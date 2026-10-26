@@ -115,7 +115,7 @@ def _prob(question: str, answer: str, *, flag: bool | None = None) -> list[dict[
 
 
 # ── The golden set ────────────────────────────────────────────────────────
-# 27 cases, ≥2 per matrix row. Rubric is None except in the g-row (class
+# 30 cases, ≥2 per matrix row. Rubric is None except in the g-row (class
 # rules), so the grader applies the shipped DEFAULT rubric — i.e. exactly what
 # a teacher who authors no rubric gets. Two cases are physics (a2, b3) per the "a couple physics" ask.
 
@@ -667,6 +667,43 @@ GOLDEN_CASES: list[GradingCase] = [
         accepts={"full"},
         rationale="The homework's own notes win over the class rule.",
     ),
+    # A units rule means measurements. Prod (Oct 2026): with "final
+    # answers need units", the grader took 5 off "5π/4" for not saying
+    # radians — the teacher gave 100 on all three.
+    GradingCase(
+        name="g5-units-rule-radians-in-pi-need-no-unit",
+        category="g",
+        extra={"rubric": {"rules": [_UNITS_RULE]}, "forbids_deduction_mentioning": ["unit", "radian"]},
+        problems=_prob("Convert $225°$ to radians. Express your answer in terms of $\\pi$.",
+                       "$225° = \\dfrac{5\\pi}{4}$ radians"),
+        extraction=_ext([(1, "225 \\cdot \\frac{\\pi}{180}"), (2, "= \\frac{5\\pi}{4}")], "\\frac{5\\pi}{4}"),
+        expected="full",
+        accepts={"full"},
+        rationale="An angle in radians written with π is unitless by convention.",
+    ),
+    GradingCase(
+        name="g6-units-rule-trig-value-needs-no-unit",
+        category="g",
+        extra={"rubric": {"rules": [_UNITS_RULE]}, "forbids_deduction_mentioning": ["unit"]},
+        problems=_prob("Find the exact value of $\\cos\\frac{4\\pi}{3}$.", "$-\\frac{1}{2}$"),
+        extraction=_ext([(1, "\\frac{4\\pi}{3} \\text{ is in QIII, reference } \\frac{\\pi}{3}"),
+                         (2, "\\cos\\frac{4\\pi}{3} = -\\frac{1}{2}")], "-\\frac{1}{2}"),
+        expected="full",
+        accepts={"full"},
+        rationale="A trig value is a pure number; a units rule doesn't touch it.",
+    ),
+    GradingCase(
+        name="g7-units-rule-once-per-problem",
+        category="g",
+        extra={"rubric": {"rules": [_UNITS_RULE]}, "requires_rule_id": "runits1", "percent_band": (95, 95)},
+        problems=_prob("A right triangle has legs 5 and 12. Find both acute angles, in degrees.",
+                       "$22.62°$ and $67.38°$"),
+        extraction=_ext([(1, "\\tan A = \\frac{5}{12}"), (2, "A = 22.62"), (3, "B = 90 - 22.62 = 67.38")],
+                        "A = 22.62, B = 67.38"),
+        expected="partial",
+        accepts={"partial"},
+        rationale="Two answers lack °: the rule's 5 points come off once, as this teacher did.",
+    ),
     GradingCase(
         name="e2-blank",
         category="e",
@@ -702,7 +739,7 @@ class GradingProbe(Probe):
     name = "grading"
     needs_browser = False
     default_constraint = (
-        "Grading-quality golden set: 27 hand-labeled submissions spanning "
+        "Grading-quality golden set: 30 hand-labeled submissions spanning "
         "clean-correct, valid-alternative-method, broken-work-right-answer, "
         "arithmetic-slip, plainly-wrong, and required-method/drawing. Asserts the AI grader's "
         "score_status matches the label."

@@ -247,7 +247,13 @@ _CLASS_RULES_INTRO = (
     "itemize it as its own deduction, and set that deduction's `rule_id` to the "
     "rule's bracketed id. A rule never turns a wrong answer into a right one, and "
     "a problem a rule doesn't cover is graded as if the rule didn't exist. A "
-    "class rule this homework's \"Notes\" contradict does not apply here."
+    "class rule this homework's \"Notes\" contradict does not apply here. Read "
+    "each rule the way the math teacher who wrote it means it, not literally: a "
+    "rule about units covers answers that measure something (a length, area, "
+    "time, rate, or an angle in degrees), never a pure number, a ratio, a trig "
+    "value, or an angle in radians written in terms of π — 5π/4 needs no unit. "
+    "Take a rule's points off once per problem, however many answers in it "
+    "break the rule."
 )
 
 

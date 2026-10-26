@@ -1067,6 +1067,28 @@
       ]
     }
   },
+  "3375567ba748e5632338e853688ef5c8": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: \\sin 80^\\circ = \\frac{h}{16}\n  Step 2: h ",
+      "recorded_at": 1792975914.697417
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.99,
+          "deductions": [],
+          "percent": 100,
+          "problem_position": 1,
+          "reasoning": "The student correctly set up sin(80\u00b0) = h/16, solved for h = 16\u00b7sin(80\u00b0), and arrived at 15.76 ft \u2014 matching the answer key exactly. Full credit criterion is met: correct final answer with clear, followable reasoning. Units are present, satisfying [runits1].",
+          "score_status": "full",
+          "student_answer": "$h = 15.76$ ft",
+          "student_feedback": "Great work! You correctly identified the sine ratio, set up the equation, and solved for the height with the right answer and units."
+        }
+      ]
+    }
+  },
   "3376db404584d996fdaaabc7274221d4": {
     "meta": {
       "mode": "ai_grading",
@@ -2210,6 +2232,28 @@
       ]
     }
   },
+  "6a3568c514a0fb975a6cc1a06f3f3196": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: \\frac{4\\pi}{3} \\text{ is in QIII, referen",
+      "recorded_at": 1792975928.095696
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.99,
+          "deductions": [],
+          "percent": 100,
+          "problem_position": 1,
+          "reasoning": "The student correctly identified the quadrant (QIII) and reference angle (\u03c0/3), then arrived at the correct final answer of \u22121/2, matching the answer key exactly. Full credit criterion is met: the reasoning path is clear and unambiguous.",
+          "score_status": "full",
+          "student_answer": "$-\\frac{1}{2}$",
+          "student_feedback": "Great work! You correctly identified that 4\u03c0/3 lies in Quadrant III with a reference angle of \u03c0/3, and used that to find the exact value of cosine."
+        }
+      ]
+    }
+  },
   "6f51fb823c66f2faab539866d6af3690": {
     "meta": {
       "mode": "ai_grading",
@@ -2403,6 +2447,35 @@
       ]
     }
   },
+  "77317537a90847b5cbb25b9d4213e0b2": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: \\tan A = \\frac{5}{12}\n  Step 2: A = 22.62",
+      "recorded_at": 1792975938.633462
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.85,
+          "deductions": [
+            {
+              "points_off": 5,
+              "reason": "Missing degree units on final angle answers \u2014 rule [runits1]",
+              "rule_id": "runits1",
+              "step_ref": 2
+            }
+          ],
+          "percent": 95,
+          "problem_position": 1,
+          "reasoning": "The student's final answers (22.62\u00b0 and 67.38\u00b0) match the answer key exactly, and the reasoning is followable (tan A = 5/12 \u2192 A, then B = 90 \u2212 A). However, the student omitted degree symbols (\u00b0) from their stated answers, which triggers the [runits1] rule (\u22125 points).",
+          "score_status": "partial",
+          "student_answer": "$A = 22.62\u00b0$, $B = 67.38\u00b0$",
+          "student_feedback": "Your approach and answers are correct \u2014 nice use of the tangent ratio and the complementary angle relationship! Just remember to include the degree symbol (\u00b0) with your final answers when reporting angle measures."
+        }
+      ]
+    }
+  },
   "77695a27016884caf2ff3f9c0ead3949": {
     "meta": {
       "mode": "ai_grading",
@@ -2492,6 +2565,35 @@
           "score_status": "full",
           "student_answer": "$x = 7, y = 3$",
           "student_feedback": "Great work! You set up the substitution correctly and solved both variables cleanly \u2014 your answer is exactly right."
+        }
+      ]
+    }
+  },
+  "7d01f0b792e3faefec948631dc0394c1": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: \\sin 80^\\circ = \\frac{h}{16}\n  Step 2: h ",
+      "recorded_at": 1792975910.141095
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.9,
+          "deductions": [
+            {
+              "points_off": 5,
+              "reason": "Final answer missing units (ft) \u2014 rule [runits1]",
+              "rule_id": "runits1",
+              "step_ref": 3
+            }
+          ],
+          "percent": 95,
+          "problem_position": 1,
+          "reasoning": "The student's approach and final answer are correct (16 \u00d7 sin 80\u00b0 \u2248 15.76 ft matches the answer key). However, the class rule [runits1] requires units on final answers that measure a length, and the student's final answer states 'h = 15.76' without 'ft', so 5 points are deducted.",
+          "score_status": "partial",
+          "student_answer": "$h = 15.76$",
+          "student_feedback": "Your setup and calculation are spot on \u2014 sin 80\u00b0 = h/16 leads directly to the correct value. Just remember to include units (ft) in your final answer since this is a measurement of length."
         }
       ]
     }
@@ -3164,35 +3266,6 @@
       ]
     }
   },
-  "a3007c6d9f7b5a54bcc4ae3f5ac7d5d7": {
-    "meta": {
-      "mode": "ai_grading",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: \\sin 80^\\circ = \\frac{h}{16}\n  Step 2: h ",
-      "recorded_at": 1792963606.6738718
-    },
-    "response": {
-      "grades": [
-        {
-          "confidence": 0.95,
-          "deductions": [
-            {
-              "points_off": 5,
-              "reason": "Final answer missing units (ft) \u2014 class rule [runits1]",
-              "rule_id": "runits1",
-              "step_ref": 3
-            }
-          ],
-          "percent": 95,
-          "problem_position": 1,
-          "reasoning": "The student's method and final answer are correct (16 \u00d7 sin 80\u00b0 \u2248 15.76 matches the answer key). However, the final answer is missing units (feet), which triggers the [runits1] class rule deduction of 5 points.",
-          "score_status": "partial",
-          "student_answer": "$h = 15.76$",
-          "student_feedback": "Your setup and calculation are spot on \u2014 sin 80\u00b0 \u00d7 16 gives the correct height. Just remember to include units (ft) with your final answer."
-        }
-      ]
-    }
-  },
   "a321e63e28e68b672358f6877b247862": {
     "meta": {
       "mode": "judge",
@@ -3761,28 +3834,6 @@
       ]
     }
   },
-  "c5bb68d8d323e96427955a2182ff746f": {
-    "meta": {
-      "mode": "ai_grading",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: \\sin 80^\\circ = \\frac{h}{16}\n  Step 2: h ",
-      "recorded_at": 1792963611.04882
-    },
-    "response": {
-      "grades": [
-        {
-          "confidence": 0.99,
-          "deductions": [],
-          "percent": 100,
-          "problem_position": 1,
-          "reasoning": "The student correctly set up sin(80\u00b0) = h/16, solved for h = 16\u00b7sin(80\u00b0) = 15.76 ft, matching the answer key exactly. Work is clearly shown and units are included, satisfying the Full credit criterion and class rule [runits1].",
-          "score_status": "full",
-          "student_answer": "$h = 15.76$ ft",
-          "student_feedback": "Great work! You correctly identified the sine relationship, set up the equation, and arrived at the right answer with units included."
-        }
-      ]
-    }
-  },
   "c7273c984526c19941bff6ccc99e69ad": {
     "meta": {
       "mode": "ai_grading",
@@ -4209,6 +4260,28 @@
       ]
     }
   },
+  "d2b08432da782fad9a231f979a0590c9": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: 225 \\cdot \\frac{\\pi}{180}\n  Step 2: = \\fr",
+      "recorded_at": 1792975923.554386
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.99,
+          "deductions": [],
+          "percent": 100,
+          "problem_position": 1,
+          "reasoning": "The student correctly multiplied 225\u00b0 by \u03c0/180, simplified to 5\u03c0/4, which matches the answer key exactly. Full credit criterion met: correct final answer with clear, followable work. No units deduction applies here since the answer is in radians expressed in terms of \u03c0 (a pure multiple of \u03c0, not a degree measure).",
+          "score_status": "full",
+          "student_answer": "$\\frac{5\\pi}{4}$",
+          "student_feedback": "Great work! You correctly applied the degree-to-radian conversion factor and simplified the fraction to get $\\frac{5\\pi}{4}$."
+        }
+      ]
+    }
+  },
   "d547afc9603809e74e587b0a54c6eb4f": {
     "meta": {
       "mode": "ai_grading",
@@ -4355,28 +4428,6 @@
           "score_status": "partial",
           "student_answer": "$x = -2$ or $x = -3$",
           "student_feedback": "Your factoring in Step 2 is perfect \u2014 (x \u2212 2)(x \u2212 3) = 0 is exactly right. Just be careful when reading the roots from the factors: if (x \u2212 2) = 0, then x = +2 (not \u22122), and similarly x = +3 from (x \u2212 3) = 0."
-        }
-      ]
-    }
-  },
-  "d9fe91a6d37f86f05fa295ad55a6aa7b": {
-    "meta": {
-      "mode": "ai_grading",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: \\sin 80^\\circ = \\frac{h}{16}\n  Step 2: h ",
-      "recorded_at": 1792963615.0696378
-    },
-    "response": {
-      "grades": [
-        {
-          "confidence": 0.99,
-          "deductions": [],
-          "percent": 100,
-          "problem_position": 1,
-          "reasoning": "The student correctly set up sin(80\u00b0) = h/16, solved for h = 16\u00b7sin(80\u00b0), and arrived at 15.76, which matches the answer key exactly. Full credit criterion is met: correct final answer with clear, followable reasoning.",
-          "score_status": "full",
-          "student_answer": "$h = 15.76$",
-          "student_feedback": "Great work! You correctly identified the sine relationship, set up the equation, and solved it accurately to get 15.76 ft."
         }
       ]
     }
@@ -5106,6 +5157,28 @@
           "score_status": "partial",
           "student_answer": "$(8/3, 3)$",
           "student_feedback": "Your answer is correct, but this problem asked you to use the elimination method \u2014 try adding or subtracting the two equations directly to cancel a variable, rather than solving for y and substituting. Make sure to match the method the problem specifies."
+        }
+      ]
+    }
+  },
+  "f81dcc69b0318b2101da6fbb736de97e": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: \\sin 80^\\circ = \\frac{h}{16}\n  Step 2: h ",
+      "recorded_at": 1792975918.8155708
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.99,
+          "deductions": [],
+          "percent": 100,
+          "problem_position": 1,
+          "reasoning": "The student correctly set up sin(80\u00b0) = h/16, solved for h = 16\u00b7sin(80\u00b0), and arrived at 15.76, which matches the answer key exactly. Full credit criterion is met: correct final answer with clear, followable reasoning.",
+          "score_status": "full",
+          "student_answer": "$h = 15.76$",
+          "student_feedback": "Great work! You correctly identified the sine relationship, set up the equation, and solved it accurately to get 15.76 ft."
         }
       ]
     }
