@@ -250,3 +250,20 @@ async def test_a_co_teacher_can_add_to_the_class_but_not_to_anothers_homework(
     res = await client.post(f"/v1/teacher/rubric-suggestions/{offer['id']}/decide",
                             json={"action": "add_class"}, headers=co)
     assert res.status_code == 200
+
+
+async def test_only_what_the_teacher_added_to_the_ais_draft_is_their_reason(client: AsyncClient) -> None:
+    # The feedback box is pre-filled with the AI's draft; teachers append
+    # their objection after it. Prod: praise for the sketch, then "You did
+    # not draw the cosecant graph at all."
+    world = await _world()
+    async with get_session_factory()() as s:
+        g = (await s.execute(
+            select(SubmissionGrade).where(SubmissionGrade.submission_id == world["submission_ids"][0])
+        )).scalar_one()
+        g.ai_breakdown = {"grades": [{**g.ai_breakdown["grades"][0], "student_feedback": "Nice work."}]}
+        await s.commit()
+    offer, stub = await _ask(client, world, comment="Nice work.\nAnswers need units.", classified=_rule())
+    assert stub.await_args.kwargs["comment"] == "Answers need units."
+    rows = await _offers(world["course_id"])
+    assert [r.teacher_comment for r in rows] == ["Answers need units."]

@@ -76,9 +76,11 @@ async def suggest_rubric_rule(
     ai_percent = ai_grade.get("percent") if ai_grade else None
     if problem is None or not isinstance(ai_percent, (int, float)):
         return {"suggestion": None}  # no AI grade to have lowered
-    # The AI's own drafted words aren't the teacher's reason.
-    said = body.comment.strip()
-    if ai_grade and said in {str(ai_grade.get(k) or "").strip() for k in ("student_feedback", "reasoning")}:
+    # The feedback box starts pre-filled with the AI's draft, and teachers
+    # usually add a line after it rather than rewrite it. Only what the
+    # teacher added is their reason; the draft itself is none.
+    said = _teacher_words(body.comment, ai_grade)
+    if not said:
         return {"suggestion": None}
 
     offer = await suggest_for_edit(
@@ -91,11 +93,22 @@ async def suggest_rubric_rule(
         student_answer=str(ai_grade.get("student_answer") or "") if ai_grade else "",
         ai_percent=float(ai_percent),
         teacher_percent=body.teacher_percent,
-        comment=body.comment,
+        comment=said,
         teacher_id=current_user.user_id,
     )
     await db.commit()
     return {"suggestion": offer_json(offer) if offer else None}
+
+
+def _teacher_words(comment: str, ai_grade: dict[str, Any] | None) -> str:
+    """The comment minus the AI's pre-filled draft it starts with (the
+    box shows `student_feedback`, or `reasoning` on older grades)."""
+    said = comment.strip()
+    for k in ("student_feedback", "reasoning"):
+        draft = str((ai_grade or {}).get(k) or "").strip()
+        if draft and said.startswith(draft):
+            return said[len(draft):].strip()
+    return said
 
 
 @router.post("/rubric-suggestions/{suggestion_id}/decide")
