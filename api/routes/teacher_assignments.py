@@ -3,10 +3,10 @@
 import asyncio
 import uuid
 from datetime import UTC, datetime
-from typing import Any, Protocol
+from typing import Annotated, Any, Protocol
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 from sqlalchemy import Integer, and_, case, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.answer_units import units_not_in_work
 from api.core.audit_log import record_activity
+from api.core.class_rubric import MAX_CLASS_RULES
 from api.core.constants import DEFAULT_HOMEWORK_INSTRUCTIONS, MAX_RUBRIC_FIELD_CHARS
 from api.core.entitlements import Entitlement, check_entitlement
 from api.core.extraction_edits import apply_extraction_edits
@@ -59,6 +60,9 @@ router = APIRouter()
 # ── Request schemas ──
 
 
+_RUBRIC_TEXT_FIELDS = ("full_credit", "partial_credit", "common_mistakes", "notes")
+
+
 class AssignmentRubric(BaseModel):
     """The teacher-authored grading rubric, as the UI actually collects it.
 
@@ -90,6 +94,10 @@ class AssignmentRubric(BaseModel):
     partial_credit: str | None = None
     common_mistakes: str | None = None
     notes: str | None = None
+    # Class rules (`Course.rubric`) this homework opts out of, by id.
+    skipped_rule_ids: list[Annotated[str, StringConstraints(max_length=40)]] | None = Field(
+        default=None, max_length=MAX_CLASS_RULES,
+    )
 
     @field_validator("full_credit", "partial_credit", "common_mistakes", "notes")
     @classmethod
@@ -116,11 +124,13 @@ class AssignmentRubric(BaseModel):
         would just re-create the shape migration cl1000081 exists to
         remove.
         """
-        stored = {
+        stored: dict[str, Any] = {
             k: v.strip()
             for k, v in self.model_dump().items()
             if isinstance(v, str) and v.strip()
         }
+        if self.skipped_rule_ids:
+            stored["skipped_rule_ids"] = sorted(set(self.skipped_rule_ids))
         return stored or None
 
 
@@ -935,11 +945,13 @@ async def list_rubric_sources(
                 "rubric": a.rubric,
                 "created_at": a.created_at.isoformat(),
             }
-            # Guard against rows where rubric is a stored-but-empty dict
-            # ({}): they carry no reusable text, so exclude them from the
-            # picker rather than offering a blank "copy" that does nothing.
+            # Only rubrics with text to copy. A stored-but-empty dict, or one
+            # holding nothing but `skipped_rule_ids` (which name another
+            # class's rules), would show as a blank row whose "copy" clears
+            # the target's rubric.
             for a, course_name in rows
-            if isinstance(a.rubric, dict) and a.rubric
+            if isinstance(a.rubric, dict)
+            and any(a.rubric.get(f) for f in _RUBRIC_TEXT_FIELDS)
         ]
     }
 
@@ -1261,6 +1273,8 @@ class Deduction(BaseModel):
     points_off: float
     reason: str
     step_ref: int | None = None
+    # The class rule this deduction applied (`Course.rubric`), if any.
+    rule_id: str | None = Field(default=None, max_length=40)
 
 
 class BreakdownEntry(BaseModel):
@@ -1799,6 +1813,7 @@ def _normalize_breakdown(entries: list[BreakdownEntry]) -> list[dict[str, Any]]:
                         "points_off": d.points_off,
                         "reason": d.reason,
                         "step_ref": d.step_ref,
+                        "rule_id": d.rule_id,
                     }
                     for d in e.deductions
                 ]
