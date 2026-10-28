@@ -267,3 +267,33 @@ async def test_only_what_the_teacher_added_to_the_ais_draft_is_their_reason(clie
     assert stub.await_args.kwargs["comment"] == "Answers need units."
     rows = await _offers(world["course_id"])
     assert [r.teacher_comment for r in rows] == ["Answers need units."]
+
+
+async def test_an_offer_shown_again_adds_to_the_homework_being_graded(client: AsyncClient) -> None:
+    # Ignored on an earlier homework, offered again on this one: "just this
+    # homework" must write here, not to the homework it was first shown on.
+    world = await _world()
+    first, _ = await _ask(client, world, classified=_rule())
+    async with get_session_factory()() as s:
+        hw = (await s.execute(select(Assignment).where(Assignment.id == world["assignment_id"]))).scalar_one()
+        earlier = Assignment(course_id=hw.course_id, unit_ids=hw.unit_ids, teacher_id=hw.teacher_id,
+                             title="HW 0", type="homework", status="published", content={"problem_ids": []})
+        s.add(earlier)
+        await s.flush()
+        row = (await s.execute(
+            select(RubricSuggestion).where(RubricSuggestion.id == uuid.UUID(first["id"]))
+        )).scalar_one()
+        row.assignment_id, row.source_label = earlier.id, "HW 0"
+        earlier_id = earlier.id
+        await s.commit()
+    key = f"s{uuid.UUID(first['id']).hex[:8]}"
+    again, _ = await _ask(client, world, classified=_rule(same_as=key))
+    assert again["id"] == first["id"] and again["source_label"] == "HW 1"
+    res = await client.post(f"/v1/teacher/rubric-suggestions/{again['id']}/decide",
+                            json={"action": "add_homework"}, headers=_auth(world["teacher_token"]))
+    assert res.status_code == 200, res.text
+    async with get_session_factory()() as s:
+        here = (await s.execute(select(Assignment.rubric).where(Assignment.id == world["assignment_id"]))).scalar_one()
+        there = (await s.execute(select(Assignment.rubric).where(Assignment.id == earlier_id))).scalar_one()
+    assert here == {"notes": "Final answers need units. Take off 5."}
+    assert not there

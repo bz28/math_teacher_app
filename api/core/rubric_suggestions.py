@@ -164,7 +164,17 @@ async def suggest_for_edit(
         return None  # already in this homework's extra rules
     pending = next((s for s in same if s.status == "pending"), None)
     if pending is not None:
-        return pending  # ignored before — offer it again
+        # Ignored before — offer it again, now about THIS edit, so "just
+        # this homework" writes to the homework being graded, not the one
+        # it was first offered on.
+        pending.assignment_id = assignment.id
+        pending.submission_id = submission_id
+        pending.problem_id = problem_id
+        pending.teacher_id = teacher_id
+        pending.source_label = assignment.title[:300]
+        pending.teacher_comment = comment[:2000]
+        await db.flush()
+        return pending
 
     offer = RubricSuggestion(
         course_id=course.id,
