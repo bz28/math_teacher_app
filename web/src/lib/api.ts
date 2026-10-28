@@ -1118,6 +1118,38 @@ export interface TeacherRubric {
   partial_credit?: string;
   common_mistakes?: string;
   notes?: string;
+  /** Class rules (the course's rubric) this homework opts out of, by id. */
+  skipped_rule_ids?: string[];
+  /** Only on a grade's `rubric_snapshot`: the class rules the grade was
+   *  made under. Never sent on a write. */
+  rules?: GradedRule[];
+}
+
+/** One of a class's grading rules — every homework in the course
+ *  inherits it unless that homework skips it. `points` is how much a
+ *  problem loses when the rule is broken (null: the AI sizes it). */
+export interface ClassRubricRule {
+  id: string;
+  text: string;
+  points: number | null;
+  source: "settings" | "suggestion";
+  /** Where a suggested rule came from ("HW 5"). */
+  source_label: string | null;
+  added_at: string | null;
+}
+
+/** A class rule as the grader saw it, frozen on a grade's snapshot. */
+export interface GradedRule {
+  id: string;
+  text: string;
+  points: number | null;
+}
+
+/** A rule as the settings editor sends it: no id = a new rule. */
+export interface ClassRubricRuleInput {
+  id?: string;
+  text: string;
+  points: number | null;
 }
 
 /** One line in a problem's itemized grade receipt — the AI's
@@ -1131,6 +1163,9 @@ export interface GradeDeduction {
   points_off: number;
   reason: string;
   step_ref: number | null;
+  /** The class rule this deduction applied, if any (id into the grade's
+   *  `rubric_snapshot.rules`). */
+  rule_id?: string | null;
 }
 
 /** One reusable grading setup the teacher already authored on another
@@ -1413,6 +1448,17 @@ export const teacher = {
   },
   deleteCourse(id: string) {
     return apiFetch<{ status: string }>(`/teacher/courses/${id}`, { method: "DELETE" });
+  },
+  /** The class's grading rules — every homework in the course inherits them. */
+  courseRubric(courseId: string) {
+    return apiFetch<{ rules: ClassRubricRule[] }>(`/teacher/courses/${courseId}/rubric`);
+  },
+  /** Replace the class's rules. A rule sent with its id keeps it. */
+  updateCourseRubric(courseId: string, rules: ClassRubricRuleInput[]) {
+    return apiFetch<{ rules: ClassRubricRule[] }>(`/teacher/courses/${courseId}/rubric`, {
+      method: "PUT",
+      body: JSON.stringify({ rules }),
+    });
   },
   sections(courseId: string) {
     return apiFetch<{ sections: TeacherSection[] }>(`/teacher/courses/${courseId}/sections`);

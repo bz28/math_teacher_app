@@ -17,6 +17,7 @@ import {
   type TeacherSection,
   type TeacherRubric,
 } from "@/lib/api";
+import { normalizeRubric } from "@/lib/rubric";
 import { useAuthStore } from "@/stores/auth";
 import {
   BANK_JOB_POLL_INTERVAL_MS,
@@ -62,18 +63,6 @@ type ConfigField =
   | "sections"
   | "rubric"
   | "description";
-
-/** Collapse a partial rubric into a normalized dict. Drops empty-string
- *  and whitespace-only values so the stored shape stays tight. */
-function normalizeRubric(r: TeacherRubric): TeacherRubric {
-  const out: TeacherRubric = {};
-  const s = (v: string | undefined) => (v && v.trim() ? v.trim() : undefined);
-  if (s(r.full_credit)) out.full_credit = s(r.full_credit);
-  if (s(r.partial_credit)) out.partial_credit = s(r.partial_credit);
-  if (s(r.common_mistakes)) out.common_mistakes = s(r.common_mistakes);
-  if (s(r.notes)) out.notes = s(r.notes);
-  return out;
-}
 
 /**
  * Full-page detail for a single homework. Handles all lifecycle
@@ -1060,6 +1049,7 @@ export default function HomeworkDetailPage({
               saveError={saveErrors.rubric}
               onChange={onChangeRubric}
               copyFromAssignmentId={assignmentId}
+              courseId={courseId}
             />
           )}
 

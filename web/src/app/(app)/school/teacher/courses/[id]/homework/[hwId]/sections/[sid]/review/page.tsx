@@ -39,12 +39,14 @@ import {
   type TeacherIntegrityDetail,
   type TeacherIntegrityTranscriptTurn,
   type TeacherRubric,
+  type ClassRubricRule,
   type TeacherSubmissionDetail,
   type TeacherSubmissionDetailProblem,
   type TeacherSubmissionDrawing,
   type TeacherSubmissionRow,
   type TeacherSubmissionStep,
 } from "@/lib/api";
+import { effectiveRubric, rubricChanged, rubricFields } from "@/lib/rubric";
 
 type GradeStatus = GradeBreakdownEntry["score_status"];
 
@@ -92,21 +94,6 @@ function isActionableTarget(el: Element | null): boolean {
   return el.getAttribute("role") === "button";
 }
 
-// Rubric drift — does the grade's frozen rubric snapshot differ from
-// the assignment's current rubric? Normalizes both sides to the same
-// four-field shape with missing fields treated as empty strings, so a
-// null snapshot and a teacher who only set `full_credit` compare
-// honestly. Returns false when both sides agree (no regrade needed)
-// and true on any field-level difference.
-const RUBRIC_FIELDS = ["full_credit", "partial_credit", "common_mistakes", "notes"] as const;
-function rubricChanged(
-  current: TeacherRubric | null,
-  snapshot: TeacherRubric | null,
-): boolean {
-  const a = current ?? {};
-  const b = snapshot ?? {};
-  return RUBRIC_FIELDS.some((f) => (a[f] ?? "") !== (b[f] ?? ""));
-}
 
 /**
  * Grading review workspace: one HW × one section.
@@ -287,7 +274,30 @@ function HomeworkSectionReview({
   // the top of the Problems card so the teacher can sanity-check the
   // AI's grades against their own stated criteria. Null when no rubric
   // was authored (all rubric fields empty or the HW predates rubrics).
-  const [rubric, setRubric] = useState<TeacherRubric | null>(null);
+  const [hwRubric, setHwRubric] = useState<TeacherRubric | null>(null);
+  // The class's rules — null until loaded (or if loading failed). Fetched
+  // on their own so a failure only hides them from the rubric panel.
+  const [classRules, setClassRules] = useState<ClassRubricRule[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    teacher
+      .courseRubric(courseId)
+      .then((res) => !cancelled && setClassRules(res.rules))
+      .catch(() => {
+        /* drift banner stays hidden; the homework rubric still shows */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [courseId]);
+  // What the grader applies now: this homework's rubric plus the class
+  // rules it hasn't skipped. Until the rules are known, only the
+  // homework's own. (The regrade banner compares only the homework's
+  // fields — see `rubricChanged`.)
+  const rubric = useMemo(
+    () => (classRules ? effectiveRubric(classRules, hwRubric) : hwRubric),
+    [classRules, hwRubric],
+  );
   // Rubric visibility is a session preference, not a per-student one.
   // Lifting it here means expanding the rubric on student A keeps it
   // expanded when the teacher hits "Next student" — otherwise
@@ -497,7 +507,7 @@ function HomeworkSectionReview({
         setError(null);
         setHwTitle(a.title);
         setSectionName(s.name);
-        setRubric(a.rubric);
+        setHwRubric(a.rubric);
         // Join submissions to roster by student_id. Email would work
         // today but breaks silently if a student ever changes their
         // account email after submitting — the submission still
@@ -2210,14 +2220,7 @@ function RubricDriftBanner({
   if (snapshot === null) return null;
   if (!rubricChanged(current, snapshot)) return null;
 
-  const snapshotFields: { label: string; text: string }[] = [];
-  if (snapshot.full_credit)
-    snapshotFields.push({ label: "Full credit", text: snapshot.full_credit });
-  if (snapshot.partial_credit)
-    snapshotFields.push({ label: "Partial credit", text: snapshot.partial_credit });
-  if (snapshot.common_mistakes)
-    snapshotFields.push({ label: "Common mistakes", text: snapshot.common_mistakes });
-  if (snapshot.notes) snapshotFields.push({ label: "Notes", text: snapshot.notes });
+  const snapshotFields = rubricFields(snapshot);
 
   return (
     <div className="rounded-[--radius-xl] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] p-4  dark:bg-[color:var(--color-warning)]/10">
@@ -2227,8 +2230,8 @@ function RubricDriftBanner({
             Rubric edited since this was graded
           </p>
           <p className="mt-1 text-xs text-[color:var(--color-warning-dark)]/80">
-            The AI graded against an earlier version of your rubric.
-            Regrade to apply your current criteria — your edits on this
+            The AI graded against an earlier version of this homework&apos;s
+            rubric. Regrade to apply the current one — your edits on this
             submission will be replaced.
           </p>
         </div>
@@ -3211,6 +3214,13 @@ function SubmissionDetailPanel({
     for (const b of detail.breakdown ?? []) map.set(b.problem_id, b);
     return map;
   }, [detail.breakdown]);
+  // The class rules this grade was made under, by id — names the rule a
+  // deduction applied.
+  const snapshotRules = row?.rubric_snapshot?.rules;
+  const ruleText = useMemo(
+    () => Object.fromEntries((snapshotRules ?? []).map((r) => [r.id, r.text])),
+    [snapshotRules],
+  );
   // AI grades keyed by position → problem. Used to show "AI" badges
   // and reasoning tooltips on grades the AI pre-filled.
   const aiByPosition = useMemo(() => {
@@ -4245,6 +4255,7 @@ function SubmissionDetailPanel({
                 onRequiresDrawingChange={(next) => onRequiresDrawingChange(p.bank_item_id, next)}
                 drawingsInventoried={detail.drawings_inventoried}
                 reportBase={reportBase}
+                ruleText={ruleText}
                 rowRef={(el) => {
                   rowRefs.current[i] = el;
                 }}
@@ -4304,11 +4315,7 @@ function RubricSection({
   open: boolean;
   onToggle: (open: boolean) => void;
 }) {
-  const fields: { label: string; text: string }[] = [];
-  if (rubric?.full_credit) fields.push({ label: "Full credit", text: rubric.full_credit });
-  if (rubric?.partial_credit) fields.push({ label: "Partial credit", text: rubric.partial_credit });
-  if (rubric?.common_mistakes) fields.push({ label: "Common mistakes", text: rubric.common_mistakes });
-  if (rubric?.notes) fields.push({ label: "Notes", text: rubric.notes });
+  const fields = rubricFields(rubric);
   if (fields.length === 0) return null;
   return (
     <details
@@ -4326,7 +4333,7 @@ function RubricSection({
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
               {f.label}
             </p>
-            <div className="mt-0.5 text-xs leading-relaxed text-text-primary">
+            <div className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-text-primary">
               <MathText text={f.text} />
             </div>
           </div>
@@ -4787,11 +4794,15 @@ function ProblemGradeRow({
   onFeedbackChange,
   onOpenPage,
   reportBase,
+  ruleText,
 }: {
   problem: TeacherSubmissionDetailProblem;
   entry: GradeBreakdownEntry | null;
   aiGrade: AiGradeEntry | null;
   reportBase: ReportProblemContext;
+  /** Class rule id → its wording, from the grade's rubric snapshot, so a
+   *  deduction that applied a rule can name it. */
+  ruleText: Record<string, string>;
   /** This row is the keyboard-focused problem — draws the left accent
    *  bar + ring and receives real DOM focus via `rowRef`. */
   focused: boolean;
@@ -5483,6 +5494,7 @@ function ProblemGradeRow({
           aiConfidence={aiGrade?.confidence ?? null}
           stepCount={stepCount}
           onAnchorClick={scrollToStep}
+          ruleText={ruleText}
         />
       )}
 
@@ -5604,6 +5616,7 @@ function GradeReceipt({
   aiConfidence,
   stepCount,
   onAnchorClick,
+  ruleText,
 }: {
   deductions: GradeDeduction[];
   status: GradeStatus;
@@ -5611,6 +5624,7 @@ function GradeReceipt({
   aiConfidence: number | null;
   stepCount: number;
   onAnchorClick: (stepRef: number) => void;
+  ruleText: Record<string, string>;
 }) {
   const credits = deductions.filter((d) => d.points_off <= 0);
   const debits = deductions.filter((d) => d.points_off > 0);
@@ -5764,6 +5778,13 @@ function GradeReceipt({
                   >
                     ↳ step {d.step_ref} in work
                   </button>
+                )}
+                {d.rule_id && ruleText[d.rule_id] && (
+                  <span className="mt-1 flex">
+                    <span className="rounded-full bg-[color:var(--color-primary-bg)] px-2 py-0.5 text-[11px] font-medium text-primary">
+                      Class rubric: {ruleText[d.rule_id]}
+                    </span>
+                  </span>
                 )}
               </span>
               <span className="shrink-0 font-mono text-[12px] font-semibold text-[color:var(--color-error)]">
