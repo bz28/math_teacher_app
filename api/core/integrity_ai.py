@@ -977,8 +977,9 @@ async def run_agent_turn(
     `temperature=0.0` pins the verdict so an identical transcript yields
     the same disposition on every run — the precondition for measuring a
     judgment change (the integrity eval harness) rather than chasing
-    sampling noise. The integrity Vision extraction upstream is already
-    temp-0 (extract_student_work), so the whole chain is reproducible.
+    sampling noise. The Vision read upstream is not temp-0 (Opus always
+    thinks), but it is read once and stored, so the transcript this sees
+    is fixed.
 
     `submission_id` and `call_metadata` are forwarded to the LLM-call
     log so the admin dashboard can correlate the agent's calls with

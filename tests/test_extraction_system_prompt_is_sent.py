@@ -65,6 +65,22 @@ class _Captured:
 
         return _Resp()
 
+    def stream(self, **kwargs: Any) -> Any:
+        """Vision reads stream; same request, same final message."""
+        captured = self
+
+        class _Stream:
+            async def __aenter__(self) -> Any:
+                return self
+
+            async def __aexit__(self, *exc: Any) -> None:
+                return None
+
+            async def get_final_message(self) -> Any:
+                return await captured.create(**kwargs)
+
+        return _Stream()
+
 
 def _system_text(kwargs: dict[str, Any]) -> str:
     """The system field may be a string or a list of cached blocks."""
