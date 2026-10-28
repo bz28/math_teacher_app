@@ -35,23 +35,18 @@ export function effectiveRubric(
   return Object.keys(merged).length ? merged : null;
 }
 
-/** Has the rubric changed since this grade was made? Compares the four
- *  text fields (missing = empty) and — only for a grade that was made
- *  under class rules — the rules in force (by id, wording and points).
- *  A grade made with no class rules isn't flagged when rules are added
- *  later: adding a rule applies from now on, it doesn't put every past
- *  grade up for a regrade. */
+/** Has this homework's own rubric changed since this grade was made?
+ *  Compares the four text fields (missing = empty). Class rules — adding,
+ *  editing, skipping — never put a grade up for a regrade: they apply to
+ *  grading from now on, and a regrade would replace the teacher's edits
+ *  on every paper the class already graded. */
 export function rubricChanged(
   current: TeacherRubric | null,
   snapshot: TeacherRubric | null,
 ): boolean {
   const a = current ?? {};
   const b = snapshot ?? {};
-  if (TEXT_FIELDS.some((f) => (a[f] ?? "") !== (b[f] ?? ""))) return true;
-  if (!b.rules) return false;
-  const key = (rules: GradedRule[] | undefined) =>
-    JSON.stringify((rules ?? []).map((r) => [r.id, r.text, r.points ?? null]));
-  return key(a.rules) !== key(b.rules);
+  return TEXT_FIELDS.some((f) => (a[f] ?? "") !== (b[f] ?? ""));
 }
 
 /** A rubric as labeled blocks for read-only display (the review page's

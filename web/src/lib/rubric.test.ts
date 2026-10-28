@@ -40,15 +40,11 @@ describe("rubricChanged", () => {
     assert.equal(rubricChanged({ ...graded }, graded), false);
   });
 
-  it("notices an added, reworded, repriced or skipped class rule", () => {
-    assert.equal(rubricChanged({ notes: "N", rules: [...graded.rules, { id: "r2", text: "y =", points: null }] }, graded), true);
-    assert.equal(rubricChanged({ notes: "N", rules: [{ id: "r1", text: "Units (ft)", points: 5 }] }, graded), true);
-    assert.equal(rubricChanged({ notes: "N", rules: [{ id: "r1", text: "Units", points: 10 }] }, graded), true);
-    assert.equal(rubricChanged({ notes: "N" }, graded), true);
-  });
-
-  it("doesn't flag a grade made without class rules when rules are added", () => {
-    assert.equal(rubricChanged({ notes: "N" }, { notes: "N" }), false);
+  it("never flags a class rule change: rules apply from now on", () => {
+    assert.equal(rubricChanged({ notes: "N", rules: [...graded.rules, { id: "r2", text: "y =", points: null }] }, graded), false);
+    assert.equal(rubricChanged({ notes: "N", rules: [{ id: "r1", text: "Units (ft)", points: 5 }] }, graded), false);
+    assert.equal(rubricChanged({ notes: "N", rules: [{ id: "r1", text: "Units", points: 10 }] }, graded), false);
+    assert.equal(rubricChanged({ notes: "N" }, graded), false);
     assert.equal(rubricChanged({ notes: "N", rules: graded.rules }, { notes: "N" }), false);
   });
 

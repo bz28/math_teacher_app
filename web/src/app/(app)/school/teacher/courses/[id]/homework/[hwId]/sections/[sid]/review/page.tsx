@@ -276,7 +276,7 @@ function HomeworkSectionReview({
   // was authored (all rubric fields empty or the HW predates rubrics).
   const [hwRubric, setHwRubric] = useState<TeacherRubric | null>(null);
   // The class's rules — null until loaded (or if loading failed). Fetched
-  // on their own so a failure only costs the drift check, never the page.
+  // on their own so a failure only hides them from the rubric panel.
   const [classRules, setClassRules] = useState<ClassRubricRule[] | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -291,8 +291,9 @@ function HomeworkSectionReview({
     };
   }, [courseId]);
   // What the grader applies now: this homework's rubric plus the class
-  // rules it hasn't skipped — compared against each grade's snapshot to
-  // offer a regrade. Until the rules are known, only the homework's own.
+  // rules it hasn't skipped. Until the rules are known, only the
+  // homework's own. (The regrade banner compares only the homework's
+  // fields — see `rubricChanged`.)
   const rubric = useMemo(
     () => (classRules ? effectiveRubric(classRules, hwRubric) : hwRubric),
     [classRules, hwRubric],
@@ -1803,7 +1804,6 @@ function HomeworkSectionReview({
                     : null
                 }
                 rubric={rubric}
-                rubricComplete={classRules !== null}
                 rubricOpen={rubricOpen}
                 onToggleRubric={setRubricOpen}
                 row={selectedEntry.submission}
@@ -2230,9 +2230,9 @@ function RubricDriftBanner({
             Rubric edited since this was graded
           </p>
           <p className="mt-1 text-xs text-[color:var(--color-warning-dark)]/80">
-            The AI graded against an earlier version of your rubric or
-            class rules. Regrade to apply your current ones — your edits on
-            this submission will be replaced.
+            The AI graded against an earlier version of this homework&apos;s
+            rubric. Regrade to apply the current one — your edits on this
+            submission will be replaced.
           </p>
         </div>
         <button
@@ -3123,7 +3123,6 @@ function SubmissionDetailPanel({
   detail,
   integrity,
   rubric,
-  rubricComplete,
   rubricOpen,
   onToggleRubric,
   row,
@@ -3166,9 +3165,6 @@ function SubmissionDetailPanel({
    *  and each grade row extend it with what they're pointing at. */
   reportBase: ReportProblemContext;
   rubric: TeacherRubric | null;
-  /** The class rules are loaded, so `rubric` is the whole effective
-   *  rubric — the drift check is only trustworthy then. */
-  rubricComplete: boolean;
   rubricOpen: boolean;
   onToggleRubric: (open: boolean) => void;
   row: TeacherSubmissionRow | null;
@@ -4096,7 +4092,7 @@ function SubmissionDetailPanel({
           Triggers a regrade confirm dialog managed by the page. Not on
           work the student flagged as misread — the server won't AI-grade
           a disputed reading. */}
-      {!detail.extraction_flagged_at && rubricComplete && (
+      {!detail.extraction_flagged_at && (
         <RubricDriftBanner
           current={rubric}
           snapshot={row?.rubric_snapshot ?? null}
