@@ -47,7 +47,8 @@ _SPELLINGS: dict[str, tuple[str, ...]] = {
 }
 _CANONICAL = {spelling: unit for unit, spellings in _SPELLINGS.items() for spelling in spellings}
 
-_DEGREE = re.compile(r"\^\s*\{?\s*(?:\\circ|o)\s*\}?|°|\\degree")
+# `^o` only after a digit ("30^o"): "e^{o}" or "f^o g" are symbols.
+_DEGREE = re.compile(r"\^\s*\{?\s*\\circ\s*\}?|(?<=\d)\s*\^\s*\{?\s*o\s*\}?|°|\\degree")
 # A unit follows a number: "15.76 ft", "3\,cm", "48\pi \text{ rad/min}",
 # "12 feet per minute". Words inside \text{} count only in that position —
 # "\text{min}(a, b)" or "\text{the point lies in quadrant II}" are prose.
@@ -96,8 +97,10 @@ def units_in(text: str, *, in_prose: bool = False) -> set[str]:
                 run.add(unit)
             elif word.lower() not in _JOINERS:
                 # Words after the number that aren't units: a sentence
-                # ("2 in quadrant II"), not a measurement.
-                if not in_prose:
+                # ("2 in quadrant II"), not a measurement — unless it's a
+                # rate, whose single-letter tail ("ft/s", "km/h") is left
+                # out of the spellings above on purpose.
+                if not in_prose and not rate:
                     run = set()
                 break
         found |= run

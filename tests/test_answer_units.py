@@ -28,6 +28,8 @@ from tests.test_teacher_review_checkpoint import _seed_hw
     (r"15.76\quad\text{ft}", {"ft"}),
     ("30^o", {"°"}),
     ("12 sec", {"sec"}),
+    (r"5 \text{ ft/s}", {"ft"}),
+    ("60 km/h", {"km"}),
 ])
 def test_units_after_a_number_are_found(text: str, units: set[str]) -> None:
     assert units_in(text) == units
@@ -38,6 +40,8 @@ def test_units_after_a_number_are_found(text: str, units: set[str]) -> None:
     "15 feet tall", r"\text{The answer is } 5", "(3, 4)", r"2\sin x",
     # Trig and set notation that spell like units.
     r"\frac{5\pi}{6}\text{ in }[0,2\pi)", "x = 2 in [0, 2pi)", "y = 2 sec(x)", "3 min(a,b)",
+    # A superscript o that isn't on a number is a symbol, not degrees.
+    "e^{o}", "f^o g",
 ])
 def test_variables_and_prose_are_not_units(text: str) -> None:
     assert units_in(text) == set()
