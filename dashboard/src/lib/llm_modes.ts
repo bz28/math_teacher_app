@@ -32,6 +32,7 @@ export const LLM_MODES = {
   BANK_EXTRACT: "bank_extract",
   AI_GRADING: "ai_grading",
   CLASSIFY_REQUIRES_DRAWING: "classify_requires_drawing",
+  SUGGEST_RUBRIC_RULE: "suggest_rubric_rule",
 } as const;
 
 export type LLMMode = (typeof LLM_MODES)[keyof typeof LLM_MODES];

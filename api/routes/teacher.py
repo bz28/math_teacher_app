@@ -11,6 +11,7 @@ from api.routes.teacher_practice_activity import router as practice_activity_rou
 from api.routes.teacher_preview import router as preview_router
 from api.routes.teacher_question_bank import router as question_bank_router
 from api.routes.teacher_reports import router as reports_router
+from api.routes.teacher_rubric_suggestions import router as rubric_suggestions_router
 from api.routes.teacher_sections import router as sections_router
 from api.routes.teacher_units import router as units_router
 from api.routes.teacher_visibility import router as visibility_router
@@ -29,3 +30,4 @@ router.include_router(preview_router)
 router.include_router(grades_router)
 router.include_router(insights_router)
 router.include_router(practice_activity_router)
+router.include_router(rubric_suggestions_router)

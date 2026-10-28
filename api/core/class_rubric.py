@@ -60,12 +60,17 @@ class ClassRubric(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     rules: list[ClassRubricRule] = Field(default_factory=list, max_length=MAX_CLASS_RULES)
+    # The revision the editor last loaded (`rubric_revision`). A write
+    # carrying an older one is refused — it would replace rules the
+    # editor never saw (added from a review page, another tab, a
+    # co-teacher). None skips the check (server-side appends).
+    rev: int | None = None
 
-    def to_stored(self, previous: dict[str, Any] | None) -> dict[str, Any] | None:
+    def to_stored(self, previous: dict[str, Any] | None) -> dict[str, Any]:
         """The value written to `Course.rubric`. Keeps each existing
-        rule's id and `added_at`, stamps new ones, and returns None when
-        no rules are left — an empty rubric and no rubric mean the same
-        thing to every reader."""
+        rule's id and `added_at`, stamps new ones, and bumps the revision.
+        An emptied list is still stored (not None) so its revision
+        survives: a stale editor must still be told the rules moved on."""
         known = {
             r.get("id"): r for r in (previous or {}).get("rules", [])
             if isinstance(r, dict)
@@ -89,7 +94,13 @@ class ClassRubric(BaseModel):
                 ),
                 "added_at": prior.get("added_at") if prior else now,
             })
-        return {"rules": rules} if rules else None
+        return {"rules": rules, "rev": rubric_revision(previous) + 1}
+
+
+def rubric_revision(course_rubric: dict[str, Any] | None) -> int:
+    """How many times the class's rules have been written (0 = never)."""
+    rev = (course_rubric or {}).get("rev")
+    return rev if isinstance(rev, int) else 0
 
 
 def class_rules(course_rubric: dict[str, Any] | None) -> list[dict[str, Any]]:
