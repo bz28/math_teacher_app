@@ -194,7 +194,38 @@ async def test_the_extractor_hands_its_prompt_to_the_vision_call(
     monkeypatch.setattr(integrity_ai, "verify_visual_work", _no_verify)
     await _REAL_EXTRACT_STUDENT_WORK(uuid.uuid4(), _Db())  # type: ignore[arg-type]
 
+    assert sent.get("model") == llm_client.MODEL_OPUS
+    assert "temperature" not in sent
     assert sent.get("system_prompt") == _EXTRACT_SYSTEM, (
         "extract_student_work must hand _EXTRACT_SYSTEM to call_claude_vision — "
         "writing the prompt is not the same as sending it"
     )
+
+
+async def test_an_always_thinking_model_gets_a_request_it_accepts(captured: _Captured) -> None:
+    """Opus 5.5 rejects `temperature` and a forced tool choice with a 400,
+    so the reader would strand every submission if either were sent."""
+    await llm_client.call_claude_vision(
+        [{"type": "text", "text": "page"}],
+        llm_client.LLMMode.INTEGRITY_EXTRACT,
+        tool_schema=INTEGRITY_EXTRACT_SCHEMA,
+        system_prompt=_EXTRACT_SYSTEM,
+        model=llm_client.MODEL_OPUS,
+    )
+    assert captured.kwargs["tool_choice"] == {"type": "auto"}
+    assert "temperature" not in captured.kwargs
+    text = _system_text(captured.kwargs)
+    assert "do not solve the problem yourself" in text.lower()
+    assert f"`{INTEGRITY_EXTRACT_SCHEMA['name']}` tool" in text
+    assert captured.persisted.get("system_prompt") == text
+
+
+async def test_an_always_thinking_model_refuses_a_temperature(captured: _Captured) -> None:
+    with pytest.raises(ValueError):
+        await llm_client.call_claude_vision(
+            [{"type": "text", "text": "page"}],
+            llm_client.LLMMode.INTEGRITY_EXTRACT,
+            tool_schema=INTEGRITY_EXTRACT_SCHEMA,
+            model=llm_client.MODEL_OPUS,
+            temperature=0.0,
+        )

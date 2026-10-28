@@ -88,11 +88,17 @@ MODEL_SONNET = settings.llm_model_sonnet
 MODEL_HAIKU = settings.llm_model_haiku
 MODEL_CLASSIFY = MODEL_HAIKU
 MODEL_REASON = MODEL_SONNET
+MODEL_OPUS = settings.llm_model_opus
+
+# Models that always think. They reject `temperature` and a forced tool
+# choice, so they get tool_choice "auto" and are told to answer with the tool.
+_ALWAYS_THINKS = {MODEL_OPUS}
 
 # Pricing per token (USD)
 _PRICING: dict[str, tuple[float, float]] = {
     MODEL_SONNET: (3.0 / 1_000_000, 15.0 / 1_000_000),
     MODEL_HAIKU: (1.0 / 1_000_000, 5.0 / 1_000_000),
+    MODEL_OPUS: (4.0 / 1_000_000, 20.0 / 1_000_000),
 }
 # Fallback for unknown models
 _DEFAULT_PRICING = _PRICING[MODEL_SONNET]
@@ -1057,6 +1063,13 @@ async def call_claude_vision(
     thinking_kwargs, effective_tool_choice = _build_thinking_kwargs(
         thinking_budget, max_tokens, tool_choice_default
     )
+    if use_model in _ALWAYS_THINKS:
+        if temperature is not None or thinking_budget is not None:
+            raise ValueError(f"{use_model} takes neither temperature nor thinking_budget")
+        effective_tool_choice = {"type": "auto"}
+        system_prompt = (
+            f"{system_prompt}\n\n" if system_prompt else ""
+        ) + f"Give your answer by calling the `{tool_schema['name']}` tool."
     if temperature is not None:
         if thinking_budget is not None and temperature != 1.0:
             raise ValueError(
