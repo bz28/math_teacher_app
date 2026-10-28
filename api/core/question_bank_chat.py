@@ -382,7 +382,9 @@ async def chat_with_bank_item(
         # Top-level question figure: pass through + pre-render so the
         # preview UI shows the diagram alongside the question text.
         top_spec_raw = proposal_raw.get("figure_spec")
-        top_figure_spec, top_figure_svg = _resolve_figure(top_spec_raw)
+        top_figure_spec, top_figure_svg = _resolve_figure(
+            top_spec_raw, proposal_raw.get("question") or item.question,
+        )
 
         proposal = {
             "question": proposal_raw.get("question") if proposal_raw.get("question") else None,
