@@ -99,9 +99,14 @@ _NAMED_POINTS = re.compile(
 )
 
 
+def _canon_point(name: str) -> str:
+    """One spelling per point name: `A′`, `A’` and `$A'$` are all `A'`."""
+    return name.replace("′", "'").replace("’", "'").replace("$", "").strip()
+
+
 def _named_points(text: str) -> set[str]:
     names: set[str] = set()
-    for m in _NAMED_POINTS.finditer(text):
+    for m in _NAMED_POINTS.finditer(_canon_point(text)):
         names.update(re.findall(_POINT, m["run"] or m["list"] or m["on"]))
     return names
 
@@ -124,7 +129,7 @@ def _resolve_figure(
     svg = render_figure_or_none(raw_spec, context="figure_spec")
     if not svg:
         return None, None
-    missing = _named_points(text) - figure_point_names(raw_spec)
+    missing = _named_points(text) - {_canon_point(n) for n in figure_point_names(raw_spec)}
     if missing:
         logger.warning("figure_spec dropped: problem names %s, which the figure doesn't draw", sorted(missing))
         return None, None

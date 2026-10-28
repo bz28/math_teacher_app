@@ -159,6 +159,7 @@ async def test_a_failed_replacement_call_keeps_the_good_problems() -> None:
     ("Solve 2x + 3 = 11. A ladder leans on a wall.", set()),
     (r"$\\triangle A'B'C'$ is the image of $\\triangle ABC$.", {"A'", "B'", "C'", "A", "B", "C"}),
     ("Points A and B lie on circle O.", {"A", "B"}),
+    ("△A′B′C′ is the image of △ABC.", {"A'", "B'", "C'", "A", "B", "C"}),
 ])
 def test_points_a_problem_names(text: str, names: set[str]) -> None:
     assert _named_points(text) == names
@@ -178,6 +179,13 @@ def test_a_figure_missing_a_named_point_is_dropped() -> None:
 def test_a_figure_with_every_named_point_is_kept() -> None:
     spec, svg = _resolve_figure(TRIANGLE_ABC, r"In $\triangle ABC$ below, find $m\angle A$.")
     assert spec == TRIANGLE_ABC and svg
+
+
+@pytest.mark.parametrize("prime", ["′", "’", "'"])
+def test_primes_match_however_they_are_typed(prime: str) -> None:
+    spec = {**TRIANGLE_ABC, "vertex_labels": {"A": f"$A{prime}$", "B": f"B{prime}", "C": f"C{prime}"}}
+    out, svg = _resolve_figure(spec, r"Find $m\angle A'$ in $\triangle A'B'C'$.")
+    assert out == spec and svg
 
 
 def test_a_figure_labeled_with_the_problems_names_is_kept() -> None:
