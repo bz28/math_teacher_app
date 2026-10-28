@@ -95,6 +95,15 @@ def test_an_unknown_id_is_treated_as_a_new_rule() -> None:
     assert stored["rules"][0]["id"] != "forged"
 
 
+def test_a_repeated_id_names_only_one_rule() -> None:
+    stored = ClassRubric.model_validate(
+        {"rules": [{"id": "r1", "text": "Units."}, {"id": "r1", "text": "Show work."}]}
+    ).to_stored({"rules": [_UNITS]})
+    assert stored is not None
+    first, second = stored["rules"]
+    assert first["id"] == "r1" and second["id"] not in ("r1", "")
+
+
 def test_clearing_every_rule_stores_none() -> None:
     assert ClassRubric(rules=[]).to_stored({"rules": [_UNITS]}) is None
 

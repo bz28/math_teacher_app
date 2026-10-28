@@ -72,8 +72,13 @@ class ClassRubric(BaseModel):
         }
         now = datetime.now(UTC).isoformat()
         rules: list[dict[str, Any]] = []
+        seen: set[str] = set()
         for rule in self.rules:
-            prior = known.get(rule.id) if rule.id else None
+            # A repeated id (a hand-built request) gets a fresh one, so a
+            # cited or skipped id always means exactly one rule.
+            prior = known.get(rule.id) if rule.id and rule.id not in seen else None
+            if prior and rule.id:
+                seen.add(rule.id)
             rules.append({
                 "id": rule.id if prior else new_rule_id(),
                 "text": rule.text,
