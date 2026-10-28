@@ -12,6 +12,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.answer_units import units_not_in_work
 from api.core.audit_log import record_activity
 from api.core.constants import DEFAULT_HOMEWORK_INSTRUCTIONS, MAX_RUBRIC_FIELD_CHARS
 from api.core.entitlements import Entitlement, check_entitlement
@@ -2537,6 +2538,11 @@ class TeacherSubmissionDetailProblem(BaseModel):
     # the marker rather than guessing, because a wrong page number is
     # worse than none.
     pages: list[int] = []
+    # Units in the read final answer that appear in none of this
+    # problem's steps — most likely added by the reader from the
+    # question ("15.76" read as "15.76 ft"). A pointer to check the
+    # photo, not a verdict; see api/core/answer_units.py.
+    units_not_in_work: list[str] = []
 
 
 class TeacherSubmissionDetail(BaseModel):
@@ -3035,6 +3041,12 @@ async def get_submission_detail(
             requires_drawing=bool(item.requires_drawing),
             drawings=drawings_by_position.get(pos, []),
             pages=sorted(pages_by_position.get(pos, [])),
+            # Checked against the answer the teacher is shown, so the note
+            # always names a unit that is on screen.
+            units_not_in_work=units_not_in_work(
+                student_answer or "",
+                [s.model_dump() for s in steps_by_position.get(pos, [])],
+            ),
         ))
 
     # Surface ai_breakdown's grades array for the frontend to show

@@ -6200,6 +6200,11 @@ export interface components {
              * @default []
              */
             student_steps: components["schemas"]["TeacherSubmissionStep"][];
+            /**
+             * Units Not In Work
+             * @default []
+             */
+            units_not_in_work: string[];
         };
         /**
          * TeacherSubmissionDrawing
