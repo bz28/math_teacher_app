@@ -47,10 +47,16 @@ export default function HomeworkPage() {
   // wrong" mode. Page-level state so the toggle survives a re-fetch
   // (visibility-change re-loads keep the filter intact).
   const [missedOnly, setMissedOnly] = useState(false);
+  // Bumped every time loadAll routes to the preparing screen. Keys
+  // IntegrityPendingView so re-entering it from inside itself (its
+  // onReady re-routes back to preparing) remounts it and restarts its
+  // poll — it stops polling once it has fired onReady.
+  const [pendingRun, setPendingRun] = useState(0);
 
   // Load (or re-load) the homework + submission + integrity state.
-  // Called on mount, after submit, and after the chat finishes so
-  // the entry prompt visibility / progress indicator stay in sync.
+  // Called on mount, after submit, after the confirm screen's Confirm
+  // or Flag, when the preparing screen is ready, and after the chat
+  // finishes, so the entry prompt / progress indicator stay in sync.
   async function loadAll(aid: string) {
     try {
       const detail = await schoolStudent.homeworkDetail(aid);
@@ -64,7 +70,11 @@ export default function HomeworkPage() {
         // Always set the mode: loadAll also runs from inside the
         // confirm and preparing screens, and leaving the mode alone
         // strands the student on a screen whose job is done.
-        setMode(routeSubmittedHomework(sub, integrity));
+        const next = routeSubmittedHomework(
+          sub, integrity, detail.grade_published_at != null,
+        );
+        if (next.kind === "integrity_pending") setPendingRun((n) => n + 1);
+        setMode(next);
       }
     } catch (e) {
       // A preview whose seat is in a period this homework was never
@@ -117,6 +127,7 @@ export default function HomeworkPage() {
   if (mode.kind === "integrity_pending" && hw.submission_id && assignmentId) {
     return (
       <IntegrityPendingView
+        key={pendingRun}
         submissionId={hw.submission_id}
         assignmentId={assignmentId}
         onReady={async () => {

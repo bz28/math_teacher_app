@@ -34,9 +34,16 @@ function state(overall_status: string): IntegrityStateResponse {
 
 const CONFIRMED = "2026-10-29T12:01:00Z";
 
+// No published grade unless a test says so.
+const route = (
+  s: StudentSubmission | null,
+  i: IntegrityStateResponse | null,
+  gradePublished = false,
+) => routeSubmittedHomework(s, i, gradePublished);
+
 describe("routeSubmittedHomework", () => {
   it("shows the confirm screen while the reading waits on the student", () => {
-    const mode = routeSubmittedHomework(sub({}), state("extracting"));
+    const mode = route(sub({}), state("extracting"));
     assert.equal(mode.kind, "integrity_confirm");
     assert.equal(mode.kind === "integrity_confirm" && mode.integrityCheckEnabled, true);
   });
@@ -49,19 +56,19 @@ describe("routeSubmittedHomework", () => {
       extraction_confirmed_at: CONFIRMED,
       integrity_check_enabled: false,
     });
-    assert.deepEqual(routeSubmittedHomework(confirmed, state("no_check")), { kind: "homework" });
+    assert.deepEqual(route(confirmed, state("no_check")), { kind: "homework" });
   });
 
   it("check on: a confirmed reading waits for the check, then opens the chat", () => {
     const confirmed = sub({ extraction_confirmed_at: CONFIRMED });
-    assert.deepEqual(routeSubmittedHomework(confirmed, state("extracting")), { kind: "integrity_pending" });
-    assert.deepEqual(routeSubmittedHomework(confirmed, state("awaiting_student")), { kind: "integrity_chat" });
-    assert.deepEqual(routeSubmittedHomework(confirmed, state("in_progress")), { kind: "integrity_chat" });
+    assert.deepEqual(route(confirmed, state("extracting")), { kind: "integrity_pending" });
+    assert.deepEqual(route(confirmed, state("awaiting_student")), { kind: "integrity_chat" });
+    assert.deepEqual(route(confirmed, state("in_progress")), { kind: "integrity_chat" });
   });
 
   it("check on, AI grading off: a confirmed reading still opens the chat", () => {
     const confirmed = sub({ extraction_confirmed_at: CONFIRMED, ai_grading_enabled: false });
-    assert.deepEqual(routeSubmittedHomework(confirmed, state("awaiting_student")), { kind: "integrity_chat" });
+    assert.deepEqual(route(confirmed, state("awaiting_student")), { kind: "integrity_chat" });
   });
 
   it("check and AI grading both off: no reading ever comes, so no spinner", () => {
@@ -70,30 +77,42 @@ describe("routeSubmittedHomework", () => {
       integrity_check_enabled: false,
       ai_grading_enabled: false,
     });
-    assert.deepEqual(routeSubmittedHomework(plain, state("no_check")), { kind: "homework" });
+    assert.deepEqual(route(plain, state("no_check")), { kind: "homework" });
   });
 
   it("a finished or unreadable check lands on the submitted view", () => {
     const confirmed = sub({ extraction_confirmed_at: CONFIRMED });
     for (const s of ["complete", "skipped_unreadable"]) {
-      assert.deepEqual(routeSubmittedHomework(confirmed, state(s)), { kind: "homework" });
+      assert.deepEqual(route(confirmed, state(s)), { kind: "homework" });
     }
   });
 
-  it("a confirmed reading with the integrity fetch failed still leaves the confirm screen", () => {
+  it("check-state fetch failed after confirm: preparing (it polls) with the check on, else submitted", () => {
     const confirmed = sub({ extraction_confirmed_at: CONFIRMED });
-    assert.deepEqual(routeSubmittedHomework(confirmed, null), { kind: "homework" });
+    assert.deepEqual(route(confirmed, null), { kind: "integrity_pending" });
+    const checkOff = sub({ extraction_confirmed_at: CONFIRMED, integrity_check_enabled: false });
+    assert.deepEqual(route(checkOff, null), { kind: "homework" });
+  });
+
+  it("a published grade skips the confirm screen and the reading spinner", () => {
+    assert.deepEqual(route(sub({}), state("extracting"), true), { kind: "homework" });
+    assert.deepEqual(route(sub({ extraction: null }), state("extracting"), true), { kind: "homework" });
+  });
+
+  it("both toggles switched off since submit: an unconfirmed reading waits on nothing", () => {
+    const off = sub({ integrity_check_enabled: false, ai_grading_enabled: false });
+    assert.deepEqual(route(off, state("no_check")), { kind: "homework" });
   });
 
   it("still reading: preparing spinner", () => {
     assert.deepEqual(
-      routeSubmittedHomework(sub({ extraction: null }), state("extracting")),
+      route(sub({ extraction: null }), state("extracting")),
       { kind: "integrity_pending" },
     );
   });
 
   it("flagged beats everything", () => {
     const flagged = sub({ extraction_flagged_at: CONFIRMED });
-    assert.deepEqual(routeSubmittedHomework(flagged, state("awaiting_student")), { kind: "extraction_flagged" });
+    assert.deepEqual(route(flagged, state("awaiting_student")), { kind: "extraction_flagged" });
   });
 });
