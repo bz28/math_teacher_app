@@ -319,6 +319,42 @@ def crop_region_for_vision(
         return None
 
 
+# Enough pixels for a hand-drawn graph to survive the crop-and-enlarge
+# (crop_region_for_vision), a little above what a phone photo of the same
+# page carries after VISION_MAX_EDGE.
+_PDF_RENDER_LONG_EDGE = 2400
+# A homework upload is a few pages; past this, a "PDF" is not homework.
+_PDF_MAX_PAGES = 30
+
+
+def pdf_pages_as_images(data_base64: str) -> list[str]:
+    """Each page of a PDF as a base64 JPEG, in order, so a drawing on a
+    PDF upload can be cropped like one on a photo. The reader sees a PDF
+    natively, page by page, so page N here is the reader's page N.
+    Empty when the PDF can't be read."""
+    import pypdfium2 as pdfium  # imported here: only PDF uploads need it
+
+    try:
+        pdf = pdfium.PdfDocument(base64.b64decode(data_base64))
+    except Exception:  # noqa: BLE001 — an unreadable PDF has no pages to crop
+        return []
+    out: list[str] = []
+    try:
+        for i in range(min(len(pdf), _PDF_MAX_PAGES)):
+            page = pdf[i]
+            width, height = page.get_size()
+            scale = _PDF_RENDER_LONG_EDGE / max(width, height, 1)
+            img = page.render(scale=scale).to_pil().convert("RGB")
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=90)
+            out.append(base64.b64encode(buf.getvalue()).decode("ascii"))
+    except Exception:  # noqa: BLE001 — keep the pages that rendered
+        pass
+    finally:
+        pdf.close()
+    return out
+
+
 def to_content_block(media_type: str, data_base64: str) -> dict[str, Any]:
     """Build the Anthropic content block for a base64 payload.
 
