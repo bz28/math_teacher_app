@@ -48,6 +48,7 @@ import {
 } from "@/lib/api";
 import { RuleSuggestion } from "@/components/school/teacher/_pieces/rule-suggestion";
 import { effectiveRubric, rubricChanged, rubricFields } from "@/lib/rubric";
+import { deductionPoints, earnedPoints, formatPoints } from "@/lib/points";
 
 type GradeStatus = GradeBreakdownEntry["score_status"];
 
@@ -3714,6 +3715,7 @@ function SubmissionDetailPanel({
   }, [handleGradingKey]);
 
   const showReadingCheck = needsReadingCheck(detail);
+  const homeworkPoints = detail.problems.reduce((s, p) => s + p.points, 0);
 
   return (
     <div className="space-y-4">
@@ -3728,6 +3730,14 @@ function SubmissionDetailPanel({
               {detail.student_name}
             </span>
             <span className="text-xs text-text-muted">{detail.student_email}</span>
+            {detail.final_score !== null && homeworkPoints > 0 && (
+              <span className="text-sm" title="Points earned out of what the homework is worth">
+                <span className="font-mono font-bold tabular-nums text-text-primary">
+                  {formatPoints(earnedPoints(detail.final_score, homeworkPoints))}/{homeworkPoints}
+                </span>
+                <span className="text-xs text-text-muted"> · {Math.round(detail.final_score)}%</span>
+              </span>
+            )}
           </p>
           <p className="mt-0.5 text-[11px] text-text-muted">
             Submitted{" "}
@@ -5495,6 +5505,7 @@ function ProblemGradeRow({
           deductions={deductions}
           status={current ?? "partial"}
           percent={entry?.percent ?? 0}
+          worth={problem.points}
           aiConfidence={aiGrade?.confidence ?? null}
           stepCount={stepCount}
           onAnchorClick={scrollToStep}
@@ -5540,6 +5551,11 @@ function ProblemGradeRow({
               className="w-12 bg-transparent text-right tabular-nums focus:outline-none"
             />
             <span aria-hidden>%</span>
+            {entry && (
+              <span className="ml-1 font-normal text-[color:var(--color-warning-dark)]/80">
+                · {formatPoints(earnedPoints(entry.percent, problem.points))}/{problem.points} pts
+              </span>
+            )}
           </div>
         )}
         <GradeBtn
@@ -5615,9 +5631,12 @@ function ProblemGradeRow({
 
 // ────────────────────────────────────────────────────────────────────
 // Itemized grade receipt — renders the AI's per-problem `deductions`
-// ledger as a "why this score" breakdown: credit lines (things done
-// right, ✓) and debit lines (−X% with the reason), summing to
-// SCORE = 100 − Σ points_off = percent. Each debit that anchors to a
+// ledger as a "why this score" breakdown in the problem's points: credit
+// lines (things done right, ✓) and debit lines (−N points with the
+// reason and where it came from — a class rule or the AI's judgment),
+// summing to SCORE = worth − Σ points off. `points_off` is stored as a
+// percent of the problem; lines are converted together (deductionPoints)
+// so they always add up to the score shown. Each debit that anchors to a
 // student-work step gets a color-matched [N] badge + "↳ step N" link
 // that highlights + scrolls to that step in the work list above. Full
 // credit (no debits) collapses to "✓ Full credit"; an itemized zero to
@@ -5628,6 +5647,7 @@ function GradeReceipt({
   deductions,
   status,
   percent,
+  worth,
   aiConfidence,
   stepCount,
   onAnchorClick,
@@ -5636,6 +5656,8 @@ function GradeReceipt({
   deductions: GradeDeduction[];
   status: GradeStatus;
   percent: number;
+  /** What the problem is worth on this homework. */
+  worth: number;
   aiConfidence: number | null;
   stepCount: number;
   onAnchorClick: (stepRef: number) => void;
@@ -5644,6 +5666,13 @@ function GradeReceipt({
   const credits = deductions.filter((d) => d.points_off <= 0);
   const debits = deductions.filter((d) => d.points_off > 0);
   const score = Math.round(percent);
+  const earned = earnedPoints(percent, worth);
+  const debitPoints = deductionPoints(
+    debits.map((d) => d.points_off),
+    worth,
+    worth - earned,
+  );
+  const scoreText = `${formatPoints(earned)}/${worth}`;
   const confPct = aiConfidence != null ? Math.round(aiConfidence * 100) : null;
   const confLow = aiConfidence != null && aiConfidence < CONFIDENCE_LOW;
 
@@ -5674,7 +5703,7 @@ function GradeReceipt({
     // an empty itemized box.
     return (
       <div className="mt-3 inline-flex items-center gap-2 rounded-[--radius-md] border border-[color:var(--color-warning-dark)]/30 bg-[color:var(--color-warning-bg)]/60 px-3 py-2 text-xs font-bold text-[color:var(--color-warning-dark)]">
-        Partial · {score}%
+        Partial · {scoreText} · {score}%
       </div>
     );
   }
@@ -5694,7 +5723,7 @@ function GradeReceipt({
     <div className="mt-3 overflow-hidden rounded-[--radius-md] border border-border-light bg-[color:var(--color-surface-alt)]">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-dashed border-border px-3 py-2">
         <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-[color:var(--color-text-secondary)]">
-          Why {score}% — itemized
+          Why {scoreText} — itemized
         </span>
         <span className="inline-flex items-center gap-1.5 text-[11px] font-bold">
           <span aria-hidden>🤖</span>
@@ -5794,16 +5823,33 @@ function GradeReceipt({
                     ↳ step {d.step_ref} in work
                   </button>
                 )}
-                {d.rule_id && ruleText[d.rule_id] && (
+                {d.rule_id && ruleText[d.rule_id] ? (
                   <span className="mt-1 flex">
                     <span className="rounded-full bg-[color:var(--color-primary-bg)] px-2 py-0.5 text-[11px] font-medium text-primary">
-                      Class rubric: {ruleText[d.rule_id]}
+                      Class rule: {ruleText[d.rule_id]}
                     </span>
                   </span>
+                ) : d.source === "class_rule" ? (
+                  <span className="mt-1 flex">
+                    <span className="rounded-full bg-[color:var(--color-primary-bg)] px-2 py-0.5 text-[11px] font-medium text-primary">
+                      Class rule
+                    </span>
+                  </span>
+                ) : (
+                  d.source === "ai_judgment" && (
+                    <span className="mt-1 flex">
+                      <span
+                        className="rounded-full border border-border-light px-2 py-0.5 text-[11px] font-medium text-text-secondary"
+                        title="No rule covered this, so the AI sized it (to the nearest half point). Worth a check."
+                      >
+                        AI judgment
+                      </span>
+                    </span>
+                  )
                 )}
               </span>
               <span className="shrink-0 font-mono text-[12px] font-semibold text-[color:var(--color-error)]">
-                −{Math.round(d.points_off)}%
+                −{formatPoints(debitPoints[i])}
               </span>
             </div>
           );
@@ -5815,11 +5861,12 @@ function GradeReceipt({
         </span>
         <span className="flex items-baseline gap-2">
           <span className="font-mono text-[11px] text-text-muted">
-            100{debits.map((d, i) => <span key={i}> − {Math.round(d.points_off)}</span>)}
+            {worth}{debitPoints.map((p, i) => <span key={i}> − {formatPoints(p)}</span>)}
           </span>
           <span className={`font-mono text-lg font-bold ${scoreColor}`}>
-            {score}%
+            {scoreText}
           </span>
+          <span className="font-mono text-[11px] text-text-muted">{score}%</span>
         </span>
       </div>
     </div>
