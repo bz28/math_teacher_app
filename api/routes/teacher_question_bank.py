@@ -16,18 +16,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.audit_log import record_activity, record_question_edit
 from api.core.checklist_points import MAX_CHECKLIST_ITEM_CHARS, MAX_CHECKLIST_ITEMS
-from api.core.class_rubric import class_rules
 from api.core.constants import SOLUTION_FAILED_SENTINEL_PREFIX
 from api.core.drawing_check import ChecklistItem
 from api.core.drawing_requirement import classify_requires_drawing
 from api.core.entitlements import Entitlement, check_entitlement
 from api.core.graph_checklist import (
-    after_save,
-    checklist_source,
     checklist_views,
+    due,
+    homework_context,
     needs_checklist,
-    problem_points,
     schedule_write,
+    source_of,
     to_stored,
     write_checklist,
 )
@@ -658,7 +657,6 @@ async def update_bank_item(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid difficulty")
     if content_changing:
         snapshot_history(item)
-    checklist_before = checklist_source(item)
     # Not part of the one-level undo (the toggle is its own undo), and
     # not lock-gated: see UpdateBankItemRequest.requires_drawing.
     drawing_changed = (
@@ -757,10 +755,10 @@ async def update_bank_item(
                 db, current_user, "bank_item.retag", "bank_item", item.id, retag,
             )
 
-    checklist_due = after_save(item, checklist_before)
+    checklist_due = due(item)
     await db.commit()
     if checklist_due:
-        schedule_write(item.id, user_id=str(current_user.user_id))
+        schedule_write(item, user_id=str(current_user.user_id))
     return await _item_response(db, item)
 
 
@@ -782,7 +780,6 @@ async def revert_bank_item(
             detail="No previous version to restore",
         )
     prior_status = item.status
-    checklist_before = checklist_source(item)
     item.question = item.previous_question
     item.solution_steps = item.previous_solution_steps
     item.final_answer = item.previous_final_answer or ""
@@ -812,10 +809,10 @@ async def revert_bank_item(
         db, current_user, "bank_item.revert", "bank_item", item.id,
         {"title": item.title, "restored_status": restored_status},
     )
-    checklist_due = after_save(item, checklist_before)
+    checklist_due = due(item)
     await db.commit()
     if checklist_due:
-        schedule_write(item.id, user_id=str(current_user.user_id))
+        schedule_write(item, user_id=str(current_user.user_id))
     return await _item_response(db, item)
 
 
@@ -891,12 +888,12 @@ async def approve_bank_item(
         db, current_user, "bank_item.approve", "bank_item", item.id,
         {"title": item.title},
     )
-    checklist_due = after_save(item, checklist_source(item))
+    checklist_due = due(item)
     await db.commit()
     # After the commit, so the background write sees the approved item —
     # and a failed write can't touch the approval.
     if checklist_due:
-        schedule_write(item.id, user_id=str(current_user.user_id))
+        schedule_write(item, user_id=str(current_user.user_id))
     return {"status": "ok"}
 
 
@@ -941,7 +938,6 @@ async def regenerate_bank_item(
     course = (await db.execute(
         select(Course).where(Course.id == item.course_id)
     )).scalar_one()
-    checklist_before = checklist_source(item)
     try:
         await regenerate_one(
             db, item, course,
@@ -970,10 +966,10 @@ async def regenerate_bank_item(
         db, current_user, "bank_item.regenerate", "bank_item", item.id,
         {"title": item.title, "mode": "guided" if kind == REGEN_GUIDED else "fresh"},
     )
-    checklist_due = after_save(item, checklist_before)
+    checklist_due = due(item)
     await db.commit()
     if checklist_due:
-        schedule_write(item.id, user_id=str(current_user.user_id))
+        schedule_write(item, user_id=str(current_user.user_id))
 
     return await _item_response(db, item)
 
@@ -1137,7 +1133,6 @@ async def accept_chat_proposal(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Proposal already resolved")
 
     snapshot_history(item)
-    checklist_before = checklist_source(item)
 
     if proposal.get("question") is not None:
         new_question = str(proposal["question"]).strip()
@@ -1228,10 +1223,10 @@ async def accept_chat_proposal(
             ],
         },
     )
-    checklist_due = after_save(item, checklist_before)
+    checklist_due = due(item)
     await db.commit()
     if checklist_due:
-        schedule_write(item.id, user_id=str(current_user.user_id))
+        schedule_write(item, user_id=str(current_user.user_id))
     return await _item_response(db, item)
 
 
@@ -1326,20 +1321,21 @@ async def update_graph_checklist(
 ) -> dict[str, Any]:
     """Replace the checklist with the teacher's. From now on it is hers:
     question and answer-key changes no longer rewrite it."""
-    points = await problem_points(db, item)
+    points, grading = await homework_context(db, item)
     if not points:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Add this question to its homework before setting its graph checklist",
         )
-    course = (await db.execute(select(Course).where(Course.id == item.course_id))).scalar_one()
-    rules = {r["id"]: r.get("points") for r in class_rules(course.rubric)}
+    # The rules the grader applies to this homework: a class rule it skips
+    # can't be linked here.
+    rules = {r["id"]: r.get("points") for r in grading}
     graph_points = 0
     for i in body.items:
         if i.rule_id is not None and i.rule_id not in rules:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="That class rule no longer exists — reload and try again",
+                detail="That class rule no longer applies to this homework — reload and try again",
             )
         rule_points = rules.get(i.rule_id) if i.rule_id else None
         graph_points += rule_points if isinstance(rule_points, int) and rule_points > 0 else i.points
@@ -1353,7 +1349,7 @@ async def update_graph_checklist(
         )
     item.graph_checklist = to_stored(
         [ChecklistItem(text=i.text, points=i.points, rule_id=i.rule_id) for i in body.items],
-        points, teacher_edited=True,
+        points, source=source_of(item), teacher_edited=True,
     )
     await record_activity(
         db, current_user, "bank_item.edit", "bank_item", item.id,
@@ -1382,10 +1378,19 @@ async def rewrite_graph_checklist(
                 "answer key, gets a graph checklist"
             ),
         )
-    if not await problem_points(db, item):
+    points, _ = await homework_context(db, item)
+    if not points:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Add this question to its homework before writing its graph checklist",
+        )
+    if points < 2:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"This problem is worth {points} point — give it at least 2 so the "
+                "graph can be worth some and the work and answer the rest"
+            ),
         )
     try:
         written = await write_checklist(

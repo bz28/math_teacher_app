@@ -9,7 +9,7 @@ would have written it.
 SAFETY
   * Dry-run by default: lists what it would write, calls no model.
     Pass --apply to write (one Sonnet call per question).
-  * Only questions with no checklist: never touches one a teacher edited,
+  * Only questions with no current checklist: never touches one a teacher edited,
     or one the app already wrote. Safe to re-run.
   * Each write re-checks the question under a row lock before saving
     (write_checklist), so a teacher editing it mid-run wins.
@@ -29,7 +29,7 @@ from sqlalchemy import select
 
 
 async def main(apply: bool) -> None:
-    from api.core.graph_checklist import needs_checklist, problem_points, write_checklist
+    from api.core.graph_checklist import due, homework_context, write_checklist
     from api.database import get_session_factory
     from api.models.question_bank import QuestionBankItem
 
@@ -39,17 +39,19 @@ async def main(apply: bool) -> None:
                 QuestionBankItem.status == "approved",
                 QuestionBankItem.requires_drawing.is_(True),
                 QuestionBankItem.parent_question_id.is_(None),
-                QuestionBankItem.graph_checklist.is_(None),
             ).order_by(QuestionBankItem.created_at)
         )).scalars().all()
         todo = []
         for item in candidates:
-            points = await problem_points(db, item)
-            ok = needs_checklist(item) and bool(points)
+            points, _ = await homework_context(db, item)
+            ok = due(item) and bool(points)
             print(f"  {'write' if ok else 'skip '} {item.id}  {points or '-':>3} pts  {item.title[:60]}")
             if ok:
                 todo.append(item.id)
-        print(f"{len(todo)} to write, {len(candidates) - len(todo)} skipped (no answer key or not on its homework)")
+        print(
+            f"{len(todo)} to write, {len(candidates) - len(todo)} skipped "
+            "(already has one, no answer key, or not on its homework)"
+        )
         if not apply:
             print("Dry run: nothing written. Pass --apply to write.")
             return

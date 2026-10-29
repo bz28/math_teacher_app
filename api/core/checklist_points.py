@@ -61,6 +61,29 @@ def _shrink(values: list[int], order: list[int], cap: int, floor_at: int) -> Non
         values[max(candidates, key=lambda i: (values[i], i))] -= 1
 
 
+def _link_rules(
+    items: list[ChecklistItem], rules: list[dict[str, Any]] | None,
+) -> tuple[list[ChecklistItem], list[int | None]]:
+    """Each item with its link checked against `rules` (an id that isn't
+    one of them is unlinked), and the rule's points where it names some."""
+    rule_points = {r["id"]: r.get("points") for r in rules or [] if r.get("id")}
+    resolved: list[ChecklistItem] = []
+    fixed: list[int | None] = []
+    for item in items:
+        rule_id = item.rule_id if item.rule_id in rule_points else None
+        resolved.append(replace(item, rule_id=rule_id))
+        rp = rule_points.get(rule_id) if rule_id else None
+        fixed.append(rp if isinstance(rp, int) and rp > 0 else None)
+    return resolved, fixed
+
+
+def link_rules(items: list[ChecklistItem], rules: list[dict[str, Any]] | None) -> list[ChecklistItem]:
+    """`items` resolved for `rules` alone, with no problem points to size
+    them by: rule points where a rule names some, missing rules unlinked."""
+    resolved, fixed = _link_rules(items, rules)
+    return [replace(i, points=f) if f is not None else i for i, f in zip(resolved, fixed, strict=True)]
+
+
 def fit_checklist(
     items: list[ChecklistItem],
     basis: int,
@@ -74,15 +97,7 @@ def fit_checklist(
     The graph part never reaches `points`. In the degenerate case of more
     items than points to give (a 3-item checklist on a 2-point problem),
     items past the budget are worth 0 rather than breaking that rule."""
-    rule_points = {r["id"]: r.get("points") for r in rules or [] if r.get("id")}
-    resolved: list[ChecklistItem] = []
-    fixed: list[int | None] = []
-    for item in items:
-        rule_id = item.rule_id if item.rule_id in rule_points else None
-        resolved.append(replace(item, rule_id=rule_id))
-        rp = rule_points.get(rule_id) if rule_id else None
-        fixed.append(rp if isinstance(rp, int) and rp > 0 else None)
-
+    resolved, fixed = _link_rules(items, rules)
     free = [i for i, f in enumerate(fixed) if f is None]
     free_points = [max(1, resolved[i].points) for i in free]
     if basis > 0 and points != basis:

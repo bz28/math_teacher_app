@@ -19,7 +19,7 @@ from sqlalchemy import select
 from api.core import drawing_check, graph_checklist
 from api.core.checklist_points import fit_checklist
 from api.core.drawing_check import ChecklistItem, write_graph_checklist
-from api.core.graph_checklist import drain_checklist_tasks, needs_checklist
+from api.core.graph_checklist import drain_checklist_tasks, needs_checklist, source_of, to_stored
 from api.database import get_session_factory
 from api.models.assignment import Assignment
 from api.models.course import Course
@@ -270,6 +270,84 @@ async def test_a_question_edit_during_the_write_wins(
     assert (await _item(hw["item_id"])).graph_checklist is None
 
 
+async def _interleave(
+    client: AsyncClient, hw: dict[str, Any], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A question edit whose request loads the row, then a background write
+    for the OLD text commits, then the request commits the new text.
+
+    The commit is slipped in through the requires-drawing classifier,
+    which a question edit awaits between loading the row and committing."""
+    from api.routes import teacher_question_bank
+
+    old = source_of(QuestionBankItem(question=QUESTION, final_answer=ANSWER))
+
+    async def background_write_lands(question: str, **_: Any) -> bool:
+        await _set(QuestionBankItem, hw["item_id"], graph_checklist=to_stored(
+            [ChecklistItem("Vertical asymptote drawn at x = 2", 3)], 10, source=old, teacher_edited=False,
+        ))
+        return True
+
+    monkeypatch.setattr(teacher_question_bank, "classify_requires_drawing", background_write_lands)
+    await _patch(client, hw, question="Graph $y = \\frac{1}{x - 3}$.")
+
+
+async def test_an_old_text_write_landing_mid_edit_is_replaced(
+    hw: dict[str, Any], client: AsyncClient, writer: Writer, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    writer.reply = []  # approve writes nothing; the old-text write lands mid-edit
+    await _approve(client, hw)
+    writer.reply = [ChecklistItem("Vertical asymptote drawn at x = 3", 3)]
+    await _interleave(client, hw, monkeypatch)
+    item = await _item(hw["item_id"])
+    assert writer.calls[-1]["question"] == "Graph $y = \\frac{1}{x - 3}$."
+    assert item.graph_checklist["source"] == source_of(item)
+    assert [i["text"] for i in (await _view(client, hw))["items"]] == ["Vertical asymptote drawn at x = 3"]
+
+
+async def test_a_stale_checklist_is_never_shown(
+    hw: dict[str, Any], client: AsyncClient, writer: Writer, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Even when its replacement fails, an old-text checklist reads as not
+    written, never as the new question's."""
+    writer.reply = []
+    await _approve(client, hw)
+    await _interleave(client, hw, monkeypatch)
+    assert (await _item(hw["item_id"])).graph_checklist is not None
+    assert await _view(client, hw) is None
+    # The same for text changed from another tab, with no save here at all.
+    writer.reply = [ChecklistItem("Vertical asymptote drawn at x = 3", 3)]
+    await _patch(client, hw, requires_drawing=False)
+    await _patch(client, hw, requires_drawing=True)
+    assert await _view(client, hw) is not None
+    await _set(QuestionBankItem, hw["item_id"], final_answer="Something else")
+    assert await _view(client, hw) is None
+
+
+async def test_two_saves_during_one_write_make_one_call(
+    hw: dict[str, Any], client: AsyncClient, writer: Writer,
+) -> None:
+    writer.reply = []  # approve's write saves nothing, so another is due
+    await _approve(client, hw)
+    item = await _item(hw["item_id"])
+    graph_checklist.schedule_write(item, user_id=None)
+    graph_checklist.schedule_write(item, user_id=None)
+    await drain_checklist_tasks()
+    assert len(writer.calls) == 2  # approve's, then one for both saves
+
+
+async def test_rewrite_on_a_one_point_problem_says_why(
+    hw: dict[str, Any], client: AsyncClient, writer: Writer,
+) -> None:
+    await _approve(client, hw)
+    await _set(Assignment, hw["hw_id"], total_points=1)
+    r = await client.post(
+        f"/v1/teacher/question-bank/{hw['item_id']}/graph-checklist/rewrite",
+        headers=_auth(hw["teacher_token"]),
+    )
+    assert r.status_code == 400 and "worth 1 point" in r.json()["detail"]
+
+
 # ── requires a drawing on / off ──
 
 
@@ -304,6 +382,34 @@ async def test_rule_linked_items_take_the_rules_points_live(
     # A deleted rule: the item is unlinked.
     await _set(Course, hw["course_id"], rubric={"rules": [], "rev": 4})
     assert [(i["points"], i["rule_id"]) for i in (await _view(client, hw))["items"]][2] == (2, None)
+
+
+async def test_a_rule_the_homework_skips_is_never_linked(
+    hw: dict[str, Any], client: AsyncClient, writer: Writer,
+) -> None:
+    await _set(Assignment, hw["hw_id"], rubric={"skipped_rule_ids": ["r1"]})
+    await _approve(client, hw)
+    # The writer only hears about the rules the grader applies here.
+    assert writer.calls[0]["class_rules"] == []
+    # Stored linked (as a stale model answer would be): read unlinked, own points.
+    await _set(QuestionBankItem, hw["item_id"], graph_checklist={
+        **(await _item(hw["item_id"])).graph_checklist,
+        "items": [{"text": "Asymptotes labeled", "points": 3, "rule_id": "r1"}],
+    })
+    assert [(i["points"], i["rule_id"]) for i in (await _view(client, hw))["items"]] == [(3, None)]
+    r = await _put(client, hw, [{"text": "Asymptotes labeled", "points": 1, "rule_id": "r1"}])
+    assert r.status_code == 400
+
+
+async def test_without_problem_points_a_deleted_rule_still_unlinks(
+    hw: dict[str, Any], client: AsyncClient, writer: Writer,
+) -> None:
+    await _approve(client, hw)
+    await _set(Assignment, hw["hw_id"], content={"problem_ids": []})
+    await _set(Course, hw["course_id"], rubric={"rules": [], "rev": 2})
+    view = await _view(client, hw)
+    assert view["problem_points"] is None
+    assert [(i["points"], i["rule_id"]) for i in view["items"]][2] == (2, None)
 
 
 async def test_the_checklist_scales_with_the_problems_points(
