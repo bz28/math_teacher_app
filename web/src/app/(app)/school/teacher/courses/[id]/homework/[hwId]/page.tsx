@@ -1690,6 +1690,20 @@ function ProblemRow({
 }) {
   const [open, setOpen] = useState(false);
   const panelId = `grading-${problem.bank_item_id}`;
+  // One box, placed beside the question on wide screens and under it on
+  // a phone, where the question needs the width.
+  const pointsBox = (where: string) =>
+    points !== null && (
+      <label className={`shrink-0 items-center gap-1.5 text-xs text-text-muted ${where}`}>
+        <PointsInput
+          value={points}
+          label={`Points for problem ${problem.position}`}
+          onCommit={onPointsChange}
+          validate={validatePoints}
+        />
+        pts
+      </label>
+    );
   return (
     <li className="rounded-[--radius-md] border border-border-light bg-surface px-4 py-3">
       <div className="flex items-start gap-3">
@@ -1701,6 +1715,7 @@ function ProblemRow({
             <MathText text={problem.question} />
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+            {pointsBox("order-last ml-auto flex sm:hidden")}
             <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
               {problem.difficulty}
             </span>
@@ -1727,17 +1742,7 @@ function ProblemRow({
             )}
           </div>
         </div>
-        {points !== null && (
-          <label className="flex shrink-0 items-center gap-1.5 text-xs text-text-muted">
-            <PointsInput
-              value={points}
-              label={`Points for problem ${problem.position}`}
-              onCommit={onPointsChange}
-              validate={validatePoints}
-            />
-            pts
-          </label>
-        )}
+        {pointsBox("hidden sm:flex")}
       </div>
       {open && points !== null && (
         <div

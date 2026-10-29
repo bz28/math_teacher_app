@@ -223,7 +223,7 @@ export function GradingSetupCard({
             Array.isArray(classRules)
               ? classRules
                   .filter((r) => !skipped.includes(r.id))
-                  .map((r) => `${r.text}${r.points === null ? "" : ` (−${r.points})`}`)
+                  .map((r) => `${r.text}${r.points === null ? "" : ` (−${r.points} pt${r.points === 1 ? "" : "s"})`}`)
               : []
           }
         />

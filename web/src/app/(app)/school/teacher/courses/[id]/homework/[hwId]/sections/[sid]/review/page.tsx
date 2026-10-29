@@ -5006,7 +5006,7 @@ function ProblemGradeRow({
   }, [stepCount]);
   const aiGradeLabel = aiGrade
     ? aiGrade.score_status === "partial"
-      ? `Partial ${Math.round(aiGrade.percent)}%`
+      ? `Partial ${formatPoints(earnedPoints(aiGrade.percent, problem.points))}/${problem.points}`
       : aiGrade.score_status === "full"
         ? "Full"
         : "No credit"
@@ -5063,7 +5063,7 @@ function ProblemGradeRow({
               // white on `--color-warning` is 4.43:1, just under AA, and
               // this label is 10px bold — nowhere near large text.
               cls: "bg-[color:var(--color-warning-dark)] text-white",
-              label: `Partial ${Math.round(aiGrade.percent)}%`,
+              label: aiGradeLabel ?? "Partial",
             };
     return (
       <div

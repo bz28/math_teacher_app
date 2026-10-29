@@ -221,7 +221,7 @@ export function ClassRubricSection({
                     }`}
                     title={r.points === null ? "The AI decides how much to take off" : undefined}
                   >
-                    {r.points === null ? "AI sizes" : `−${r.points}`}
+                    {r.points === null ? "AI sizes" : `−${r.points} pt${r.points === 1 ? "" : "s"}`}
                   </span>
                   <button
                     type="button"
@@ -436,7 +436,7 @@ function CreditGuidance({
                 onChange={(e) => setDrafts((d) => ({ ...d, [field]: e.target.value }))}
                 onBlur={() => commit(field)}
                 maxLength={2000}
-                rows={4}
+                rows={6}
                 className="mt-1.5 w-full resize-y rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm leading-relaxed text-text-primary focus:border-primary focus:outline-none"
               />
             </div>

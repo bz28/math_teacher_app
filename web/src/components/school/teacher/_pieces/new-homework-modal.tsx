@@ -667,9 +667,6 @@ export function NewHomeworkModal({
                         problem&apos;s points once they&apos;re made.
                       </p>
                     </div>
-                    <p className="pt-2 text-xs text-text-muted">
-                      How the AI grades student work on this homework.
-                    </p>
                     {/* GradingSetupCard owns its own card chrome; -mt
                         pulls it tight under the helper line. */}
                     <div className="-mt-2">
