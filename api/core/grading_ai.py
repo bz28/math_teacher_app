@@ -470,9 +470,14 @@ def _build_problem_set_block(problems: list[dict[str, Any]], *, with_points: boo
         lines.append(
             f"Answer key: {p.get('final_answer') or '(no answer key)'}"
         )
+        part = p.get("graph_part")
         if with_points and p.get("points"):
-            lines.append(f"Worth: {p['points']} points")
-        if p.get("requires_drawing"):
+            lines.append(f"Worth: {part.work_points if part else p['points']} points")
+        if part:
+            # The drawing is checked against its checklist, apart from the
+            # grader (`graph_grading`); this grade is the written work's.
+            lines.append(_graph_part_line(part.linked_rules))
+        elif p.get("requires_drawing"):
             lines.append("Requires a drawing: yes")
         elif _MENTIONS_DRAWING.search(p.get("question") or ""):
             # The wording says "graph" but the teacher's flag says no
@@ -485,6 +490,19 @@ def _build_problem_set_block(problems: list[dict[str, Any]], *, with_points: boo
             )
         lines.append("")
     return "\n".join(lines)
+
+
+def _graph_part_line(linked_rules: set[str]) -> str:
+    line = (
+        "Drawing: checked separately. Grade only the written work and the final answer, "
+        "as if they were the whole problem: 100% means the work and the answer are fully "
+        "right. Never credit or deduct for the drawing, or for a missing one. An answer "
+        "the student marked only on the drawing still counts as their final answer."
+    )
+    if linked_rules:
+        ids = ", ".join(f"[{r}]" for r in sorted(linked_rules))
+        line += f" Class rules {ids} are checked with the drawing: don't apply them here."
+    return line
 
 
 _MENTIONS_DRAWING = re.compile(
@@ -662,7 +680,10 @@ async def grade_submission_with_ai(
         extraction: Output of extract_student_work() — contains steps
             and final_answers.
         problems: List of dicts with {position, question, final_answer}
-            from the HW's bank items.
+            from the HW's bank items. A problem carrying a `graph_part`
+            (`graph_grading.GraphPart`) is graded on its written work and
+            answer only, worth the work part's points; its drawing is
+            checked apart (`graph_grading`).
         rubric: The effective rubric — the homework's own fields plus the
             class rules it applies (`class_rubric.effective_rubric`). Optional.
         user_id: For cost-tracking attribution.
@@ -782,8 +803,9 @@ def _cap_confidence_for_unconfirmed_drawings(
     unconfirmed drawing, or a submission extracted before drawings were
     inventoried. Deterministic, so the teacher is always pointed at the
     photo whatever the model returned. Unflagged problems are untouched —
-    their drawings aren't used."""
-    flagged = {p.get("position") for p in problems if p.get("requires_drawing")}
+    their drawings aren't used — and so are problems whose drawing is
+    checked apart from the grader (`graph_part`)."""
+    flagged = {p.get("position") for p in problems if p.get("requires_drawing") and not p.get("graph_part")}
     if "visual_work" not in extraction:
         positions = flagged
     else:

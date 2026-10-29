@@ -211,6 +211,10 @@ class SubmissionGrade(Base):
     # rubric. Stored as a dict; null for grades created before rubric
     # versioning or when rubric was null.
     rubric_snapshot: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # Each graph problem's drawing check against its checklist
+    # (`graph_grading.ProblemGraphCheck.stored`), keyed by problem id. Null
+    # when no drawing was checked.
+    graph_checks: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     reviewed_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
     )
