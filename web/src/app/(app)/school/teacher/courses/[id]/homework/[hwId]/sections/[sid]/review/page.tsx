@@ -5081,7 +5081,10 @@ function ProblemGradeRow({
         <button
           type="button"
           onClick={onToggleExpand}
-          className="flex min-w-0 flex-1 items-center gap-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-[--radius-sm]"
+          // Wraps rather than clips: in the narrow middle column (or on a
+          // phone) the verdict drops under the answer instead of
+          // squeezing the answer to "⚠ No ⁝".
+          className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-[--radius-sm]"
           // Spell the comparison out for screen readers rather than
           // leaving them the bare position. Delimiters stripped: these
           // values are LaTeX source, not plain text — the API wraps the
@@ -5114,7 +5117,7 @@ function ProblemGradeRow({
                   dropped into a truncating flex item. That grows the row
                   well past one line. Inlining keeps the row honest, and
                   `max-h` hard-caps anything still too tall. */}
-          <span className="flex max-h-6 min-w-0 flex-1 items-baseline gap-1.5 overflow-hidden text-[13px] [&_div]:!my-0 [&_div]:!inline [&_span]:!whitespace-nowrap">
+          <span className="flex max-h-6 min-w-[12rem] flex-1 items-baseline gap-1.5 overflow-hidden text-[13px] [&_div]:!my-0 [&_div]:!inline [&_span]:!whitespace-nowrap">
             {problem.student_answer ? (
               <span
                 className="min-w-0 max-w-[50%] truncate font-semibold text-text-primary"
