@@ -47,12 +47,12 @@ function headline(graph: TeacherGraphCheck): string | null {
  */
 export function GraphCheckReview({
   graph,
-  busyItem,
+  busyItems,
   onVerdict,
 }: {
   graph: TeacherGraphCheck;
-  /** The item whose call is saving, if any. */
-  busyItem: number | null;
+  /** Items whose call is saving. */
+  busyItems: readonly number[];
   onVerdict: (n: number, verdict: Verdict) => void;
 }) {
   const earned = graph.items.reduce((sum, i) => sum + (effective(i) === "no" ? 0 : i.points), 0);
@@ -67,7 +67,7 @@ export function GraphCheckReview({
       <header className="flex items-baseline justify-between gap-3 border-b border-border-light px-3 py-2">
         <h4 className="text-xs font-bold text-text-primary">Graph checklist</h4>
         <span className="font-mono text-[12px] font-semibold text-text-secondary tabular-nums">
-          {formatPoints(earned)}/{graph.graph_points}
+          {formatPoints(earned)}/{formatPoints(graph.graph_points)}
           <span className="font-sans text-[11px] font-medium text-text-muted"> of {graph.points} pts</span>
         </span>
       </header>
@@ -87,12 +87,14 @@ export function GraphCheckReview({
           const waiting = decidable && item.verdict === "unclear" && !item.teacher;
           const shown = MARK[effective(item)];
           const lost = effective(item) === "no";
+          const busy = busyItems.includes(item.n);
           return (
             <li
               key={item.n}
               className={`flex gap-2.5 px-3 py-2.5 ${waiting ? "bg-[color:var(--color-warning-bg)]/40" : ""}`}
             >
               <span
+                role="img"
                 aria-label={shown.label}
                 title={shown.label}
                 className={`mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-[4px] border text-[11px] font-extrabold ${shown.cls}`}
@@ -118,9 +120,11 @@ export function GraphCheckReview({
                             key={v}
                             type="button"
                             aria-pressed={pressed}
-                            disabled={busyItem !== null}
-                            onClick={() => !pressed && onVerdict(item.n, v)}
-                            className={`min-h-8 border px-3 text-xs font-bold transition-colors focus:outline-none focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-primary disabled:cursor-not-allowed disabled:opacity-60 ${
+                            // aria-disabled, not disabled: a disabled button
+                            // drops keyboard focus mid-list while it saves.
+                            aria-disabled={busy}
+                            onClick={() => !pressed && !busy && onVerdict(item.n, v)}
+                            className={`min-h-8 border px-3 text-xs font-bold transition-colors focus:outline-none focus-visible:z-10 focus-visible:ring-2 focus-visible:ring-primary aria-disabled:cursor-wait aria-disabled:opacity-60 ${
                               k === 0 ? "rounded-l-[--radius-md]" : "-ml-px rounded-r-[--radius-md]"
                             } ${
                               pressed
@@ -133,7 +137,7 @@ export function GraphCheckReview({
                         );
                       })}
                     </div>
-                    {busyItem === item.n ? (
+                    {busy ? (
                       <span className="text-[11px] text-text-muted">Saving…</span>
                     ) : (
                       item.teacher && <span className="text-[11px] font-semibold text-text-muted">Your call</span>

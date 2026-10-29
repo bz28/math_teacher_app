@@ -195,11 +195,13 @@ function teacherOverrodeAi(
 // her calls make together. Measuring "did she override the AI" against
 // this keeps a ✗ from reading as an override (and "revert" from undoing
 // it); ✓ changes nothing, since an unclear item already kept its points.
+// Her calls count even once she re-scores the problem by hand, so
+// "revert" goes back to the AI's call with them, not without.
 function withGraphCalls(
   ai: AiGradeEntry | null,
   graph: TeacherGraphCheck | null | undefined,
 ): AiGradeEntry | null {
-  if (!ai || !graph || graph.overridden || graph.points <= 0) return ai;
+  if (!ai || !graph || graph.points <= 0) return ai;
   const off = graph.items
     .filter((i) => i.verdict === "unclear" && i.teacher === "no")
     .reduce((sum, i) => sum + (i.points * 100) / graph.points, 0);
@@ -208,6 +210,11 @@ function withGraphCalls(
   const score_status = percent >= 100 ? "full" : percent <= 0 ? "zero" : "partial";
   return { ...ai, percent, score_status };
 }
+
+// A teacher's ✓ / ✗ on a graph checklist item, and what the server
+// sends back once it has re-scored the problem.
+type GraphCall = { problemId: string; n: number; verdict: "yes" | "no" };
+type GraphCallResult = Awaited<ReturnType<typeof teacher.setGraphItemVerdict>>;
 
 // Always-on AI confidence indicator for a single grade. Reads the
 // pipeline's calibrated value — never computes or mutates it. Null
@@ -877,23 +884,79 @@ function HomeworkSectionReview({
   // Fix: at most one save in flight per submission; while one runs, newer
   // grades just update `latest`, and the drain loop saves only that latest
   // snapshot when the in-flight save returns. Ordered + coalesced → no race.
+  //
+  // A teacher's ✓ / ✗ on a graph checklist item rides the same queue, so
+  // it never crosses a grade save in flight: the server re-scores the
+  // problem on a call, and a save racing it would put the old score back
+  // (and read as her re-scoring the problem by hand).
   const saveStateRef = useRef<
-    Map<string, { inFlight: boolean; latest: GradeBreakdownEntry[] | null }>
+    Map<
+      string,
+      { inFlight: boolean; latest: GradeBreakdownEntry[] | null; graphCalls: GraphCall[] }
+    >
   >(new Map());
+  // Graph items with a call queued or saving, as `${problemId}:${n}`.
+  const [graphBusy, setGraphBusy] = useState<ReadonlySet<string>>(() => new Set());
 
-  const persistBreakdown = useCallback(
-    async (submissionId: string, breakdown: GradeBreakdownEntry[]) => {
-      const map = saveStateRef.current;
-      let s = map.get(submissionId);
-      if (!s) {
-        s = { inFlight: false, latest: null };
-        map.set(submissionId, s);
-      }
-      // Always remember the most recent snapshot to be saved.
-      s.latest = breakdown;
+  // A graph call's result, merged into the page as it is now — not as it
+  // was when she clicked, since other edits may have landed meanwhile.
+  // Her feedback on the problem stays as the page holds it.
+  const applyGraphCall = useCallback(
+    (submissionId: string, call: GraphCall, res: GraphCallResult) => {
+      const merge = (b: GradeBreakdownEntry[]) =>
+        b.map((e) => (e.problem_id === call.problemId ? { ...res.entry, feedback: e.feedback } : e));
+      setDetail((cur) =>
+        cur && cur.submission_id === submissionId
+          ? {
+              ...cur,
+              breakdown: merge(cur.breakdown ?? []),
+              problems: cur.problems.map((p) =>
+                p.bank_item_id === call.problemId ? { ...p, graph: res.graph } : p,
+              ),
+              final_score: res.final_score,
+              grade_dirty: res.grade_dirty,
+            }
+          : cur,
+      );
+      setRoster((prev) =>
+        prev
+          ? prev.map((e) =>
+              e.submission?.id === submissionId
+                ? {
+                    ...e,
+                    submission: {
+                      ...e.submission,
+                      final_score: res.final_score,
+                      grade_dirty: res.grade_dirty,
+                      ...(e.submission.breakdown ? { breakdown: merge(e.submission.breakdown) } : {}),
+                      graph_items_open: res.graph_items_open,
+                    },
+                  }
+                : e,
+            )
+          : prev,
+      );
+    },
+    [],
+  );
 
-      // A save is already running — it will pick up `latest` when it drains.
-      if (s.inFlight) return;
+  const saveState = (submissionId: string) => {
+    const map = saveStateRef.current;
+    let s = map.get(submissionId);
+    if (!s) {
+      s = { inFlight: false, latest: null, graphCalls: [] };
+      map.set(submissionId, s);
+    }
+    return s;
+  };
+
+  // Drains a submission's queue, one request at a time: graph calls
+  // first, then the latest grade snapshot. A failed request reports and
+  // the drain moves on, so nothing queued behind it is stranded.
+  const drainSaves = useCallback(
+    async (submissionId: string) => {
+      const s = saveStateRef.current.get(submissionId);
+      if (!s || s.inFlight) return;
 
       setSaveError((prev) =>
         prev?.forSubmissionId === submissionId ? null : prev,
@@ -906,39 +969,75 @@ function HomeworkSectionReview({
         return next;
       });
       try {
-        while (s.latest) {
+        while (s.graphCalls.length > 0 || s.latest) {
+          const call = s.graphCalls[0];
+          if (call) {
+            try {
+              const res = await teacher.setGraphItemVerdict(submissionId, {
+                problem_id: call.problemId,
+                n: call.n,
+                verdict: call.verdict,
+              });
+              applyGraphCall(submissionId, call, res);
+              // A snapshot queued meanwhile was taken before this call
+              // landed: carry the server's re-score of the problem into
+              // it. Its grade buttons are held while a call is pending
+              // (setProblemGrade), so there's no newer score of hers to lose.
+              if (s.latest) {
+                s.latest = s.latest.map((e) =>
+                  e.problem_id === call.problemId ? { ...res.entry, feedback: e.feedback } : e,
+                );
+              }
+            } catch (e) {
+              setSaveError({
+                forSubmissionId: submissionId,
+                message: e instanceof Error ? e.message : "Failed to save your call on the graph",
+              });
+            } finally {
+              s.graphCalls.shift();
+              setGraphBusy((prev) => {
+                const next = new Set(prev);
+                next.delete(`${call.problemId}:${call.n}`);
+                return next;
+              });
+            }
+            continue;
+          }
           const toSave = s.latest;
+          if (!toSave) break;
           s.latest = null;
-          const res = await teacher.gradeSubmission(submissionId, {
-            breakdown: toSave,
-          });
-          // The save response's reviewed_at is authoritative: a hand
-          // grade (no AI score) self-approves on the save that grades
-          // its last problem and un-approves if one is cleared, while an
-          // AI grade's stamp is untouched by a save. Mirror it onto the
-          // roster row and the open detail. This can't clobber a fresh
-          // Approve click — the Approve/Undo buttons are disabled while
-          // a save is in flight.
-          applyGradeToRoster(submissionId, {
-            final_score: res.final_score,
-            breakdown: toSave,
-            grade_dirty: res.grade_dirty,
-            reviewed_at: res.reviewed_at,
-          });
-          setDetail((d) =>
-            d && d.submission_id === submissionId
-              ? { ...d, grade_dirty: res.grade_dirty, reviewed_at: res.reviewed_at }
-              : d,
-          );
+          try {
+            const res = await teacher.gradeSubmission(submissionId, {
+              breakdown: toSave,
+            });
+            // The save response's reviewed_at is authoritative: a hand
+            // grade (no AI score) self-approves on the save that grades
+            // its last problem and un-approves if one is cleared, while an
+            // AI grade's stamp is untouched by a save. Mirror it onto the
+            // roster row and the open detail. This can't clobber a fresh
+            // Approve click — the Approve/Undo buttons are disabled while
+            // a save is in flight.
+            applyGradeToRoster(submissionId, {
+              final_score: res.final_score,
+              breakdown: toSave,
+              grade_dirty: res.grade_dirty,
+              reviewed_at: res.reviewed_at,
+            });
+            setDetail((d) =>
+              d && d.submission_id === submissionId
+                ? { ...d, grade_dirty: res.grade_dirty, reviewed_at: res.reviewed_at }
+                : d,
+            );
+          } catch (e) {
+            setSaveError({
+              forSubmissionId: submissionId,
+              message: e instanceof Error ? e.message : "Failed to save grade",
+            });
+            // Drop the snapshot — the optimistic UI still shows the grade
+            // and the teacher can re-click to retry; avoids a hot retry loop.
+            s.latest = null;
+          }
         }
-      } catch (e) {
-        setSaveError({
-          forSubmissionId: submissionId,
-          message: e instanceof Error ? e.message : "Failed to save grade",
-        });
-        // Drop any queued snapshot — the optimistic UI still shows the grade
-        // and the teacher can re-click to retry; avoids a hot retry loop.
-        s.latest = null;
       } finally {
         s.inFlight = false;
         setSavingGradeIds((prev) => {
@@ -949,7 +1048,31 @@ function HomeworkSectionReview({
         });
       }
     },
-    [applyGradeToRoster],
+    [applyGradeToRoster, applyGraphCall],
+  );
+
+  const persistBreakdown = useCallback(
+    (submissionId: string, breakdown: GradeBreakdownEntry[]) => {
+      // Always remember the most recent snapshot to be saved; a drain
+      // already running picks it up.
+      saveState(submissionId).latest = breakdown;
+      return drainSaves(submissionId);
+    },
+    [drainSaves],
+  );
+
+  // The teacher's ✓ / ✗ on a graph checklist item the drawing check
+  // couldn't decide. The server re-scores the problem (applyGraphCall).
+  const queueGraphCall = useCallback(
+    (submissionId: string, call: GraphCall) => {
+      const key = `${call.problemId}:${call.n}`;
+      const s = saveState(submissionId);
+      if (s.graphCalls.some((c) => `${c.problemId}:${c.n}` === key)) return;
+      s.graphCalls.push(call);
+      setGraphBusy((prev) => new Set(prev).add(key));
+      return drainSaves(submissionId);
+    },
+    [drainSaves],
   );
 
   // Optimistic writer — mutates `detail.breakdown` in place so the
@@ -959,6 +1082,9 @@ function HomeworkSectionReview({
   const setProblemGrade = useCallback(
     (problemId: string, status: GradeStatus, partialPercent?: number) => {
       if (!detail) return;
+      // Held while a graph call on this problem is pending: the server is
+      // re-scoring it, and the queued save is rebased onto that score.
+      if (saveStateRef.current.get(detail.submission_id)?.graphCalls.some((c) => c.problemId === problemId)) return;
       const percent =
         status === "full" ? 100 : status === "zero" ? 0 : (partialPercent ?? 50);
       const prior = detail.breakdown ?? [];
@@ -1488,59 +1614,6 @@ function HomeworkSectionReview({
     [],
   );
 
-  // The teacher's ✓ / ✗ on a graph checklist item the drawing check
-  // couldn't decide. The server re-scores the problem; mirror its entry,
-  // its graph check and the homework score onto the open detail and the
-  // roster row. Errors share the saveError channel.
-  const [graphBusy, setGraphBusy] = useState<{ problemId: string; n: number } | null>(null);
-  const handleGraphVerdict = useCallback(
-    async (submissionId: string, problemId: string, n: number, verdict: "yes" | "no") => {
-      setGraphBusy({ problemId, n });
-      setSaveError((prev) => (prev?.forSubmissionId === submissionId ? null : prev));
-      try {
-        const res = await teacher.setGraphItemVerdict(submissionId, { problem_id: problemId, n, verdict });
-        // Built from the detail this click was made on (it's for this
-        // submission: the panel only shows the open one), so the roster
-        // row gets the same values in the same pass.
-        const d = detail && detail.submission_id === submissionId ? detail : null;
-        const breakdown = d ? (d.breakdown ?? []).map((e) => (e.problem_id === problemId ? res.entry : e)) : null;
-        const problems = d
-          ? d.problems.map((p) => (p.bank_item_id === problemId ? { ...p, graph: res.graph } : p))
-          : null;
-        setDetail((cur) =>
-          cur && cur.submission_id === submissionId && breakdown && problems
-            ? { ...cur, breakdown, problems, final_score: res.final_score, grade_dirty: res.grade_dirty }
-            : cur,
-        );
-        setRoster((prev) =>
-          prev
-            ? prev.map((e) =>
-                e.submission?.id === submissionId
-                  ? {
-                      ...e,
-                      submission: {
-                        ...e.submission,
-                        final_score: res.final_score,
-                        grade_dirty: res.grade_dirty,
-                        ...(breakdown ? { breakdown } : {}),
-                        ...(problems ? { graph_items_open: openGraphItems(problems) } : {}),
-                      },
-                    }
-                  : e,
-              )
-            : prev,
-        );
-      } catch (e) {
-        setSaveError({
-          forSubmissionId: submissionId,
-          message: e instanceof Error ? e.message : "Failed to save your call on the graph",
-        });
-      } finally {
-        setGraphBusy(null);
-      }
-    },
-    [detail],
-  );
 
   // Undo an approval — clears reviewed_at server-side, then mirrors it
   // back to null on the roster row + open detail so the submission drops
@@ -1929,7 +2002,7 @@ function HomeworkSectionReview({
                   void handleUnmarkReviewed(selectedEntry.submission!.id)
                 }
                 onGraphVerdict={(problemId, n, verdict) =>
-                  void handleGraphVerdict(selectedEntry.submission!.id, problemId, n, verdict)
+                  void queueGraphCall(selectedEntry.submission!.id, { problemId, n, verdict })
                 }
                 graphBusy={graphBusy}
                 marking={markingReviewedId === selectedEntry.submission.id}
@@ -3305,7 +3378,8 @@ function SubmissionDetailPanel({
   /** The teacher's ✓ / ✗ on an unclear graph checklist item. */
   onGraphVerdict: (problemId: string, n: number, verdict: "yes" | "no") => void;
   /** The graph item whose call is saving, if any. */
-  graphBusy: { problemId: string; n: number } | null;
+  /** Graph items with a call queued or saving, as `${problemId}:${n}`. */
+  graphBusy: ReadonlySet<string>;
   marking: boolean;
   savingGrade: boolean;
   regrading: boolean;
@@ -4423,7 +4497,7 @@ function SubmissionDetailPanel({
                   onFeedbackChange(p.bank_item_id, text)
                 }
                 onGraphVerdict={(n, verdict) => onGraphVerdict(p.bank_item_id, n, verdict)}
-                graphBusyItem={graphBusy?.problemId === p.bank_item_id ? graphBusy.n : null}
+                graphBusyItems={p.graph ? p.graph.items.filter((it) => graphBusy.has(`${p.bank_item_id}:${it.n}`)).map((it) => it.n) : []}
                 onOpenPage={() =>
                   setGalleryPage(p.pages.length > 0 ? p.pages[0]! - 1 : 0)
                 }
@@ -4951,7 +5025,7 @@ function ProblemGradeRow({
   onChange,
   onFeedbackChange,
   onGraphVerdict,
-  graphBusyItem,
+  graphBusyItems,
   onOpenPage,
   reportBase,
   ruleText,
@@ -4997,7 +5071,7 @@ function ProblemGradeRow({
   /** The teacher's ✓ / ✗ on one of this problem's unclear graph items. */
   onGraphVerdict: (n: number, verdict: "yes" | "no") => void;
   /** This problem's graph item whose call is saving, if any. */
-  graphBusyItem: number | null;
+  graphBusyItems: number[];
   /** Opens the work gallery on this problem's first tagged page. */
   onOpenPage: () => void;
 }) {
@@ -5659,7 +5733,7 @@ function ProblemGradeRow({
           charged against. Items the check couldn't decide wait here for
           her call. */}
       {problem.graph && (
-        <GraphCheckReview graph={problem.graph} busyItem={graphBusyItem} onVerdict={onGraphVerdict} />
+        <GraphCheckReview graph={problem.graph} busyItems={graphBusyItems} onVerdict={onGraphVerdict} />
       )}
 
       {deductions !== null && (
