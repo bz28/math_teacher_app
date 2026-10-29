@@ -21,6 +21,7 @@ from api.core.drawing_check import ChecklistItem
 from api.core.drawing_requirement import classify_requires_drawing
 from api.core.entitlements import Entitlement, check_entitlement
 from api.core.graph_checklist import (
+    checklist_version,
     checklist_views,
     current_checklist,
     due,
@@ -262,6 +263,12 @@ class UpdateGraphChecklistRequest(BaseModel):
     """The teacher's checklist, replacing the whole list."""
 
     items: list[GraphChecklistItemIn] = Field(min_length=1, max_length=MAX_CHECKLIST_ITEMS)
+
+
+class MarkGraphChecklistCheckedRequest(BaseModel):
+    """`version`: the checklist the teacher was shown (its `version`)."""
+
+    version: str = Field(min_length=1, max_length=64)
 
 
 # ── helpers ──
@@ -1362,6 +1369,42 @@ async def update_graph_checklist(
         ],
         points, source=source_of(item), teacher_edited=True,
     )
+    await record_activity(
+        db, current_user, "bank_item.edit", "bank_item", item.id,
+        {"title": item.title, "fields": ["graph_checklist"]},
+    )
+    await db.commit()
+    return await _item_response(db, item)
+
+
+@router.post("/question-bank/{item_id}/graph-checklist/checked")
+async def mark_graph_checklist_checked(
+    body: MarkGraphChecklistCheckedRequest,
+    item: QuestionBankItem = Depends(get_bank_item),
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """The teacher read the checklist and it looks right. Its items don't
+    change; it is now checked against the current question and answer
+    key, so a later change to either unchecks it again. Refused with 409
+    when the checklist isn't the version she was shown."""
+    locked = (await db.execute(
+        select(QuestionBankItem).where(QuestionBankItem.id == item.id)
+        .with_for_update().execution_options(populate_existing=True)
+    )).scalar_one()
+    stored = current_checklist(locked)
+    if stored is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This question has no graph checklist yet",
+        )
+    if checklist_version(stored) != body.version:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This checklist changed since you opened it. Check the new one.",
+        )
+    locked.graph_checklist = {**stored, "source": source_of(locked), "checked": True}
+    item = locked
     await record_activity(
         db, current_user, "bank_item.edit", "bank_item", item.id,
         {"title": item.title, "fields": ["graph_checklist"]},

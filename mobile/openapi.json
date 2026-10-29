@@ -2750,6 +2750,22 @@
         "title": "LoginVerifyMfaRequest",
         "type": "object"
       },
+      "MarkGraphChecklistCheckedRequest": {
+        "description": "`version`: the checklist the teacher was shown (its `version`).",
+        "properties": {
+          "version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "MarkGraphChecklistCheckedRequest",
+        "type": "object"
+      },
       "MarkTourSeenRequest": {
         "properties": {
           "persona": {
@@ -19138,6 +19154,67 @@
           }
         ],
         "summary": "Update Graph Checklist",
+        "tags": [
+          "teacher"
+        ]
+      }
+    },
+    "/v1/teacher/question-bank/{item_id}/graph-checklist/checked": {
+      "post": {
+        "description": "The teacher read the checklist and it looks right. Its items don't\nchange; it is now checked against the current question and answer\nkey, so a later change to either unchecks it again. Refused with 409\nwhen the checklist isn't the version she was shown.",
+        "operationId": "mark_graph_checklist_checked_v1_teacher_question_bank__item_id__graph_checklist_checked_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkGraphChecklistCheckedRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Mark Graph Checklist Checked V1 Teacher Question Bank  Item Id  Graph Checklist Checked Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Mark Graph Checklist Checked",
         "tags": [
           "teacher"
         ]

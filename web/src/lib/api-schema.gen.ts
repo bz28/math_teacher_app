@@ -3926,6 +3926,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/teacher/question-bank/{item_id}/graph-checklist/checked": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark Graph Checklist Checked
+         * @description The teacher read the checklist and it looks right. Its items don't
+         *     change; it is now checked against the current question and answer
+         *     key, so a later change to either unchecks it again. Refused with 409
+         *     when the checklist isn't the version she was shown.
+         */
+        post: operations["mark_graph_checklist_checked_v1_teacher_question_bank__item_id__graph_checklist_checked_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teacher/question-bank/{item_id}/graph-checklist/rewrite": {
         parameters: {
             query?: never;
@@ -5475,6 +5498,14 @@ export interface components {
             code: string;
             /** Mfa Pending Token */
             mfa_pending_token: string;
+        };
+        /**
+         * MarkGraphChecklistCheckedRequest
+         * @description `version`: the checklist the teacher was shown (its `version`).
+         */
+        MarkGraphChecklistCheckedRequest: {
+            /** Version */
+            version: string;
         };
         /** MarkTourSeenRequest */
         MarkTourSeenRequest: {
@@ -13810,6 +13841,43 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["UpdateGraphChecklistRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_graph_checklist_checked_v1_teacher_question_bank__item_id__graph_checklist_checked_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkGraphChecklistCheckedRequest"];
             };
         };
         responses: {

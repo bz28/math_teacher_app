@@ -1158,6 +1158,14 @@ export interface GraphChecklist {
   graph_points: number;
   problem_points: number | null;
   teacher_edited: boolean;
+  /** The teacher has looked at it: she edited it or said it looks
+   *  right. False for anything the AI wrote and nobody has checked. */
+  checked: boolean;
+  /** She edited it, then the question or answer key changed: her items
+   *  stay, but she hasn't checked them against the new text. */
+  key_changed: boolean;
+  /** Names this exact checklist; Looks right sends it back. */
+  version: string;
   /** False: the AI read the question as asking for no drawing. */
   asks_for_drawing: boolean;
 }
@@ -2102,6 +2110,14 @@ export const teacher = {
     return apiFetch<unknown>(`/teacher/question-bank/${itemId}/graph-checklist`, {
       method: "PUT",
       body: JSON.stringify({ items }),
+    });
+  },
+  /** The teacher read the checklist and it looks right. `version` is the
+   *  one she was shown; a 409 means it has changed since. */
+  markGraphChecklistChecked(itemId: string, version: string) {
+    return apiFetch<unknown>(`/teacher/question-bank/${itemId}/graph-checklist/checked`, {
+      method: "POST",
+      body: JSON.stringify({ version }),
     });
   },
   /** Write the checklist again from the answer key, replacing edits. */

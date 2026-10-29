@@ -17,6 +17,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 
 from api.core import drawing_check, graph_checklist
+from api.core.auth import create_access_token, hash_password
 from api.core.checklist_points import fit_checklist
 from api.core.drawing_check import ChecklistItem, WrittenChecklist, values_not_given, write_graph_checklist
 from api.core.graph_checklist import drain_checklist_tasks, needs_checklist, source_of, to_stored
@@ -24,6 +25,7 @@ from api.database import get_session_factory
 from api.models.assignment import Assignment
 from api.models.course import Course
 from api.models.question_bank import QuestionBankItem
+from api.models.user import User
 from tests.conftest import auth_headers as _auth
 from tests.test_question_edits import _own_course
 
@@ -615,3 +617,156 @@ async def test_a_teacher_save_keeps_the_note_on_items_she_left_alone(
     assert r.status_code == 200, r.text
     view = await _view(client, hw)
     assert [i["values_to_check"] for i in view["items"]] == [["24"], []]
+
+
+# ── checked: the teacher has looked at it ──
+
+
+async def _looks_right(
+    client: AsyncClient, hw: dict[str, Any], token: str | None = None, version: str | None = None,
+) -> Any:
+    """Marks the checklist checked, as shown now unless `version` says
+    which one the teacher saw."""
+    if version is None:
+        view = await _view(client, hw)
+        version = view["version"] if view else "none"
+    return await client.post(
+        f"/v1/teacher/question-bank/{hw['item_id']}/graph-checklist/checked",
+        headers=_auth(token or hw["teacher_token"]), json={"version": version},
+    )
+
+
+async def test_the_ais_checklist_starts_unchecked(
+    hw: dict[str, Any], client: AsyncClient, writer: Writer,
+) -> None:
+    await _approve(client, hw)
+    assert (await _view(client, hw))["checked"] is False
+
+
+async def test_a_checklist_stored_before_checked_existed_reads_unchecked(
+    hw: dict[str, Any], client: AsyncClient, writer: Writer,
+) -> None:
+    await _approve(client, hw)
+    stored = (await _item(hw["item_id"])).graph_checklist
+    assert stored is not None and "checked" not in stored
+    assert (await _view(client, hw))["checked"] is False
+
+
+async def test_looks_right_checks_it_without_changing_it(
+    hw: dict[str, Any], client: AsyncClient, writer: Writer,
+) -> None:
+    await _approve(client, hw)
+    before = await _view(client, hw)
+    r = await _looks_right(client, hw)
+    assert r.status_code == 200, r.text
+    after = r.json()["graph_checklist"]
+    assert after["checked"] is True and after["teacher_edited"] is False
+    assert after["items"] == before["items"]
+    assert (await _view(client, hw))["checked"] is True
+
+
+async def test_an_edit_checks_it(
+    hw: dict[str, Any], client: AsyncClient, writer: Writer,
+) -> None:
+    await _approve(client, hw)
+    r = await _put(client, hw, MINE)
+    assert r.status_code == 200, r.text
+    assert r.json()["graph_checklist"]["checked"] is True
+
+
+async def test_a_rewrite_unchecks_it(
+    hw: dict[str, Any], client: AsyncClient, writer: Writer,
+) -> None:
+    await _approve(client, hw)
+    assert (await _looks_right(client, hw)).status_code == 200
+    writer.reply = [ChecklistItem("Fresh item", 2)]
+    r = await client.post(
+        f"/v1/teacher/question-bank/{hw['item_id']}/graph-checklist/rewrite",
+        headers=_auth(hw["teacher_token"]),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["graph_checklist"]["checked"] is False
+
+
+async def test_an_answer_change_unchecks_a_checklist_marked_looks_right(
+    hw: dict[str, Any], client: AsyncClient, writer: Writer,
+) -> None:
+    """Looks right vouches for this checklist, not the next one the AI
+    writes for a new answer key."""
+    await _approve(client, hw)
+    assert (await _looks_right(client, hw)).status_code == 200
+    writer.reply = [ChecklistItem("Vertical asymptote drawn at x = 3", 4)]
+    await _patch(client, hw, final_answer="Vertical asymptote x = 3.")
+    view = await _view(client, hw)
+    assert [i["text"] for i in view["items"]] == ["Vertical asymptote drawn at x = 3"]
+    assert view["checked"] is False
+
+
+async def test_looks_right_with_no_checklist_says_so(
+    hw: dict[str, Any], client: AsyncClient, writer: Writer,
+) -> None:
+    await _own_course(hw)
+    r = await _looks_right(client, hw)
+    assert r.status_code == 400
+    assert "no graph checklist" in r.json()["detail"]
+
+
+async def test_looks_right_is_for_the_classs_teacher_only(
+    hw: dict[str, Any], client: AsyncClient, writer: Writer,
+) -> None:
+    await _approve(client, hw)
+    assert (await _looks_right(client, hw, hw["student_token"])).status_code == 403
+    async with get_session_factory()() as s:
+        stranger = User(
+            email=f"t_{uuid.uuid4().hex[:6]}@t.com", password_hash=hash_password("x"),
+            grade_level=12, role="teacher", name="Other",
+        )
+        s.add(stranger)
+        await s.commit()
+        token = create_access_token(str(stranger.id), "teacher")
+    assert (await _looks_right(client, hw, token)).status_code in (403, 404)
+    assert (await _view(client, hw))["checked"] is False
+
+
+async def test_looks_right_on_a_version_she_never_saw_is_refused(
+    hw: dict[str, Any], client: AsyncClient, writer: Writer,
+) -> None:
+    """Another tab rewrote it after this one loaded: the old tab's Looks
+    right would vouch for items the teacher never read."""
+    await _approve(client, hw)
+    seen = (await _view(client, hw))["version"]
+    writer.reply = [ChecklistItem("Fresh item", 2)]
+    r = await client.post(
+        f"/v1/teacher/question-bank/{hw['item_id']}/graph-checklist/rewrite",
+        headers=_auth(hw["teacher_token"]),
+    )
+    assert r.status_code == 200, r.text
+    r = await _looks_right(client, hw, version=seen)
+    assert r.status_code == 409
+    assert (await _view(client, hw))["checked"] is False
+
+
+async def test_the_version_changes_with_an_edit(
+    hw: dict[str, Any], client: AsyncClient, writer: Writer,
+) -> None:
+    await _approve(client, hw)
+    before = (await _view(client, hw))["version"]
+    assert (await _put(client, hw, MINE)).status_code == 200
+    assert (await _view(client, hw))["version"] != before
+
+
+async def test_an_answer_change_after_an_edit_unchecks_it_and_keeps_her_items(
+    hw: dict[str, Any], client: AsyncClient, writer: Writer,
+) -> None:
+    await _approve(client, hw)
+    assert (await _put(client, hw, MINE)).status_code == 200
+    await _patch(client, hw, final_answer="Vertical asymptote x = 2, crosses at (1, 0) and (3, 2).")
+    view = await _view(client, hw)
+    assert [i["text"] for i in view["items"]] == [m["text"] for m in MINE]
+    assert (view["teacher_edited"], view["checked"], view["key_changed"]) == (True, False, True)
+    # Looks right checks her items against the new answer key.
+    r = await _looks_right(client, hw)
+    assert r.status_code == 200, r.text
+    view = r.json()["graph_checklist"]
+    assert (view["checked"], view["key_changed"]) == (True, False)
+    assert [i["text"] for i in view["items"]] == [m["text"] for m in MINE]
