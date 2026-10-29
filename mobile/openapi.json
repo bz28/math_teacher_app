@@ -2566,6 +2566,10 @@
               }
             ]
           },
+          "nudge_own_words": {
+            "title": "Nudge Own Words",
+            "type": "boolean"
+          },
           "overall_status": {
             "title": "Overall Status",
             "type": "string"
@@ -2600,7 +2604,8 @@
           "extraction",
           "problems",
           "transcript",
-          "stuck_tap_used"
+          "stuck_tap_used",
+          "nudge_own_words"
         ],
         "title": "IntegrityStateResponse",
         "type": "object"
@@ -4985,6 +4990,10 @@
               }
             ]
           },
+          "didnt_engage": {
+            "title": "Didnt Engage",
+            "type": "boolean"
+          },
           "disposition": {
             "anyOf": [
               {
@@ -5125,7 +5134,8 @@
           "resolved_by_name",
           "resolved_at",
           "problems",
-          "transcript"
+          "transcript",
+          "didnt_engage"
         ],
         "title": "TeacherIntegrityDetail",
         "type": "object"

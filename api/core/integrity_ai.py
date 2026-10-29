@@ -41,6 +41,7 @@ from api.core.llm_schemas import (
     INTEGRITY_EXTRACT_SCHEMA,
     INTEGRITY_FINISH_CHECK_SCHEMA,
     INTEGRITY_GENERATE_VARIANT_SCHEMA,
+    INTEGRITY_LABEL_REPLY_SCHEMA,
     INTEGRITY_SUBMIT_VERDICT_SCHEMA,
     VISUAL_WORK_VERIFY_SCHEMA,
 )
@@ -740,6 +741,21 @@ framing as a substitute for the underlying rule — then teach the rule with a \
 concrete counter-example. The student's takeaway should be the rule and the \
 habit-correction, not the validation.
 
+ENGAGEMENT. Alongside every reply to a student message, call \
+`label_student_reply` once to label that message:
+  - answering: any real attempt — a step, a reason, a guess, even a wrong one.
+  - honest_confusion: a real question or a specific "I don't get X" ("what \
+does slope mean here?"). This is welcome — keep teaching, never nudge it.
+  - not_trying: "idk", "I don't know how to explain", filler, or evasion \
+with no attempt at all ("whatever it's just math").
+The label never changes how you treat the student: an honest admission is \
+still the teaching moment described above. If the student gives three \
+not_trying replies in a row, you may wrap up — submit your verdict and \
+call `finish_check`; say in `summary` that the student didn't engage with \
+the questions. Not engaging raises the teacher's scrutiny; it is not by \
+itself a reason for `flag_for_review` — choose the disposition from the \
+evidence as usual.
+
 Helpfulness. This is a brief teaching moment, not just an evaluation. Affirm \
 the unit-level move they made, not baseline skills already mastered at this \
 level — if there's nothing unit-level worth naming, skip the affirmation. \
@@ -801,6 +817,9 @@ and reasoning for one of the sampled problems. Call once per problem.
 paper but blank verbally" case. See the tool description for the usage \
 protocol. Single use per session.
 
+`label_student_reply(engagement)` — label the student's latest message (see \
+ENGAGEMENT). Once per response to a student message, always with reply text.
+
 `finish_check(disposition, ...)` — terminal. Sets the disposition for the \
 entire conversation. Never call this in the same response as a new question \
 to the student. If you're still probing, let the student reply first. Only \
@@ -837,6 +856,7 @@ reference; it must never appear in your chat replies.
 
 
 AGENT_TOOL_SCHEMAS = [
+    INTEGRITY_LABEL_REPLY_SCHEMA,
     INTEGRITY_SUBMIT_VERDICT_SCHEMA,
     INTEGRITY_GENERATE_VARIANT_SCHEMA,
     INTEGRITY_FINISH_CHECK_SCHEMA,

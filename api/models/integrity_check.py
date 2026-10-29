@@ -298,6 +298,13 @@ class IntegrityConversationTurn(Base):
     #   }
     telemetry: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
+    # The agent's label for this student reply (student turns only):
+    # "answering" | "honest_confusion" | "not_trying". Set by the
+    # `label_student_reply` tool; NULL when the agent didn't label it or
+    # sent an invalid value, and on every row from before labelling — all
+    # read as "not not_trying", so a model miss never nags a student.
+    engagement: Mapped[str | None] = mapped_column(String(20), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False,
     )

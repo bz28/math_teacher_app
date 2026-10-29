@@ -41,7 +41,10 @@ from api.core.integrity_ai import (
     run_agent_turn,
 )
 from api.core.llm_client import MODEL_HAIKU, LLMMode, call_claude_json
-from api.core.llm_schemas import INTEGRITY_ANSWER_EQUIVALENCE_SCHEMA
+from api.core.llm_schemas import (
+    INTEGRITY_ANSWER_EQUIVALENCE_SCHEMA,
+    INTEGRITY_ENGAGEMENT_VALUES,
+)
 from api.database import get_session_factory
 from api.models.assignment import Assignment, Submission
 from api.models.integrity_check import (
@@ -81,6 +84,36 @@ MAX_AGENT_LOOPS_PER_TURN = 6
 TOOL_SUBMIT_VERDICT = "submit_problem_verdict"
 TOOL_GENERATE_VARIANT = "generate_variant"
 TOOL_FINISH_CHECK = "finish_check"
+TOOL_LABEL_REPLY = "label_student_reply"
+
+# Engagement labels (one per student reply, set by TOOL_LABEL_REPLY).
+ENGAGEMENT_NOT_TRYING = "not_trying"
+# This many not_trying replies in a row → the student chat shows the
+# "answer in your own words" nudge.
+NUDGE_NOT_TRYING_STREAK = 2
+# This many in a row → the teacher sees "didn't engage with the
+# questions". Raises scrutiny only; never changes the disposition.
+DISENGAGED_NOT_TRYING_STREAK = 3
+
+
+def trailing_not_trying_streak(engagements: list[str | None]) -> int:
+    """How many of the most recent student replies, in a row, were
+    labelled not_trying. NULL (unlabelled / invalid) breaks the streak,
+    so a model miss never nags a student."""
+    n = 0
+    for e in reversed(engagements):
+        if e != ENGAGEMENT_NOT_TRYING:
+            break
+        n += 1
+    return n
+
+
+def longest_not_trying_streak(engagements: list[str | None]) -> int:
+    best = run = 0
+    for e in engagements:
+        run = run + 1 if e == ENGAGEMENT_NOT_TRYING else 0
+        best = max(best, run)
+    return best
 
 # Submission-level status state machine.
 STATUS_EXTRACTING = "extracting"
@@ -1312,14 +1345,15 @@ async def process_student_turn(
         .where(IntegrityConversationTurn.integrity_check_submission_id == check.id)
     )).scalar_one()
     student_ordinal = int(current_ordinal) + 1
-    db.add(IntegrityConversationTurn(
+    student_turn = IntegrityConversationTurn(
         integrity_check_submission_id=check.id,
         ordinal=student_ordinal,
         role=ROLE_STUDENT,
         content=student_message,
         seconds_on_turn=seconds_on_turn,
         telemetry=telemetry,
-    ))
+    )
+    db.add(student_turn)
     check.status = STATUS_IN_PROGRESS
     # Stamp the check itself on every turn. After the first turn nothing
     # else on the row changes, so the column's onupdate would never fire
@@ -1401,10 +1435,20 @@ async def process_student_turn(
             result_text = await _apply_tool_call(
                 check, block, db,
                 user_id=user_id,
+                student_turn=student_turn,
             )
             await _record_tool_result(
                 check.id, getattr(block, "id", ""), result_text, db,
             )
+
+        # The engagement label rides alongside the reply text. When it's
+        # the only tool in a response that already has text, the reply is
+        # complete — don't spend another model call just to acknowledge
+        # the label's tool_result (it's in the transcript for next turn).
+        if text_reply and all(
+            getattr(b, "name", "") == TOOL_LABEL_REPLY for b in tool_uses
+        ):
+            break
 
         # After tool calls, keep looping so the agent can continue
         # (it will see the tool_results when we rebuild messages).
@@ -1503,6 +1547,7 @@ async def _apply_tool_call(
     db: AsyncSession,
     *,
     user_id: str | None = None,
+    student_turn: IntegrityConversationTurn | None = None,
 ) -> str:
     """Validate + apply a single tool call. Returns the tool_result
     text to persist (and echo back to the agent on the next loop).
@@ -1510,6 +1555,8 @@ async def _apply_tool_call(
     tool_name = getattr(block, "name", "")
     raw_input = getattr(block, "input", {}) or {}
 
+    if tool_name == TOOL_LABEL_REPLY:
+        return _apply_label_reply(student_turn, raw_input)
     if tool_name == TOOL_SUBMIT_VERDICT:
         return await _apply_submit_verdict(check, raw_input, db)
     if tool_name == TOOL_GENERATE_VARIANT:
@@ -1519,6 +1566,28 @@ async def _apply_tool_call(
     if tool_name == TOOL_FINISH_CHECK:
         return await _apply_finish_check(check, raw_input, db)
     return f"rejected: unknown tool '{tool_name}'"
+
+
+def _apply_label_reply(
+    student_turn: IntegrityConversationTurn | None,
+    raw_input: dict[str, Any],
+) -> str:
+    """Store the agent's engagement label on the student reply it's
+    answering. Strict: anything outside the enum leaves the row NULL
+    (reads as "not not_trying"), and only the first label per reply
+    counts, so a later loop iteration can't overwrite it."""
+    engagement = raw_input.get("engagement")
+    if engagement not in INTEGRITY_ENGAGEMENT_VALUES:
+        return (
+            "rejected: engagement must be one of "
+            + ", ".join(INTEGRITY_ENGAGEMENT_VALUES)
+        )
+    if student_turn is None:
+        return "rejected: there is no student message to label"
+    if student_turn.engagement is not None:
+        return "ignored: this message is already labelled"
+    student_turn.engagement = engagement
+    return "recorded"
 
 
 async def _apply_generate_variant(
