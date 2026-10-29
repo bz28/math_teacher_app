@@ -1,212 +1,45 @@
 {
-  "203da218a3a1e9c271d1430459b0ff96": {
+  "071137fdcc99a8c28f9bd6becc82089e": {
     "meta": {
       "mode": "drawing_check",
       "model": "claude-opus-5-5",
       "prompt": "You check a student's hand drawing against a short list of features.\n\nYou see a  ||",
-      "recorded_at": 1793281247.062102
+      "recorded_at": 1793285192.3500118
     },
     "response": {
       "in_view": "whole",
       "items": [
         {
           "n": 1,
-          "seen": "There is a dashed vertical line through the x = 2 tick.",
-          "verdict": "yes"
+          "seen": "The line crosses the y-axis at the -2 tick, not at -1.",
+          "verdict": "no"
         },
         {
           "n": 2,
-          "seen": "There is a dashed horizontal line through the y = 1 tick.",
-          "verdict": "yes"
-        },
-        {
-          "n": 3,
-          "seen": "The vertical line is labeled \"x=2\" at the top and the horizontal line is labeled \"y=1\" at the left.",
-          "verdict": "yes"
-        },
-        {
-          "n": 4,
-          "seen": "One branch sits right of x = 2 and above y = 1. The other sits left of x = 2 and below y = 1, dropping steeply near x = 2.",
-          "verdict": "yes"
-        },
-        {
-          "n": 5,
-          "seen": "The left branch crosses the x-axis at the x = 1 tick.",
+          "seen": "The line goes through (0, -2), (1, 0) and about (4, 6), which is a rise of 2 for every 1 across.",
           "verdict": "yes"
         }
       ]
     }
   },
-  "2e7f1e26e652e6148901ee46a5295fec": {
+  "1fe94b75584fac435651c84432fa5be2": {
     "meta": {
       "mode": "drawing_check",
       "model": "claude-opus-5-5",
       "prompt": "You check a student's hand drawing against a short list of features.\n\nYou see a  ||",
-      "recorded_at": 1793281257.911202
-    },
-    "response": {
-      "in_view": "whole",
-      "items": [
-        {
-          "n": 1,
-          "seen": "The dashed vertical asymptote is at x = 3 and labeled \"x=3\", not at x = 2.",
-          "verdict": "no"
-        },
-        {
-          "n": 2,
-          "seen": "A dashed horizontal line at y = 1, labeled \"y=1\".",
-          "verdict": "yes"
-        },
-        {
-          "n": 3,
-          "seen": "Both dashed asymptotes have labels: \"x=3\" on the vertical one and \"y=1\" on the horizontal one.",
-          "verdict": "yes"
-        },
-        {
-          "n": 4,
-          "seen": "One branch is above y = 1 and right of x = 3. The other is below y = 1 and left of x = 3, dropping steeply near the vertical asymptote.",
-          "verdict": "yes"
-        },
-        {
-          "n": 5,
-          "seen": "The left branch crosses the x-axis at about x = 2, not at x = 1.",
-          "verdict": "no"
-        }
-      ]
-    }
-  },
-  "35f4bac78450e5cc9e05c33943ddb7e5": {
-    "meta": {
-      "mode": "drawing_check",
-      "model": "claude-opus-5-5",
-      "prompt": "You check a student's hand-drawn graph against a short list of features.\n\nYou se ||",
-      "recorded_at": 1793234320.603233
+      "recorded_at": 1793285152.619633
     },
     "response": {
       "in_view": "not_found",
       "items": [
         {
           "n": 1,
-          "seen": "No graph is drawn. \"VA: x = 2\" is only written as text.",
+          "seen": "No graph is drawn; \"VA: x = 2\" is only written as text.",
           "verdict": "no"
         },
         {
           "n": 2,
-          "seen": "No graph is drawn. \"HA: y = 1\" is only written as text.",
-          "verdict": "no"
-        },
-        {
-          "n": 3,
-          "seen": "No asymptote lines are drawn, so there is nothing to label.",
-          "verdict": "no"
-        },
-        {
-          "n": 4,
-          "seen": "No curve or branches are drawn.",
-          "verdict": "no"
-        },
-        {
-          "n": 5,
-          "seen": "No curve is drawn. \"x-int: (1, 0)\" is only written as text.",
-          "verdict": "no"
-        }
-      ]
-    }
-  },
-  "39ac021e63e842d4c1b827daa9a957de": {
-    "meta": {
-      "mode": "drawing_check",
-      "model": "claude-opus-5-5",
-      "prompt": "You check a student's hand drawing against a short list of features.\n\nYou see a  ||",
-      "recorded_at": 1793281297.709746
-    },
-    "response": {
-      "in_view": "whole",
-      "items": [
-        {
-          "n": 1,
-          "seen": "Dashed vertical line drawn through the x = 2 tick.",
-          "verdict": "yes"
-        },
-        {
-          "n": 2,
-          "seen": "Dashed horizontal line drawn through the y = 1 tick.",
-          "verdict": "yes"
-        },
-        {
-          "n": 3,
-          "seen": "Vertical line labeled \"x=2\" at the top and horizontal line labeled \"y=1\" on the left.",
-          "verdict": "yes"
-        },
-        {
-          "n": 4,
-          "seen": "One branch above and right of the asymptote crossing (x > 2, y > 1); one below and left, flattening just under y = 1 and dropping down along x = 2.",
-          "verdict": "yes"
-        },
-        {
-          "n": 5,
-          "seen": "The left branch crosses the x-axis at the x = 1 tick.",
-          "verdict": "yes"
-        }
-      ]
-    }
-  },
-  "3af07ebefddae24c84c1dda83ba82a4f": {
-    "meta": {
-      "mode": "drawing_check",
-      "model": "claude-opus-5-5",
-      "prompt": "You check a student's hand drawing against a short list of features.\n\nYou see a  ||",
-      "recorded_at": 1793281281.480968
-    },
-    "response": {
-      "in_view": "whole",
-      "items": [
-        {
-          "n": 1,
-          "seen": "Dashed vertical line through the tick at x = 2.",
-          "verdict": "yes"
-        },
-        {
-          "n": 2,
-          "seen": "Dashed horizontal line at the y = 1 tick, running across the graph.",
-          "verdict": "yes"
-        },
-        {
-          "n": 3,
-          "seen": "The vertical line is labeled \"x=2\" at the top, and the horizontal line is labeled \"y=1\" at the left.",
-          "verdict": "yes"
-        },
-        {
-          "n": 4,
-          "seen": "One branch sits above y = 1 to the right of x = 2. The other sits below y = 1 to the left of x = 2 and drops steeply toward the vertical asymptote.",
-          "verdict": "yes"
-        },
-        {
-          "n": 5,
-          "seen": "The left branch crosses the x-axis at the x = 1 tick.",
-          "verdict": "yes"
-        }
-      ]
-    }
-  },
-  "43196837a7bcee7dbd832d3f55721bf9": {
-    "meta": {
-      "mode": "drawing_check",
-      "model": "claude-opus-5-5",
-      "prompt": "You check a student's hand drawing against a short list of features.\n\nYou see a  ||",
-      "recorded_at": 1793281276.2522812
-    },
-    "response": {
-      "in_view": "not_found",
-      "items": [
-        {
-          "n": 1,
-          "seen": "No graph drawn; only the text \"VA: x = 2\" is written.",
-          "verdict": "no"
-        },
-        {
-          "n": 2,
-          "seen": "No graph drawn; only the text \"HA: y = 1\" is written.",
+          "seen": "No graph is drawn; \"HA: y = 1\" is only written as text.",
           "verdict": "no"
         },
         {
@@ -216,111 +49,233 @@
         },
         {
           "n": 4,
-          "seen": "No curve or branches are drawn anywhere on the page.",
+          "seen": "No curve or branches are drawn.",
           "verdict": "no"
         },
         {
           "n": 5,
-          "seen": "No curve drawn; only the text \"x-int: (1, 0)\" is written.",
+          "seen": "No curve is drawn; \"x-int: (1, 0)\" is only written as text.",
           "verdict": "no"
         }
       ]
     }
   },
-  "45f1a104c55236fe28287ab2c2fd8f64": {
+  "2667f41430e9b782b8f583071d4de8fa": {
     "meta": {
       "mode": "drawing_check",
       "model": "claude-opus-5-5",
       "prompt": "You check a student's hand drawing against a short list of features.\n\nYou see a  ||",
-      "recorded_at": 1793281252.838773
-    },
-    "response": {
-      "in_view": "whole",
-      "items": [
-        {
-          "n": 1,
-          "seen": "Dashed vertical line through the x = 2 tick, running the full height of the graph.",
-          "verdict": "yes"
-        },
-        {
-          "n": 2,
-          "seen": "Dashed horizontal line at the y = 1 tick, running across the whole graph.",
-          "verdict": "yes"
-        },
-        {
-          "n": 3,
-          "seen": "Only the vertical asymptote is labeled \"x=2\". The horizontal dashed line has no label; the only \"1\" near it is the y-axis tick number.",
-          "verdict": "no"
-        },
-        {
-          "n": 4,
-          "seen": "One branch is above and right of (2, 1) and levels off toward y = 1. The other comes in from the left just under y = 1 and drops toward negative infinity next to x = 2.",
-          "verdict": "yes"
-        },
-        {
-          "n": 5,
-          "seen": "The lower-left branch crosses the x-axis at the x = 1 tick.",
-          "verdict": "yes"
-        }
-      ]
-    }
-  },
-  "5464f46dff81b2172836e33a6103a43f": {
-    "meta": {
-      "mode": "drawing_check",
-      "model": "claude-opus-5-5",
-      "prompt": "You check a student's hand drawing against a short list of features.\n\nYou see a  ||",
-      "recorded_at": 1793281261.590019
-    },
-    "response": {
-      "in_view": "whole",
-      "items": [
-        {
-          "n": 1,
-          "seen": "A dashed vertical line runs through x = 2 across the whole graph.",
-          "verdict": "yes"
-        },
-        {
-          "n": 2,
-          "seen": "A dashed horizontal line runs through y = 1 across the whole graph.",
-          "verdict": "yes"
-        },
-        {
-          "n": 3,
-          "seen": "The vertical dashed line is labeled \"x=2\" and the horizontal one is labeled \"y=1\".",
-          "verdict": "yes"
-        },
-        {
-          "n": 4,
-          "seen": "Only the upper-right branch is drawn, falling from about (2.1, 5.4) toward y = 1. There is no lower-left branch.",
-          "verdict": "no"
-        },
-        {
-          "n": 5,
-          "seen": "No curve reaches the x-axis. The only branch stays above y = 1 to the right of x = 2, so nothing passes through (1, 0).",
-          "verdict": "no"
-        }
-      ]
-    }
-  },
-  "609931b0f1a8b620744392fe2acd2d4a": {
-    "meta": {
-      "mode": "drawing_check",
-      "model": "claude-opus-5-5",
-      "prompt": "You check a student's hand-drawn graph against a short list of features.\n\nYou se ||",
-      "recorded_at": 1793234317.935839
+      "recorded_at": 1793285146.6221719
     },
     "response": {
       "in_view": "not_found",
       "items": [
         {
           "n": 1,
-          "seen": "Blank lined paper; no vertical asymptote or any drawing present.",
+          "seen": "Blank lined paper; no vertical asymptote is drawn.",
           "verdict": "no"
         },
         {
           "n": 2,
-          "seen": "Blank lined paper; no horizontal asymptote drawn.",
+          "seen": "Blank lined paper; no horizontal asymptote is drawn.",
+          "verdict": "no"
+        },
+        {
+          "n": 3,
+          "seen": "No asymptotes or labels appear anywhere.",
+          "verdict": "no"
+        },
+        {
+          "n": 4,
+          "seen": "No curve branches are drawn.",
+          "verdict": "no"
+        },
+        {
+          "n": 5,
+          "seen": "No curve or axes are drawn, so there is no x-intercept.",
+          "verdict": "no"
+        }
+      ]
+    }
+  },
+  "2676de9ce24d636db146f01e1a094b0f": {
+    "meta": {
+      "mode": "drawing_check",
+      "model": "claude-opus-5-5",
+      "prompt": "You check a student's hand drawing against a short list of features.\n\nYou see a  ||",
+      "recorded_at": 1793285137.424465
+    },
+    "response": {
+      "in_view": "whole",
+      "items": [
+        {
+          "n": 1,
+          "seen": "Dashed vertical line through the x-axis tick at 2, running the full height of the graph.",
+          "verdict": "yes"
+        },
+        {
+          "n": 2,
+          "seen": "Dashed horizontal line through the y-axis tick at 1, running across the whole graph.",
+          "verdict": "yes"
+        },
+        {
+          "n": 3,
+          "seen": "The vertical dashed line is labeled \"x=2\" at the top and the horizontal one is labeled \"y=1\" at the left.",
+          "verdict": "yes"
+        },
+        {
+          "n": 4,
+          "seen": "Only the upper-right branch is drawn, falling from about y=5.4 near x=2 toward y=1. No lower-left branch is drawn.",
+          "verdict": "no"
+        },
+        {
+          "n": 5,
+          "seen": "The only curve drawn stays above y=1 to the right of x=2 and never crosses the x-axis, so nothing passes through (1, 0).",
+          "verdict": "no"
+        }
+      ]
+    }
+  },
+  "29733f4ea9103f9eee6a21dbf85d88f8": {
+    "meta": {
+      "mode": "drawing_check",
+      "model": "claude-opus-5-5",
+      "prompt": "You check a student's hand drawing against a short list of features.\n\nYou see a  ||",
+      "recorded_at": 1793285179.390219
+    },
+    "response": {
+      "in_view": "whole",
+      "items": [
+        {
+          "n": 1,
+          "seen": "The line crosses the y-axis at the -1 tick.",
+          "verdict": "yes"
+        },
+        {
+          "n": 2,
+          "seen": "The line rises from (0, -1) through about (0.5, 0) to about (2, 3), so it goes up 2 for every 1 across.",
+          "verdict": "yes"
+        }
+      ]
+    }
+  },
+  "420cb4cc2911b444685f13d59e5fc7d2": {
+    "meta": {
+      "mode": "drawing_check",
+      "model": "claude-opus-5-5",
+      "prompt": "You check a student's hand drawing against a short list of features.\n\nYou see a  ||",
+      "recorded_at": 1793285195.487017
+    },
+    "response": {
+      "in_view": "whole",
+      "items": [
+        {
+          "n": 1,
+          "seen": "The line crosses the y-axis a little below the origin, which fits a negative intercept, but the axes have no ticks or numbers to confirm -1.",
+          "verdict": "unclear"
+        },
+        {
+          "n": 2,
+          "seen": "The line rises steeply from lower left to upper right, which fits a positive slope, but with no scale the value 2 can't be read.",
+          "verdict": "unclear"
+        }
+      ]
+    }
+  },
+  "64d18fa6b7d6d892a20487484e764324": {
+    "meta": {
+      "mode": "drawing_check",
+      "model": "claude-opus-5-5",
+      "prompt": "You check a student's hand drawing against a short list of features.\n\nYou see a  ||",
+      "recorded_at": 1793285143.585938
+    },
+    "response": {
+      "in_view": "whole",
+      "items": [
+        {
+          "n": 1,
+          "seen": "A dashed vertical line is drawn at x = 2 and labeled \"x=2\".",
+          "verdict": "yes"
+        },
+        {
+          "n": 2,
+          "seen": "There is no horizontal asymptote line. The branches level off near y \u2248 0.8 on the left and y \u2248 1.4 on the right, but no line is drawn at y = 1.",
+          "verdict": "no"
+        },
+        {
+          "n": 3,
+          "seen": "Only the vertical asymptote is labeled (\"x=2\"). There is no horizontal asymptote, so it has no label.",
+          "verdict": "no"
+        },
+        {
+          "n": 4,
+          "seen": "There are two branches: one to the right of x = 2 and above y = 1, and one to the left of x = 2 and below y = 1 that drops down along the asymptote.",
+          "verdict": "yes"
+        },
+        {
+          "n": 5,
+          "seen": "The left branch crosses the x-axis at the tick marked 1.",
+          "verdict": "yes"
+        }
+      ]
+    }
+  },
+  "78084469336642f29b17b251a5d048a8": {
+    "meta": {
+      "mode": "drawing_check",
+      "model": "claude-opus-5-5",
+      "prompt": "You check a student's hand drawing against a short list of features.\n\nYou see a  ||",
+      "recorded_at": 1793285132.782356
+    },
+    "response": {
+      "in_view": "whole",
+      "items": [
+        {
+          "n": 1,
+          "seen": "The dashed vertical asymptote is at x = 3 and labeled \"x=3\". Nothing is drawn at x = 2.",
+          "verdict": "no"
+        },
+        {
+          "n": 2,
+          "seen": "A dashed horizontal line runs through y = 1 and is labeled \"y=1\".",
+          "verdict": "yes"
+        },
+        {
+          "n": 3,
+          "seen": "Both dashed lines are labeled: \"x=3\" on the vertical line and \"y=1\" on the horizontal line.",
+          "verdict": "yes"
+        },
+        {
+          "n": 4,
+          "seen": "One branch sits above and to the right of where the asymptotes cross at (3, 1). The other sits below and to the left, dropping toward -4.5 as it nears x = 3.",
+          "verdict": "yes"
+        },
+        {
+          "n": 5,
+          "seen": "The lower-left branch crosses the x-axis at about (2, 0), a whole tick away from (1, 0).",
+          "verdict": "no"
+        }
+      ]
+    }
+  },
+  "b771a2f9459f3dba013fef88cda3892a": {
+    "meta": {
+      "mode": "drawing_check",
+      "model": "claude-opus-5-5",
+      "prompt": "You check a student's hand drawing against a short list of features.\n\nYou see a  ||",
+      "recorded_at": 1793285150.1615849
+    },
+    "response": {
+      "in_view": "not_found",
+      "items": [
+        {
+          "n": 1,
+          "seen": "Only blank lined paper; no vertical asymptote is drawn.",
+          "verdict": "no"
+        },
+        {
+          "n": 2,
+          "seen": "Only blank lined paper; no horizontal asymptote is drawn.",
           "verdict": "no"
         },
         {
@@ -335,322 +290,79 @@
         },
         {
           "n": 5,
-          "seen": "No curve, axes, or marked point (1, 0) are drawn.",
+          "seen": "No axes or curve are drawn, so there's no x-intercept.",
           "verdict": "no"
         }
       ]
     }
   },
-  "65f4425354107c7a76340634753b6fa1": {
-    "meta": {
-      "mode": "drawing_check",
-      "model": "claude-opus-5-5",
-      "prompt": "You check a student's hand-drawn graph against a short list of features.\n\nYou se ||",
-      "recorded_at": 1793234295.488251
-    },
-    "response": {
-      "in_view": "whole",
-      "items": [
-        {
-          "n": 1,
-          "seen": "Dashed vertical line drawn through x = 2, running the full height of the graph.",
-          "verdict": "yes"
-        },
-        {
-          "n": 2,
-          "seen": "Dashed horizontal line drawn at y = 1 across the full width of the graph.",
-          "verdict": "yes"
-        },
-        {
-          "n": 3,
-          "seen": "Only the vertical asymptote is labeled \"x=2\"; the dashed horizontal line at y = 1 has no label.",
-          "verdict": "no"
-        },
-        {
-          "n": 4,
-          "seen": "One branch is above and to the right of (2, 1), and the other is below and to the left, running from near y = 1 on the left down toward the asymptote at x = 2.",
-          "verdict": "yes"
-        },
-        {
-          "n": 5,
-          "seen": "The left branch crosses the x-axis at the x = 1 tick mark.",
-          "verdict": "yes"
-        }
-      ]
-    }
-  },
-  "68cdab7410bc857c6045a98e44544eb4": {
-    "meta": {
-      "mode": "drawing_check",
-      "model": "claude-opus-5-5",
-      "prompt": "You check a student's hand-drawn graph against a short list of features.\n\nYou se ||",
-      "recorded_at": 1793234306.04371
-    },
-    "response": {
-      "in_view": "whole",
-      "items": [
-        {
-          "n": 1,
-          "seen": "A dashed vertical line passes through x = 2 and runs from the top of the graph to the bottom.",
-          "verdict": "yes"
-        },
-        {
-          "n": 2,
-          "seen": "A dashed horizontal line runs across the whole graph at y = 1.",
-          "verdict": "yes"
-        },
-        {
-          "n": 3,
-          "seen": "The vertical line is labeled \"x=2\" near the top, and the horizontal line is labeled \"y=1\" at the left.",
-          "verdict": "yes"
-        },
-        {
-          "n": 4,
-          "seen": "Only the upper-right branch is drawn, starting near x = 2 at about y = 5.5 and leveling off toward y = 1. There is no lower-left branch.",
-          "verdict": "no"
-        },
-        {
-          "n": 5,
-          "seen": "No curve is drawn near (1, 0). The only branch stays above y = 1 to the right of x = 2.",
-          "verdict": "no"
-        }
-      ]
-    }
-  },
-  "7d0f8891e850e599bad1e7084856bb53": {
-    "meta": {
-      "mode": "drawing_check",
-      "model": "claude-opus-5-5",
-      "prompt": "You check a student's hand-drawn graph against a short list of features.\n\nYou se ||",
-      "recorded_at": 1793234301.179421
-    },
-    "response": {
-      "in_view": "whole",
-      "items": [
-        {
-          "n": 1,
-          "seen": "The dashed vertical asymptote is at x = 3 and labeled \"x=3\"; there is no asymptote at x = 2.",
-          "verdict": "no"
-        },
-        {
-          "n": 2,
-          "seen": "A dashed horizontal line at y = 1 runs across the graph and is labeled \"y=1\".",
-          "verdict": "yes"
-        },
-        {
-          "n": 3,
-          "seen": "Both dashed lines are labeled: \"x=3\" on the vertical one and \"y=1\" on the horizontal one.",
-          "verdict": "yes"
-        },
-        {
-          "n": 4,
-          "seen": "One branch is above and right of where the asymptotes cross at (3, 1), and one is below and left of it.",
-          "verdict": "yes"
-        },
-        {
-          "n": 5,
-          "seen": "The left branch crosses the x-axis at about (2, 0), not at (1, 0).",
-          "verdict": "no"
-        }
-      ]
-    }
-  },
-  "7e7602505d2720d071200a2caecb22e9": {
-    "meta": {
-      "mode": "drawing_check",
-      "model": "claude-opus-5-5",
-      "prompt": "You check a student's hand-drawn graph against a short list of features.\n\nYou se ||",
-      "recorded_at": 1793234311.816963
-    },
-    "response": {
-      "in_view": "whole",
-      "items": [
-        {
-          "n": 1,
-          "seen": "Dashed vertical line drawn at x = 2.",
-          "verdict": "yes"
-        },
-        {
-          "n": 2,
-          "seen": "No horizontal line is drawn at y = 1. The branches only level off near y \u2248 1.",
-          "verdict": "no"
-        },
-        {
-          "n": 3,
-          "seen": "Only the vertical asymptote has a label (\"x=2\"). There is no horizontal asymptote line or label.",
-          "verdict": "no"
-        },
-        {
-          "n": 4,
-          "seen": "Two branches: one in the upper right of (2, 1), and one in the lower left that stays below y = 1 and drops down next to x = 2.",
-          "verdict": "yes"
-        },
-        {
-          "n": 5,
-          "seen": "The left branch crosses the x-axis at the x = 1 tick mark.",
-          "verdict": "yes"
-        }
-      ]
-    }
-  },
-  "7ff5289f028aa23312f1abf761edf8cc": {
-    "meta": {
-      "mode": "drawing_check",
-      "model": "claude-opus-5-5",
-      "prompt": "You check a student's hand-drawn graph against a short list of features.\n\nYou se ||",
-      "recorded_at": 1793234329.806853
-    },
-    "response": {
-      "in_view": "not_found",
-      "items": [
-        {
-          "n": 1,
-          "seen": "No graph is drawn; 'VA: x = 2' appears only as written work.",
-          "verdict": "no"
-        },
-        {
-          "n": 2,
-          "seen": "No graph is drawn; 'HA: y = 1' appears only as written work.",
-          "verdict": "no"
-        },
-        {
-          "n": 3,
-          "seen": "No asymptote lines are drawn, so nothing is labeled on a graph.",
-          "verdict": "no"
-        },
-        {
-          "n": 4,
-          "seen": "No curve or branches are drawn anywhere on the page.",
-          "verdict": "no"
-        },
-        {
-          "n": 5,
-          "seen": "No curve or axes are drawn; 'x-int: (1, 0)' is only written as text.",
-          "verdict": "no"
-        }
-      ]
-    }
-  },
-  "8a418007f1eb61007af2e83ed150da13": {
+  "c441495cae671b63c5b486f21e4b3b8c": {
     "meta": {
       "mode": "drawing_check",
       "model": "claude-opus-5-5",
       "prompt": "You check a student's hand drawing against a short list of features.\n\nYou see a  ||",
-      "recorded_at": 1793281284.749347
-    },
-    "response": {
-      "in_view": "not_found",
-      "items": [
-        {
-          "n": 1,
-          "seen": "No graph is drawn. \"VA: x = 2\" appears only as written text.",
-          "verdict": "no"
-        },
-        {
-          "n": 2,
-          "seen": "No graph is drawn. \"HA: y = 1\" appears only as written text.",
-          "verdict": "no"
-        },
-        {
-          "n": 3,
-          "seen": "There are no asymptote lines to label. The page has only written work.",
-          "verdict": "no"
-        },
-        {
-          "n": 4,
-          "seen": "No curve or branches are drawn anywhere on the page.",
-          "verdict": "no"
-        },
-        {
-          "n": 5,
-          "seen": "No curve or axes are drawn. \"x-int: (1, 0)\" appears only as written text.",
-          "verdict": "no"
-        }
-      ]
-    }
-  },
-  "b83bec903c17bc6dff9363179cf151ec": {
-    "meta": {
-      "mode": "drawing_check",
-      "model": "claude-opus-5-5",
-      "prompt": "You check a student's hand drawing against a short list of features.\n\nYou see a  ||",
-      "recorded_at": 1793281266.80601
+      "recorded_at": 1793285187.990853
     },
     "response": {
       "in_view": "whole",
       "items": [
         {
           "n": 1,
-          "seen": "There is a dashed vertical line at x = 2, labeled \"x=2\".",
+          "seen": "The line crosses the y-axis at the -1 tick.",
           "verdict": "yes"
         },
         {
           "n": 2,
-          "seen": "No horizontal line is drawn at y = 1. The branches only level off near y \u2248 1.",
+          "seen": "Counted on the ticks, the slope is about 3. The line runs from (0, -1) up to about (2.2, 5.9) and passes y = 2 near x = 0.85, but slope 2 would give y = 1 at x = 1.",
           "verdict": "no"
-        },
-        {
-          "n": 3,
-          "seen": "Only the vertical asymptote has a label (\"x=2\"). The horizontal asymptote isn't drawn or labeled.",
-          "verdict": "no"
-        },
-        {
-          "n": 4,
-          "seen": "One branch is above and to the right of (2, 1), and the other is below and to the left, dropping down beside x = 2.",
-          "verdict": "yes"
-        },
-        {
-          "n": 5,
-          "seen": "The left branch crosses the x-axis at the tick for x = 1.",
-          "verdict": "yes"
         }
       ]
     }
   },
-  "bad20364fbf46f60290dd74cf10d13b9": {
+  "c672f4ff9d01502ae8571f8ae6eef3fb": {
     "meta": {
       "mode": "drawing_check",
       "model": "claude-opus-5-5",
-      "prompt": "You check a student's hand-drawn graph against a short list of features.\n\nYou se ||",
-      "recorded_at": 1793234343.767765
+      "prompt": "You check a student's hand drawing against a short list of features.\n\nYou see a  ||",
+      "recorded_at": 1793285173.8396108
     },
     "response": {
       "in_view": "whole",
       "items": [
         {
           "n": 1,
-          "seen": "A dashed vertical line is drawn at x = 2 and runs through the whole graph.",
+          "seen": "Dashed vertical line through the x = 2 tick.",
           "verdict": "yes"
         },
         {
           "n": 2,
-          "seen": "A dashed horizontal line is drawn at y = 1 across the graph.",
+          "seen": "Dashed horizontal line through the y = 1 tick.",
           "verdict": "yes"
         },
         {
           "n": 3,
-          "seen": "The vertical line is labeled \"x=2\" at its top, and the horizontal line is labeled \"y=1\" at its left end.",
+          "seen": "The vertical dashed line is labeled \"x=2\" and the horizontal one is labeled \"y=1\".",
           "verdict": "yes"
         },
         {
           "n": 4,
-          "seen": "One branch sits above y = 1 to the right of x = 2. The other sits below y = 1 to the left of x = 2 and drops toward the vertical asymptote.",
+          "seen": "One branch drops from the upper right toward y = 1. The other branch runs from near y = 1 on the left down toward x = 2.",
           "verdict": "yes"
         },
         {
           "n": 5,
-          "seen": "The lower-left branch crosses the x-axis at the tick marked 1.",
+          "seen": "The lower-left branch crosses the x-axis at about the x = 1 tick.",
           "verdict": "yes"
         }
       ]
     }
   },
-  "c206450d5bf40b1fdf9991087bbabfb3": {
+  "cadb605da3aef668036e061cb0a2b758": {
     "meta": {
       "mode": "drawing_check",
       "model": "claude-opus-5-5",
       "prompt": "You check a student's hand drawing against a short list of features.\n\nYou see a  ||",
-      "recorded_at": 1793281288.8717382
+      "recorded_at": 1793285166.469207
     },
     "response": {
       "in_view": "not_found",
@@ -683,230 +395,177 @@
       ]
     }
   },
-  "cf4016521cea05e8b0a5e3803241cfa2": {
+  "d32914ae6ca57e6f60fc5641f90625fd": {
     "meta": {
       "mode": "drawing_check",
       "model": "claude-opus-5-5",
       "prompt": "You check a student's hand drawing against a short list of features.\n\nYou see a  ||",
-      "recorded_at": 1793281273.291402
-    },
-    "response": {
-      "in_view": "not_found",
-      "items": [
-        {
-          "n": 1,
-          "seen": "Blank lined paper; there's no vertical asymptote or any other stroke.",
-          "verdict": "no"
-        },
-        {
-          "n": 2,
-          "seen": "Blank lined paper; there's no horizontal asymptote. The printed ruled lines aren't part of a drawing.",
-          "verdict": "no"
-        },
-        {
-          "n": 3,
-          "seen": "There are no labels anywhere on the page.",
-          "verdict": "no"
-        },
-        {
-          "n": 4,
-          "seen": "No curve or branches are drawn.",
-          "verdict": "no"
-        },
-        {
-          "n": 5,
-          "seen": "No axes or curve are drawn, so nothing crosses at (1, 0).",
-          "verdict": "no"
-        }
-      ]
-    }
-  },
-  "dc647dfe24dee1420ea248c9838a95a0": {
-    "meta": {
-      "mode": "drawing_check",
-      "model": "claude-opus-5-5",
-      "prompt": "You check a student's hand-drawn graph against a short list of features.\n\nYou se ||",
-      "recorded_at": 1793234314.871443
-    },
-    "response": {
-      "in_view": "not_found",
-      "items": [
-        {
-          "n": 1,
-          "seen": "The page is blank lined paper with no vertical asymptote drawn.",
-          "verdict": "no"
-        },
-        {
-          "n": 2,
-          "seen": "No horizontal asymptote is drawn, only the paper's printed ruled lines.",
-          "verdict": "no"
-        },
-        {
-          "n": 3,
-          "seen": "There are no asymptotes and no labels on the page.",
-          "verdict": "no"
-        },
-        {
-          "n": 4,
-          "seen": "No curve or branches are drawn.",
-          "verdict": "no"
-        },
-        {
-          "n": 5,
-          "seen": "No axes, curve or marked point are drawn.",
-          "verdict": "no"
-        }
-      ]
-    }
-  },
-  "de9117533cf6ac80985808094da6f1fa": {
-    "meta": {
-      "mode": "drawing_check",
-      "model": "claude-opus-5-5",
-      "prompt": "You check a student's hand-drawn graph against a short list of features.\n\nYou se ||",
-      "recorded_at": 1793234326.2657971
+      "recorded_at": 1793285126.455617
     },
     "response": {
       "in_view": "whole",
       "items": [
         {
           "n": 1,
-          "seen": "Dashed vertical line through x = 2, running from above y = 6 to below y = -5.",
+          "seen": "Dashed vertical line through x = 2, labeled \"x=2\".",
           "verdict": "yes"
         },
         {
           "n": 2,
-          "seen": "Dashed horizontal line at y = 1, running from x = -6 to x = 6.",
+          "seen": "Dashed horizontal line at y = 1 running across the whole graph.",
           "verdict": "yes"
         },
         {
           "n": 3,
-          "seen": "The vertical dashed line is labeled \"x=2\" at the top, and the horizontal one is labeled \"y=1\" at the left end.",
-          "verdict": "yes"
+          "seen": "Only the vertical asymptote has a label (\"x=2\"). The horizontal dashed line has no label; the \"1\" there is just the y-axis tick number.",
+          "verdict": "no"
         },
         {
           "n": 4,
-          "seen": "One branch is right of x = 2 and above y = 1, falling toward y = 1. The other is left of x = 2 and below y = 1, dropping steeply near x = 2.",
+          "seen": "One branch sits right of x = 2 and above y = 1, and another sits left of x = 2 and below y = 1, dropping toward -4.5 near x = 2.",
           "verdict": "yes"
         },
         {
           "n": 5,
-          "seen": "The left branch crosses the x-axis at the tick marked 1.",
+          "seen": "The lower-left branch crosses the x-axis at about x = 1.",
           "verdict": "yes"
         }
       ]
     }
   },
-  "e3f45924ee39b45330a83eda7b03e542": {
+  "da196faff4feb1f63d9c7caef1ac902a": {
     "meta": {
       "mode": "drawing_check",
       "model": "claude-opus-5-5",
-      "prompt": "You check a student's hand-drawn graph against a short list of features.\n\nYou se ||",
-      "recorded_at": 1793234338.216979
+      "prompt": "You check a student's hand drawing against a short list of features.\n\nYou see a  ||",
+      "recorded_at": 1793285162.9233332
     },
     "response": {
       "in_view": "not_found",
       "items": [
         {
           "n": 1,
-          "seen": "No graph is drawn; 'VA: x = 2' is only written as text, with no vertical line.",
+          "seen": "No graph is drawn; \"VA: x = 2\" appears only as written text.",
           "verdict": "no"
         },
         {
           "n": 2,
-          "seen": "No graph is drawn; 'HA: y = 1' is only written as text, with no horizontal line.",
+          "seen": "No graph is drawn; \"HA: y = 1\" appears only as written text.",
           "verdict": "no"
         },
         {
           "n": 3,
-          "seen": "No asymptote lines are drawn, so nothing is labeled on a graph.",
+          "seen": "No asymptote lines are drawn, so there is nothing labeled.",
           "verdict": "no"
         },
         {
           "n": 4,
-          "seen": "No curve or branches are drawn; the page has only written equations.",
+          "seen": "No curve or branches are drawn anywhere on the page.",
           "verdict": "no"
         },
         {
           "n": 5,
-          "seen": "No curve or x-axis is drawn; 'x-int: (1, 0)' is only written as text.",
+          "seen": "No curve or x-axis is drawn; \"x-int: (1, 0)\" appears only as written text.",
           "verdict": "no"
         }
       ]
     }
   },
-  "f7fef923b9439f91a9efc729aad54b64": {
+  "e1d590ff3eb5790e67f97d675eeb49af": {
     "meta": {
       "mode": "drawing_check",
       "model": "claude-opus-5-5",
-      "prompt": "You check a student's hand-drawn graph against a short list of features.\n\nYou se ||",
-      "recorded_at": 1793234290.035736
+      "prompt": "You check a student's hand drawing against a short list of features.\n\nYou see a  ||",
+      "recorded_at": 1793285199.371616
     },
     "response": {
       "in_view": "whole",
       "items": [
         {
           "n": 1,
-          "seen": "A dashed vertical line runs through x = 2 from the top of the graph to the bottom.",
+          "seen": "The line crosses the y-axis above the origin, so its y-intercept is positive, not at -1 below the origin.",
+          "verdict": "no"
+        },
+        {
+          "n": 2,
+          "seen": "The line rises steeply from left to right, so the slope is positive, but the axes have no ticks or scale to read a value of 2.",
+          "verdict": "unclear"
+        }
+      ]
+    }
+  },
+  "f756207ab46643a8b9885dc17c7bb39e": {
+    "meta": {
+      "mode": "drawing_check",
+      "model": "claude-opus-5-5",
+      "prompt": "You check a student's hand drawing against a short list of features.\n\nYou see a  ||",
+      "recorded_at": 1793285120.76212
+    },
+    "response": {
+      "in_view": "whole",
+      "items": [
+        {
+          "n": 1,
+          "seen": "A dashed vertical line runs through the x = 2 tick, top to bottom.",
           "verdict": "yes"
         },
         {
           "n": 2,
-          "seen": "A dashed horizontal line runs across the whole graph at y = 1.",
+          "seen": "A dashed horizontal line runs through the y = 1 tick, across the whole graph.",
           "verdict": "yes"
         },
         {
           "n": 3,
-          "seen": "The vertical line is labeled \"x=2\" at the top and the horizontal line is labeled \"y=1\" at the left.",
+          "seen": "The vertical dashed line is labeled \"x=2\" and the horizontal one is labeled \"y=1\".",
           "verdict": "yes"
         },
         {
           "n": 4,
-          "seen": "One branch sits right of x = 2 and above y = 1, and the other sits left of x = 2 and below y = 1, dropping down beside the vertical asymptote.",
+          "seen": "One branch sits above y = 1 to the right of x = 2. The other sits below y = 1 to the left of x = 2, dropping steeply near x = 2.",
           "verdict": "yes"
         },
         {
           "n": 5,
-          "seen": "The left branch crosses the x-axis at the tick mark for x = 1.",
+          "seen": "The left branch crosses the x-axis at about x = 1, within half a tick.",
           "verdict": "yes"
         }
       ]
     }
   },
-  "fa118bfb852419f6bf3323d1be36570e": {
+  "fd47f1af5548c1fd22d30c7b90586877": {
     "meta": {
       "mode": "drawing_check",
       "model": "claude-opus-5-5",
       "prompt": "You check a student's hand drawing against a short list of features.\n\nYou see a  ||",
-      "recorded_at": 1793281270.0864131
+      "recorded_at": 1793285158.358457
     },
     "response": {
-      "in_view": "not_found",
+      "in_view": "whole",
       "items": [
         {
           "n": 1,
-          "seen": "Only blank lined paper is visible, with no vertical asymptote drawn.",
-          "verdict": "unclear"
+          "seen": "Dashed vertical line through the x = 2 tick, running the full height of the graph.",
+          "verdict": "yes"
         },
         {
           "n": 2,
-          "seen": "Only blank lined paper is visible, with no horizontal asymptote drawn.",
-          "verdict": "unclear"
+          "seen": "Dashed horizontal line through the y = 1 tick, across the whole graph.",
+          "verdict": "yes"
         },
         {
           "n": 3,
-          "seen": "There are no asymptotes and no labels in the image.",
-          "verdict": "unclear"
+          "seen": "The vertical dashed line is labeled \"x=2\" at the top and the horizontal one \"y=1\" at the left.",
+          "verdict": "yes"
         },
         {
           "n": 4,
-          "seen": "No curve branches are drawn anywhere on the page.",
-          "verdict": "unclear"
+          "seen": "One branch sits above y = 1 to the right of x = 2. The other sits below y = 1 to the left of x = 2 and drops toward the vertical asymptote.",
+          "verdict": "yes"
         },
         {
           "n": 5,
-          "seen": "No curve or axes are drawn, so no x-intercept can be seen.",
-          "verdict": "unclear"
+          "seen": "The left branch crosses the x-axis at the x = 1 tick.",
+          "verdict": "yes"
         }
       ]
     }

@@ -1717,8 +1717,9 @@ DRAWING_CHECK_SCHEMA: ToolSchema = {
                             "type": "string",
                             "enum": ["yes", "no", "unclear"],
                             "description": (
-                                "yes: clearly drawn as described. no: visibly missing, "
-                                "or drawn differently. unclear: this image can't settle it."
+                                "yes: drawn as described, as closely as a careful freehand "
+                                "sketch can show it. no: missing, or clearly drawn "
+                                "differently. unclear: this image can't settle it."
                             ),
                         },
                         "seen": {

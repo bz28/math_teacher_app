@@ -116,15 +116,18 @@ a math teacher grades a freehand sketch:
 - no: missing, or clearly drawn differently. Say what is there instead.
 - unclear: this image can't settle it (too faint, cut off, a label you can't read).
 
-Students sketch by hand, often on lined paper with uneven ticks. A line a little \
-steeper or flatter than asked, a crossing a little off a tick, or a wobbly curve is \
-still yes. No is for a feature that is clearly wrong: on the wrong side of an axis \
-or the origin, sloping the wrong way, about twice as steep or flat as it should be \
-or more, crossing at a clearly different point, or not there.
+Students sketch by hand, often on lined paper. Wobbly strokes and uneven spacing \
+are fine. When the drawing has a scale (numbered ticks, or tick marks with a stated \
+spacing), read the values off it the way a teacher would: within about half a tick \
+is yes; a point, crossing, endpoint or bar a whole tick or more from where it should \
+be is no, and so is a slope whose rise over run, counted on the ticks, gives a \
+different number.
 
-When the axes have no ticks or numbers, judge what the sketch does show: which side \
-of the origin each crossing is on, which way each line goes, which is steeper, and \
-the order of the features. Yes when all of that fits.
+When the drawing has no scale, exact values can't be read. Judge what it does show: \
+which side of the origin or zero a feature is on, which way a line goes, which of \
+two lines is steeper, the order of the features. A feature that gets any of that \
+wrong is no. An item that names a value (a crossing at (0, -1), a slope of 2) is \
+unclear when everything you can see fits.
 
 Judge the strokes, not what the student probably meant. A feature only written as \
 an equation beside the drawing is not drawn. Writing that is part of the drawing \

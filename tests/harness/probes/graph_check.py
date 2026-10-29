@@ -8,7 +8,8 @@ feature that isn't drawn", including when the student WROTE the feature
 in their work beside the graph (case written-not-drawn).
 
 Synthetic pages with exact ground truth: we draw f(x) = 1/(x - 2) + 1, or
-a deliberately wrong version of it, on lined paper with phone-photo
+a deliberately wrong version of it, and straight lines a little wrong or
+with no scale (where sketch tolerance stops), on lined paper with phone-photo
 degradation. The checklist is fixed, so the probe measures the check, not
 the checklist writer.
 
@@ -44,6 +45,13 @@ CHECKLIST = [
     ChecklistItem("Two branches: one upper-right and one lower-left of where the asymptotes cross", 2),
     ChecklistItem("The curve crosses the x-axis at (1, 0)", 1),
 ]
+# The line cases test where sketch tolerance stops: read off a scale, a
+# slope or a crossing one tick out is wrong; with no scale, a value can't
+# be read, so it is unclear unless what can be seen is wrong.
+LINE_CHECKLIST = [
+    ChecklistItem("The line crosses the y-axis at (0, -1)", 2),
+    ChecklistItem("The line has slope 2", 2),
+]
 
 
 @dataclass
@@ -62,6 +70,14 @@ class GraphCase:
     faint: bool = False
     # Box handed to the check, as page fractions. None = the true box.
     bbox: dict[str, float] | None = None
+    # (slope, y-intercept): draw this line instead of f, judged on LINE_CHECKLIST.
+    line: tuple[float, float] | None = None
+    # False: the axes have no tick marks or numbers.
+    ticks: bool = True
+
+    @property
+    def checklist(self) -> list[ChecklistItem]:
+        return LINE_CHECKLIST if self.line else CHECKLIST
 
 
 CASES: list[GraphCase] = [
@@ -79,6 +95,12 @@ CASES: list[GraphCase] = [
     # must widen or fall back to the page and still judge the graph.
     GraphCase("box-misses-graph", bbox={"x0": 0.04, "y0": 0.06, "x1": 0.4, "y1": 0.3},
               truth=["yes", "yes", "yes", "yes", "yes"]),
+    # truth "unclear": the only right answer is unclear.
+    GraphCase("line-correct", line=(2, -1), written=["4.  y = 2x - 1"], truth=["yes", "yes"]),
+    GraphCase("line-slope-3-not-2", line=(3, -1), written=["4.  y = 2x - 1"], truth=["yes", "no"]),
+    GraphCase("line-intercept-one-tick-off", line=(2, -2), written=["4.  y = 2x - 1"], truth=["no", "yes"]),
+    GraphCase("line-no-scale", line=(2, -1), ticks=False, written=["4.  y = 2x - 1"], truth=["unclear", "unclear"]),
+    GraphCase("line-no-scale-wrong-side", line=(2, 3), ticks=False, written=["4.  y = 2x - 1"], truth=["no", None]),
 ]
 
 
@@ -119,7 +141,7 @@ def render(case: GraphCase, seed: int = 7) -> str:
         pen([(cx, y0), (cx, y1)])
         small = _font(18)
         for t in range(-_UNIT_RANGE, _UNIT_RANGE + 1):
-            if t == 0:
+            if t == 0 or not case.ticks:
                 continue
             tx, _ = P(t, 0)
             pen([(tx, cy - 5), (tx, cy + 5)], 2)
@@ -128,18 +150,22 @@ def render(case: GraphCase, seed: int = 7) -> str:
             pen([(cx - 5, ty), (cx + 5, ty)], 2)
             d.text((cx - 26, ty - 9), str(t), font=small, fill=ink)
         label = _font(22)
-        if case.va is not None:
+        if case.line:
+            m, b = case.line
+            xs = [x / 10 for x in range(-10 * _UNIT_RANGE, 10 * _UNIT_RANGE + 1)]
+            pen([P(x, m * x + b) for x in xs if abs(m * x + b) <= _UNIT_RANGE], 3)
+        if case.va is not None and not case.line:
             vx, _ = P(case.va, 0)
             pen([(vx, y) for y in [y0 + k * 12 for k in range(int((y1 - y0) / 12))]], 2, dashed=True)
             if case.label_va:
                 d.text((vx + 6, y0 + 4), f"x={case.va:g}", font=label, fill=ink)
-        if case.ha is not None:
+        if case.ha is not None and not case.line:
             _, hy = P(0, case.ha)
             pen([(x, hy) for x in [x0 + k * 12 for k in range(int((x1 - x0) / 12))]], 2, dashed=True)
             if case.label_ha:
                 d.text((x0 + 8, hy - 32), f"y={case.ha:g}", font=label, fill=ink)
         va = case.va if case.va is not None else 2.0
-        for side in case.branches:
+        for side in case.branches if not case.line else ():
             xs = ([va + 0.08 + i * 0.05 for i in range(160)] if side == "right"
                   else [va - 0.08 - i * 0.05 for i in range(160)])
             pts = [P(x, _f(x, va)) for x in xs if abs(x) <= _UNIT_RANGE and abs(_f(x, va)) <= _UNIT_RANGE]
@@ -179,7 +205,7 @@ class GraphCheckProbe(Probe):
 
     def capability_spec(self) -> str:
         return (
-            "Judging a student's hand-drawn graph against a checklist of features: "
+            "Judging a student's hand drawing against a checklist of features: "
             "yes only when the feature is drawn, no when it is missing or wrong, "
             "unclear when the image can't settle it."
         )
@@ -198,7 +224,7 @@ class GraphCheckProbe(Probe):
 
     async def _run(self, case: GraphCase) -> GeneratedItem:
         result = await check_drawing(
-            render(case), "image/jpeg", case.bbox or _true_bbox(), CHECKLIST, problem_position=4,
+            render(case), "image/jpeg", case.bbox or _true_bbox(), case.checklist, problem_position=4,
         )
         raw: dict[str, Any] = {
             "case": case.name,
@@ -207,6 +233,7 @@ class GraphCheckProbe(Probe):
             "in_view": result.in_view,
             "items": [asdict(i) for i in result.items],
             "draw_graph": case.draw_graph,
+            "items_expected": len(case.checklist),
         }
         return GeneratedItem(
             id=case.name, label=f"[graph-check] {case.name}", problem_text="Graph f(x) = 1/(x - 2) + 1",
@@ -219,7 +246,7 @@ class GraphCheckProbe(Probe):
         raw = item.raw
         verdicts = [i["verdict"] for i in raw["items"]]
         checks = [CheckResult(
-            "one verdict per checklist item", len(verdicts) == len(CHECKLIST), f"got {len(verdicts)}",
+            "one verdict per checklist item", len(verdicts) == raw["items_expected"], f"got {len(verdicts)}",
         )]
         if not raw["draw_graph"]:
             ok = all(v == "unclear" for v in verdicts)
@@ -236,6 +263,12 @@ class GraphCheckProbe(Probe):
         checks.append(CheckResult(
             "never no for a feature that is drawn", not false_no,
             "" if not false_no else f"items {false_no}: {[raw['items'][n - 1] for n in false_no]}",
+        ))
+        not_unclear = [n for n, (t, v) in enumerate(zip(raw["truth"], verdicts, strict=True), 1)
+                       if t == "unclear" and v != "unclear"]
+        checks.append(CheckResult(
+            "unclear when the value can't be read", not not_unclear,
+            "" if not not_unclear else f"items {not_unclear}: {[raw['items'][n - 1] for n in not_unclear]}",
         ))
         return checks
 
