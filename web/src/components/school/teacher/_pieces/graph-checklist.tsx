@@ -90,6 +90,20 @@ export function GraphChecklistPanel({
     setBusy(false);
   };
 
+  const markChecked = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await teacher.markGraphChecklistChecked(bankItemId);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't save that. Try again.");
+      setBusy(false);
+      return;
+    }
+    await reread();
+    setBusy(false);
+  };
+
   const save = async (drafts: Draft[]) => {
     const items = drafts.map((d) => ({
       text: d.text.trim(),
@@ -199,10 +213,19 @@ export function GraphChecklistPanel({
     <Section
       actions={
         <>
-          {checklist.teacher_edited && (
+          {checklist.checked ? (
             <span className="rounded-full bg-bg-subtle px-2 py-0.5 text-[11px] text-text-secondary">
-              Edited by you
+              {checklist.teacher_edited ? "Edited by you" : "Checked by you"}
             </span>
+          ) : (
+            <button
+              type="button"
+              onClick={markChecked}
+              disabled={busy}
+              className="min-h-8 rounded-[--radius-sm] border border-primary/40 bg-primary-bg/40 px-2 text-xs font-semibold text-primary hover:bg-primary-bg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50"
+            >
+              Looks right
+            </button>
           )}
           <button
             type="button"
@@ -251,16 +274,18 @@ export function GraphChecklistPanel({
           </span>
         </div>
       )}
+      {!checklist.checked && (
+        <p className="text-xs text-text-secondary">
+          Written by AI from the answer key. Every student&rsquo;s drawing is
+          graded against it, so check it before you publish.
+        </p>
+      )}
       <ul className="space-y-1.5">
         {checklist.items.map((item, i) => (
           <ItemRow key={i} item={item} />
         ))}
       </ul>
       <SplitBar graph={checklist.graph_points} problem={problemPoints} />
-      <p className="text-[11px] text-text-muted">
-        Not counted in grades yet: until it is, the AI grades the whole problem
-        with the rules below.
-      </p>
       <ErrorLine error={error} />
     </Section>
   );
