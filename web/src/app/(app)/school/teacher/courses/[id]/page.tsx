@@ -22,6 +22,7 @@ import { GradesTab } from "@/components/school/teacher/grades-tab";
 import { StudentInsightsTab } from "@/components/school/teacher/student-insights-tab";
 import { SettingsTab } from "@/components/school/teacher/settings-tab";
 import { ErrorBoundary } from "@/components/ui";
+import { PencilIcon } from "@/components/ui/icons";
 import { Skeleton } from "@/components/ui/skeleton";
 
 type TabKey =
@@ -409,26 +410,26 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
   );
 }
 
-/**
- * Initial-load placeholder for the course workspace. Mirrors the real
- * silhouette — eyebrow back-link, the 40px serif title, the status pill
- * row, the underlined tab bar, then a content slab — so the first paint
- * settles into the workspace instead of blanking to "Loading…".
- */
-// The course name is the page title; clicking it renames the course.
-// Subject and grade level are set once, in New course.
+// The course name is the page title; the pencil beside it renames the
+// course. Subject and grade level are set once, in New course.
 function CourseTitle({ course, onRenamed }: { course: TeacherCourse; onRenamed: () => Promise<void> }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(course.name);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const wasEditingRef = useRef(false);
 
   useEffect(() => {
     if (wasEditingRef.current && !editing) triggerRef.current?.focus();
     wasEditingRef.current = editing;
   }, [editing]);
+
+  // A refused or failed save hands focus back to the name, where the fix is.
+  useEffect(() => {
+    if (error) inputRef.current?.focus();
+  }, [error]);
 
   const cancel = () => {
     setEditing(false);
@@ -462,7 +463,8 @@ function CourseTitle({ course, onRenamed }: { course: TeacherCourse; onRenamed: 
 
   if (!editing) {
     return (
-      <h1 className={titleType}>
+      <div className="flex min-w-0 items-baseline gap-2">
+        <h1 className={titleType}>{course.name}</h1>
         <button
           ref={triggerRef}
           type="button"
@@ -470,12 +472,13 @@ function CourseTitle({ course, onRenamed }: { course: TeacherCourse; onRenamed: 
             setDraft(course.name);
             setEditing(true);
           }}
-          title="Click to rename"
-          className="cursor-text text-left transition-colors hover:text-primary"
+          aria-label="Rename course"
+          title="Rename course"
+          className="shrink-0 rounded-[--radius-sm] p-1.5 text-text-muted transition-colors hover:bg-[color:var(--color-surface-alt-2)] hover:text-text-primary"
         >
-          {course.name}
+          <PencilIcon className="h-[18px] w-[18px]" />
         </button>
-      </h1>
+      </div>
     );
   }
 
@@ -486,6 +489,12 @@ function CourseTitle({ course, onRenamed }: { course: TeacherCourse; onRenamed: 
         e.preventDefault();
         save();
       }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && !saving) {
+          e.preventDefault();
+          cancel();
+        }
+      }}
     >
       <div className="flex flex-wrap items-center gap-2">
         <input
@@ -495,19 +504,14 @@ function CourseTitle({ course, onRenamed }: { course: TeacherCourse; onRenamed: 
             setDraft(e.target.value);
             setError(null);
           }}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") {
-              e.preventDefault();
-              cancel();
-            }
-          }}
+          ref={inputRef}
           autoFocus
-          disabled={saving}
+          readOnly={saving}
           maxLength={200}
           aria-label="Course name"
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? "course-rename-error" : undefined}
-          className={`${titleType} min-w-0 basis-full rounded-[--radius-md] border border-primary bg-surface px-2 py-1 focus:outline-none disabled:opacity-50 sm:basis-auto sm:flex-1`}
+          className={`${titleType} min-w-0 basis-full rounded-[--radius-md] border border-primary bg-surface px-2 py-1 focus:outline-none read-only:opacity-50 sm:basis-auto sm:flex-1`}
         />
         <button
           type="submit"
@@ -534,6 +538,12 @@ function CourseTitle({ course, onRenamed }: { course: TeacherCourse; onRenamed: 
   );
 }
 
+/**
+ * Initial-load placeholder for the course workspace. Mirrors the real
+ * silhouette — eyebrow back-link, the 40px serif title, the status pill
+ * row, the underlined tab bar, then a content slab — so the first paint
+ * settles into the workspace instead of blanking to "Loading…".
+ */
 function CourseWorkspaceSkeleton() {
   return (
     <div className="mx-auto max-w-6xl" aria-busy="true" aria-live="polite">
