@@ -17,6 +17,7 @@ from unittest.mock import patch
 
 from httpx import AsyncClient
 from sqlalchemy import select, text, update
+from sqlalchemy.exc import IntegrityError
 
 from api.database import get_session_factory
 from api.models.integrity_check import (
@@ -26,9 +27,9 @@ from api.models.integrity_check import (
 )
 from api.models.question_bank import QuestionBankItem
 from api.routes.integrity_check import (
+    NUDGE_OWN_WORDS,
     STUCK_MESSAGE,
     STUCK_PHRASES,
-    meets_after_stuck_minimum,
 )
 from api.routes.school_student_practice import drain_integrity_background_tasks
 from tests.conftest import (
@@ -579,48 +580,86 @@ async def test_legacy_stuck_text_counts_as_the_tap(
     assert await _student_turn_contents(submission_id) == [STUCK_MESSAGE]
 
 
-async def test_typed_minimum_rises_to_a_few_words_after_stuck_tap(
+async def test_non_answers_rejected_after_stuck_tap(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
-    """Before the tap: the plain 5-char floor. After it: 3+ words OR
-    12+ chars, so honest short answers ("x = 4") still go through."""
+    """Before the tap: just the 5-char floor, so "I have no idea" is a
+    normal turn. After it: a don't-know non-answer is turned back, while
+    compact math answers still go through."""
     set_agent_script([[make_text("Opener")]])
     r = await _submit(client, world)
     submission_id = r.json()["submission_id"]
 
-    # Pre-tap, a 2-word 5-char reply is fine.
-    set_agent_script([[make_text("Okay, say more?")]])
-    r = await _post_turn(client, world, submission_id, {"message": "I did"})
+    set_agent_script([[make_text("Okay — what did you try first?")]])
+    r = await _post_turn(client, world, submission_id, {"message": "I have no idea"})
     assert r.status_code == 200, r.text
 
     set_agent_script([[make_text("That's okay.")]])
     r = await _post_turn(client, world, submission_id, {"stuck": True})
     assert r.status_code == 200, r.text
 
-    for too_short in ("I did", "no idea", "dunno lol"):
-        r = await _post_turn(client, world, submission_id, {"message": too_short})
-        assert r.status_code == 400, too_short
-        assert "own words" in r.json()["detail"]
+    for non_answer in ("I don't know", "idk idk idk", "not sure lol", "no idea 🤷"):
+        r = await _post_turn(client, world, submission_id, {"message": non_answer})
+        assert r.status_code == 400, non_answer
+        assert r.json()["detail"] == NUDGE_OWN_WORDS
     # The plain floor still applies first.
-    r = await _post_turn(client, world, submission_id, {"message": "idk"})
+    r = await _post_turn(client, world, submission_id, {"message": "x=4"})
     assert r.status_code == 400
+    assert "at least" in r.json()["detail"]
 
-    for ok in ("x = 4", "factorization"):
+    for ok in ("y=2x+3", "(3, 4)"):
         set_agent_script([[make_text("Thanks.")]])
         r = await _post_turn(client, world, submission_id, {"message": ok})
         assert r.status_code == 200, (ok, r.text)
 
     assert await _student_turn_contents(submission_id) == [
-        "I did", STUCK_MESSAGE, "x = 4", "factorization",
+        "I have no idea", STUCK_MESSAGE, "y=2x+3", "(3, 4)",
     ]
 
 
-def test_meets_after_stuck_minimum_boundaries() -> None:
-    assert meets_after_stuck_minimum("a b c")  # 3 words
-    assert not meets_after_stuck_minimum("ab cd")  # 2 words, 5 chars
-    assert not meets_after_stuck_minimum("abcdefghijk")  # 11 chars
-    assert meets_after_stuck_minimum("abcdefghijkl")  # 12 chars
-    assert not meets_after_stuck_minimum("   no   idea   ")  # stripped
+async def test_smart_punctuation_stuck_text_counts_as_the_tap(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """iOS smart punctuation / case variants of the stuck text still
+    spend the tap and are stored as the canonical text."""
+    set_agent_script([[make_text("Opener")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    set_agent_script([[make_text("That's okay.")]])
+    r = await _post_turn(client, world, submission_id, {
+        "message": "i’m stuck – not sure how to explain this",
+    })
+    assert r.status_code == 200, r.text
+    assert r.json()["stuck_tap_used"] is True
+    r = await _post_turn(client, world, submission_id, {
+        "message": "I’M STUCK — I’M NOT SURE HOW TO EXPLAIN THIS!",
+    })
+    assert r.status_code == 400
+    assert await _student_turn_contents(submission_id) == [STUCK_MESSAGE]
+
+
+async def test_racing_send_returns_clean_error_not_500(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Two sends at once collide on the transcript ordinal; the loser
+    gets the same answer as a repeat (400 for a stuck tap, 409 for a
+    typed reply) instead of a 500, and nothing is written."""
+    set_agent_script([[make_text("Opener")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    collision = IntegrityError("INSERT", {}, Exception("uq_ict_submission_ordinal"))
+    with patch(
+        "api.routes.integrity_check.process_student_turn",
+        side_effect=collision,
+    ):
+        r = await _post_turn(client, world, submission_id, {"stuck": True})
+        assert r.status_code == 400
+        assert "already used" in r.json()["detail"]
+        r = await _post_turn(client, world, submission_id, {"message": "I added 3"})
+        assert r.status_code == 409
+    assert await _student_turn_contents(submission_id) == []
 
 
 async def test_turn_happy_path_verdict_then_finish(

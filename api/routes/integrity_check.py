@@ -17,9 +17,11 @@ from typing import Any, Literal
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.audit_log import log_student_record_access
+from api.core.integrity_non_answer import is_non_answer, normalize_reply
 from api.core.integrity_pipeline import (
     MAX_STUDENT_TURNS,
     PROBLEM_STATUS_DIAGNOSIS_ONLY,
@@ -69,22 +71,25 @@ STUCK_MESSAGE = "I'm stuck — I'm not sure how to explain this."
 # flag existed (builds already on phones still do). Matching them means
 # an old client — or a student who types the phrase verbatim — can't
 # sidestep the one-use cap, and taps already in the DB count with no
-# backfill.
+# backfill. Incoming text is compared after normalize_reply (case, smart
+# punctuation), but every tap is *stored* as STUCK_MESSAGE, so the DB
+# count can match these exact strings.
 STUCK_PHRASES = (
     STUCK_MESSAGE,
     "I'm stuck — not sure how to explain this.",
 )
+_STUCK_NORMALIZED = frozenset(normalize_reply(p) for p in STUCK_PHRASES)
 MAX_STUCK_TAPS = 1
 
-# Once the stuck tap is spent, a typed reply has to be "a few words":
-# at least MIN_WORDS_AFTER_STUCK whitespace-separated words OR
-# MIN_CHARS_AFTER_STUCK characters. Either bar is enough, so an honest
-# short answer still goes through ("x = 4" is three words, "factorization"
-# is 13 chars) while "idk", "no idea", "dunno lol" don't. Only applies
-# after the tap is used — a student who never tapped keeps the plain
-# 5-char floor, so short "yes I did"-style replies aren't newly blocked.
-MIN_WORDS_AFTER_STUCK = 3
-MIN_CHARS_AFTER_STUCK = 12
+# Once the tap is spent, a typed reply that is only a don't-know
+# non-answer ("idk", "I have no idea", "not sure lol") is turned back —
+# see api.core.integrity_non_answer. Everything else, including compact
+# math ("y=2x+3", "(3, 4)"), goes through; the 5-char floor above stays
+# the same for everyone.
+NUDGE_OWN_WORDS = "Give it a try in your own words — even a guess helps."
+_STUCK_ALREADY_USED = (
+    f"You've already used \"I'm stuck\" on this problem. {NUDGE_OWN_WORDS}"
+)
 
 # Teacher resolution states for an integrity check (see
 # IntegrityCheckSubmission.resolution). "unresolved" is the default the
@@ -259,16 +264,6 @@ class ResolveRequest(BaseModel):
 
 
 # ── Helpers ─────────────────────────────────────────────────────────
-
-def meets_after_stuck_minimum(message: str) -> bool:
-    """The "a few words" bar for a typed reply once the stuck tap is
-    spent. See MIN_WORDS_AFTER_STUCK / MIN_CHARS_AFTER_STUCK."""
-    text = message.strip()
-    return (
-        len(text.split()) >= MIN_WORDS_AFTER_STUCK
-        or len(text) >= MIN_CHARS_AFTER_STUCK
-    )
-
 
 def _is_stuck_turn(turn: IntegrityConversationTurn) -> bool:
     return turn.role == "student" and turn.content in STUCK_PHRASES
@@ -593,31 +588,19 @@ async def post_student_turn(
         )
 
     message = body.message.strip()
-    is_stuck_tap = body.stuck or message in STUCK_PHRASES
+    is_stuck_tap = body.stuck or normalize_reply(message) in _STUCK_NORMALIZED
     stuck_used = await _count_stuck_taps(check.id, db) >= MAX_STUCK_TAPS
     if is_stuck_tap:
         if stuck_used:
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    "You've already used \"I'm stuck\" on this problem. "
-                    "Try putting it in your own words — even a guess helps."
-                ),
-            )
+            raise HTTPException(status_code=400, detail=_STUCK_ALREADY_USED)
         message = STUCK_MESSAGE
     elif len(message) < MIN_MESSAGE_CHARS:
         raise HTTPException(
             status_code=400,
             detail=f"Message must be at least {MIN_MESSAGE_CHARS} characters",
         )
-    elif stuck_used and not meets_after_stuck_minimum(message):
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Try putting it in your own words — a few words is enough, "
-                "even a guess helps."
-            ),
-        )
+    elif stuck_used and is_non_answer(message):
+        raise HTTPException(status_code=400, detail=NUDGE_OWN_WORDS)
 
     # Enforce the hard turn cap at the endpoint too, in case the agent
     # loop in a prior turn somehow missed finalization. One count
@@ -630,12 +613,26 @@ async def post_student_turn(
     telemetry = (
         body.telemetry.model_dump(mode="json") if body.telemetry else None
     )
-    await process_student_turn(
-        check, message, body.seconds_on_turn, db,
-        user_id=str(user.id),
-        telemetry=telemetry,
-    )
-    await db.commit()
+    try:
+        await process_student_turn(
+            check, message, body.seconds_on_turn, db,
+            user_id=str(user.id),
+            telemetry=telemetry,
+        )
+        await db.commit()
+    except IntegrityError:
+        # Two sends raced for the same transcript ordinal (a double tap,
+        # two tabs): the other one landed first. Answer like a repeat
+        # instead of a 500 — for a stuck tap that's "already used".
+        await db.rollback()
+        if is_stuck_tap:
+            raise HTTPException(
+                status_code=400, detail=_STUCK_ALREADY_USED,
+            ) from None
+        raise HTTPException(
+            status_code=409,
+            detail="Your last message is still sending — give it a moment.",
+        ) from None
 
     # `check` was mutated in-memory and the session uses
     # expire_on_commit=False, so attrs are already current. Problems +
