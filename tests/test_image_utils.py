@@ -10,6 +10,9 @@ from api.core.constants import MAX_IMAGE_BYTES, MAX_PDF_BYTES
 from api.core.image_utils import (
     VISION_MAX_EDGE,
     page_looks_sideways,
+    pdf_page_checks,
+    pdf_pages_as_images,
+    pdf_scan_long_edges,
     preprocess_image_for_vision,
     rotate_upload,
     to_content_block,
@@ -285,12 +288,24 @@ class TestRotateUpload:
             rotate_upload(bomb, "image/png", 90)
         assert page_looks_sideways(bomb) is False
 
-    def test_pdf_is_left_alone(self) -> None:
+    def test_unturned_pdf_keeps_the_bytes(self) -> None:
         b64 = _b64(_PDF_HEADER + b"pdf")
-        assert rotate_upload(b64, "application/pdf", 90) == b64
+        assert rotate_upload(b64, "application/pdf", 0) == b64
+
+    def test_quarter_turn_turns_every_pdf_page(self) -> None:
+        pdf = pdf_of([_marked((300, 200)), _marked((300, 200))])
+        turned = rotate_upload(pdf, "application/pdf", 90)
+        pages = [Image.open(io.BytesIO(base64.b64decode(p))) for p in pdf_pages_as_images(turned)]
+        assert [p.size[0] < p.size[1] for p in pages] == [True, True]
+        # Clockwise, like a photo: the red top-left corner ends top-right.
+        assert pages[0].convert("RGB").getpixel((pages[0].width - 5, 5))[1] < 80
+
+    def test_unreadable_pdf_cant_be_turned(self) -> None:
+        with pytest.raises(ValueError):
+            rotate_upload(_b64(_PDF_HEADER + b"pdf"), "application/pdf", 90)
 
 
-# ── page_looks_sideways (the free "looks sideways" nudge) ─────────────
+# ── page_looks_sideways (the free "looks sideways" check) ─────────────
 
 
 def _page_of_writing() -> Image.Image:
@@ -336,3 +351,144 @@ class TestPageLooksSideways:
     def test_blank_or_unreadable_is_not_sideways(self) -> None:
         assert page_looks_sideways(_encode(Image.new("RGB", (400, 600), "white"), "PNG")) is False
         assert page_looks_sideways(_b64(b"not an image")) is False
+
+
+# ── PDF pages get the photo checks ────────────────────────────────────
+
+
+def pdf_of(pages: list[Image.Image], dpi: float = 72) -> str:
+    """A PDF made the way a scanner app makes one: each page a photo."""
+    buf = io.BytesIO()
+    pages[0].save(buf, format="PDF", save_all=True, append_images=pages[1:], resolution=dpi)
+    return _b64(buf.getvalue())
+
+
+def tablet_pdf(paper: tuple[int, int]) -> str:
+    """A page the way a tablet note app exports one: a small raster
+    'paper' stretched over a letter page, with the writing as vector
+    strokes on top."""
+    import pypdfium2 as pdfium
+    import pypdfium2.raw as pdfium_c
+
+    pdf = pdfium.PdfDocument(base64.b64decode(pdf_of([Image.new("RGB", paper, "white")], dpi=paper[0] / 8.5)))
+    page = pdf[0]
+    for line in range(12):
+        y = 700.0 - line * 50
+        stroke = pdfium_c.FPDFPageObj_CreateNewPath(72.0, y)
+        for step in range(1, 20):
+            pdfium_c.FPDFPath_LineTo(stroke, 72.0 + step * 20, y + (8 if step % 2 else -8))
+        pdfium_c.FPDFPath_SetDrawMode(stroke, 0, True)
+        pdfium_c.FPDFPage_InsertObject(page.raw, stroke)
+    page.gen_content()
+    buf = io.BytesIO()
+    pdf.save(buf)
+    return _b64(buf.getvalue())
+
+
+class TestPdfScanLongEdges:
+    def test_measures_the_photo_behind_each_page(self) -> None:
+        pages = [Image.new("RGB", (1600, 1200), "white"), Image.new("RGB", (320, 240), "white")]
+        assert pdf_scan_long_edges(pdf_of(pages)) == [1600, 320]
+
+    def test_a_small_photo_on_a_big_page_is_still_small(self) -> None:
+        # 320 px stretched over a 16-inch page renders big, reads no better.
+        assert pdf_scan_long_edges(pdf_of([Image.new("RGB", (320, 240))], dpi=20)) == [320]
+
+    def test_a_typed_page_has_no_pixel_size(self) -> None:
+        import pypdfium2 as pdfium
+
+        pdf = pdfium.PdfDocument.new()
+        pdf.new_page(612, 792)
+        buf = io.BytesIO()
+        pdf.save(buf)
+        assert pdf_scan_long_edges(_b64(buf.getvalue())) == [None]
+
+    def test_a_worksheet_over_a_faint_background_picture_isnt_a_scan(self) -> None:
+        # Typed text over a full-page 200 px background: the text is sharp,
+        # so the page must not be refused for the picture's size.
+        import pypdfium2 as pdfium
+        import pypdfium2.raw as pdfium_c
+
+        pdf = pdfium.PdfDocument(base64.b64decode(pdf_of([Image.new("RGB", (200, 260), "white")])))
+        page = pdf[0]
+        import ctypes
+
+        text = pdfium_c.FPDFPageObj_NewTextObj(pdf.raw, b"Helvetica", 12.0)
+        words = ctypes.create_string_buffer("Solve for x".encode("utf-16-le") + b"\0\0")
+        pdfium_c.FPDFText_SetText(text, ctypes.cast(words, ctypes.POINTER(pdfium_c.FPDF_WCHAR)))
+        pdfium_c.FPDFPage_InsertObject(page.raw, text)
+        page.gen_content()
+        buf = io.BytesIO()
+        pdf.save(buf)
+        assert pdf_scan_long_edges(_b64(buf.getvalue())) == [None]
+
+    @pytest.mark.parametrize("paper", [(300, 388), (1, 1)])
+    def test_tablet_handwriting_over_a_small_paper_picture_isnt_a_scan(
+        self, paper: tuple[int, int],
+    ) -> None:
+        # Cold review on #957: a tablet app's page is vector strokes over a
+        # small raster "paper" stretched across the page. Measured as a scan
+        # it came out [388] / [1] and was refused with no way round it.
+        assert pdf_scan_long_edges(tablet_pdf(paper)) == [None]
+
+    def test_a_real_small_scan_is_still_measured(self) -> None:
+        # No text, no strokes, one small photo filling the page: a scan.
+        assert pdf_scan_long_edges(pdf_of([Image.new("RGB", (240, 320), "white")], dpi=30)) == [320]
+
+    def test_unreadable_pdf_has_no_pages(self) -> None:
+        assert pdf_scan_long_edges(_b64(_PDF_HEADER + b"pdf")) == []
+
+
+class TestPdfPageChecks:
+    def test_flags_the_sideways_page_and_previews_it(self) -> None:
+        page = _page_of_writing()
+        checks = pdf_page_checks(pdf_of([page, page.rotate(90, expand=True)]))
+        assert checks["page_count"] == 2
+        assert checks["sideways_pages"] == [2]
+        assert checks["too_small_pages"] == []
+        preview = Image.open(io.BytesIO(base64.b64decode(checks["preview"])))
+        assert preview.width > preview.height  # page 2, as it lies
+
+    def test_flags_a_page_too_small_to_read(self) -> None:
+        page = _page_of_writing()
+        checks = pdf_page_checks(pdf_of([page, page.resize((240, 320))]))
+        assert checks["too_small_pages"] == [2]
+        assert checks["sideways_pages"] == []
+        preview = Image.open(io.BytesIO(base64.b64decode(checks["preview"])))
+        assert preview.height == 640  # page 1 when nothing is sideways
+
+    def test_renders_at_the_checks_own_size(self) -> None:
+        # The reader's 2400 px would hold the PDF lock ~9x longer for the
+        # same answer: the sideways check reads 800 px.
+        from api.core.image_utils import _ORIENTATION_EDGE
+
+        assert _ORIENTATION_EDGE == 800
+        checks = pdf_page_checks(pdf_of([_page_of_writing()]))
+        preview = Image.open(io.BytesIO(base64.b64decode(checks["preview"])))
+        assert max(preview.size) == 640
+
+    def test_a_page_that_wont_render_still_counts(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import pypdfium2 as pdfium
+
+        page = _page_of_writing()
+        pdf = pdf_of([page, page.rotate(90, expand=True), page.rotate(90, expand=True)])
+        real_render = pdfium.PdfPage.render
+        calls = {"n": 0}
+
+        def flaky(self: object, *a: object, **k: object) -> object:
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise RuntimeError("bad page")
+            return real_render(self, *a, **k)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(pdfium.PdfPage, "render", flaky)
+        checks = pdf_page_checks(pdf)
+        # Page 2 is counted but not flagged, so the wording ("Page 3 of
+        # this PDF", "only some pages") stays right.
+        assert checks["page_count"] == 3
+        assert checks["sideways_pages"] == [3]
+
+    def test_unreadable_pdf_reports_nothing(self) -> None:
+        assert pdf_page_checks(_b64(_PDF_HEADER + b"pdf")) == {
+            "page_count": 0, "sideways_pages": [], "too_small_pages": [], "preview": None,
+        }

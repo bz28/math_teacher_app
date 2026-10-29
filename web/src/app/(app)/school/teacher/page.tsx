@@ -326,7 +326,6 @@ function NewCourseModal({ onClose, onCreated }: { onClose: () => void; onCreated
   const [name, setName] = useState("");
   const [subject, setSubject] = useState("math");
   const [gradeLevel, setGradeLevel] = useState<string>("");
-  const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -349,7 +348,6 @@ function NewCourseModal({ onClose, onCreated }: { onClose: () => void; onCreated
         name: name.trim(),
         subject,
         grade_level: gradeLevel ? Number(gradeLevel) : undefined,
-        description: description.trim() || undefined,
       });
       onCreated(created.id);
     } catch (e) {
@@ -409,15 +407,6 @@ function NewCourseModal({ onClose, onCreated }: { onClose: () => void; onCreated
             />
           </Field>
 
-          <Field label="Description (optional)">
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={2}
-              maxLength={1000}
-              className="w-full rounded-[--radius-sm] border border-border bg-surface px-3 py-2 text-[15px] text-text-primary transition-colors focus:border-primary"
-            />
-          </Field>
         </div>
 
         {error && <p className="mt-3 text-xs text-[color:var(--color-error)]">{error}</p>}

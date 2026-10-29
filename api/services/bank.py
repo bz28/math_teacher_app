@@ -117,6 +117,11 @@ async def hydrate_assignment_content(
                     "figure_svg": it.figure_svg,
                     "solution_steps": it.solution_steps,
                     "final_answer": it.final_answer,
+                    # The student practice runner turns every problem
+                    # into multiple choice from final_answer +
+                    # distractors, so the teacher's view needs them to
+                    # show what students actually pick from.
+                    "distractors": it.distractors,
                     "difficulty": it.difficulty,
                 }
                 for pos, it in enumerate(items, start=1)

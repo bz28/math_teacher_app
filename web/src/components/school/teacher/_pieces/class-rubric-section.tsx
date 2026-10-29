@@ -6,7 +6,6 @@ import {
   type ClassRubric,
   type ClassRubricRule,
   type ClassRubricRuleInput,
-  type RubricSuggestion,
 } from "@/lib/api";
 import { CREDIT_DEFAULTS } from "@/lib/rubric";
 import {
@@ -320,13 +319,6 @@ export function ClassRubricSection({
       <p className="mt-2 text-xs text-text-muted">
         Changes apply to homework graded from now on. Grades already given don&apos;t change.
       </p>
-      <DeclinedSuggestions
-        courseId={courseId}
-        onAdded={(next, nextRev) => {
-          setRules(next);
-          setRev(nextRev);
-        }}
-      />
     </section>
   );
 }
@@ -475,83 +467,6 @@ function CreditGuidance({
         })}
       </div>
     </section>
-  );
-}
-
-/**
- * Rules the app offered after a lowered grade and the teacher declined.
- * Declined offers are never made again, so this is where a "no" can be
- * undone. Hidden when there are none.
- */
-function DeclinedSuggestions({
-  courseId,
-  onAdded,
-}: {
-  courseId: string;
-  onAdded: (rules: ClassRubricRule[], rev: number) => void;
-}) {
-  const [items, setItems] = useState<RubricSuggestion[] | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    teacher
-      .rubricSuggestions(courseId, "declined")
-      .then((res) => !cancelled && setItems(res.suggestions))
-      .catch(() => !cancelled && setItems([]));
-    return () => {
-      cancelled = true;
-    };
-  }, [courseId]);
-
-  if (!items || items.length === 0) return null;
-
-  const add = async (s: RubricSuggestion) => {
-    setBusyId(s.id);
-    setError(null);
-    try {
-      const res = await teacher.decideRubricSuggestion(s.id, { action: "add_class" });
-      onAdded(res.rules, res.rev);
-      setItems((list) => (list ?? []).filter((x) => x.id !== s.id));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't add it. Try again.");
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  return (
-    <details className="mt-4 rounded-[--radius-md] border border-border-light bg-surface">
-      <summary className="flex min-h-10 cursor-pointer items-center px-4 text-sm font-semibold text-primary">
-        Suggestions you declined ({items.length})
-      </summary>
-      <ul className="divide-y divide-border-light border-t border-border-light px-4">
-        {items.map((s) => (
-          <li key={s.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-3">
-            <div className="min-w-[12rem] flex-1">
-              <p className="text-sm text-text-primary">{s.text}</p>
-              {s.source_label && (
-                <p className="mt-0.5 text-xs text-text-muted">Suggested while grading {s.source_label}</p>
-              )}
-            </div>
-            {s.points !== null && (
-              <span className="font-mono text-sm font-semibold text-text-secondary">−{s.points}</span>
-            )}
-            <button
-              type="button"
-              disabled={busyId !== null}
-              onClick={() => void add(s)}
-              aria-label={`Add “${s.text}” to the class rubric`}
-              className="min-h-10 rounded-[--radius-md] px-3 text-sm font-semibold text-primary hover:bg-primary-bg disabled:opacity-50"
-            >
-              {busyId === s.id ? "Adding…" : "Add to rubric"}
-            </button>
-          </li>
-        ))}
-      </ul>
-      {error && <p className="px-4 pb-3 text-xs text-[color:var(--color-error)]">{error}</p>}
-    </details>
   );
 }
 

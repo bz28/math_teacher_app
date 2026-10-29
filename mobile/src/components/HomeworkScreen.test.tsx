@@ -1,5 +1,5 @@
 import { Alert, StyleSheet } from "react-native";
-import { fireEvent, render, screen } from "@testing-library/react-native";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react-native";
 import { HomeworkScreen } from "./HomeworkScreen";
 import { waitForText } from "../test-utils";
 import { colors } from "../theme";
@@ -117,31 +117,133 @@ describe("HomeworkScreen sideways pages", () => {
     await fireEvent.press(await waitForText("Add your work"));
   }
 
-  it("nudges a page the check reads as sideways, until it gets a quarter turn", async () => {
-    mockedApi.checkPageOrientation.mockResolvedValue({ sideways: true });
+  const checkResult = (over: Partial<Awaited<ReturnType<typeof api.checkPageOrientation>>> = {}) => ({
+    sideways: false,
+    page_count: 1,
+    sideways_pages: [] as number[],
+    too_small_pages: [] as number[],
+    preview: null,
+    ...over,
+  });
+  const SIDEWAYS_PHOTO = checkResult({ sideways: true, sideways_pages: [1] });
+  const reviewButton = () => screen.getByText("Review & turn in 1 page");
+
+  it("holds turn-in while a page reads as sideways, until it gets a quarter turn", async () => {
+    mockedApi.checkPageOrientation.mockResolvedValue(SIDEWAYS_PHOTO);
     await addPhoto();
 
-    expect(await waitForText(/Page 1 looks sideways/)).toBeTruthy();
+    expect(await waitForText(/This page is sideways/)).toBeTruthy();
     expect(mockedApi.checkPageOrientation).toHaveBeenCalledWith("SMALL_B64");
+    expect(screen.getByText("Page 1 is sideways. Fix it before you turn it in.")).toBeTruthy();
+    await fireEvent.press(reviewButton());
+    expect(screen.queryByText("Turn it in")).toBeNull();
 
     const rotateBtn = screen.getByLabelText("Rotate page a quarter turn clockwise");
     await fireEvent.press(rotateBtn);
-    expect(screen.queryByText(/looks sideways/)).toBeNull();
+    expect(screen.queryByText(/is sideways/)).toBeNull();
     // A half turn leaves the writing running up and down again.
     await fireEvent.press(rotateBtn);
-    expect(screen.getByText(/Page 1 looks sideways/)).toBeTruthy();
+    expect(screen.getByText(/This page is sideways/)).toBeTruthy();
     await fireEvent.press(rotateBtn);
 
-    await fireEvent.press(screen.getByText("Review & turn in 1 page"));
+    await fireEvent.press(reviewButton());
     await fireEvent.press(screen.getByText("Turn it in"));
     expect(mockedApi.submitHomework).toHaveBeenCalledWith("hw1", ["PHOTO_B64"], [270]);
   });
 
-  it("shows no nudge when the check is unsure or fails", async () => {
+  it("lets the student overrule the check with \"It's already upright\"", async () => {
+    mockedApi.checkPageOrientation.mockResolvedValue(SIDEWAYS_PHOTO);
+    await addPhoto();
+    await fireEvent.press(await waitForText("It's already upright"));
+    expect(screen.queryByText(/is sideways/)).toBeNull();
+
+    await fireEvent.press(reviewButton());
+    await fireEvent.press(screen.getByText("Turn it in"));
+    expect(mockedApi.submitHomework).toHaveBeenCalledWith("hw1", ["PHOTO_B64"], [0]);
+  });
+
+  it("waits for the check before turn-in", async () => {
+    let answer: (v: ReturnType<typeof checkResult>) => void = () => {};
+    mockedApi.checkPageOrientation.mockReturnValue(new Promise((r) => (answer = r)));
+    await addPhoto();
+    expect(await waitForText("Checking your pages…")).toBeTruthy();
+    await fireEvent.press(reviewButton());
+    expect(screen.queryByText("Turn it in")).toBeNull();
+
+    answer(checkResult());
+    await waitFor(() => expect(screen.queryByText("Checking your pages…")).toBeNull());
+    await fireEvent.press(reviewButton());
+    expect(screen.getByText("Turn it in")).toBeTruthy();
+  });
+
+  it("holds nothing when the check fails", async () => {
     mockedApi.checkPageOrientation.mockRejectedValue(new Error("offline"));
     await addPhoto();
     expect(await screen.findByLabelText("Rotate page a quarter turn clockwise")).toBeTruthy();
-    expect(screen.queryByText(/looks sideways/)).toBeNull();
+    expect(screen.queryByText(/is sideways/)).toBeNull();
+    await fireEvent.press(reviewButton());
+    expect(screen.getByText("Turn it in")).toBeTruthy();
+  });
+
+  it("reads an older API's answer without crashing (partial deploy)", async () => {
+    // The old endpoint answers a photo with only `sideways`.
+    mockedApi.checkPageOrientation.mockResolvedValue({ sideways: true } as never);
+    await addPhoto();
+    expect(await waitForText(/This page is sideways/)).toBeTruthy();
+  });
+
+  it("holds nothing on a malformed answer", async () => {
+    mockedApi.checkPageOrientation.mockResolvedValue({ sideways_pages: "1" } as never);
+    await addPhoto();
+    await waitFor(() => expect(screen.queryByText("Checking your pages…")).toBeNull());
+    expect(screen.queryByText(/is sideways/)).toBeNull();
+    await fireEvent.press(reviewButton());
+    expect(screen.getByText("Turn it in")).toBeTruthy();
+  });
+
+  describe("PDFs", () => {
+    beforeEach(() => {
+      jest.spyOn(Alert, "alert").mockImplementation((_t, _m, buttons) => {
+        buttons?.find((b) => b.text === "Attach a PDF")?.onPress?.();
+      });
+      const capture = jest.requireMock("../hooks/useCameraCapture");
+      capture.pickWorkPdf.mockResolvedValue({ base64: "PDF_B64", filename: "hw.pdf" });
+    });
+
+    it("checks every page of the whole PDF and turns a sideways one", async () => {
+      mockedApi.checkPageOrientation.mockResolvedValue(
+        checkResult({ sideways: true, page_count: 2, sideways_pages: [1, 2], preview: "PREVIEW_B64" }),
+      );
+      await addPhoto();
+      expect(await waitForText(/This PDF is sideways/)).toBeTruthy();
+      expect(mockedApi.checkPageOrientation).toHaveBeenCalledWith("PDF_B64");
+
+      await fireEvent.press(screen.getByLabelText("Rotate page a quarter turn clockwise"));
+      expect(screen.queryByText(/is sideways/)).toBeNull();
+      await fireEvent.press(reviewButton());
+      await fireEvent.press(screen.getByText("Turn it in"));
+      expect(mockedApi.submitHomework).toHaveBeenCalledWith("hw1", ["PDF_B64"], [90]);
+    });
+
+    it("offers no rotate when only some pages are sideways", async () => {
+      mockedApi.checkPageOrientation.mockResolvedValue(
+        checkResult({ sideways: true, page_count: 3, sideways_pages: [2], preview: "PREVIEW_B64" }),
+      );
+      await addPhoto();
+      expect(await waitForText(/Page 2 of this PDF is sideways/)).toBeTruthy();
+      expect(screen.queryByLabelText("Rotate page a quarter turn clockwise")).toBeNull();
+      await fireEvent.press(screen.getByText("It's already upright"));
+      expect(screen.queryByText(/is sideways/)).toBeNull();
+    });
+
+    it("takes back a PDF with a page too small to read, saying which", async () => {
+      mockedApi.checkPageOrientation.mockResolvedValue(
+        checkResult({ page_count: 2, too_small_pages: [2], preview: "PREVIEW_B64" }),
+      );
+      await addPhoto();
+      expect(await waitForText(/^Page 2 of this PDF is too small to read/)).toBeTruthy();
+      expect(screen.queryByText(/Review & turn in/)).toBeNull();
+    });
   });
 });
 

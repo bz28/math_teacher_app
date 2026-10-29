@@ -456,10 +456,15 @@ export const submitHomework = (
     uploadTimeoutFor(files.reduce((n, f) => n + f.length, 0)),
   );
 
-/** Free pixel check behind the "looks sideways" nudge. `image` is a
- *  small copy of one page. */
+/** Free pixel check behind the upload screen's sideways block (and, for
+ *  a PDF, its too-small pages). `image` is a small copy of one photo, or
+ *  a whole PDF. */
 export const checkPageOrientation = (image: string) =>
-  apiPost<{ sideways: boolean }>(`/school/student/homework/page-orientation`, { image });
+  apiPost<Schemas["PageOrientationResponse"]>(
+    `/school/student/homework/page-orientation`,
+    { image },
+    uploadTimeoutFor(image.length),
+  );
 
 // The Vision extraction wire shape — a flat list of steps and final
 // answers, each tagged with the 1-based HW problem_position it belongs to

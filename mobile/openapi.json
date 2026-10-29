@@ -630,18 +630,6 @@
       },
       "CreateCourseRequest": {
         "properties": {
-          "description": {
-            "anyOf": [
-              {
-                "maxLength": 2000,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
           "grade_level": {
             "anyOf": [
               {
@@ -1255,49 +1243,6 @@
           "published_at"
         ],
         "title": "DashboardGrade",
-        "type": "object"
-      },
-      "DecideRequest": {
-        "properties": {
-          "action": {
-            "enum": [
-              "add_class",
-              "add_homework",
-              "decline"
-            ],
-            "title": "Action",
-            "type": "string"
-          },
-          "points": {
-            "anyOf": [
-              {
-                "maximum": 100.0,
-                "minimum": 0.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Points"
-          },
-          "text": {
-            "anyOf": [
-              {
-                "maxLength": 300,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Text"
-          }
-        },
-        "required": [
-          "action"
-        ],
-        "title": "DecideRequest",
         "type": "object"
       },
       "Deduction": {
@@ -2943,13 +2888,46 @@
       },
       "PageOrientationResponse": {
         "properties": {
+          "page_count": {
+            "title": "Page Count",
+            "type": "integer"
+          },
+          "preview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preview"
+          },
           "sideways": {
             "title": "Sideways",
             "type": "boolean"
+          },
+          "sideways_pages": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Sideways Pages",
+            "type": "array"
+          },
+          "too_small_pages": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Too Small Pages",
+            "type": "array"
           }
         },
         "required": [
-          "sideways"
+          "sideways",
+          "page_count",
+          "sideways_pages",
+          "too_small_pages",
+          "preview"
         ],
         "title": "PageOrientationResponse",
         "type": "object"
@@ -4858,33 +4836,6 @@
         "title": "SubmitWorkResponse",
         "type": "object"
       },
-      "SuggestRequest": {
-        "properties": {
-          "comment": {
-            "maxLength": 4000,
-            "title": "Comment",
-            "type": "string"
-          },
-          "problem_id": {
-            "format": "uuid",
-            "title": "Problem Id",
-            "type": "string"
-          },
-          "teacher_percent": {
-            "maximum": 100.0,
-            "minimum": 0.0,
-            "title": "Teacher Percent",
-            "type": "number"
-          }
-        },
-        "required": [
-          "problem_id",
-          "teacher_percent",
-          "comment"
-        ],
-        "title": "SuggestRequest",
-        "type": "object"
-      },
       "SuggestUnitsRequest": {
         "properties": {
           "document_ids": {
@@ -6285,29 +6236,6 @@
       },
       "UpdateCourseRequest": {
         "properties": {
-          "description": {
-            "anyOf": [
-              {
-                "maxLength": 2000,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
-          "grade_level": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Grade Level"
-          },
           "name": {
             "anyOf": [
               {
@@ -6329,17 +6257,6 @@
               }
             ],
             "title": "Status"
-          },
-          "subject": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Subject"
           }
         },
         "title": "UpdateCourseRequest",
@@ -13425,7 +13342,7 @@
     },
     "/v1/school/student/homework/page-orientation": {
       "post": {
-        "description": "Does a page the student just added look sideways?\n\nBacks the \"This page looks sideways \u2014 rotate it?\" nudge on the\nupload screen. Free (a pixel check, no model call) and advisory:\nit never rotates anything \u2014 the student does, with the rotate\nbutton, and the turn is applied at submit.",
+        "description": "Do the pages the student just added read upright, at a size the\nreader can make out?\n\nBacks the upload screen, which holds Submit while a page reads as\nsideways and refuses a PDF page that turn-in would. Free (a pixel\ncheck, no model call). It never rotates anything \u2014 the student does,\nwith the rotate button, and the turn is applied at submit.\n\nOrientation is enforced on the client only, never at submit: the\ncheck can be wrong, and the student's \"It's already upright\" has to\nbe able to overrule it. Turn-in enforces the size floor alone.",
         "operationId": "check_page_orientation_v1_school_student_homework_page_orientation_post",
         "requestBody": {
           "content": {
@@ -16800,71 +16717,6 @@
         ]
       }
     },
-    "/v1/teacher/courses/{course_id}/rubric-suggestions": {
-      "get": {
-        "description": "A class's offers by status \u2014 the declined list lets a \"no\" be undone.",
-        "operationId": "list_rubric_suggestions_v1_teacher_courses__course_id__rubric_suggestions_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "course_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Course Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "status_filter",
-            "required": false,
-            "schema": {
-              "default": "declined",
-              "enum": [
-                "declined",
-                "pending"
-              ],
-              "title": "Status Filter",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response List Rubric Suggestions V1 Teacher Courses  Course Id  Rubric Suggestions Get",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "List Rubric Suggestions",
-        "tags": [
-          "teacher"
-        ]
-      }
-    },
     "/v1/teacher/courses/{course_id}/rubric/credit": {
       "put": {
         "description": "Set what the AI uses for mistakes no rule covers. Leaves the rules\nand their revision alone, so it never collides with the rules editor.",
@@ -19580,67 +19432,6 @@
         ]
       }
     },
-    "/v1/teacher/rubric-suggestions/{suggestion_id}/decide": {
-      "post": {
-        "description": "Record the teacher's answer: add to the class rubric, add to this\nhomework only, or decline (never offered again).",
-        "operationId": "decide_rubric_suggestion_v1_teacher_rubric_suggestions__suggestion_id__decide_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "suggestion_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Suggestion Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DecideRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Decide Rubric Suggestion V1 Teacher Rubric Suggestions  Suggestion Id  Decide Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Decide Rubric Suggestion",
-        "tags": [
-          "teacher"
-        ]
-      }
-    },
     "/v1/teacher/submissions/{submission_id}": {
       "get": {
         "description": "Full per-submission detail for the teacher view: image + per-\nproblem typed answers shown alongside the original problem text\nand the answer key. No grading or annotations in this PR.",
@@ -19959,67 +19750,6 @@
           }
         ],
         "summary": "Regrade Submission",
-        "tags": [
-          "teacher"
-        ]
-      }
-    },
-    "/v1/teacher/submissions/{submission_id}/rubric-suggestion": {
-      "post": {
-        "description": "After a teacher lowers an AI grade with a comment: the rule to offer\nadding to the class rubric, or null. Never changes a rubric.",
-        "operationId": "suggest_rubric_rule_v1_teacher_submissions__submission_id__rubric_suggestion_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "submission_id",
-            "required": true,
-            "schema": {
-              "format": "uuid",
-              "title": "Submission Id",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SuggestRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Suggest Rubric Rule V1 Teacher Submissions  Submission Id  Rubric Suggestion Post",
-                  "type": "object"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "summary": "Suggest Rubric Rule",
         "tags": [
           "teacher"
         ]
