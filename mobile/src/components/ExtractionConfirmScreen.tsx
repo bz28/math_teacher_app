@@ -345,7 +345,7 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
           <View style={styles.nextCard}>
             <Text style={styles.nextTitle}>Next: a quick chat about your work</Text>
             <Text style={styles.nextBody}>
-              Your teacher reads it when grading — it's the best way to get credit for what you
+              Your teacher reads it alongside your work — it's the best way to show them what you
               understand. Answer in your own words; nothing to look up.
             </Text>
           </View>

@@ -2605,7 +2605,13 @@ export interface StudentHomeworkSummary {
   problem_count: number;
   /** "not_started" | "submitted". Drives the badge on the HW list. */
   status: string;
+  /** What's left on turned-in work: confirm the AI's reading, or finish
+   *  the understanding check. Null when there's nothing to do. A nudge
+   *  only — grading never waits on it. */
+  next_step: StudentNextStep | null;
 }
+
+export type StudentNextStep = "confirm_reading" | "finish_check";
 
 export interface StudentPracticeSummary {
   assignment_id: string;
@@ -2711,6 +2717,10 @@ export interface StudentHomeworkDetail {
    *  published_breakdown snapshot — the live teacher draft never
    *  surfaces here. */
   breakdown: StudentProblemFeedback[] | null;
+  /** What's left on turned-in work: confirm the AI's reading, or finish
+   *  the understanding check. Null when there's nothing to do. A nudge
+   *  only — grading never waits on it. */
+  next_step: StudentNextStep | null;
 }
 
 /** Backend `SubmissionFileOut` (api/schemas/extraction.py). `data` is
@@ -2791,6 +2801,10 @@ export interface DashboardAssignment {
   section_name: string;
   status: "not_started" | "submitted";
   is_late: boolean;
+  /** What's left on turned-in work: confirm the AI's reading, or finish
+   *  the understanding check. Null when there's nothing to do. A nudge
+   *  only — grading never waits on it. */
+  next_step: StudentNextStep | null;
 }
 
 export interface DashboardGrade {
@@ -3183,6 +3197,9 @@ export interface IntegrityStateResponse {
   extraction: IntegrityExtraction | null;
   problems: IntegrityProblemSummary[];
   transcript: IntegrityTurn[];
+  /** Closed because the student didn't finish it (never answered / left
+   *  partway). The chat says so instead of the "thanks" closing. */
+  closed_unfinished: boolean;
 }
 
 // ── Teacher integrity detail (mirror api/routes/integrity_check.py) ──

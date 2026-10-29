@@ -38,6 +38,7 @@ from sqlalchemy import delete as sql_delete
 from sqlalchemy import distinct, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from api.core.audit_log import record_student_activity
 from api.core.constants import MAX_SUBMISSION_FILES, MAX_SUBMISSION_TOTAL_BYTES
@@ -52,8 +53,10 @@ from api.core.image_utils import (
     validate_and_decode_upload,
 )
 from api.core.integrity_pipeline import (
+    NextStep,
     spawn_diagnosis_seeding,
     start_integrity_check,
+    student_next_step,
 )
 from api.core.tutor import completed_chat, step_chat
 from api.database import get_db, get_session_factory
@@ -61,6 +64,7 @@ from api.middleware.auth import get_current_user_full
 from api.middleware.rate_limit import limiter
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
 from api.models.course import Course, CourseTeacher
+from api.models.integrity_check import IntegrityCheckSubmission
 from api.models.practice_activity import (
     MODE_LEARN,
     MODE_PRACTICE,
@@ -373,6 +377,11 @@ class StudentHomeworkSummary(BaseModel):
     problem_count: int
     # "not_started" or "submitted". Drives the badge on the HW list.
     status: str
+    # What's left for the student on turned-in work: "confirm_reading"
+    # (the AI's reading is waiting for their OK) or "finish_check" (the
+    # understanding check is open). Null when there's nothing to do. A
+    # nudge only — nothing waits on it. See student_next_step.
+    next_step: NextStep | None = None
 
 
 class StudentPracticeSummary(BaseModel):
@@ -498,6 +507,11 @@ class StudentHomeworkDetail(BaseModel):
     final_score: float | None = None
     grade_published_at: datetime | None = None
     breakdown: list[StudentProblemFeedback] | None = None
+    # What's left for the student on turned-in work: "confirm_reading"
+    # (the AI's reading is waiting for their OK) or "finish_check" (the
+    # understanding check is open). Null when there's nothing to do. A
+    # nudge only — nothing waits on it. See student_next_step.
+    next_step: NextStep | None = None
 
 
 class SubmitHomeworkRequest(BaseModel):
@@ -612,6 +626,11 @@ class DashboardAssignment(BaseModel):
     # "not_started" (in Due/Overdue) or "submitted" (in In review).
     status: Literal["not_started", "submitted"]
     is_late: bool
+    # What's left for the student on turned-in work: "confirm_reading"
+    # (the AI's reading is waiting for their OK) or "finish_check" (the
+    # understanding check is open). Null when there's nothing to do. A
+    # nudge only — nothing waits on it. See student_next_step.
+    next_step: NextStep | None = None
 
 
 class DashboardGrade(BaseModel):
@@ -1090,6 +1109,58 @@ async def move_preview_seat(
     return {"status": "ok"}
 
 
+async def _next_steps(
+    db: AsyncSession, submission_ids: list[uuid.UUID],
+) -> dict[uuid.UUID, NextStep | None]:
+    """`student_next_step` for each of a student's submissions, in three
+    queries whatever the count, against the homework's toggles as they
+    are now. Loads only the columns the rule reads —
+    a submission row also carries every page's image."""
+    if not submission_ids:
+        return {}
+    rows = (await db.execute(
+        select(
+            Submission,
+            Assignment.integrity_check_enabled,
+            Assignment.ai_grading_enabled,
+        )
+        .join(Assignment, Assignment.id == Submission.assignment_id)
+        .options(load_only(
+            Submission.id,
+            Submission.extraction,
+            Submission.extraction_confirmed_at,
+            Submission.extraction_flagged_at,
+        ))
+        .where(Submission.id.in_(submission_ids))
+    )).all()
+    checks = {
+        c.submission_id: c for c in (await db.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id.in_(submission_ids))
+        )).scalars().all()
+    }
+    # "Published" the way every student surface means it: the stamp AND
+    # the snapshot (see get_dashboard).
+    published = set((await db.execute(
+        select(SubmissionGrade.submission_id).where(
+            SubmissionGrade.submission_id.in_(submission_ids),
+            SubmissionGrade.grade_published_at.is_not(None),
+            SubmissionGrade.published_final_score.is_not(None),
+        )
+    )).scalars().all())
+    now = datetime.now(UTC)
+    return {
+        sub.id: student_next_step(
+            sub, checks.get(sub.id),
+            grade_published=sub.id in published,
+            integrity_enabled=integrity_on,
+            ai_grading_enabled=ai_grading_on,
+            now=now,
+        )
+        for sub, integrity_on, ai_grading_on in rows
+    }
+
+
 @router.get("/classes")
 async def list_classes(
     user: User = Depends(get_current_user_full),
@@ -1159,15 +1230,16 @@ async def list_homework(
     )).scalars().all() if aid_rows else []
 
     # Single query to find which of these the student already submitted.
-    submitted_ids: set[uuid.UUID] = set()
+    submission_by_aid: dict[uuid.UUID, uuid.UUID] = {}
     if rows:
         submitted_rows = (await db.execute(
-            select(Submission.assignment_id).where(
+            select(Submission.assignment_id, Submission.id).where(
                 Submission.student_id == user.id,
                 Submission.assignment_id.in_([a.id for a in rows]),
             )
-        )).scalars().all()
-        submitted_ids = set(submitted_rows)
+        )).all()
+        submission_by_aid = {aid: sid for aid, sid in submitted_rows}
+    next_steps = await _next_steps(db, list(submission_by_aid.values()))
 
     return [
         StudentHomeworkSummary(
@@ -1176,7 +1248,11 @@ async def list_homework(
             type=a.type,
             due_at=a.due_at,
             problem_count=len(problem_ids_in_content(a.content)),
-            status="submitted" if a.id in submitted_ids else "not_started",
+            status="submitted" if a.id in submission_by_aid else "not_started",
+            next_step=(
+                next_steps.get(submission_by_aid[a.id])
+                if a.id in submission_by_aid else None
+            ),
         )
         for a in rows
     ]
@@ -1369,6 +1445,7 @@ async def get_dashboard(
     submitted_at_by_aid: dict[uuid.UUID, datetime] = {
         sub_aid: sub_at for _, sub_aid, sub_at in submitted_rows
     }
+    next_steps = await _next_steps(db, list(submission_by_aid.values()))
 
     # Published grades keyed by submission_id for the dedupe below.
     #
@@ -1421,6 +1498,7 @@ async def get_dashboard(
                 section_name=meta["section_name"],
                 status="submitted",
                 is_late=bool(a.due_at and a.due_at < now),
+                next_step=next_steps.get(submission_id) if submission_id else None,
             ))
             continue
 
@@ -1730,6 +1808,10 @@ async def homework_detail(
         final_score=final_score,
         grade_published_at=grade_published_at,
         breakdown=breakdown_out,
+        next_step=(
+            (await _next_steps(db, [sub.id])).get(sub.id)
+            if sub is not None else None
+        ),
     )
 
 

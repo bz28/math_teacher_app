@@ -2,12 +2,13 @@ import Link from "next/link";
 import type { DashboardAssignment } from "@/lib/api";
 import { CourseAvatar } from "./dashboard-card";
 import { UrgencyPill } from "./urgency-pill";
+import { NEXT_STEP_COPY } from "./next-step";
 
 /**
- * Row used inside Due this week and Overdue subsections on the
- * student dashboard. Click target is the HW detail page. The
- * In-review bucket renders as a status sentence, not rows, so this
- * component always shows the urgency pill.
+ * Row used inside the One more step, Due this week and Overdue
+ * subsections on the student dashboard. Click target is the HW detail
+ * page. Shows the urgency pill, or the student's next step on
+ * turned-in work that has one.
  */
 export function DashboardAssignmentRow({
   assignment,
@@ -30,8 +31,23 @@ export function DashboardAssignmentRow({
         <div className="truncate text-xs text-text-muted">
           {assignment.course_name} · {assignment.section_name}
         </div>
+        {/* On phones the chip would squeeze the title to a few letters,
+            so the step sits under it instead. */}
+        {assignment.next_step && (
+          <div className="mt-0.5 truncate text-xs font-semibold text-primary sm:hidden">
+            {NEXT_STEP_COPY[assignment.next_step].label}
+          </div>
+        )}
       </div>
-      <UrgencyPill dueAt={assignment.due_at} />
+      {/* Turned-in work with a step left shows that step instead of a
+          due date — it's already in, so urgency would be wrong. */}
+      {assignment.next_step ? (
+        <span className="hidden shrink-0 rounded-full bg-primary-bg px-2.5 py-0.5 text-xs font-semibold text-primary group-hover:bg-primary group-hover:text-white sm:inline">
+          {NEXT_STEP_COPY[assignment.next_step].label}
+        </span>
+      ) : (
+        <UrgencyPill dueAt={assignment.due_at} />
+      )}
       <svg
         className="h-4 w-4 shrink-0 text-text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
         viewBox="0 0 24 24"

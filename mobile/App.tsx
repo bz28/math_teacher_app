@@ -334,6 +334,11 @@ function AppRoot() {
             assignmentId={activeHomeworkId}
             onBack={() => setScreen(homeworkReturn)}
             onSubmitted={() => setScreen("extraction-confirm")}
+            onConfirmReading={() => setScreen("extraction-confirm")}
+            onFinishCheck={(submissionId) => {
+              setActiveSubmissionId(submissionId);
+              setScreen("integrity-chat");
+            }}
           />
         </ErrorBoundary>
         <StatusBar style="auto" />
