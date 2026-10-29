@@ -2064,12 +2064,17 @@ export interface paths {
         put?: never;
         /**
          * Check Page Orientation
-         * @description Does a page the student just added look sideways?
+         * @description Do the pages the student just added read upright, at a size the
+         *     reader can make out?
          *
-         *     Backs the "This page looks sideways — rotate it?" nudge on the
-         *     upload screen. Free (a pixel check, no model call) and advisory:
-         *     it never rotates anything — the student does, with the rotate
-         *     button, and the turn is applied at submit.
+         *     Backs the upload screen, which holds Submit while a page reads as
+         *     sideways and refuses a PDF page that turn-in would. Free (a pixel
+         *     check, no model call). It never rotates anything — the student does,
+         *     with the rotate button, and the turn is applied at submit.
+         *
+         *     Orientation is enforced on the client only, never at submit: the
+         *     check can be wrong, and the student's "It's already upright" has to
+         *     be able to overrule it. Turn-in enforces the size floor alone.
          */
         post: operations["check_page_orientation_v1_school_student_homework_page_orientation_post"];
         delete?: never;
@@ -5593,8 +5598,16 @@ export interface components {
         };
         /** PageOrientationResponse */
         PageOrientationResponse: {
+            /** Page Count */
+            page_count: number;
+            /** Preview */
+            preview: string | null;
             /** Sideways */
             sideways: boolean;
+            /** Sideways Pages */
+            sideways_pages: number[];
+            /** Too Small Pages */
+            too_small_pages: number[];
         };
         /**
          * PasteEvent

@@ -114,13 +114,16 @@ async def test_submit_stores_each_page_the_way_the_student_turned_it(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
     """A page rotated on the upload screen is saved upright, so the AI
-    reader and the teacher's photo view both get it that way. Pages
-    with no turn — and PDFs — are stored exactly as sent."""
+    reader and the teacher's photo view both get it that way — a PDF's
+    pages too. Pages with no turn are stored exactly as sent."""
+    from tests.test_image_utils import pdf_of
+
     wide = _real_jpeg((800, 400))
+    wide_pdf = pdf_of([Image.new("RGB", (800, 400), "white")])
     r = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=_auth(world["student_token"]),
-        json={"files": [wide, wide, TINY_PDF], "rotations": [90, 0, 90]},
+        json={"files": [wide, wide, TINY_PDF, wide_pdf], "rotations": [90, 0, 0, 90]},
     )
     assert r.status_code == 200, r.text
 
@@ -133,6 +136,11 @@ async def test_submit_stores_each_page_the_way_the_student_turned_it(
     assert turned.size == (400, 800)
     assert files[1]["data"] == wide
     assert files[2]["data"] == TINY_PDF
+    from api.core.image_utils import pdf_pages_as_images
+
+    [page] = pdf_pages_as_images(files[3]["data"])
+    page_img = Image.open(io.BytesIO(base64.b64decode(page)))
+    assert page_img.width < page_img.height
 
 
 async def test_submit_refuses_to_turn_a_decompression_bomb(
@@ -181,14 +189,50 @@ async def test_page_orientation_check(
             url, headers=_auth(world["student_token"]), json={"image": enc(img)},
         )
         assert r.status_code == 200, r.text
-        assert r.json() == {"sideways": expected}
+        assert r.json() == {
+            "sideways": expected, "page_count": 1,
+            "sideways_pages": [1] if expected else [],
+            "too_small_pages": [], "preview": None,
+        }
 
     r = await client.post(
-        url, headers=_auth(world["student_token"]), json={"image": TINY_PDF},
+        url, headers=_auth(world["student_token"]),
+        json={"image": base64.b64encode(b"not a page").decode()},
     )
     assert r.status_code == 400
     r = await client.post(url, json={"image": enc(page)})
     assert r.status_code == 401
+
+
+async def test_page_orientation_check_reads_every_pdf_page(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """A PDF gets the photo checks page by page, as the reader sees it:
+    the sideways page and the page too small to read are both named."""
+    from tests.test_image_utils import _page_of_writing, pdf_of
+
+    page = _page_of_writing()
+    pdf = pdf_of([page, page.rotate(90, expand=True), page.resize((240, 320))])
+    r = await client.post(
+        "/v1/school/student/homework/page-orientation",
+        headers=_auth(world["student_token"]), json={"image": pdf},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["sideways"] is True
+    assert body["page_count"] == 3
+    assert body["sideways_pages"] == [2]
+    assert body["too_small_pages"] == [3]
+    assert body["preview"]
+
+    # A PDF it can't open: no pages, no claims about them.
+    r = await client.post(
+        "/v1/school/student/homework/page-orientation",
+        headers=_auth(world["student_token"]), json={"image": TINY_PDF},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["page_count"] == 0
+    assert r.json()["sideways"] is False
 
 
 async def test_submit_homework_total_payload_guard_rejects() -> None:
@@ -304,3 +348,47 @@ async def test_submit_refuses_bytes_that_only_look_like_a_jpeg(
     )
     assert r.status_code == 400
     assert "File 1" in r.json()["detail"]
+
+
+async def test_submit_refuses_a_pdf_page_too_small_to_read(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """The teacher report behind this: a phone photo saved as a PDF was
+    read as badly as the photo would have been. A PDF page is held to
+    the photo's size floor, and the message names the page."""
+    from tests.test_image_utils import pdf_of
+
+    pdf = pdf_of([Image.new("RGB", (1600, 1200), "white"), Image.new("RGB", (320, 240), "white")])
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"files": [PAGE_PNG, pdf]},
+    )
+    assert r.status_code == 400
+    assert r.json()["detail"] == (
+        "File 2, page 2 is too small to read (320px). "
+        "Take it again closer up, so the page fills the screen."
+    )
+
+
+async def test_submit_accepts_pdf_pages_at_the_minimum_size_and_typed_pages(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """At the floor is fine, and a typed page has no pixel size to fail."""
+    import pypdfium2 as pdfium
+
+    from tests.test_image_utils import pdf_of
+
+    typed = pdfium.PdfDocument.new()
+    typed.new_page(612, 792)
+    buf = io.BytesIO()
+    typed.save(buf)
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"files": [
+            pdf_of([Image.new("RGB", (400, 300), "white")]),
+            base64.b64encode(buf.getvalue()).decode("ascii"),
+        ]},
+    )
+    assert r.status_code == 200, r.text

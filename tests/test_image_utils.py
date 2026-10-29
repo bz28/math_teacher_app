@@ -10,6 +10,9 @@ from api.core.constants import MAX_IMAGE_BYTES, MAX_PDF_BYTES
 from api.core.image_utils import (
     VISION_MAX_EDGE,
     page_looks_sideways,
+    pdf_page_checks,
+    pdf_pages_as_images,
+    pdf_scan_long_edges,
     preprocess_image_for_vision,
     rotate_upload,
     to_content_block,
@@ -285,12 +288,24 @@ class TestRotateUpload:
             rotate_upload(bomb, "image/png", 90)
         assert page_looks_sideways(bomb) is False
 
-    def test_pdf_is_left_alone(self) -> None:
+    def test_unturned_pdf_keeps_the_bytes(self) -> None:
         b64 = _b64(_PDF_HEADER + b"pdf")
-        assert rotate_upload(b64, "application/pdf", 90) == b64
+        assert rotate_upload(b64, "application/pdf", 0) == b64
+
+    def test_quarter_turn_turns_every_pdf_page(self) -> None:
+        pdf = pdf_of([_marked((300, 200)), _marked((300, 200))])
+        turned = rotate_upload(pdf, "application/pdf", 90)
+        pages = [Image.open(io.BytesIO(base64.b64decode(p))) for p in pdf_pages_as_images(turned)]
+        assert [p.size[0] < p.size[1] for p in pages] == [True, True]
+        # Clockwise, like a photo: the red top-left corner ends top-right.
+        assert pages[0].convert("RGB").getpixel((pages[0].width - 5, 5))[1] < 80
+
+    def test_unreadable_pdf_cant_be_turned(self) -> None:
+        with pytest.raises(ValueError):
+            rotate_upload(_b64(_PDF_HEADER + b"pdf"), "application/pdf", 90)
 
 
-# ── page_looks_sideways (the free "looks sideways" nudge) ─────────────
+# ── page_looks_sideways (the free "looks sideways" check) ─────────────
 
 
 def _page_of_writing() -> Image.Image:
@@ -336,3 +351,59 @@ class TestPageLooksSideways:
     def test_blank_or_unreadable_is_not_sideways(self) -> None:
         assert page_looks_sideways(_encode(Image.new("RGB", (400, 600), "white"), "PNG")) is False
         assert page_looks_sideways(_b64(b"not an image")) is False
+
+
+# ── PDF pages get the photo checks ────────────────────────────────────
+
+
+def pdf_of(pages: list[Image.Image], dpi: float = 72) -> str:
+    """A PDF made the way a scanner app makes one: each page a photo."""
+    buf = io.BytesIO()
+    pages[0].save(buf, format="PDF", save_all=True, append_images=pages[1:], resolution=dpi)
+    return _b64(buf.getvalue())
+
+
+class TestPdfScanLongEdges:
+    def test_measures_the_photo_behind_each_page(self) -> None:
+        pages = [Image.new("RGB", (1600, 1200), "white"), Image.new("RGB", (320, 240), "white")]
+        assert pdf_scan_long_edges(pdf_of(pages)) == [1600, 320]
+
+    def test_a_small_photo_on_a_big_page_is_still_small(self) -> None:
+        # 320 px stretched over a 16-inch page renders big, reads no better.
+        assert pdf_scan_long_edges(pdf_of([Image.new("RGB", (320, 240))], dpi=20)) == [320]
+
+    def test_a_typed_page_has_no_pixel_size(self) -> None:
+        import pypdfium2 as pdfium
+
+        pdf = pdfium.PdfDocument.new()
+        pdf.new_page(612, 792)
+        buf = io.BytesIO()
+        pdf.save(buf)
+        assert pdf_scan_long_edges(_b64(buf.getvalue())) == [None]
+
+    def test_unreadable_pdf_has_no_pages(self) -> None:
+        assert pdf_scan_long_edges(_b64(_PDF_HEADER + b"pdf")) == []
+
+
+class TestPdfPageChecks:
+    def test_flags_the_sideways_page_and_previews_it(self) -> None:
+        page = _page_of_writing()
+        checks = pdf_page_checks(pdf_of([page, page.rotate(90, expand=True)]))
+        assert checks["page_count"] == 2
+        assert checks["sideways_pages"] == [2]
+        assert checks["too_small_pages"] == []
+        preview = Image.open(io.BytesIO(base64.b64decode(checks["preview"])))
+        assert preview.width > preview.height  # page 2, as it lies
+
+    def test_flags_a_page_too_small_to_read(self) -> None:
+        page = _page_of_writing()
+        checks = pdf_page_checks(pdf_of([page, page.resize((240, 320))]))
+        assert checks["too_small_pages"] == [2]
+        assert checks["sideways_pages"] == []
+        preview = Image.open(io.BytesIO(base64.b64decode(checks["preview"])))
+        assert preview.height == 640  # page 1 when nothing is sideways
+
+    def test_unreadable_pdf_reports_nothing(self) -> None:
+        assert pdf_page_checks(_b64(_PDF_HEADER + b"pdf")) == {
+            "page_count": 0, "sideways_pages": [], "too_small_pages": [], "preview": None,
+        }
