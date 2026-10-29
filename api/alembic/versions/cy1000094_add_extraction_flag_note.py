@@ -1,6 +1,6 @@
 """add submissions.extraction_flag_note
 
-Revision ID: cw1000092
+Revision ID: cy1000094
 Revises: cv1000091
 Create Date: 2026-10-29 00:00:00.000000
 
@@ -14,6 +14,11 @@ student made before flagging reuse the existing `extraction_edits` /
 
 Adding a nullable column is safe while the old container still serves:
 it never reads or writes the column.
+
+Numbered cy1000094 because cw1000092 (#954, #958) and cx1000093 (#960)
+are taken by other open PRs that also revise cv1000091. Whichever of
+these merges after the first must re-point its down_revision onto the
+then-current head, or alembic sees two heads.
 """
 
 from __future__ import annotations
@@ -21,7 +26,7 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "cw1000092"
+revision: str = "cy1000094"
 down_revision: str | None = "cv1000091"
 branch_labels = None
 depends_on = None
