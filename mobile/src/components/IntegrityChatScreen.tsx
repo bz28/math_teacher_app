@@ -20,9 +20,9 @@ import { MathText } from "./MathText";
 import {
   getIntegrityState,
   postIntegrityTurn,
+  MIN_INTEGRITY_MESSAGE_CHARS,
   type IntegrityState,
 } from "../services/api";
-import { meetsIntegrityMinimum, MIN_INTEGRITY_MESSAGE_CHARS } from "../utils/integrityMinimum";
 import { groupExtraction } from "../utils/extraction";
 import { useColors, spacing, typography, radii, type ColorPalette } from "../theme";
 import { useReducedMotion } from "../utils/useReducedMotion";
@@ -45,8 +45,8 @@ const BUDGET_LABEL = "~5 min";
 // The truthful "I can't explain this" — the stuck chip sends a `stuck` turn
 // that bypasses the min-char gate, so honesty is one tap, never coached into
 // a fabricated answer by a character minimum. Allowed ONCE per problem
-// (server-enforced); after that the chip disables and typed replies must be
-// a few words. The server writes the canonical text — this copy is only the
+// (server-enforced); after that the chip disables with a nudge to try in
+// their own words. The server writes the canonical text — this copy is only the
 // optimistic echo and must match it.
 const STUCK_MESSAGE = "I'm stuck — I'm not sure how to explain this.";
 const STUCK_USED_HINT = "Give it a try in your own words — even a guess helps.";
@@ -173,7 +173,7 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
       // truthful "I can't explain" is sendable — once per problem.
       const message = input.trim();
       if (sending) return;
-      if (stuck ? stuckUsed : !meetsIntegrityMinimum(message, stuckUsed)) return;
+      if (stuck ? stuckUsed : message.length < MIN_INTEGRITY_MESSAGE_CHARS) return;
       setSending(true);
       setSendError(null);
       markActivity();
@@ -217,17 +217,17 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
     [input, sending, stuckUsed, submissionId, telemetry, markActivity],
   );
 
-  const canSend = meetsIntegrityMinimum(input, stuckUsed);
-  // One hint at a time. Once the tap is spent, a single nudge covers both
-  // "why is the chip greyed out" and "that draft won't send", clearing as
-  // soon as the draft is sendable. Before the tap, only the 5-char floor hint.
-  const hint = stuckUsed
-    ? canSend
-      ? null
-      : STUCK_USED_HINT
-    : input.trim().length > 0 && !canSend
-      ? `Add a little more — at least ${MIN_INTEGRITY_MESSAGE_CHARS} characters. Stuck? Tap the line above.`
-      : null;
+  const canSend = input.trim().length >= MIN_INTEGRITY_MESSAGE_CHARS;
+  // One hint at a time: a too-short draft shows the 5-char floor hint;
+  // otherwise, once the tap is spent, a nudge explains the greyed-out chip.
+  const hint =
+    input.trim().length > 0 && !canSend
+      ? stuckUsed
+        ? `Add a little more — at least ${MIN_INTEGRITY_MESSAGE_CHARS} characters.`
+        : `Add a little more — at least ${MIN_INTEGRITY_MESSAGE_CHARS} characters. Stuck? Tap the line above.`
+      : stuckUsed
+        ? STUCK_USED_HINT
+        : null;
 
   // ── Pre-chat states ───────────────────────────────────
   // Timeout fallback takes precedence: a stalled "Preparing…" wait gets a

@@ -27,7 +27,6 @@ from api.models.integrity_check import (
 )
 from api.models.question_bank import QuestionBankItem
 from api.routes.integrity_check import (
-    NUDGE_OWN_WORDS,
     STUCK_MESSAGE,
     STUCK_PHRASES,
 )
@@ -578,43 +577,6 @@ async def test_legacy_stuck_text_counts_as_the_tap(
     r = await _post_turn(client, world, submission_id, {"stuck": True})
     assert r.status_code == 400
     assert await _student_turn_contents(submission_id) == [STUCK_MESSAGE]
-
-
-async def test_non_answers_rejected_after_stuck_tap(
-    client: AsyncClient, world: dict[str, Any]
-) -> None:
-    """Before the tap: just the 5-char floor, so "I have no idea" is a
-    normal turn. After it: a don't-know non-answer is turned back, while
-    compact math answers still go through."""
-    set_agent_script([[make_text("Opener")]])
-    r = await _submit(client, world)
-    submission_id = r.json()["submission_id"]
-
-    set_agent_script([[make_text("Okay — what did you try first?")]])
-    r = await _post_turn(client, world, submission_id, {"message": "I have no idea"})
-    assert r.status_code == 200, r.text
-
-    set_agent_script([[make_text("That's okay.")]])
-    r = await _post_turn(client, world, submission_id, {"stuck": True})
-    assert r.status_code == 200, r.text
-
-    for non_answer in ("I don't know", "idk idk idk", "not sure lol", "no idea 🤷"):
-        r = await _post_turn(client, world, submission_id, {"message": non_answer})
-        assert r.status_code == 400, non_answer
-        assert r.json()["detail"] == NUDGE_OWN_WORDS
-    # The plain floor still applies first.
-    r = await _post_turn(client, world, submission_id, {"message": "x=4"})
-    assert r.status_code == 400
-    assert "at least" in r.json()["detail"]
-
-    for ok in ("y=2x+3", "(3, 4)"):
-        set_agent_script([[make_text("Thanks.")]])
-        r = await _post_turn(client, world, submission_id, {"message": ok})
-        assert r.status_code == 200, (ok, r.text)
-
-    assert await _student_turn_contents(submission_id) == [
-        "I have no idea", STUCK_MESSAGE, "y=2x+3", "(3, 4)",
-    ]
 
 
 async def test_smart_punctuation_stuck_text_counts_as_the_tap(

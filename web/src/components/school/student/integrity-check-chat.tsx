@@ -14,7 +14,6 @@ import { ExtractionView } from "@/components/school/shared/extraction-view";
 import { MathText } from "@/components/shared/math-text";
 import { cn } from "@/lib/utils";
 import { useDeviceType } from "./use-device-type";
-import { MIN_MESSAGE_CHARS, meetsTypedMinimum } from "./integrity-message-rules";
 import { useTurnTelemetry } from "./use-turn-telemetry";
 
 // Soft time budget we advertise to the student on the chat header.
@@ -66,12 +65,14 @@ interface Props {
   onLeave: () => void;
 }
 
+const MIN_MESSAGE_CHARS = 5;
+
 // The honest "I can't explain this" exit. Tapping the chip sends a
 // `stuck` turn that skips the typed minimum, so a truthful "I'm stuck"
 // is one tap away instead of a blocked send that coaches a frozen kid
 // into fabricating an answer. It's allowed ONCE per problem (server-
-// enforced); after that the chip disables and typed replies must be a
-// few words. The server writes the canonical text into the transcript —
+// enforced); after that the chip disables with a nudge to try in their
+// own words. The server writes the canonical text into the transcript —
 // this copy is only the optimistic echo and must match it.
 const STUCK_MESSAGE = "I'm stuck — I'm not sure how to explain this.";
 const STUCK_USED_HINT = "Give it a try in your own words — even a guess helps.";
@@ -259,12 +260,11 @@ export function IntegrityCheckChat({
 
   // `stuck` is the honest "I'm stuck" chip path: it skips the typed
   // minimum (which exists only to stop empty / one-word free-text sends)
-  // and is spendable once per problem. Free-text sends stay gated — and
-  // once the tap is spent, gated to "a few words".
+  // and is spendable once per problem. Free-text sends stay gated.
   async function handleSend(stuck = false) {
     const trimmed = message.trim();
     if (sending || isComplete) return;
-    if (stuck ? stuckUsed : !meetsTypedMinimum(trimmed, stuckUsed)) return;
+    if (stuck ? stuckUsed : trimmed.length < MIN_MESSAGE_CHARS) return;
     setPendingStudentMessage(stuck ? STUCK_MESSAGE : trimmed);
     if (!stuck) setMessage("");
     setSending(true);
@@ -338,13 +338,13 @@ export function IntegrityCheckChat({
     );
   }
 
-  const draftOk = meetsTypedMinimum(message, stuckUsed);
+  const draftOk = message.trim().length >= MIN_MESSAGE_CHARS;
   const canSend = !sending && !isComplete && draftOk;
-  // One hint at a time. Once the tap is spent, a single nudge beside the
-  // disabled chip covers both "why is this greyed out" and "that draft
-  // won't send"; it clears as soon as the draft is sendable. Before the
-  // tap, only the plain 5-char floor hint under the composer can show.
-  const showStuckUsedHint = stuckUsed && !draftOk;
+  // One hint at a time: a too-short draft shows the 5-char floor hint
+  // under the composer; otherwise, once the tap is spent, a nudge sits
+  // beside the disabled chip explaining why it's greyed out.
+  const showFloorHint = message.length > 0 && !draftOk;
+  const showStuckUsedHint = stuckUsed && !showFloorHint;
 
   const hasReference = state.problems.length > 0;
 
@@ -702,9 +702,7 @@ export function IntegrityCheckChat({
               </div>
               <div className="mt-1 flex items-start justify-between gap-2">
                 <p className="text-xs text-text-muted">
-                  {message.length > 0 &&
-                    !stuckUsed &&
-                    !draftOk &&
+                  {showFloorHint &&
                     `Try a sentence or two (${MIN_MESSAGE_CHARS}+ characters).`}
                 </p>
                 {/* Plain Enter inserts a newline; only ⌘/Ctrl+Enter

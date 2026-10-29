@@ -497,6 +497,8 @@ export const flagExtraction = (submissionId: string) =>
     {},
   );
 
+export const MIN_INTEGRITY_MESSAGE_CHARS = 5;
+
 export type IntegrityProblem = Schemas["ProblemSummary"];
 export type IntegrityTurn = Schemas["TurnOut"];
 // overall_status: no_check | extracting | awaiting_student | in_progress |

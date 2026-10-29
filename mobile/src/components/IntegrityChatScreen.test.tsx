@@ -6,6 +6,7 @@ import * as api from "../services/api";
 jest.mock("../services/api", () => ({
   getIntegrityState: jest.fn(),
   postIntegrityTurn: jest.fn(),
+  MIN_INTEGRITY_MESSAGE_CHARS: 5,
 }));
 const mockedApi = api as jest.Mocked<typeof api>;
 
@@ -161,23 +162,18 @@ describe("IntegrityChatScreen", () => {
     expect(mockedApi.postIntegrityTurn).toHaveBeenCalledTimes(1);
   });
 
-  it("after the stuck tap, turns back a bare don't-know but sends compact math", async () => {
+  it("after the stuck tap, a short typed answer still sends", async () => {
     mockedApi.getIntegrityState.mockResolvedValue({ ...STATE, stuck_tap_used: true } as never);
     mockedApi.postIntegrityTurn.mockResolvedValue({ ...STATE, stuck_tap_used: true } as never);
     render(<IntegrityChatScreen submissionId="sub-1" onExit={jest.fn()} />);
 
     await waitForText("How did you get your answer?");
-    const composer = screen.getByPlaceholderText("Explain how you solved it…");
-    // Over the plain 5-char floor, but only a don't-know. One hint, not two.
-    fireEvent.changeText(composer, "I have no idea");
-    await flush();
+    // Resumed with the tap spent: chip disabled, one nudge shown.
+    expect(screen.getByLabelText(STUCK_LABEL)).toBeDisabled();
     expect(screen.getAllByText(NUDGE)).toHaveLength(1);
-    expect(screen.getByLabelText("Send")).toBeDisabled();
 
-    // A compact math answer clears the bar.
-    fireEvent.changeText(composer, "y=2x+3");
+    fireEvent.changeText(screen.getByPlaceholderText("Explain how you solved it…"), "y=2x+3");
     await flush();
-    expect(screen.queryByText(NUDGE)).toBeNull();
     fireEvent.press(screen.getByLabelText("Send"));
     await flush();
     expect(mockedApi.postIntegrityTurn).toHaveBeenCalledWith(
