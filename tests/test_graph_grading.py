@@ -11,11 +11,11 @@ from typing import Any
 
 import pypdfium2 as pdfium
 import pytest
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from api.core import graph_grading
 from api.core.drawing_check import ChecklistItem, DrawingCheck, ItemResult
-from api.core.grading_ai import _build_breakdown, _build_problem_set_block, _build_system_prompt
+from api.core.grading_ai import _build_breakdown, _build_problem_set_block, _build_system_prompt, _build_user_message
 from api.core.graph_checklist import source_of, to_stored
 from api.core.graph_grading import (
     GraphPart,
@@ -26,6 +26,7 @@ from api.core.graph_grading import (
     combine,
     graph_part,
     page_images,
+    uploads_look_sideways,
 )
 from api.core.image_utils import pdf_pages_as_images
 from api.models.question_bank import QuestionBankItem
@@ -302,6 +303,53 @@ async def test_check_graphs_checks_only_problems_with_a_graph_part(checks: Check
     assert out["a"] is not None and out["a"].stored(PART)["checklist_key"] == PART.key
 
 
+def _lined_page(sideways: bool) -> str:
+    """A page of handwriting-like rows of ink; turned on its side when
+    `sideways`."""
+    img = Image.new("RGB", (800, 1000), (250, 250, 250))
+    draw = ImageDraw.Draw(img)
+    for y in range(60, 960, 40):
+        for x in range(60, 740, 24):
+            draw.line([(x, y), (x + 14, y)], fill=(20, 20, 20), width=4)
+    if sideways:
+        img = img.rotate(90, expand=True)
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG")
+    return base64.b64encode(buf.getvalue()).decode()
+
+
+def test_an_upload_is_sideways_when_any_page_is() -> None:
+    upright, sideways = _lined_page(False), _lined_page(True)
+    assert not uploads_look_sideways([[(upright, "image/jpeg")], [(upright, "image/jpeg")]])
+    assert uploads_look_sideways([[(upright, "image/jpeg")], [(sideways, "image/jpeg")]])
+
+
+async def test_on_a_sideways_upload_a_no_is_unclear_and_a_yes_stands(checks: Checks) -> None:
+    checks.queue(_found("tight", "yes", "no"))
+    r = await check_problem_drawing(
+        _extraction(visual=[_drawn()]), [[(_jpeg(), "image/jpeg")]], 1, PART, sideways=True,
+    )
+    assert r is not None and [i.verdict for i in r.items] == ["yes", "unclear"]
+    assert "looks sideways" in r.items[1].seen and r.items[0].seen == "s"
+
+
+async def test_on_a_sideways_upload_an_agreed_missing_drawing_is_still_no(checks: Checks) -> None:
+    checks.queue(_not_found())
+    missing = {"problem_position": 1, "kind": "graph", "present": False}
+    r = await check_problem_drawing(
+        _extraction(visual=[missing]), [[(_jpeg(), "image/jpeg")]], 1, PART, sideways=True,
+    )
+    assert r is not None and r.note == "not_drawn" and [i.verdict for i in r.items] == ["no", "no"]
+
+
+async def test_check_graphs_doubts_the_noes_of_a_sideways_upload(checks: Checks) -> None:
+    checks.queue(_found("tight", "no", "yes"))
+    problems = [{"position": 1, "bank_item_id": "a", "graph_part": PART}]
+    files = [{"data": _lined_page(True), "media_type": "image/jpeg"}]
+    out = await check_graphs(_extraction(visual=[_drawn()]), files, problems)
+    assert out["a"] is not None and [i.verdict for i in out["a"].items] == ["unclear", "yes"]
+
+
 # ── combine ────────────────────────────────────────────────────────
 
 
@@ -439,3 +487,17 @@ def test_only_the_problem_with_a_graph_part_changes() -> None:
     other = {**PROBLEM, "position": 2}
     with_part = _build_system_prompt(None, [{**PROBLEM, "graph_part": PART}, other])
     assert with_part.split("## Problem 2")[1] == _build_system_prompt(None, [PROBLEM, other]).split("## Problem 2")[1]
+
+
+def test_a_graph_part_shows_the_grader_only_what_is_written_on_the_drawing() -> None:
+    drawing = {
+        "problem_position": 1, "kind": "graph", "present": True, "verified": True,
+        "plotted_elements": ["one line rising"], "labeled_points": ["(2, 3)"],
+        "answer_on_drawing": "(2, 3)", "description": "Only one line is drawn.",
+    }
+    extraction = {"steps": [], "final_answers": [], "visual_work": [drawing]}
+    alone = _build_user_message(extraction, [{**PROBLEM, "graph_part": PART}])
+    assert "(2, 3)" in alone and "checked separately" in alone
+    assert "one line rising" not in alone and "Only one line" not in alone
+    whole = _build_user_message(extraction, [PROBLEM])
+    assert "one line rising" in whole and "Only one line" in whole

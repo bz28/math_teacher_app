@@ -32,7 +32,7 @@ from api.core.checklist_points import fit_checklist
 from api.core.drawing_check import ChecklistItem, DrawingCheck, ItemResult, check_drawing
 from api.core.graph_checklist import current_checklist, stored_items
 from api.core.homework_points import weighted_percent
-from api.core.image_utils import pdf_pages_as_images
+from api.core.image_utils import page_looks_sideways, pdf_pages_as_images
 from api.core.integrity_ai import _strip_data_url_prefix
 from api.models.question_bank import QuestionBankItem
 
@@ -47,6 +47,7 @@ _CHECK_CONCURRENCY = 3
 _NOT_FOUND = "Couldn't find the drawing."
 _FAILED = "Couldn't check the graph."
 _NOT_DRAWN = "No drawing for this problem."
+_SIDEWAYS = "The photo looks sideways, so the axes may have been misread."
 
 
 @dataclass
@@ -159,12 +160,33 @@ def _page_number(value: Any, pages: int) -> int | None:
     return None
 
 
+def uploads_look_sideways(pages: list[list[Image]]) -> bool:
+    """Any page of the upload lying on its side. A student photographs
+    every page the same way, and the drawing page itself is often too
+    sparse for `page_looks_sideways` to read, so one sideways page counts
+    for the whole upload."""
+    return any(page_looks_sideways(data) for imgs in pages for data, _ in imgs)
+
+
+def _doubt_noes(results: list[ItemResult], sideways: bool) -> list[ItemResult]:
+    """On a sideways upload a "no" is unclear: the check can misread a
+    sideways grid's axes (8 of its 13 wrong "no"s on correct drawings in
+    the Oct 2026 eval), so the teacher decides. A "yes" stands."""
+    if not sideways:
+        return results
+    return [
+        ItemResult(r.n, "unclear", f"{r.seen} {_SIDEWAYS}".strip()) if r.verdict == "no" else r
+        for r in results
+    ]
+
+
 async def check_problem_drawing(
     extraction: dict[str, Any],
     pages: list[list[Image]],
     position: int,
     part: GraphPart,
     *,
+    sideways: bool = False,
     user_id: str | None = None,
     submission_id: str | None = None,
 ) -> ProblemGraphCheck | None:
@@ -177,7 +199,8 @@ async def check_problem_drawing(
     one shows the drawing. When none does, every item is unclear, except
     when the reader also recorded no drawing: two looks agree it isn't
     there, so every item is "no". A check that fails is every item
-    unclear, for the teacher."""
+    unclear, for the teacher. On a `sideways` upload (`uploads_look_sideways`)
+    every "no" the check returns is unclear (`_doubt_noes`)."""
     visuals = [
         v for v in extraction.get("visual_work") or [] if isinstance(v, dict) and v.get("problem_position") == position
     ]
@@ -211,7 +234,7 @@ async def check_problem_drawing(
                 data, media_type = pages[page - 1][0]
                 check = await look(data, media_type, v["bbox"])
                 if check.in_view != "not_found":
-                    return ProblemGraphCheck(check.step, check.in_view, check.items)
+                    return ProblemGraphCheck(check.step, check.in_view, _doubt_noes(check.items, sideways))
                 # Not on the page the reader put it on (its crops and that
                 # whole page): the reader's page can be wrong, so hunt the rest.
                 located = page
@@ -226,7 +249,7 @@ async def check_problem_drawing(
         for data, media_type in looks:
             check = await look(data, media_type, None)
             if check.in_view != "not_found":
-                return ProblemGraphCheck(check.step, check.in_view, check.items)
+                return ProblemGraphCheck(check.step, check.in_view, _doubt_noes(check.items, sideways))
     except Exception:  # noqa: BLE001 — a failed check is the teacher's call, never a failed grade
         logger.exception("graph check failed submission=%s problem=%s", submission_id, position)
         return ProblemGraphCheck("none", "not_found", _all(part.items, "unclear", _FAILED), note="failed")
@@ -250,6 +273,7 @@ async def check_graphs(
     if not with_part:
         return {}
     pages = page_images(files)
+    sideways = uploads_look_sideways(pages)
     gate = asyncio.Semaphore(_CHECK_CONCURRENCY)
 
     async def one(p: dict[str, Any]) -> ProblemGraphCheck | None:
@@ -259,6 +283,7 @@ async def check_graphs(
                 pages,
                 p["position"],
                 p["graph_part"],
+                sideways=sideways,
                 user_id=user_id,
                 submission_id=submission_id,
             )

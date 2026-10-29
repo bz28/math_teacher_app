@@ -381,6 +381,14 @@ def _format_visual_work(v: dict[str, Any]) -> str:
     return line
 
 
+def _format_drawing_answer(v: dict[str, Any]) -> str:
+    """What the student wrote on a drawing that is checked apart from the
+    grader (`graph_part`): its labeled points and marked answer only."""
+    points = ", ".join(v.get("labeled_points") or []) or "none"
+    ans = v.get("answer_on_drawing") or "none"
+    return f"drawing (checked separately) — labeled points: {points} — answer marked on drawing: {ans}"
+
+
 def _bucket_visual_work_by_position(
     visual_work: list[dict[str, Any]], valid_positions: set[int],
 ) -> tuple[dict[int, list[dict[str, Any]]], list[dict[str, Any]]]:
@@ -496,8 +504,10 @@ def _graph_part_line(linked_rules: set[str]) -> str:
     line = (
         "Drawing: checked separately. Grade only the written work and the final answer, "
         "as if they were the whole problem: 100% means the work and the answer are fully "
-        "right. Never credit or deduct for the drawing, or for a missing one. An answer "
-        "the student marked only on the drawing still counts as their final answer."
+        "right. Never credit or deduct for the drawing, or for a missing one. The drawing "
+        "is the student's method for what it shows: don't deduct for written steps it "
+        "replaces (finding a point on a graph needs no algebra). An answer the student "
+        "marked only on the drawing still counts as their final answer."
     )
     if linked_rules:
         ids = ", ".join(f"[{r}]" for r in sorted(linked_rules))
@@ -620,7 +630,12 @@ def _build_user_message(
             lines.append("Student's drawings:")
             if problem_visuals:
                 for v in problem_visuals:
-                    lines.append(f"  {_format_visual_work(v)}")
+                    # A drawing checked apart from the grader shows only
+                    # what the student wrote on it: the grader still
+                    # credits an answer marked there, but never sees the
+                    # reader's account of the lines, so it can't grade them.
+                    line = _format_drawing_answer(v) if p.get("graph_part") else _format_visual_work(v)
+                    lines.append(f"  {line}")
             elif unattributed_visuals:
                 # A drawing exists somewhere that couldn't be tied to a
                 # problem — say so, rather than asserting there is none.
