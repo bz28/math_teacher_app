@@ -5,40 +5,23 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import Link from "next/link";
 import {
   teacher,
-  type ClassRubricRule,
+  type ClassRubric,
   type RubricSource,
   type TeacherRubric,
 } from "@/lib/api";
+import { CREDIT_DEFAULTS } from "@/lib/rubric";
 import {
   InlineSavedHint,
   type SaveState,
 } from "@/components/school/teacher/_pieces/inline-saved-hint";
 import { GradingPreview } from "@/components/school/teacher/_pieces/grading-preview";
 
-// Default rubric text shown pre-filled in the two primary fields.
-//
-// KEEP IN SYNC with the backend fallbacks in
-// api/core/grading_ai.py::_DEFAULT_FULL_CREDIT / _DEFAULT_PARTIAL_CREDIT.
-// When the teacher doesn't edit, the stored rubric stays null and the
-// backend falls back to this same text — so what the teacher sees here
-// is exactly what the AI grader applies.
-export const GRADING_SETUP_DEFAULTS = {
-  full_credit:
-    "Correct final answer (mathematically equivalent forms like 1/2 and 0.5 both count). Enough work shown that the reasoning is followable — students can skip routine or mental steps as long as the path from set-up to answer is unambiguous to the grader, with no non-obvious leaps. A bare final answer with no set-up doesn't qualify. If the problem names an algebraic method (\"using elimination\") full credit requires that method, and if the question is marked as requiring a drawing, full credit requires the drawing.",
-  partial_credit:
-    "Anchor partial credit on how much of the correct reasoning is intact. Right approach with a small execution error (sign flip, arithmetic slip) — around 95%. Right approach with multiple errors or stopped mid-solution — around 60%. Correct answer but the method or drawing the problem asked for is missing — around 50%; present but incomplete — around 75%. Right setup but substantially incomplete, or a plausible attempt with a wrong method — around 30%. Use judgment between these anchors. Incoherent attempts that show no sign of the right concept are zero, not partial.",
-} as const;
-
 const COMMON_MISTAKES_PLACEHOLDER =
   "e.g. Sign errors when distributing; flipping the inequality direction when multiplying by negatives.";
 const NOTES_PLACEHOLDER =
   "e.g. Problems 2–5: the graph must show two full periods. Take off 10 if it shows one.";
 
-type RubricFieldName =
-  | "full_credit"
-  | "partial_credit"
-  | "common_mistakes"
-  | "notes";
+type RubricFieldName = "common_mistakes" | "notes";
 
 // Null-sentinel buffer per field: null means "show the external value",
 // a string means "user is actively typing in this field". Lifted into
@@ -47,8 +30,6 @@ type RubricFieldName =
 type DraftMap = Record<RubricFieldName, string | null>;
 
 const INITIAL_DRAFTS: DraftMap = {
-  full_credit: null,
-  partial_credit: null,
   common_mistakes: null,
   notes: null,
 };
@@ -61,6 +42,7 @@ export function GradingSetupCard({
   copyFromAssignmentId,
   courseId,
   linkToClassRubric = true,
+  embedded = false,
 }: {
   rubric: TeacherRubric | null;
   saveState: SaveState;
@@ -73,13 +55,20 @@ export function GradingSetupCard({
    *  without the affordance, keeping non-opted-in call sites unchanged. */
   copyFromAssignmentId?: string;
   /** The homework's course. When set, the card lists the class's grading
-   *  rules (which this homework inherits) with a per-homework skip. */
+   *  rules (which this homework inherits) with a per-homework skip, and
+   *  the class's full/partial credit guidance in the preview. */
   courseId?: string;
-  /** Show "Edit class rubric" (off where navigating away loses work). */
+  /** Link out to class settings (off where navigating away loses work). */
   linkToClassRubric?: boolean;
+  /** Render as a block inside another card (the homework page's
+   *  "Problems & grading") rather than as a card of its own. */
+  embedded?: boolean;
 }) {
   const [drafts, setDrafts] = useState<DraftMap>(INITIAL_DRAFTS);
-  const classRules = useClassRules(courseId);
+  const classRubric = useClassRubric(courseId);
+  const classRules =
+    classRubric && classRubric !== "failed" ? classRubric.rules : classRubric;
+  const credit = classRubric && classRubric !== "failed" ? classRubric : null;
   const skipped = rubric?.skipped_rule_ids ?? [];
   // Title of the source the teacher most recently copied from. Drives
   // the transient "Copied from {title}" confirmation. Cleared on the
@@ -91,14 +80,7 @@ export function GradingSetupCard({
   // the teacher's eye line than a panel-top hint.
   const [lastEdited, setLastEdited] = useState<RubricFieldName | "skipped" | null>(null);
 
-  const externalFor = (field: RubricFieldName): string => {
-    if (field === "full_credit")
-      return rubric?.full_credit ?? GRADING_SETUP_DEFAULTS.full_credit;
-    if (field === "partial_credit")
-      return rubric?.partial_credit ?? GRADING_SETUP_DEFAULTS.partial_credit;
-    if (field === "common_mistakes") return rubric?.common_mistakes ?? "";
-    return rubric?.notes ?? "";
-  };
+  const externalFor = (field: RubricFieldName): string => rubric?.[field] ?? "";
 
   const displayed = (field: RubricFieldName): string =>
     drafts[field] ?? externalFor(field);
@@ -110,17 +92,14 @@ export function GradingSetupCard({
     if (copiedFrom) setCopiedFrom(null);
   };
 
-  // Copy another assignment's rubric wholesale into this one. We pass an
-  // explicit patch for ALL four fields (undefined where the source has
-  // none) so the parent REPLACES rather than merges — copying should
-  // mirror the source, not layer it over leftover text. Resetting the
-  // local drafts first makes the freshly-committed external values show
-  // in the textareas immediately.
+  // Copy another assignment's rubric text into this one. Both fields go
+  // in the patch (undefined where the source has none) so the parent
+  // REPLACES rather than merges — copying should mirror the source, not
+  // layer it over leftover text. Resetting the local drafts first makes
+  // the freshly-committed external values show immediately.
   const handleCopy = (source: RubricSource) => {
     setDrafts(INITIAL_DRAFTS);
     onChange({
-      full_credit: source.rubric.full_credit,
-      partial_credit: source.rubric.partial_credit,
       common_mistakes: source.rubric.common_mistakes,
       notes: source.rubric.notes,
     });
@@ -132,8 +111,7 @@ export function GradingSetupCard({
     if (draft === null) return; // user didn't touch this field
     const committed = draft;
     setDrafts((d) => ({ ...d, [field]: null }));
-    const external = externalFor(field);
-    if (committed === external) return;
+    if (committed === externalFor(field)) return;
     setLastEdited(field);
     // Whitespace-only → undefined so normalizeRubric in the parent drops
     // the field (unset rather than a padded string stored). Trimming
@@ -148,25 +126,24 @@ export function GradingSetupCard({
       <InlineSavedHint state={saveState} errorMessage={saveError} />
     ) : null;
 
-  // "Using default" surfaces on a primary field whenever the displayed
-  // text equals the hardcoded default AND the teacher isn't actively
-  // typing — i.e., the backend will fall back to the default because
-  // the teacher either never edited or explicitly cleared their
-  // custom text. Tells them "your delete worked — you're now on the
-  // default" instead of leaving them wondering why the default text
-  // reappeared after they cleared it.
-  const isUsingDefault = (field: "full_credit" | "partial_credit"): boolean => {
-    if (drafts[field] !== null) return false; // teacher is typing
-    return (rubric?.[field] ?? null) === null;
-  };
+  const settingsHref = courseId ? `/school/teacher/courses/${courseId}?tab=settings` : null;
+  const creditIsCustom = Boolean(credit?.full_credit || credit?.partial_credit);
 
-  return (
-    <section className="mt-6 rounded-[--radius-xl] border border-border-light bg-surface p-6 shadow-sm">
-      <header className="border-b border-border-light pb-3">
+  const heading = embedded ? (
+    <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+      Rules for every problem
+    </h3>
+  ) : (
+    <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+      Grading setup
+    </h2>
+  );
+
+  const body = (
+    <>
+      <header className={embedded ? "" : "border-b border-border-light pb-3"}>
         <div className="flex items-start justify-between gap-3">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
-            Grading setup
-          </h2>
+          {heading}
           {copyFromAssignmentId && (
             <CopyFromMenu
               currentAssignmentId={copyFromAssignmentId}
@@ -175,82 +152,71 @@ export function GradingSetupCard({
           )}
         </div>
         <p className="mt-1 text-xs text-text-secondary">
-          Tell the AI how to grade. We&apos;ve filled in sensible defaults
-          — edit to match how you grade.
+          The AI grades every problem with these, on top of its answer key.
         </p>
         <CopiedConfirmation title={copiedFrom} />
       </header>
 
-      {courseId && (
-        <ClassRulesList
-          courseId={courseId}
-          state={classRules}
-          skipped={skipped}
-          onSkippedChange={(ids) => {
-            setLastEdited("skipped");
-            onChange({ skipped_rule_ids: ids });
-          }}
-          saveHint={
-            lastEdited === "skipped" ? (
-              <InlineSavedHint state={saveState} errorMessage={saveError} />
-            ) : null
-          }
-          showEditLink={linkToClassRubric}
-        />
-      )}
-
-      <div className="mt-4 grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(260px,340px)]">
+      <div className="mt-4 grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(240px,320px)]">
         <div className="space-y-4">
-          <PrimaryField
-            id="rubric-full-credit"
-            label="Full credit"
-            usingDefault={isUsingDefault("full_credit")}
-            value={displayed("full_credit")}
-            onDraftChange={(v) => handleDraftChange("full_credit", v)}
-            onBlur={() => commitField("full_credit")}
-            rightSlot={hintFor("full_credit")}
-          />
-          <PrimaryField
-            id="rubric-partial-credit"
-            label="Partial credit"
-            usingDefault={isUsingDefault("partial_credit")}
-            value={displayed("partial_credit")}
-            onDraftChange={(v) => handleDraftChange("partial_credit", v)}
-            onBlur={() => commitField("partial_credit")}
-            rightSlot={hintFor("partial_credit")}
-          />
-          <OptionalDetails
-            // Open by default when either optional field already has a
-            // stored value — otherwise the teacher would have to dig
-            // to find their own text after reloading.
-            hasContent={
-              Boolean(rubric?.common_mistakes) || Boolean(rubric?.notes)
-            }
-          >
-            <OptionalField
-              id="rubric-common-mistakes"
-              label="Common mistakes"
-              placeholder={COMMON_MISTAKES_PLACEHOLDER}
-              value={displayed("common_mistakes")}
-              onDraftChange={(v) => handleDraftChange("common_mistakes", v)}
-              onBlur={() => commitField("common_mistakes")}
-              rightSlot={hintFor("common_mistakes")}
+          {courseId && (
+            <ClassRulesList
+              state={classRules}
+              skipped={skipped}
+              onSkippedChange={(ids) => {
+                setLastEdited("skipped");
+                onChange({ skipped_rule_ids: ids });
+              }}
+              saveHint={
+                lastEdited === "skipped" ? (
+                  <InlineSavedHint state={saveState} errorMessage={saveError} />
+                ) : null
+              }
+              settingsHref={linkToClassRubric ? settingsHref : null}
             />
-            <OptionalField
-              id="rubric-notes"
-              label="Extra rules for this homework"
-              help={courseId ? "If one disagrees with a class rule, this one wins." : undefined}
-              placeholder={NOTES_PLACEHOLDER}
-              value={displayed("notes")}
-              onDraftChange={(v) => handleDraftChange("notes", v)}
-              onBlur={() => commitField("notes")}
-              rightSlot={hintFor("notes")}
-            />
-          </OptionalDetails>
+          )}
+          <OptionalField
+            id="rubric-notes"
+            label="Extra rules for this homework"
+            help={courseId ? "If one disagrees with a class rule, this one wins." : undefined}
+            placeholder={NOTES_PLACEHOLDER}
+            value={displayed("notes")}
+            onDraftChange={(v) => handleDraftChange("notes", v)}
+            onBlur={() => commitField("notes")}
+            rightSlot={hintFor("notes")}
+          />
+          <OptionalField
+            id="rubric-common-mistakes"
+            label="Common mistakes to watch for"
+            placeholder={COMMON_MISTAKES_PLACEHOLDER}
+            value={displayed("common_mistakes")}
+            onDraftChange={(v) => handleDraftChange("common_mistakes", v)}
+            onBlur={() => commitField("common_mistakes")}
+            rightSlot={hintFor("common_mistakes")}
+          />
+          {courseId && (
+            <p className="text-xs text-text-muted">
+              Full and partial credit:{" "}
+              {creditIsCustom ? "using your class settings" : "using the standard guidance"}
+              {settingsHref && linkToClassRubric ? (
+                <>
+                  {" · "}
+                  <Link
+                    href={settingsHref}
+                    className="font-semibold text-primary hover:underline"
+                  >
+                    Change
+                  </Link>
+                </>
+              ) : (
+                " · change it in class settings"
+              )}
+            </p>
+          )}
         </div>
         <GradingPreview
-          fullCredit={displayed("full_credit")}
-          partialCredit={displayed("partial_credit")}
+          fullCredit={credit?.full_credit ?? CREDIT_DEFAULTS.full_credit}
+          partialCredit={credit?.partial_credit ?? CREDIT_DEFAULTS.partial_credit}
           commonMistakes={displayed("common_mistakes")}
           notes={displayed("notes")}
           classRules={
@@ -262,6 +228,15 @@ export function GradingSetupCard({
           }
         />
       </div>
+    </>
+  );
+
+  if (embedded) {
+    return <div className="mt-6 border-t border-border-light pt-5">{body}</div>;
+  }
+  return (
+    <section className="mt-6 rounded-[--radius-xl] border border-border-light bg-surface p-6 shadow-sm">
+      {body}
     </section>
   );
 }
@@ -279,8 +254,7 @@ export function GradingSetupCard({
  *  picker row previews what it'll copy without unfurling the whole
  *  rubric. */
 function rubricHint(r: TeacherRubric): string {
-  const text =
-    r.full_credit || r.partial_credit || r.common_mistakes || r.notes || "";
+  const text = r.notes || r.common_mistakes || "";
   const flat = text.replace(/\s+/g, " ").trim();
   return flat.length > 90 ? `${flat.slice(0, 90)}…` : flat;
 }
@@ -445,99 +419,8 @@ function CopiedConfirmation({ title }: { title: string | null }) {
 }
 
 // ────────────────────────────────────────────────────────────────────
-// Primary field — Full credit / Partial credit. Pre-filled with a
-// default the teacher can accept verbatim or edit. Larger textarea +
-// stronger label weight than OptionalField. Controlled — parent owns
-// the buffer.
-// ────────────────────────────────────────────────────────────────────
-
-function PrimaryField({
-  id,
-  label,
-  value,
-  usingDefault,
-  onDraftChange,
-  onBlur,
-  rightSlot,
-}: {
-  id: string;
-  label: string;
-  value: string;
-  usingDefault: boolean;
-  onDraftChange: (text: string) => void;
-  onBlur: () => void;
-  rightSlot?: React.ReactNode;
-}) {
-  return (
-    <div>
-      <div className="flex items-baseline justify-between gap-2">
-        <label
-          htmlFor={id}
-          className="flex items-baseline gap-1.5 text-[11px] font-bold uppercase tracking-wider text-text-primary"
-        >
-          <span>{label}</span>
-          {usingDefault && (
-            <span className="font-normal normal-case tracking-normal text-text-muted">
-              · using default
-            </span>
-          )}
-        </label>
-        {rightSlot}
-      </div>
-      <textarea
-        id={id}
-        value={value}
-        onChange={(e) => onDraftChange(e.target.value)}
-        onBlur={onBlur}
-        rows={3}
-        className="mt-1.5 w-full resize-y rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm leading-relaxed text-text-primary focus:border-primary focus:outline-none"
-      />
-    </div>
-  );
-}
-
-// ────────────────────────────────────────────────────────────────────
-// Collapsible wrapper for Common mistakes + Notes. Collapsed by default
-// to keep the rubric card scannable — most teachers won't need these,
-// and when they do, one click away is fine. Auto-opens when either
-// field already has saved content so the teacher's own text isn't
-// hidden behind a chevron after reload.
-// ────────────────────────────────────────────────────────────────────
-
-function OptionalDetails({
-  hasContent,
-  children,
-}: {
-  hasContent: boolean;
-  children: React.ReactNode;
-}) {
-  // Auto-open when either optional field already has saved content, so
-  // a teacher's own text isn't hidden behind a chevron on reload. The
-  // chevron reflects open state so the glyph stays honest.
-  const [open, setOpen] = useState(hasContent);
-  return (
-    <details
-      open={open}
-      onToggle={(e) => setOpen((e.target as HTMLDetailsElement).open)}
-      className="rounded-[--radius-md] border border-border-light bg-bg-subtle/40"
-    >
-      <summary className="flex cursor-pointer items-center gap-1.5 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)] hover:text-text-primary">
-        <span aria-hidden className="text-xs">{open ? "▾" : "▸"}</span>
-        Optional details
-        <span className="font-normal normal-case tracking-normal text-text-muted/80">
-          · Common mistakes, Extra rules
-        </span>
-      </summary>
-      <div className="space-y-4 border-t border-border-light p-3">
-        {children}
-      </div>
-    </details>
-  );
-}
-
-// ────────────────────────────────────────────────────────────────────
-// Optional field — Common mistakes / Notes. Blank by default with a
-// guiding placeholder. Smaller + muted label vs PrimaryField.
+// Text field — Extra rules / Common mistakes. Blank by default with a
+// guiding placeholder.
 // ────────────────────────────────────────────────────────────────────
 
 function OptionalField({
@@ -591,20 +474,21 @@ function OptionalField({
 // list is read-only apart from the skip.
 // ────────────────────────────────────────────────────────────────────
 
-/** The course's class rules: null while loading, "failed", or the list.
+/** The course's rubric: null while loading, "failed", or the rubric.
  *  Idle (null forever) when there's no course to ask about. */
-type ClassRulesState = ClassRubricRule[] | null | "failed";
+type ClassRubricState = ClassRubric | null | "failed";
+type ClassRulesState = ClassRubric["rules"] | null | "failed";
 
-function useClassRules(courseId: string | undefined): ClassRulesState {
+function useClassRubric(courseId: string | undefined): ClassRubricState {
   // Keyed by course so a different course never shows the last one's
-  // rules while its own load.
-  const [loaded, setLoaded] = useState<{ courseId: string; value: ClassRulesState } | null>(null);
+  // rubric while its own loads.
+  const [loaded, setLoaded] = useState<{ courseId: string; value: ClassRubricState } | null>(null);
   useEffect(() => {
     if (!courseId) return;
     let cancelled = false;
     teacher
       .courseRubric(courseId)
-      .then((res) => !cancelled && setLoaded({ courseId, value: res.rules }))
+      .then((res) => !cancelled && setLoaded({ courseId, value: res }))
       .catch(() => !cancelled && setLoaded({ courseId, value: "failed" }));
     return () => {
       cancelled = true;
@@ -614,24 +498,22 @@ function useClassRules(courseId: string | undefined): ClassRulesState {
 }
 
 function ClassRulesList({
-  courseId,
   state,
   skipped,
   onSkippedChange,
   saveHint,
-  showEditLink,
+  settingsHref,
 }: {
-  courseId: string;
   state: ClassRulesState;
   skipped: string[];
   onSkippedChange: (ids: string[]) => void;
   saveHint: React.ReactNode;
-  showEditLink: boolean;
+  /** Where "Edit class rules" goes; null hides it. */
+  settingsHref: string | null;
 }) {
   const failed = state === "failed";
   const rules = failed ? null : state;
 
-  const settingsHref = `/school/teacher/courses/${courseId}?tab=settings`;
   const skippedSet = new Set(skipped);
   const toggle = (id: string, skip: boolean) => {
     const next = new Set(skippedSet);
@@ -641,18 +523,18 @@ function ClassRulesList({
   };
 
   return (
-    <div className="mt-4 rounded-[--radius-md] border border-border-light bg-bg-subtle/40 p-3">
+    <div className="rounded-[--radius-md] border border-border-light bg-bg-subtle/40 p-3">
       <div className="flex items-baseline justify-between gap-3">
-        <h3 className="flex items-baseline gap-2 text-[11px] font-bold uppercase tracking-wider text-text-primary">
-          From your class rubric
+        <h4 className="flex items-baseline gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+          Class rules
           <span className="normal-case tracking-normal">{saveHint}</span>
-        </h3>
-        {showEditLink && (
+        </h4>
+        {settingsHref && (
           <Link
             href={settingsHref}
             className="inline-flex min-h-10 items-center text-xs font-semibold text-primary hover:underline"
           >
-            Edit class rubric
+            Edit class rules
           </Link>
         )}
       </div>
@@ -682,8 +564,11 @@ function ClassRulesList({
                 >
                   {r.text}
                 </span>
-                <span className="shrink-0 font-mono text-xs font-semibold text-text-secondary">
-                  {r.points === null ? "AI sizes" : `−${r.points}`}
+                <span
+                  className="shrink-0 font-mono text-xs font-semibold text-text-secondary"
+                  title={r.points === null ? "The AI decides how much to take off" : `${r.points} of the problem's points`}
+                >
+                  {r.points === null ? "AI sizes" : `−${r.points} pt${r.points === 1 ? "" : "s"}`}
                 </span>
                 <label
                   htmlFor={boxId}

@@ -1103,19 +1103,10 @@ export interface TeacherAssignment {
   created_at: string;
 }
 
-/** Structured grading rubric. All fields optional — teachers fill in
- *  what makes sense for the HW. Full credit + Partial credit are
- *  pre-filled on the HW authoring UI with opinionated defaults; Common
- *  mistakes and Notes are blank with placeholders. The AI grader reads
- *  these fields as labeled criteria and cites them by name in its
- *  per-problem reasoning.
- *
- *  Note: the DB row still has a historical `grading_mode` column for
- *  legacy rows. It is not used by the current UI or the AI grader, so
- *  it's omitted from this type. */
+/** A homework's own grading rubric. All fields optional. The AI grader
+ *  reads them as labeled criteria alongside the class's rules and its
+ *  full/partial credit guidance (`ClassRubric`). */
 export interface TeacherRubric {
-  full_credit?: string;
-  partial_credit?: string;
   common_mistakes?: string;
   notes?: string;
   /** Class rules (the course's rubric) this homework opts out of, by id. */
@@ -1123,6 +1114,28 @@ export interface TeacherRubric {
   /** Only on a grade's `rubric_snapshot`: the class rules the grade was
    *  made under. Never sent on a write. */
   rules?: GradedRule[];
+  /** Only on a grade's `rubric_snapshot`: the class's credit guidance
+   *  the grade was made under (absent = the defaults). */
+  full_credit?: string;
+  partial_credit?: string;
+}
+
+/** A class's grading rubric: its rules, plus the guidance the AI uses
+ *  for any mistake no rule covers (null = the default text). */
+export interface ClassRubric {
+  rules: ClassRubricRule[];
+  rev: number;
+  full_credit: string | null;
+  partial_credit: string | null;
+}
+
+/** What a homework's problems are worth. `by_problem` is keyed by
+ *  problem id; `total` is their sum. `custom` = the teacher set
+ *  problems by hand (else the total is split evenly). */
+export interface HomeworkPoints {
+  total: number;
+  by_problem: Record<string, number>;
+  custom: boolean;
 }
 
 /** One of a class's grading rules — every homework in the course
@@ -1178,6 +1191,10 @@ export interface GradeDeduction {
   /** The class rule this deduction applied, if any (id into the grade's
    *  `rubric_snapshot.rules`). */
   rule_id?: string | null;
+  /** Where the deduction came from: a class rule (fixed points) or the
+   *  AI's own judgment (sized by the AI, rounded to half a point).
+   *  Absent on grades made before points existed and on hand edits. */
+  source?: "class_rule" | "ai_judgment" | null;
 }
 
 /** One reusable grading setup the teacher already authored on another
@@ -1311,6 +1328,8 @@ export interface GradebookAssignment {
   /** Mean of this column's published scores. */
   avg_percent: number | null;
   counted_count: number;
+  /** What the homework is worth: its problems' points added up. */
+  total_points: number;
 }
 
 export interface GradebookStudent {
@@ -1463,7 +1482,7 @@ export const teacher = {
   },
   /** The class's grading rules — every homework in the course inherits them. */
   courseRubric(courseId: string) {
-    return apiFetch<{ rules: ClassRubricRule[]; rev: number }>(`/teacher/courses/${courseId}/rubric`);
+    return apiFetch<ClassRubric>(`/teacher/courses/${courseId}/rubric`);
   },
   /** After lowering an AI grade with a comment: the rule to offer adding
    *  to the class rubric, or null. Never changes a rubric. */
@@ -1493,9 +1512,19 @@ export const teacher = {
    *  is the revision the editor loaded; a 409 means the rules changed
    *  elsewhere since (reload and redo the edit). */
   updateCourseRubric(courseId: string, rules: ClassRubricRuleInput[], rev: number) {
-    return apiFetch<{ rules: ClassRubricRule[]; rev: number }>(`/teacher/courses/${courseId}/rubric`, {
+    return apiFetch<ClassRubric>(`/teacher/courses/${courseId}/rubric`, {
       method: "PUT",
       body: JSON.stringify({ rules, rev }),
+    });
+  },
+  /** Set the class's full/partial credit guidance (null = the default). */
+  updateCourseCredit(
+    courseId: string,
+    credit: { full_credit: string | null; partial_credit: string | null },
+  ) {
+    return apiFetch<ClassRubric>(`/teacher/courses/${courseId}/rubric/credit`, {
+      method: "PUT",
+      body: JSON.stringify(credit),
     });
   },
   sections(courseId: string) {
@@ -1631,6 +1660,7 @@ export const teacher = {
       content: unknown;
       answer_key: unknown;
       rubric: TeacherRubric | null;
+      points: HomeworkPoints;
     }>(`/teacher/assignments/${assignmentId}`);
   },
   createAssignment(courseId: string, data: {
@@ -1639,6 +1669,8 @@ export const teacher = {
     /** Required: at least one unit. Multi-unit is for midterms / review HWs. */
     unit_ids: string[];
     document_ids?: string[]; bank_item_ids?: string[];
+    /** What the homework is worth, split evenly (default 100). */
+    total_points?: number;
   }) {
     return apiFetch<{ id: string; title: string; status: string }>(`/teacher/courses/${courseId}/assignments`, {
       method: "POST",
@@ -2235,6 +2267,8 @@ export interface TeacherSubmissionDetailProblem {
    *  work — most likely added by the reader from the question. A prompt
    *  to check the photo, not a verdict. */
   units_not_in_work: string[];
+  /** What this problem is worth on this homework. */
+  points: number;
 }
 
 export interface TeacherSubmissionDetail {

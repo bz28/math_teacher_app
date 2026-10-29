@@ -48,6 +48,10 @@ describe("rubricChanged", () => {
     assert.equal(rubricChanged({ notes: "N", rules: graded.rules }, { notes: "N" }), false);
   });
 
+  it("never flags the class's credit guidance, which every snapshot now carries", () => {
+    assert.equal(rubricChanged({ notes: "N" }, { ...graded, full_credit: "Right answer.", partial_credit: "Half." }), false);
+  });
+
   it("still flags a text change on such a grade", () => {
     assert.equal(rubricChanged({ notes: "M", rules: graded.rules }, { notes: "N" }), true);
   });

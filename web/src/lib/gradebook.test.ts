@@ -12,7 +12,7 @@ import {
 } from "./gradebook.ts";
 
 const A: GradebookAssignment[] = ["h1", "h2", "h3", "h4"].map((id) => ({
-  id, title: id, due_at: null, avg_percent: null, counted_count: 0,
+  id, title: id, due_at: null, avg_percent: null, counted_count: 0, total_points: 100,
 }));
 
 function published(score: number, ai: number | null = score): GradebookCell {
