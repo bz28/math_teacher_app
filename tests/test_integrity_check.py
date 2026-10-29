@@ -944,6 +944,62 @@ async def test_abandoned_after_answering_is_left_partway(
     assert body["incomplete_reason"] == "left_partway"
 
 
+async def test_every_student_turn_restarts_the_abandoned_clock(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """A student still chatting is never closed as abandoned. The clock
+    runs from their latest reply, not their first — turns after the
+    first change nothing else on the check row."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+    for message in ("I factored it into two brackets.", "Then I set each one to zero."):
+        set_agent_script([[make_text("And why does that work?")]])
+        r = await client.post(
+            f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+            headers=_auth(world["student_token"]),
+            json={"message": message},
+        )
+        assert r.status_code == 200, r.text
+        # Stale before each reply; the reply itself must make it fresh.
+        await _backdate_check(submission_id)
+    set_agent_script([[make_text("And why does that work?")]])
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+        headers=_auth(world["student_token"]),
+        json={"message": "Because a product is zero only if a factor is."},
+    )
+    assert r.status_code == 200, r.text
+
+    r = await client.get(
+        f"/v1/teacher/integrity/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.json()["overall_status"] == "in_progress"
+
+
+def test_a_verdict_is_never_shown_as_unfinished() -> None:
+    """If an abandoned close races a reply that then finishes with a
+    verdict, the teacher sees the verdict — never a neutral
+    "didn't finish" over a real flag."""
+    from datetime import UTC, datetime
+
+    from api.core.integrity_pipeline import unfinished_check_state
+    from api.models.assignment import Submission
+
+    check = IntegrityCheckSubmission(
+        status="complete", disposition="flag_for_review",
+        incomplete_reason="left_partway",
+    )
+    assert unfinished_check_state(
+        Submission(), check, integrity_enabled=True, now=datetime.now(UTC),
+    ) is None
+    check.disposition = None
+    assert unfinished_check_state(
+        Submission(), check, integrity_enabled=True, now=datetime.now(UTC),
+    ) == "left_partway"
+
+
 async def test_student_read_finalizes_abandoned_check(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:

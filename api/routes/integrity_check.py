@@ -643,8 +643,9 @@ class TeacherIntegrityDetail(BaseModel):
     submission_id: str
     overall_status: str
     # One of pass / needs_practice / tutor_pivot / flag_for_review.
-    # Null when status is skipped_unreadable or when the agent couldn't
-    # conclude (turn cap or no sampled problems).
+    # Null when status is skipped_unreadable or when no verdict ran: the
+    # turn cap, no sampled problems, or the student didn't finish (see
+    # incomplete_reason).
     disposition: str | None
     overall_summary: str | None
     # 4-8 word verdict title the agent emitted in finish_check. Null

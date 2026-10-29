@@ -1321,6 +1321,13 @@ async def process_student_turn(
         telemetry=telemetry,
     ))
     check.status = STATUS_IN_PROGRESS
+    # Stamp the check itself on every turn. After the first turn nothing
+    # else on the row changes, so the column's onupdate would never fire
+    # and the abandoned clock would run from the first reply, closing a
+    # student mid-conversation. The flush also row-locks the check for
+    # this turn's transaction, so the abandoned sweep (SKIP LOCKED)
+    # passes over a check whose reply is in flight.
+    check.updated_at = datetime.now(UTC)
     await db.flush()
 
     student_turn_count = await count_student_turns(check.id, db)
@@ -1896,6 +1903,9 @@ async def _apply_finish_check(
 
     check.status = STATUS_COMPLETE
     check.disposition = disposition
+    # A real verdict means the check was finished, whatever closed it
+    # first (an on-read abandoned close racing this turn).
+    check.incomplete_reason = None
     check.overall_summary = summary
     # Defensive truncate: schema enforces maxLength=80 but if a future
     # agent variant emits more, the column would reject. Cheap to clamp.
@@ -2071,6 +2081,7 @@ def unfinished_check_state(
     if check is not None:
         if (
             check.status == STATUS_COMPLETE
+            and check.disposition is None
             and check.incomplete_reason in UNFINISHED_REASONS
         ):
             return check.incomplete_reason
@@ -2113,10 +2124,9 @@ async def finalize_if_abandoned(
     as abandoned and return True. Otherwise no-op → False. Mutates `check`
     in place; the caller is responsible for committing.
 
-    Last activity is read off `check.updated_at` (bumped on every student
-    turn, since process_student_turn mutates the row each turn) with a
-    `created_at` fallback for the awaiting_student case where no turn ever
-    landed.
+    Last activity is read off `check.updated_at` (process_student_turn
+    stamps it on every student turn) with a `created_at` fallback for the
+    awaiting_student case where no turn ever landed.
     """
     if not _is_abandoned(check, datetime.now(UTC)):
         return False
