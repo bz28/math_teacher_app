@@ -21,7 +21,6 @@ class Course(Base):
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     subject: Mapped[str] = mapped_column(String(30), nullable=False, default="math")
     grade_level: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
     # The class's grading rules, inherited by every homework in it —
     # `{"rules": [{id, text, points, source, source_label, added_at}]}`.

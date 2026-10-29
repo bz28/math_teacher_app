@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import AfterValidator, BaseModel, Field
+from pydantic import AfterValidator, BaseModel
 from sqlalchemy import Integer, and_, case, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -75,14 +75,10 @@ class CreateCourseRequest(BaseModel):
     name: CourseName
     subject: CourseSubject = "math"
     grade_level: CourseGrade | None = None
-    description: str | None = Field(default=None, max_length=2000)
 
 
 class UpdateCourseRequest(BaseModel):
     name: CourseName | None = None
-    subject: CourseSubject | None = None
-    grade_level: CourseGrade | None = None
-    description: str | None = Field(default=None, max_length=2000)
     status: CourseStatus | None = None
 
 
@@ -307,7 +303,7 @@ async def create_course(
     teacher = (await db.execute(select(User).where(User.id == current_user.user_id))).scalar_one()
     course = Course(
         school_id=teacher.school_id, name=body.name,
-        subject=body.subject, grade_level=body.grade_level, description=body.description,
+        subject=body.subject, grade_level=body.grade_level,
     )
     db.add(course)
     await db.flush()
@@ -553,7 +549,7 @@ async def get_course(
     attention = await _course_attention(db, current_user.user_id, course_id)
     return {
         "id": str(course.id), "name": course.name, "subject": course.subject,
-        "grade_level": course.grade_level, "description": course.description,
+        "grade_level": course.grade_level,
         "status": course.status, "created_at": course.created_at.isoformat(),
         "to_review": attention["to_review"],
         "flagged": attention["flagged"],
@@ -647,12 +643,6 @@ async def update_course(
         return {"status": "ok"}
     if body.name is not None:
         course.name = body.name
-    if body.subject is not None:
-        course.subject = body.subject
-    if body.grade_level is not None:
-        course.grade_level = body.grade_level
-    if body.description is not None:
-        course.description = body.description
     if body.status is not None:
         course.status = body.status
     await db.commit()

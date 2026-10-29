@@ -976,7 +976,6 @@ export interface TeacherCourse {
   name: string;
   subject: string;
   grade_level: number | null;
-  description: string | null;
   status: string;
   section_count: number;
   doc_count: number;
@@ -1505,13 +1504,13 @@ export const teacher = {
   courseSetupStatus(id: string) {
     return apiFetch<CourseSetupStatus>(`/teacher/courses/${id}/setup-status`);
   },
-  createCourse(data: { name: string; subject?: string; grade_level?: number; description?: string }) {
+  createCourse(data: { name: string; subject?: string; grade_level?: number }) {
     return apiFetch<{ id: string }>("/teacher/courses", {
       method: "POST",
       body: JSON.stringify(data),
     });
   },
-  updateCourse(id: string, data: Record<string, unknown>) {
+  updateCourse(id: string, data: { name: string }) {
     return apiFetch<{ status: string }>(`/teacher/courses/${id}`, {
       method: "PATCH",
       body: JSON.stringify(data),
