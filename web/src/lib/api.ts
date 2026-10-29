@@ -2989,6 +2989,9 @@ export const schoolStudent = {
     submissionId: string,
     body: {
       message: string;
+      /** True for an "I'm stuck" tap: the server ignores `message` and
+       *  writes its own canonical text. Allowed once per problem. */
+      stuck?: boolean;
       seconds_on_turn?: number;
       /** Client-captured behavioral signals — teacher-facing evidence
        *  only, never surfaced back to the student. Shape mirrors the
@@ -3203,6 +3206,10 @@ export interface IntegrityStateResponse {
   extraction: IntegrityExtraction | null;
   problems: IntegrityProblemSummary[];
   transcript: IntegrityTurn[];
+  /** True once the student has used their one "I'm stuck" tap on the
+   *  problem. The button disables and typed replies must be "a few
+   *  words" (server-enforced either way). */
+  stuck_tap_used: boolean;
 }
 
 // ── Teacher integrity detail (mirror api/routes/integrity_check.py) ──

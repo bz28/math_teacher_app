@@ -497,8 +497,6 @@ export const flagExtraction = (submissionId: string) =>
     {},
   );
 
-export const MIN_INTEGRITY_MESSAGE_CHARS = 5;
-
 export type IntegrityProblem = Schemas["ProblemSummary"];
 export type IntegrityTurn = Schemas["TurnOut"];
 // overall_status: no_check | extracting | awaiting_student | in_progress |
@@ -509,16 +507,26 @@ export type IntegrityState = Schemas["IntegrityStateResponse"];
 export const getIntegrityState = (submissionId: string) =>
   apiGet<IntegrityState>(`/school/student/integrity/submissions/${submissionId}`);
 
-/** Send a student turn and get the agent's reply (runs the agent loop, so slow). */
+/**
+ * Send a student turn and get the agent's reply (runs the agent loop, so slow).
+ * `stuck` = an "I'm stuck" tap: the server ignores `message`, writes its own
+ * canonical text, and allows it once per problem.
+ */
 export const postIntegrityTurn = (
   submissionId: string,
   message: string,
   secondsOnTurn: number,
   telemetry?: Schemas["TurnTelemetry"],
+  stuck = false,
 ) =>
   apiPost<IntegrityState>(
     `/school/student/integrity/submissions/${submissionId}/turn`,
-    { message, seconds_on_turn: secondsOnTurn, telemetry: telemetry ?? { device_type: "mobile" } },
+    {
+      message,
+      stuck,
+      seconds_on_turn: secondsOnTurn,
+      telemetry: telemetry ?? { device_type: "mobile" },
+    },
     LLM_TIMEOUT_MS,
   );
 

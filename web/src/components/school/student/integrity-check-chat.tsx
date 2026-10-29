@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
+  ApiError,
   schoolStudent,
   type IntegrityExtraction,
   type IntegrityProblemSummary,
@@ -13,6 +14,7 @@ import { ExtractionView } from "@/components/school/shared/extraction-view";
 import { MathText } from "@/components/shared/math-text";
 import { cn } from "@/lib/utils";
 import { useDeviceType } from "./use-device-type";
+import { MIN_MESSAGE_CHARS, meetsTypedMinimum } from "./integrity-message-rules";
 import { useTurnTelemetry } from "./use-turn-telemetry";
 
 // Soft time budget we advertise to the student on the chat header.
@@ -64,14 +66,15 @@ interface Props {
   onLeave: () => void;
 }
 
-const MIN_MESSAGE_CHARS = 5;
-
-// The honest "I can't explain this" exit. Tapping the chip sends this
-// as the student's message, bypassing the MIN_MESSAGE_CHARS gate so a
-// truthful "I'm stuck" is always one tap away — never a blocked send
-// that effectively coaches a frozen kid into fabricating an answer.
-// The agent already handles arbitrary input and replies supportively.
+// The honest "I can't explain this" exit. Tapping the chip sends a
+// `stuck` turn that skips the typed minimum, so a truthful "I'm stuck"
+// is one tap away instead of a blocked send that coaches a frozen kid
+// into fabricating an answer. It's allowed ONCE per problem (server-
+// enforced); after that the chip disables and typed replies must be a
+// few words. The server writes the canonical text into the transcript —
+// this copy is only the optimistic echo and must match it.
 const STUCK_MESSAGE = "I'm stuck — I'm not sure how to explain this.";
+const STUCK_USED_HINT = "Try putting it in your own words — even a guess helps.";
 
 /**
  * Kid-facing conversational integrity chat.
@@ -252,19 +255,18 @@ export function IntegrityCheckChat({
     return "";
   }, [visibleTranscript]);
 
-  // `override` is the honest "I'm stuck" chip path: it carries its own
-  // message and skips the MIN_MESSAGE_CHARS gate (the gate exists only
-  // to stop empty / one-word free-text sends — it must never block the
-  // truthful "I can't explain this"). Free-text sends pass no override
-  // and stay gated.
-  async function handleSend(override?: string) {
-    const trimmed = (override ?? message).trim();
-    const isOverride = override != null;
+  const stuckUsed = state?.stuck_tap_used ?? false;
+
+  // `stuck` is the honest "I'm stuck" chip path: it skips the typed
+  // minimum (which exists only to stop empty / one-word free-text sends)
+  // and is spendable once per problem. Free-text sends stay gated — and
+  // once the tap is spent, gated to "a few words".
+  async function handleSend(stuck = false) {
+    const trimmed = message.trim();
     if (sending || isComplete) return;
-    if (!isOverride && trimmed.length < MIN_MESSAGE_CHARS) return;
-    if (trimmed.length === 0) return;
-    setPendingStudentMessage(trimmed);
-    if (!isOverride) setMessage("");
+    if (stuck ? stuckUsed : !meetsTypedMinimum(trimmed, stuckUsed)) return;
+    setPendingStudentMessage(stuck ? STUCK_MESSAGE : trimmed);
+    if (!stuck) setMessage("");
     setSending(true);
     setError(null);
     try {
@@ -274,7 +276,8 @@ export function IntegrityCheckChat({
       );
       const telemetryPayload = telemetry.snapshot();
       const next = await schoolStudent.postIntegrityTurn(submissionId, {
-        message: trimmed,
+        message: stuck ? "" : trimmed,
+        stuck,
         seconds_on_turn: seconds,
         telemetry: telemetryPayload,
       });
@@ -288,10 +291,17 @@ export function IntegrityCheckChat({
       // here stops the inactivity nudge from firing immediately on
       // a turn that finished right at the threshold.
       lastActivityRef.current = Date.now();
-    } catch {
-      setError("Couldn't send that — try again.");
+    } catch (err) {
+      // A 400 carries the server's own student-facing reason (e.g. the
+      // stuck tap was already spent in another tab) — show it verbatim.
+      setError(
+        err instanceof ApiError && err.status === 400
+          ? err.message
+          : "Couldn't send that — try again.",
+      );
       setPendingStudentMessage(null);
-      setMessage(trimmed);
+      // Hand a typed draft back; a stuck tap has no draft to restore.
+      if (!stuck) setMessage(trimmed);
     } finally {
       setSending(false);
     }
@@ -316,7 +326,7 @@ export function IntegrityCheckChat({
   }
 
   const canSend =
-    !sending && !isComplete && message.trim().length >= MIN_MESSAGE_CHARS;
+    !sending && !isComplete && meetsTypedMinimum(message, stuckUsed);
 
   const hasReference = state.problems.length > 0;
 
@@ -584,17 +594,30 @@ export function IntegrityCheckChat({
               {/* The honest exit. A frozen student who genuinely can't
                   put their reasoning into words taps this instead of
                   being told their truthful "idk" is too short. Sends a
-                  fixed message that bypasses the char gate so the agent
-                  can respond with support, not a rejection. Low emphasis
-                  on purpose — always available, never the loud default. */}
-              <button
-                type="button"
-                onClick={() => void handleSend(STUCK_MESSAGE)}
-                disabled={sending}
-                className="mb-2 inline-flex items-center rounded-full border border-border-light bg-bg-subtle px-3 py-1 text-xs font-medium text-text-secondary transition-colors hover:border-primary hover:text-primary disabled:opacity-50"
-              >
-                I&rsquo;m stuck — not sure how to explain this
-              </button>
+                  stuck turn that bypasses the char gate so the agent can
+                  respond with support, not a rejection. Low emphasis on
+                  purpose — never the loud default. One use per problem:
+                  once spent it stays visible but disabled, with a nudge
+                  toward a guess in their own words. */}
+              <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+                <button
+                  type="button"
+                  onClick={() => void handleSend(true)}
+                  disabled={sending || stuckUsed}
+                  aria-describedby={stuckUsed ? "integrity-stuck-used-hint" : undefined}
+                  className="inline-flex items-center rounded-full border border-border-light bg-bg-subtle px-3 py-1 text-xs font-medium text-text-secondary transition-colors enabled:hover:border-primary enabled:hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  I&rsquo;m stuck — not sure how to explain this
+                </button>
+                {stuckUsed && (
+                  <span
+                    id="integrity-stuck-used-hint"
+                    className="text-xs text-text-muted"
+                  >
+                    {STUCK_USED_HINT}
+                  </span>
+                )}
+              </div>
               <div className="flex items-end gap-2">
                 <textarea
                   value={message}
@@ -662,8 +685,10 @@ export function IntegrityCheckChat({
               <div className="mt-1 flex items-start justify-between gap-2">
                 <p className="text-xs text-text-muted">
                   {message.length > 0 &&
-                    message.trim().length < MIN_MESSAGE_CHARS &&
-                    `Try a sentence or two (${MIN_MESSAGE_CHARS}+ characters).`}
+                    !meetsTypedMinimum(message, stuckUsed) &&
+                    (stuckUsed
+                      ? "Add a few words — even a guess helps."
+                      : `Try a sentence or two (${MIN_MESSAGE_CHARS}+ characters).`)}
                 </p>
                 {/* Plain Enter inserts a newline; only ⌘/Ctrl+Enter
                     sends (phone-typer safety). Surface that so desktop

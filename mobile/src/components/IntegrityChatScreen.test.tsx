@@ -6,14 +6,17 @@ import * as api from "../services/api";
 jest.mock("../services/api", () => ({
   getIntegrityState: jest.fn(),
   postIntegrityTurn: jest.fn(),
-  MIN_INTEGRITY_MESSAGE_CHARS: 5,
 }));
 const mockedApi = api as jest.Mocked<typeof api>;
+
+const STUCK_LABEL = "I'm stuck — not sure how to explain this";
+const STUCK_MESSAGE = "I'm stuck — I'm not sure how to explain this.";
 
 const STATE = {
   submission_id: "sub-1",
   overall_status: "awaiting_student",
   disposition: null,
+  stuck_tap_used: false,
   problems: [{ problem_id: "p1", hw_position: 3, status: "pending", question: "What is 2+2?" }],
   transcript: [
     { ordinal: 0, role: "agent", content: "How did you get your answer?", created_at: "x", is_variant_probe: false },
@@ -56,6 +59,7 @@ describe("IntegrityChatScreen", () => {
       "I added two and two",
       expect.any(Number),
       expect.objectContaining({ device_type: "mobile" }),
+      false,
     );
     expect(screen.getByText("Nice — why does that work?")).toBeTruthy();
   });
@@ -120,14 +124,15 @@ describe("IntegrityChatScreen", () => {
     expect(screen.getByText(/Add a little more — at least 5 characters\./)).toBeTruthy();
   });
 
-  it("sends the truthful 'I'm stuck' message, bypassing the min-char gate", async () => {
+  it("sends a stuck turn, bypassing the min-char gate, then disables the chip", async () => {
     mockedApi.getIntegrityState.mockResolvedValue(STATE as never);
     mockedApi.postIntegrityTurn.mockResolvedValue({
       ...STATE,
       overall_status: "in_progress",
+      stuck_tap_used: true,
       transcript: [
         ...STATE.transcript,
-        { ordinal: 1, role: "student", content: "I'm stuck — not sure how to explain this.", created_at: "x", is_variant_probe: false },
+        { ordinal: 1, role: "student", content: STUCK_MESSAGE, created_at: "x", is_variant_probe: false },
         { ordinal: 2, role: "agent", content: "That's okay — let's start small.", created_at: "x", is_variant_probe: false },
       ],
     } as never);
@@ -136,16 +141,51 @@ describe("IntegrityChatScreen", () => {
     await waitForText("How did you get your answer?");
     // Tap the chip with the composer EMPTY — the truthful "I can't explain"
     // must send without hitting the 5-char minimum.
-    fireEvent.press(screen.getByLabelText("I'm stuck — not sure how to explain this"));
+    fireEvent.press(screen.getByLabelText(STUCK_LABEL));
     await flush();
 
     expect(mockedApi.postIntegrityTurn).toHaveBeenCalledWith(
       "sub-1",
-      "I'm stuck — not sure how to explain this.",
+      "",
       expect.any(Number),
       expect.objectContaining({ device_type: "mobile" }),
+      true,
     );
     expect(await waitForText("That's okay — let's start small.")).toBeTruthy();
+    // Spent: the chip disables with a nudge, and a second tap sends nothing.
+    expect(screen.getByLabelText(STUCK_LABEL)).toBeDisabled();
+    expect(screen.getByText("Try putting it in your own words — even a guess helps.")).toBeTruthy();
+    fireEvent.press(screen.getByLabelText(STUCK_LABEL));
+    await flush();
+    expect(mockedApi.postIntegrityTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it("after the stuck tap, holds typed replies to a few words", async () => {
+    mockedApi.getIntegrityState.mockResolvedValue({ ...STATE, stuck_tap_used: true } as never);
+    mockedApi.postIntegrityTurn.mockResolvedValue({ ...STATE, stuck_tap_used: true } as never);
+    render(<IntegrityChatScreen submissionId="sub-1" onExit={jest.fn()} />);
+
+    await waitForText("How did you get your answer?");
+    const composer = screen.getByPlaceholderText("Explain how you solved it…");
+    // Over the plain 5-char floor, under "a few words".
+    fireEvent.changeText(composer, "no idea");
+    await flush();
+    expect(screen.getByText("Add a few words — even a guess helps.")).toBeTruthy();
+    expect(screen.getByLabelText("Send")).toBeDisabled();
+
+    // An honest short answer clears the bar.
+    fireEvent.changeText(composer, "x = 4");
+    await flush();
+    expect(screen.queryByText("Add a few words — even a guess helps.")).toBeNull();
+    fireEvent.press(screen.getByLabelText("Send"));
+    await flush();
+    expect(mockedApi.postIntegrityTurn).toHaveBeenCalledWith(
+      "sub-1",
+      "x = 4",
+      expect.any(Number),
+      expect.objectContaining({ device_type: "mobile" }),
+      false,
+    );
   });
 
   it("times out the 'Preparing…' wait and offers a retry instead of spinning forever", async () => {
