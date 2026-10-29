@@ -2,11 +2,15 @@
 
 import base64
 import io
+import logging
+import threading
 from typing import Any
 
 from PIL import Image, ImageOps
 
 from api.core.constants import MAX_IMAGE_BYTES, MAX_PDF_BYTES
+
+logger = logging.getLogger(__name__)
 
 # Anthropic vision downscales anything past ~1568px on the long edge
 # anyway, so we cap there before sending: same legibility, roughly half
@@ -325,19 +329,29 @@ def crop_region_for_vision(
 _PDF_RENDER_LONG_EDGE = 2400
 # A homework upload is a few pages; past this, a "PDF" is not homework.
 _PDF_MAX_PAGES = 30
+_PDF_LOCK = threading.Lock()
 
 
 def pdf_pages_as_images(data_base64: str) -> list[str]:
     """Each page of a PDF as a base64 JPEG, in order, so a drawing on a
-    PDF upload can be cropped like one on a photo. The reader sees a PDF
-    natively, page by page, so page N here is the reader's page N.
-    Empty when the PDF can't be read."""
+    PDF upload can be cropped like one on a photo. The reader sees the
+    whole PDF under one page number, so these are that page's images.
+    Empty when the PDF can't be read. pdfium isn't thread-safe, so
+    renders take `_PDF_LOCK` (callers run this off the event loop)."""
     import pypdfium2 as pdfium  # imported here: only PDF uploads need it
 
+    with _PDF_LOCK:
+        return _render_pdf(pdfium, data_base64)
+
+
+def _render_pdf(pdfium: Any, data_base64: str) -> list[str]:
     try:
         pdf = pdfium.PdfDocument(base64.b64decode(data_base64))
     except Exception:  # noqa: BLE001 — an unreadable PDF has no pages to crop
+        logger.warning("pdf render: unreadable PDF, no pages")
         return []
+    if len(pdf) > _PDF_MAX_PAGES:
+        logger.warning("pdf render: %d pages, rendering the first %d", len(pdf), _PDF_MAX_PAGES)
     out: list[str] = []
     try:
         for i in range(min(len(pdf), _PDF_MAX_PAGES)):
@@ -349,7 +363,7 @@ def pdf_pages_as_images(data_base64: str) -> list[str]:
             img.save(buf, format="JPEG", quality=90)
             out.append(base64.b64encode(buf.getvalue()).decode("ascii"))
     except Exception:  # noqa: BLE001 — keep the pages that rendered
-        pass
+        logger.warning("pdf render: stopped after %d of %d pages", len(out), len(pdf), exc_info=True)
     finally:
         pdf.close()
     return out

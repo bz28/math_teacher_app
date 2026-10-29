@@ -383,7 +383,15 @@ def _format_visual_work(v: dict[str, Any]) -> str:
 
 def _format_drawing_answer(v: dict[str, Any]) -> str:
     """What the student wrote on a drawing that is checked apart from the
-    grader (`graph_part`): its labeled points and marked answer only."""
+    grader (`graph_part`): its labeled points and marked answer only. A
+    drawing whose reads disagree, or that a zoomed look couldn't find,
+    credits nothing read off it, as `_format_visual_work` says."""
+    if v.get("unconfirmed"):
+        return (
+            "drawing (checked separately) — UNCONFIRMED: what is written on it couldn't be "
+            "read reliably. Credit no point or answer read off it, and have the teacher "
+            "check the photo (see the UNCONFIRMED rule)"
+        )
     points = ", ".join(v.get("labeled_points") or []) or "none"
     ans = v.get("answer_on_drawing") or "none"
     return f"drawing (checked separately) — labeled points: {points} — answer marked on drawing: {ans}"
@@ -673,8 +681,11 @@ def _build_user_message(
             lines.append(f"  {_format_step(s)}")
         for fa in unattributed_finals:
             lines.append(f"  Final answer: {_format_final_answer(fa)}")
+        # When every drawing on the homework is checked apart from the
+        # grader, an untied one is shown as the graph parts are.
+        apart = all(p.get("graph_part") for p in problems if p.get("requires_drawing"))
         for v in unattributed_visuals:
-            lines.append(f"  Drawing: {_format_visual_work(v)}")
+            lines.append(f"  Drawing: {_format_drawing_answer(v) if apart else _format_visual_work(v)}")
         lines.append("</student_work>")
 
     return "\n".join(lines)
@@ -818,9 +829,10 @@ def _cap_confidence_for_unconfirmed_drawings(
     unconfirmed drawing, or a submission extracted before drawings were
     inventoried. Deterministic, so the teacher is always pointed at the
     photo whatever the model returned. Unflagged problems are untouched —
-    their drawings aren't used — and so are problems whose drawing is
-    checked apart from the grader (`graph_part`)."""
-    flagged = {p.get("position") for p in problems if p.get("requires_drawing") and not p.get("graph_part")}
+    their drawings aren't used. A problem whose drawing is checked apart
+    (`graph_part`) is capped too: an answer marked on an unconfirmed
+    drawing is still the grader's to credit or not."""
+    flagged = {p.get("position") for p in problems if p.get("requires_drawing")}
     if "visual_work" not in extraction:
         positions = flagged
     else:

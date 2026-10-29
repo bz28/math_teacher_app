@@ -102,6 +102,9 @@ def graph_part(
         problem_points,
         rules,
     )
+    # An item fitted to 0 points (more items than the graph part has
+    # points) can't earn or lose anything: it isn't checked.
+    items = [i for i in items if i.points > 0]
     if not items or sum(i.points for i in items) >= problem_points:
         return None
     return GraphPart(items=items, points=problem_points)
@@ -192,7 +195,8 @@ async def check_problem_drawing(
 ) -> ProblemGraphCheck | None:
     """Check the drawing for problem `position` against `part`.
 
-    None when the problem is blank (no work, no answer, no drawing): it is
+    None when the problem is blank (no work, no answer, no drawing, and
+    no drawing the reader left untied to a problem): it is
     graded as it always was. A drawing the reader located (a page and a
     box on a one-image page) is cropped there. Otherwise the check looks
     at whole pages, the ones the reader tied to this problem first, until
@@ -212,7 +216,13 @@ async def check_problem_drawing(
     )
     steps = [s for s in extraction.get("steps") or [] if s.get("problem_position") == position]
     finals = [f for f in extraction.get("final_answers") or [] if f.get("problem_position") == position]
-    if not drawn and not steps and not finals:
+    # A drawing the reader couldn't tie to a problem may be this one's, so
+    # the problem isn't blank while one exists: the pages are searched.
+    unattributed = any(
+        isinstance(v, dict) and v.get("present", True) is not False and not isinstance(v.get("problem_position"), int)
+        for v in extraction.get("visual_work") or []
+    )
+    if not drawn and not steps and not finals and not unattributed:
         return None
 
     async def look(data: str, media_type: str, bbox: dict[str, Any] | None) -> DrawingCheck:
@@ -272,8 +282,9 @@ async def check_graphs(
     with_part = [p for p in problems if p.get("graph_part")]
     if not with_part:
         return {}
-    pages = page_images(files)
-    sideways = uploads_look_sideways(pages)
+    # Rendering PDFs and the sideways check are CPU work: off the loop.
+    pages = await asyncio.to_thread(page_images, files)
+    sideways = await asyncio.to_thread(uploads_look_sideways, pages)
     gate = asyncio.Semaphore(_CHECK_CONCURRENCY)
 
     async def one(p: dict[str, Any]) -> ProblemGraphCheck | None:

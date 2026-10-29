@@ -145,6 +145,14 @@ def test_no_graph_part_on_a_problem_with_no_room_for_one() -> None:
     assert graph_part(_item(), 1, []) is None
 
 
+def test_items_fitted_to_no_points_are_left_out_of_the_graph_part() -> None:
+    item = _item()
+    three = [ChecklistItem("a", 1), ChecklistItem("b", 1), ChecklistItem("c", 1)]
+    item.graph_checklist = to_stored(three, 10, source=source_of(item), teacher_edited=False)
+    part = graph_part(item, 2, [])
+    assert part is not None and all(i.points > 0 for i in part.items) and part.work_points >= 1
+
+
 def test_the_key_changes_with_the_checklist_or_the_points() -> None:
     assert PART.key == GraphPart(list(ITEMS), 5).key
     assert PART.key != GraphPart(ITEMS, 6).key
@@ -186,6 +194,15 @@ async def test_a_blank_problem_is_not_checked(checks: Checks) -> None:
     blank = {"steps": [], "final_answers": [], "visual_work": [{"problem_position": 1, "present": False}]}
     assert await check_problem_drawing(blank, [[(_jpeg(), "image/jpeg")]], 1, PART) is None
     assert checks.calls == []
+
+
+async def test_a_drawing_the_reader_left_untied_is_searched_for(checks: Checks) -> None:
+    checks.queue(_found("page", "yes", "yes"))
+    drawing = {"problem_position": None, "kind": "graph", "present": True}
+    untied = {"steps": [], "final_answers": [], "visual_work": [drawing]}
+    r = await check_problem_drawing(untied, [[(_jpeg(), "image/jpeg")]], 1, PART)
+    assert r is not None and [i.verdict for i in r.items] == ["yes", "yes"]
+    assert checks.calls and checks.calls[0]["bbox"] is None
 
 
 async def test_a_located_drawing_is_cropped_on_its_page(checks: Checks) -> None:
@@ -501,3 +518,29 @@ def test_a_graph_part_shows_the_grader_only_what_is_written_on_the_drawing() -> 
     assert "one line rising" not in alone and "Only one line" not in alone
     whole = _build_user_message(extraction, [PROBLEM])
     assert "one line rising" in whole and "Only one line" in whole
+
+
+def test_an_unconfirmed_drawing_credits_nothing_written_on_it() -> None:
+    drawing = {
+        "problem_position": 1, "kind": "graph", "present": True, "unconfirmed": True,
+        "unconfirmed_reason": "labeled_points_disagree", "labeled_points": ["(2, 3)"],
+        "zoomed_labeled_points": ["(3, 2)"], "answer_on_drawing": "(2, 3)",
+    }
+    msg = _build_user_message({"steps": [], "final_answers": [], "visual_work": [drawing]},
+                              [{**PROBLEM, "graph_part": PART}])
+    assert "UNCONFIRMED" in msg and "(2, 3)" not in msg
+
+
+def test_without_a_graph_part_the_students_message_is_unchanged() -> None:
+    drawing = {"problem_position": 1, "kind": "graph", "present": True, "plotted_elements": ["a line"]}
+    untied = {"problem_position": None, "kind": "graph", "present": True, "plotted_elements": ["b line"]}
+    ext = {"steps": [], "final_answers": [], "visual_work": [drawing, untied]}
+    assert _build_user_message(ext, [{**PROBLEM, "graph_part": None}]) == _build_user_message(ext, [PROBLEM])
+
+
+def test_an_untied_drawing_is_shown_as_a_graph_part_when_every_drawing_is_checked_apart() -> None:
+    untied = {"problem_position": None, "kind": "graph", "present": True, "plotted_elements": ["b line"],
+              "labeled_points": ["(1, 1)"]}
+    ext = {"steps": [], "final_answers": [], "visual_work": [untied]}
+    msg = _build_user_message(ext, [{**PROBLEM, "graph_part": PART}])
+    assert "(1, 1)" in msg and "b line" not in msg
