@@ -1925,6 +1925,28 @@
       ]
     }
   },
+  "5a34b1c142902a2da0b091cb29aa6456": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: \\sin 80^\\circ = \\frac{h}{16}\n  Step 2: h ",
+      "recorded_at": 1793236893.7551858
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.99,
+          "deductions": [],
+          "percent": 100,
+          "problem_position": 1,
+          "reasoning": "The student correctly set up sin(80\u00b0) = h/16, solved for h = 16\u00b7sin(80\u00b0), and arrived at the correct answer of 15.76 ft. The reasoning is fully followable, and units are included, satisfying the [runits1] rule. Full credit criterion is met.",
+          "score_status": "full",
+          "student_answer": "$h = 15.76$ ft",
+          "student_feedback": "Great work! You correctly identified the sine relationship, set up the equation, and solved it to get the right answer with proper units."
+        }
+      ]
+    }
+  },
   "5a393191fb7b98e7f1f4d66ccc76c451": {
     "meta": {
       "mode": "ai_grading",
@@ -2101,6 +2123,35 @@
       ]
     }
   },
+  "67a713556d45bda17154bcbad2a14305": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: \\sin 80^\\circ = \\frac{h}{16}\n  Step 2: h ",
+      "recorded_at": 1793236889.227504
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.9,
+          "deductions": [
+            {
+              "points_off": 5,
+              "reason": "Missing units (ft) on final answer \u2014 class rule [runits1]: 1 point off on a 20-point problem = 5%",
+              "rule_id": "runits1",
+              "step_ref": 3
+            }
+          ],
+          "percent": 95,
+          "problem_position": 1,
+          "reasoning": "The student's approach and final answer are correct (16\u00b7sin 80\u00b0 \u2248 15.76 matches the answer key). However, the final answer is missing units (ft), which triggers the [runits1] class rule deduction of 1 point out of 20, corresponding to 5 percentage points.",
+          "score_status": "partial",
+          "student_answer": "$h = 15.76$",
+          "student_feedback": "Great work setting up the sine ratio and solving correctly \u2014 your answer of 15.76 is right! Just remember to include units (ft) with your final answer."
+        }
+      ]
+    }
+  },
   "68eecdcc00b9aa901abe91fc0479fe7c": {
     "meta": {
       "mode": "judge",
@@ -2250,6 +2301,28 @@
           "score_status": "full",
           "student_answer": "$-\\frac{1}{2}$",
           "student_feedback": "Great work! You correctly identified that 4\u03c0/3 lies in Quadrant III with a reference angle of \u03c0/3, and used that to find the exact value of cosine."
+        }
+      ]
+    }
+  },
+  "6c9eb4a92720e887b91567c2150cd48e": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: \\frac{4\\pi}{3} \\text{ is in QIII, referen",
+      "recorded_at": 1793236906.3993962
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.99,
+          "deductions": [],
+          "percent": 100,
+          "problem_position": 1,
+          "reasoning": "The student correctly identified that 4\u03c0/3 lies in QIII with reference angle \u03c0/3, then applied the correct sign to get cos(4\u03c0/3) = \u22121/2, matching the answer key exactly. The 'Full credit' criterion is met: correct final answer with followable reasoning shown.",
+          "score_status": "full",
+          "student_answer": "$-\\frac{1}{2}$",
+          "student_feedback": "Great work! You correctly identified the quadrant and reference angle, then applied the right sign to arrive at the exact value."
         }
       ]
     }
@@ -3475,6 +3548,28 @@
       ]
     }
   },
+  "afc83995dd0310b4dd2a0b20c83eb001": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: 225 \\cdot \\frac{\\pi}{180}\n  Step 2: = \\fr",
+      "recorded_at": 1793236902.010646
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.99,
+          "deductions": [],
+          "percent": 100,
+          "problem_position": 1,
+          "reasoning": "The student correctly multiplied 225\u00b0 by \u03c0/180, simplified to 5\u03c0/4, which matches the answer key exactly. Full credit criterion is met: correct final answer with clear, followable work. No units deduction needed per [runits1] since the answer is in radians expressed in terms of \u03c0 (a pure multiple of \u03c0, not a degree measure).",
+          "score_status": "full",
+          "student_answer": "$\\frac{5\\pi}{4}$",
+          "student_feedback": "Great work! You correctly applied the degree-to-radian conversion factor and simplified the fraction to get $\\frac{5\\pi}{4}$."
+        }
+      ]
+    }
+  },
   "b0656d13bd3039fab22453ff30fff53a": {
     "meta": {
       "mode": "ai_grading",
@@ -4172,6 +4267,28 @@
       "rationale": "no issues",
       "steps_valid": 5,
       "well_posed": 5
+    }
+  },
+  "d11303117b80399063adc9f5bb9c6132": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: \\sin 80^\\circ = \\frac{h}{16}\n  Step 2: h ",
+      "recorded_at": 1793236897.6808052
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.97,
+          "deductions": [],
+          "percent": 100,
+          "problem_position": 1,
+          "reasoning": "The student correctly set up sin(80\u00b0) = h/16, solved for h = 16\u00b7sin(80\u00b0), and arrived at 15.76, which matches the answer key exactly. The reasoning path is clear and unambiguous \u2014 Full credit criterion is met.",
+          "score_status": "full",
+          "student_answer": "$h = 15.76$",
+          "student_feedback": "Great work! You correctly identified the sine relationship, set up the equation, and calculated the height accurately."
+        }
+      ]
     }
   },
   "d13eea7d9c63733c655f06407aa0d166": {
@@ -5195,6 +5312,35 @@
         "$a = 7$",
         "$a = \\sqrt{119}$",
         "$a = 12$"
+      ]
+    }
+  },
+  "f9949578dfc3eefd72324111c03bac8f": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: \\tan A = \\frac{5}{12}\n  Step 2: A = 22.62",
+      "recorded_at": 1793236914.746798
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.85,
+          "deductions": [
+            {
+              "points_off": 10,
+              "reason": "Missing units (\u00b0) on final angle answers \u2014 rule [runits1]: 1 point off on a 20-point problem = 5% on the 100-point scale",
+              "rule_id": "runits1",
+              "step_ref": 2
+            }
+          ],
+          "percent": 90,
+          "problem_position": 1,
+          "reasoning": "The student's final answers (22.62\u00b0 and 67.38\u00b0) match the answer key exactly, and the reasoning path is clear and followable (tan A = 5/12 \u2192 A \u2192 B = 90 \u2212 A). However, the answers are missing degree units in the written steps (Step 2 and Step 3 write bare numbers), triggering the [runits1] rule deduction of 1 point out of 20, which is 5% on the 0\u2013100 scale.",
+          "score_status": "partial",
+          "student_answer": "$A = 22.62\u00b0$, $B = 67.38\u00b0$",
+          "student_feedback": "Great work setting up tan A = 5/12 and using the complementary angle relationship to find both angles \u2014 your answers are correct! Just remember to include the degree symbol (\u00b0) with your final answers, since these are angle measurements."
+        }
       ]
     }
   },
