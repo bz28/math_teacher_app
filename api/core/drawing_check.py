@@ -164,7 +164,8 @@ def _parse_check(out: dict[str, Any], count: int) -> tuple[str, list[ItemResult]
         if not isinstance(raw, dict):
             continue
         n, verdict = raw.get("n"), raw.get("verdict")
-        if isinstance(n, int) and 1 <= n <= count and n not in by_n and verdict in ("yes", "no", "unclear"):
+        if (isinstance(n, int) and not isinstance(n, bool) and 1 <= n <= count and n not in by_n
+                and verdict in ("yes", "no", "unclear")):
             by_n[n] = ItemResult(n=n, verdict=verdict, seen=str(raw.get("seen") or ""))
     in_view = out.get("in_view") if out.get("in_view") in ("whole", "cut_off", "not_found") else "not_found"
     return str(in_view), [by_n.get(n) or ItemResult(n=n, verdict="unclear", seen="") for n in range(1, count + 1)]
@@ -193,10 +194,11 @@ async def _look(
         to_content_block(media_type, image_b64),
         {"type": "text", "text": f"{where}Features to check:\n{_item_list(items)}"},
     ]
-    # One retry for a malformed tool answer: Opus occasionally writes the
-    # `items` array as raw parameter text, which fails parsing (2 of 44
-    # looks in the Oct 2026 eval). The same request usually comes back
-    # well-formed; a second failure is the caller's to handle.
+    # One retry for a malformed answer: Opus occasionally writes the
+    # `items` array as raw parameter text (2 of 44 looks in the Oct 2026
+    # eval), or answers without the tool. Both surface as RuntimeError
+    # from the client; API errors are their own types and aren't retried
+    # here. A second failure is the caller's to handle.
     for attempt in (1, 2):
         try:
             out = await call_claude_vision(
@@ -212,8 +214,8 @@ async def _look(
                                "attempt": attempt},
             )
             break
-        except RuntimeError as exc:
-            if attempt == 2 or "unparseable" not in str(exc):
+        except RuntimeError:
+            if attempt == 2:
                 raise
             logger.warning("drawing check: malformed answer, retrying submission=%s", submission_id)
     return _parse_check(out, len(items))
@@ -244,13 +246,14 @@ async def check_drawing(
     common = {"user_id": user_id, "submission_id": submission_id}
     if isinstance(bbox, dict):
         last: tuple[str, list[ItemResult]] | None = None
-        for step, (margin, min_frac) in (("tight", _TIGHT), ("wide", _WIDE)):
+        looks: tuple[tuple[Step, tuple[float, float]], ...] = (("tight", _TIGHT), ("wide", _WIDE))
+        for step, (margin, min_frac) in looks:
             crop = crop_region_for_vision(page_b64, media_type, bbox, margin=margin, min_frac=min_frac)
             if crop is None:
                 break
             last = await _look(crop, "image/jpeg", items, find_problem=None, phase=f"drawing_check_{step}", **common)
             if last[0] == "whole":
-                return DrawingCheck(step=step, in_view=last[0], items=last[1])  # type: ignore[arg-type]
+                return DrawingCheck(step=step, in_view=last[0], items=last[1])
         # A drawing cut off even in the wide crop is still the best view we
         # have of it; the whole page would only show it smaller.
         if last is not None and last[0] == "cut_off":

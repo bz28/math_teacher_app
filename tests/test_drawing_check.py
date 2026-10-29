@@ -70,6 +70,24 @@ async def test_still_cut_off_when_wide_keeps_the_wide_look(looks: Looks) -> None
     looks.queue(_reply("cut_off", "unclear", "unclear"), _reply("cut_off", "yes", "unclear"))
     r = await check_drawing(_page(), "image/jpeg", BOX, ITEMS, problem_position=4)
     assert r.step == "wide" and len(looks.calls) == 2
+    assert [i.verdict for i in r.items] == ["yes", "unclear"]
+
+
+async def test_cut_off_then_missing_falls_back_to_the_page(looks: Looks) -> None:
+    looks.queue(_reply("cut_off"), _reply("not_found"), _reply("whole", "yes", "no"))
+    r = await check_drawing(_page(), "image/jpeg", BOX, ITEMS, problem_position=4)
+    assert (r.step, [i.verdict for i in r.items]) == ("page", ["yes", "no"])
+
+
+@pytest.mark.parametrize("bbox", [
+    {"x0": 0.9, "y0": 0.3, "x1": 0.4, "y1": 0.7},
+    {"x0": "a", "y0": 0.3, "x1": 0.9, "y1": 0.7},
+    [0.4, 0.3, 0.9, 0.7],
+])
+async def test_an_unusable_box_goes_to_the_page(looks: Looks, bbox: Any) -> None:
+    looks.queue(_reply("whole", "yes", "yes"))
+    r = await check_drawing(_page(), "image/jpeg", bbox, ITEMS, problem_position=4)
+    assert r.step == "page" and len(looks.calls) == 1
 
 
 async def test_crops_without_the_drawing_fall_back_to_the_page(looks: Looks) -> None:
@@ -92,11 +110,11 @@ async def test_a_drawing_nobody_can_find_is_left_to_the_teacher(looks: Looks) ->
     assert [i.verdict for i in r.items] == ["unclear", "unclear"]
 
 
-async def test_the_check_never_sees_the_question_or_answer(looks: Looks) -> None:
+async def test_a_crop_look_sends_only_the_item_list(looks: Looks) -> None:
     looks.queue(_reply("whole", "yes", "yes"))
     await check_drawing(_page(), "image/jpeg", BOX, ITEMS, problem_position=4)
     sent = looks.calls[0]
-    assert sent["text"].endswith("1. Vertical asymptote drawn at x = 2\n2. Both asymptotes labeled")
+    assert sent["text"] == "Features to check:\n1. Vertical asymptote drawn at x = 2\n2. Both asymptotes labeled"
     assert sent["model"] == drawing_check.MODEL_OPUS and "temperature" not in sent
 
 
@@ -107,6 +125,7 @@ async def test_a_pdf_page_is_left_to_the_teacher_without_a_call(looks: Looks) ->
 
 
 def test_skipped_duplicated_or_off_script_items_become_unclear() -> None:
+    assert _parse_check({"in_view": "whole", "items": [{"n": True, "verdict": "yes"}]}, 1)[1][0].verdict == "unclear"
     out = {"in_view": "whole", "items": [
         {"n": 1, "verdict": "yes", "seen": "a"},
         {"n": 1, "verdict": "no", "seen": "duplicate is ignored"},
@@ -124,7 +143,7 @@ async def test_a_malformed_answer_is_asked_once_more(monkeypatch: pytest.MonkeyP
     async def flaky(content: list[Any], mode: str, **kw: Any) -> dict[str, Any]:
         calls.append(kw["call_metadata"]["attempt"])
         if len(calls) == 1:
-            raise RuntimeError("Failed to parse Claude Vision response: ... an unparseable string (22 chars)")
+            raise RuntimeError("No tool_use block in response")
         return _reply("whole", "yes", "yes")
 
     monkeypatch.setattr(drawing_check, "call_claude_vision", flaky)
