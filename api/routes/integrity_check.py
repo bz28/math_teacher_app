@@ -28,6 +28,7 @@ from api.core.integrity_pipeline import (
     STATUS_COMPLETE,
     STATUS_SKIPPED_UNREADABLE,
     TOOL_GENERATE_VARIANT,
+    UNFINISHED_REASONS,
     count_student_turns,
     finalize_if_abandoned,
     process_student_turn,
@@ -128,6 +129,11 @@ class IntegrityStateResponse(BaseModel):
     extraction: ExtractionOut | None
     problems: list[ProblemSummary]
     transcript: list[TurnOut]
+    # True when the check closed because the student didn't finish it
+    # (never answered / left partway — incomplete_reason). The chat shows
+    # that honestly instead of the "thanks, your teacher has everything"
+    # closing. False for a finished check and for the turn cap.
+    closed_unfinished: bool = False
 
 
 # Per-event and array-length caps. A tampered client can't land
@@ -454,6 +460,11 @@ async def _build_state_response(
         extraction=_first_extraction(chat_probed),
         problems=_problem_summaries(chat_probed, questions, hw_positions),
         transcript=_student_facing_transcript(turns),
+        closed_unfinished=(
+            check.status == STATUS_COMPLETE
+            and check.disposition is None
+            and check.incomplete_reason in UNFINISHED_REASONS
+        ),
     )
 
 

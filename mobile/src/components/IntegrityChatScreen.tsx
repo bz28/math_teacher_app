@@ -451,12 +451,25 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
             </View>
           )}
 
+          {/* A check closed unfinished (reopened after the deadline) gets
+              the honest version, not a thank-you. */}
           {complete && (
             <View style={styles.completeBanner}>
-              <Ionicons name="checkmark-circle" size={20} color={colors.success} />
-              <Text style={styles.completeText}>
-                Thanks for explaining your work! You're all done here.
-              </Text>
+              {state?.closed_unfinished ? (
+                <>
+                  <Ionicons name="information-circle" size={20} color={colors.textMuted} />
+                  <Text style={styles.completeText}>
+                    This check closed because it wasn't finished. Your work is still turned in.
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+                  <Text style={styles.completeText}>
+                    Thanks for explaining your work! You're all done here.
+                  </Text>
+                </>
+              )}
             </View>
           )}
         </ScrollView>

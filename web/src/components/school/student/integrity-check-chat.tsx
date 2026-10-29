@@ -547,13 +547,29 @@ export function IntegrityCheckChat({
 
           {isComplete ? (
             <div className="border-t border-border-light px-2 py-4 text-center">
-              <p className="font-serif text-base text-text-primary">
-                Thanks for walking me through that!
-              </p>
-              <p className="mt-1 text-sm text-text-secondary">
-                Your teacher has everything they need — you&rsquo;ll see
-                your grade once they publish it.
-              </p>
+              {/* A check closed unfinished (a tab reopened after the
+                  deadline) gets the honest version, not a thank-you for
+                  a conversation that didn't happen. */}
+              {state?.closed_unfinished ? (
+                <>
+                  <p className="font-serif text-base text-text-primary">
+                    This check closed because it wasn&rsquo;t finished.
+                  </p>
+                  <p className="mt-1 text-sm text-text-secondary">
+                    Your work is still turned in.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="font-serif text-base text-text-primary">
+                    Thanks for walking me through that!
+                  </p>
+                  <p className="mt-1 text-sm text-text-secondary">
+                    Your teacher has everything they need — you&rsquo;ll see
+                    your grade once they publish it.
+                  </p>
+                </>
+              )}
               {/* Practice nudge — only renders when the agent's disposition
                   suggests more study would help AND a practice set is
                   actually linked to this HW. Any other combination stays

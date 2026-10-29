@@ -5434,6 +5434,11 @@ export interface components {
         };
         /** IntegrityStateResponse */
         IntegrityStateResponse: {
+            /**
+             * Closed Unfinished
+             * @default false
+             */
+            closed_unfinished: boolean;
             /** Disposition */
             disposition: string | null;
             extraction: components["schemas"]["ExtractionOut"] | null;

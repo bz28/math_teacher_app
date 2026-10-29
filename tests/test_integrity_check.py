@@ -1028,6 +1028,7 @@ async def test_student_read_finalizes_abandoned_check(
         headers=_auth(world["student_token"]),
     )
     assert r.json()["overall_status"] == "awaiting_student"
+    assert r.json()["closed_unfinished"] is False
 
     await _backdate_check(submission_id)
     r = await client.get(
@@ -1038,6 +1039,8 @@ async def test_student_read_finalizes_abandoned_check(
     assert r.json()["overall_status"] == "complete"
     # Student-facing: no disposition, ever, for a closed-unfinished check.
     assert r.json()["disposition"] is None
+    # ...and the chat says it closed unfinished, not "thanks".
+    assert r.json()["closed_unfinished"] is True
     check = await _check_row(submission_id)
     assert check.status == "complete"
     assert check.incomplete_reason == "not_started"

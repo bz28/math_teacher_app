@@ -3232,6 +3232,9 @@ export interface IntegrityStateResponse {
   extraction: IntegrityExtraction | null;
   problems: IntegrityProblemSummary[];
   transcript: IntegrityTurn[];
+  /** Closed because the student didn't finish it (never answered / left
+   *  partway). The chat says so instead of the "thanks" closing. */
+  closed_unfinished: boolean;
 }
 
 // ── Teacher integrity detail (mirror api/routes/integrity_check.py) ──

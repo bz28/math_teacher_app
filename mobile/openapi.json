@@ -2595,6 +2595,11 @@
       },
       "IntegrityStateResponse": {
         "properties": {
+          "closed_unfinished": {
+            "default": false,
+            "title": "Closed Unfinished",
+            "type": "boolean"
+          },
           "disposition": {
             "anyOf": [
               {
