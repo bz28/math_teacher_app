@@ -622,6 +622,13 @@
             "title": "Title",
             "type": "string"
           },
+          "total_points": {
+            "default": 100,
+            "maximum": 1000.0,
+            "minimum": 1.0,
+            "title": "Total Points",
+            "type": "integer"
+          },
           "type": {
             "title": "Type",
             "type": "string"
@@ -1290,6 +1297,21 @@
               }
             ],
             "title": "Rule Id"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "class_rule",
+                  "ai_judgment"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
           },
           "step_ref": {
             "anyOf": [
@@ -5810,6 +5832,22 @@
             ],
             "title": "Late Policy"
           },
+          "problem_points": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "maximum": 1000.0,
+                  "minimum": 1.0,
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Problem Points"
+          },
           "rubric": {
             "anyOf": [
               {
@@ -5841,6 +5879,19 @@
               }
             ],
             "title": "Title"
+          },
+          "total_points": {
+            "anyOf": [
+              {
+                "maximum": 1000.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Total Points"
           },
           "unit_ids": {
             "anyOf": [

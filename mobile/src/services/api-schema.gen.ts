@@ -4554,6 +4554,11 @@ export interface components {
             source_type?: string | null;
             /** Title */
             title: string;
+            /**
+             * Total Points
+             * @default 100
+             */
+            total_points: number;
             /** Type */
             type: string;
             /** Unit Ids */
@@ -4768,6 +4773,8 @@ export interface components {
             reason: string;
             /** Rule Id */
             rule_id?: string | null;
+            /** Source */
+            source?: ("class_rule" | "ai_judgment") | null;
             /** Step Ref */
             step_ref?: number | null;
         };
@@ -6566,11 +6573,17 @@ export interface components {
             due_at?: string | null;
             /** Late Policy */
             late_policy?: string | null;
+            /** Problem Points */
+            problem_points?: {
+                [key: string]: number;
+            } | null;
             rubric?: components["schemas"]["AssignmentRubric"] | null;
             /** Status */
             status?: string | null;
             /** Title */
             title?: string | null;
+            /** Total Points */
+            total_points?: number | null;
             /** Unit Ids */
             unit_ids?: string[] | null;
         };

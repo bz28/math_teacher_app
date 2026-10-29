@@ -130,7 +130,7 @@ def test_rules_render_with_ids_and_points_only_when_present() -> None:
         effective_rubric({"rules": [_UNITS, _AXIS]}, {"notes": "Two full periods."})
     )
     assert "Class rules" in block
-    assert "[r1] Final answers need units. (take off 5 points)" in block
+    assert "[r1] Final answers need units. (take off 5 of the problem's points)" in block
     assert "[r2] Write the axis as y = 1, not just 1." in block
     assert "[r2] Write the axis as y = 1, not just 1. (" not in block
 

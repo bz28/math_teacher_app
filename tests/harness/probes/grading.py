@@ -119,7 +119,10 @@ def _prob(question: str, answer: str, *, flag: bool | None = None) -> list[dict[
 # rules), so the grader applies the shipped DEFAULT rubric — i.e. exactly what
 # a teacher who authors no rubric gets. Two cases are physics (a2, b3) per the "a couple physics" ask.
 
-_UNITS_RULE = {"id": "runits1", "text": "Final answers need units (ft, °, rad/min).", "points": 5}
+_UNITS_RULE = {"id": "runits1", "text": "Final answers need units (ft, °, rad/min).", "points": 1}
+# What every golden problem is worth. With the units rule's 1 point that is
+# the 5% the class-rule cases were labeled against.
+_PROBLEM_POINTS = 20
 
 GOLDEN_CASES: list[GradingCase] = [
     # (a) clean correct, standard method → full ----------------------------
@@ -728,7 +731,8 @@ async def grade_case(
     (reproducible) config, which is what production ships.
     """
     result = await grade_submission_with_ai(
-        case.extraction, case.problems, case.extra.get("rubric"), reproducible=reproducible,
+        case.extraction, [{**p, "points": _PROBLEM_POINTS} for p in case.problems],
+        case.extra.get("rubric"), reproducible=reproducible,
     )
     grades = result.get("grades", [])
     status = grades[0].get("score_status") if grades else None
@@ -801,9 +805,10 @@ class GradingProbe(Probe):
                 result.get("grades") or [],
                 pos_to_bid,
                 pos_to_step_count=pos_to_step_count,
-                rule_ids=frozenset(
-                    r["id"] for r in (case.extra.get("rubric") or {}).get("rules", [])
-                ),
+                rules={
+                    r["id"]: r.get("points") for r in (case.extra.get("rubric") or {}).get("rules", [])
+                },
+                points={bid: _PROBLEM_POINTS for bid in pos_to_bid.values()},
             )
             persisted_deductions = [
                 {

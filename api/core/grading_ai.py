@@ -24,6 +24,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.class_rubric import effective_rubric
+from api.core.homework_points import assignment_points, weighted_percent
 from api.core.llm_client import (
     MODEL_REASON,
     LLMMode,
@@ -243,7 +244,9 @@ _CLASS_RULES_INTRO = (
     "\"Class rules\" — this teacher's own grading standards for every homework in "
     "this class. Apply each one to every problem it covers, judged only from the "
     "student's extracted work. When the work breaks a rule, take off the points the "
-    "rule names (a rule that names none: size it like a small execution error), "
+    "rule names. They are points of the problem, not percent: each problem says what "
+    "it is worth, so a 1-point rule on a problem worth 10 points is points_off 10 "
+    "(a rule that names none: size it like a small execution error). "
     "itemize it as its own deduction, and set that deduction's `rule_id` to the "
     "rule's bracketed id. A rule never turns a wrong answer into a right one, and "
     "a problem a rule doesn't cover is graded as if the rule didn't exist. A "
@@ -276,7 +279,8 @@ def _build_rubric_block(rubric: dict[str, Any] | None) -> str:
         lines = [_CLASS_RULES_INTRO]
         for r in rules:
             cost = (
-                f" (take off {r['points']} points)" if r.get("points") is not None else ""
+                f" (take off {r['points']} of the problem's points)"
+                if r.get("points") is not None else ""
             )
             lines.append(f"[{r['id']}] {r['text']}{cost}")
         parts.append("\n".join(lines))
@@ -434,7 +438,7 @@ def _bucket_steps_by_position(
     return steps_by_pos, unattributed
 
 
-def _build_problem_set_block(problems: list[dict[str, Any]]) -> str:
+def _build_problem_set_block(problems: list[dict[str, Any]], *, with_points: bool = False) -> str:
     """Render the assignment's questions + answer keys.
 
     This is the half of the grading prompt that is IDENTICAL for every
@@ -447,6 +451,10 @@ def _build_problem_set_block(problems: list[dict[str, Any]]) -> str:
     Positions are the contract between this block and the student-work
     blocks that follow in the user message: the grader matches
     "Problem 3" here to "## Problem 3" there. Keep the two in lockstep.
+
+    `with_points` adds what each problem is worth. Only class rules need
+    it (their points are the problem's points), so a homework without
+    rules sends the same prompt it always did.
     """
     lines = [
         "THE ASSIGNMENT",
@@ -462,6 +470,8 @@ def _build_problem_set_block(problems: list[dict[str, Any]]) -> str:
         lines.append(
             f"Answer key: {p.get('final_answer') or '(no answer key)'}"
         )
+        if with_points and p.get("points"):
+            lines.append(f"Worth: {p['points']} points")
         if p.get("requires_drawing"):
             lines.append("Requires a drawing: yes")
         elif _MENTIONS_DRAWING.search(p.get("question") or ""):
@@ -498,7 +508,7 @@ def _build_system_prompt(
     """
     return "\n\n".join([
         _GRADING_SYSTEM.format(rubric_block=_build_rubric_block(rubric)),
-        _build_problem_set_block(problems),
+        _build_problem_set_block(problems, with_points=bool((rubric or {}).get("rules"))),
     ])
 
 
@@ -907,13 +917,82 @@ def _reconcile_deductions(
     }]
 
 
+def _charge_in_points(
+    entry: dict[str, Any], points: int, rules: dict[str, int | None],
+) -> None:
+    """Re-size a partial grade's deductions in the problem's own points,
+    in place, and set its percent from what's left.
+
+    The model grades in percent; the teacher sets points. A deduction
+    citing a class rule that names points costs exactly those points, and
+    each rule is charged once per problem. Every other deduction is the
+    AI's own sizing ("AI judgment"). Their total is rounded to the nearest
+    half point, and to at least half a point so a real deduction can't
+    round away, then shared out by largest remainder. Nothing takes
+    off more than the problem is worth. `points_off` stays a percent of
+    the problem, as the review page reads it; `source` says who sized it.
+    Full and zero grades keep their status; only a partial is re-sized.
+    """
+    for d in entry["deductions"]:
+        d["source"] = "class_rule" if d.get("rule_id") else "ai_judgment"
+    if entry["score_status"] != "partial" or points <= 0:
+        return
+    # The ledger reconciles to the percent only within _LEDGER_TOLERANCE.
+    # The gap belongs to the AI's own sizing, so it joins the last AI
+    # judgment line (or becomes one) instead of vanishing.
+    gap = (100 - entry["percent"]) - sum(d["points_off"] for d in entry["deductions"])
+    if gap:
+        own = [d for d in entry["deductions"] if not d.get("rule_id")]
+        if own:
+            own[-1]["points_off"] = max(0.0, own[-1]["points_off"] + gap)
+        elif gap > 0:
+            entry["deductions"].append({
+                "points_off": gap, "reason": "Points off (itemization unavailable)",
+                "step_ref": None, "rule_id": None, "source": "ai_judgment",
+            })
+    charged: set[str] = set()
+    sized: list[tuple[dict[str, Any], float]] = []
+    for d in entry["deductions"]:
+        rid = d.get("rule_id")
+        if rid in charged:
+            continue
+        if rid:
+            charged.add(rid)
+        fixed = rules.get(rid) if rid else None
+        sized.append((d, float(fixed) if fixed is not None else d["points_off"] * points / 100))
+    own = [i for i, (d, _) in enumerate(sized) if rules.get(d.get("rule_id") or "") is None]
+    raw_own = sum(sized[i][1] for i in own)
+    if own and raw_own > 0:
+        # Largest remainder, in half points, so the lines add up exactly.
+        halves = [sized[i][1] * 2 for i in own]
+        units = [int(h) for h in halves]
+        for k in sorted(range(len(own)), key=lambda k: halves[k] - units[k], reverse=True)[
+            : max(1, round(raw_own * 2)) - sum(units)
+        ]:
+            units[k] += 1
+        for k, i in enumerate(own):
+            sized[i] = (sized[i][0], units[k] / 2)
+    kept: list[dict[str, Any]] = []
+    off = 0.0
+    for d, pts in sized:
+        pts = min(pts, points - off)
+        if pts <= 0:
+            continue
+        off += pts
+        kept.append({**d, "points_off": pts * 100 / points})
+    entry["deductions"] = kept
+    entry["percent"] = (points - off) * 100 / points
+    entry["score_status"] = "full" if off == 0 else "zero" if off >= points else "partial"
+
+
 def _build_breakdown(
     grades: list[dict[str, Any]],
     pos_to_bid: dict[Any, str],
     *,
     submission_id: str | None = None,
     pos_to_step_count: dict[Any, int] | None = None,
-    rule_ids: frozenset[str] = frozenset(),
+    rules: dict[str, int | None] | None = None,
+    points: dict[str, int] | None = None,
 ) -> tuple[list[dict[str, Any]], float | None]:
     """Turn the model's raw per-problem grades into the actionable
     breakdown the teacher edits, plus the averaged `ai_score`.
@@ -926,9 +1005,14 @@ def _build_breakdown(
       values become None so the UI renders a neutral state.
     - `percent` for `partial` grades → [1, 99]. `full`/`zero` are pinned
       to 100/0 by status, so without this a model returning percent=120
-      or -10 would corrupt `ai_score = total_percent / len(breakdown)`.
+      or -10 would corrupt `ai_score`.
       Clamping the partial percent keeps every persisted percent — and
       therefore `ai_score` — inside [0, 100].
+
+    Then each partial grade is re-sized in its problem's points
+    (`_charge_in_points`): `points` is {problem_id: points}, `rules` is
+    {class rule id: its points or None}. `ai_score` is points earned over
+    points possible; without `points` every problem counts the same.
 
     The per-problem `deductions` ledger is reconciled to the clamped
     `percent` via `_reconcile_deductions` so the persisted itemization is
@@ -937,8 +1021,9 @@ def _build_breakdown(
     deduction's `step_ref` is range-checked against `pos_to_step_count`
     (the count of student steps the grader saw for that problem) and nulled
     when out of range, so a review-UI highlight can't anchor to a step that
-    doesn't exist. The raw model ledger is preserved verbatim on
-    `ai_breakdown` (the immutable snapshot).
+    doesn't exist. The raw grades on `ai_breakdown` are updated to the
+    same final call (status, percent, ledger); the model's reasoning and
+    confidence stay as it wrote them.
     """
     for g in grades:
         raw_conf = g.get("confidence")
@@ -948,7 +1033,6 @@ def _build_breakdown(
             g["confidence"] = None
 
     breakdown = []
-    total_percent = 0.0
     for g in grades:
         bid = pos_to_bid.get(g.get("problem_position"))
         if not bid:
@@ -993,10 +1077,9 @@ def _build_breakdown(
                     if pos_to_step_count is not None
                     else None
                 ),
-                rule_ids=rule_ids,
+                rule_ids=frozenset(rules or {}),
             ),
         })
-        total_percent += percent
 
     # Reconcile the denominator against the REAL problem set. The model
     # sometimes returns no grade for a problem (common for blanks) — without
@@ -1031,10 +1114,18 @@ def _build_breakdown(
                 ),
             ),
         })
-        # total_percent unchanged: the appended zeros add 0 to the numerator
-        # but raise len(breakdown), lowering the average correctly.
 
-    ai_score = total_percent / len(breakdown) if breakdown else None
+    weights = points or {e["problem_id"]: 100 for e in breakdown}
+    by_bid = {pos_to_bid.get(g.get("problem_position")): g for g in grades}
+    for entry in breakdown:
+        _charge_in_points(entry, weights.get(entry["problem_id"], 0), rules or {})
+        # The review page reads the raw grade as "the AI's call" (to show
+        # it, spot a teacher edit, and revert to it), so it carries the
+        # call as grading made it, not the model's pre-points numbers.
+        if (raw := by_bid.get(entry["problem_id"])) is not None:
+            raw.update(score_status=entry["score_status"], percent=entry["percent"],
+                       deductions=[dict(d) for d in entry["deductions"]])
+    ai_score = weighted_percent(((e["problem_id"], e["percent"]) for e in breakdown), weights)
     return breakdown, ai_score
 
 
@@ -1056,7 +1147,7 @@ async def run_ai_grading_for_submission(
 
     Writes to SubmissionGrade:
     - ai_breakdown: raw AI output (reasoning preserved for teacher)
-    - ai_score: average of per-problem percents
+    - ai_score: points earned over points possible
     - rubric_snapshot: the rubric this run applied, for drift detection
     - breakdown: actionable grades (same shape the teacher writes to)
     - final_score: same as ai_score until teacher overrides
@@ -1103,6 +1194,9 @@ async def run_ai_grading_for_submission(
     problems = await load_problems_for_assignment(db, assignment)
     if not problems:
         return None
+    points = assignment_points(assignment)
+    for p in problems:
+        p["points"] = points.get(p["bank_item_id"], 0)
 
     # The class's rules plus this homework's own rubric — what the grader
     # applies, and what the grade row freezes below.
@@ -1148,8 +1242,12 @@ async def run_ai_grading_for_submission(
     breakdown, ai_score = _build_breakdown(
         grades, pos_to_bid, submission_id=str(submission_id),
         pos_to_step_count=pos_to_step_count,
-        rule_ids=frozenset(r["id"] for r in (rubric or {}).get("rules", [])),
+        rules={r["id"]: r.get("points") for r in (rubric or {}).get("rules", [])},
+        points=points,
     )
+    # The per-problem percents ai_score weighs, so a later points change
+    # can re-weigh the AI's call without regrading (homework_points).
+    result["problem_percents"] = {e["problem_id"]: e["percent"] for e in breakdown}
 
     # Upsert the grade row (race-safe with teacher manual grading).
     await db.execute(

@@ -3,7 +3,7 @@
 import asyncio
 import uuid
 from datetime import UTC, datetime
-from typing import Annotated, Any, Protocol
+from typing import Annotated, Any, Literal, Protocol
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
@@ -18,6 +18,13 @@ from api.core.class_rubric import MAX_CLASS_RULES
 from api.core.constants import DEFAULT_HOMEWORK_INSTRUCTIONS, MAX_RUBRIC_FIELD_CHARS
 from api.core.entitlements import Entitlement, check_entitlement
 from api.core.extraction_edits import apply_extraction_edits
+from api.core.homework_points import (
+    DEFAULT_TOTAL_POINTS,
+    MAX_TOTAL_POINTS,
+    assignment_points,
+    rescore_assignment,
+    weighted_percent,
+)
 from api.core.integrity_ai import UNREADABLE_THRESHOLD
 from api.core.integrity_pipeline import (
     ABANDONED_INTERVIEW_DEADLINE,
@@ -155,6 +162,8 @@ class CreateAssignmentRequest(BaseModel):
     bank_item_ids: list[uuid.UUID] | None = None
     # Structured grading rubric. None = no rubric authored yet.
     rubric: AssignmentRubric | None = None
+    # What the homework is worth, split evenly across its problems.
+    total_points: int = Field(default=DEFAULT_TOTAL_POINTS, ge=1, le=MAX_TOTAL_POINTS)
 
     @field_validator("title")
     @classmethod
@@ -214,6 +223,12 @@ class UpdateAssignmentRequest(BaseModel):
     # clear" ambiguity — empty text and null both render as "no
     # instructions" on the student page, so we collapse them).
     description: str | None = None
+    # Points (api/core/homework_points.py), editable while published:
+    # they only change what grades add up to. `total_points` splits a new
+    # total evenly ("Split 100 evenly"); `problem_points` sets every
+    # problem's points by hand, {problem_id: points}. Not both at once.
+    total_points: int | None = Field(default=None, ge=1, le=MAX_TOTAL_POINTS)
+    problem_points: dict[str, Annotated[int, Field(ge=1, le=MAX_TOTAL_POINTS)]] | None = None
 
     @field_validator("description")
     @classmethod
@@ -636,6 +651,7 @@ async def create_assignment(
         content=content, answer_key=body.answer_key,
         unit_ids=body.unit_ids, document_ids=doc_id_strings,
         rubric=body.rubric.to_stored() if body.rubric else None,
+        total_points=body.total_points,
         # Seeded, not enforced: it lands in the teacher's own
         # Instructions block, which she can edit or clear like any other
         # text she wrote. Practice is excluded because it has no
@@ -969,6 +985,14 @@ async def get_assignment(
     result["content"] = await hydrate_assignment_content(db, a)
     result["answer_key"] = a.answer_key
     result["rubric"] = a.rubric
+    by_problem = assignment_points(a)
+    result["points"] = {
+        # The sum, not `total_points`: a total below the problem count
+        # still gives every problem 1 point.
+        "total": sum(by_problem.values()),
+        "by_problem": by_problem,
+        "custom": a.problem_points is not None,
+    }
     return result
 
 
@@ -1062,6 +1086,36 @@ async def update_assignment(
         a.rubric = None
     elif body.rubric is not None:
         a.rubric = body.rubric.to_stored()
+
+    if body.total_points is not None and body.problem_points is not None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Set a total or each problem's points, not both",
+        )
+    if body.problem_points is not None:
+        if set(body.problem_points) != set(problem_ids_in_content(a.content)):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Give points for exactly this homework's problems",
+            )
+        total = sum(body.problem_points.values())
+        if total > MAX_TOTAL_POINTS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"A homework can be worth at most {MAX_TOTAL_POINTS} points",
+            )
+        a.problem_points = dict(body.problem_points)
+        a.total_points = total
+    elif body.total_points is not None:
+        if body.total_points < len(problem_ids_in_content(a.content)):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Every problem needs at least 1 point",
+            )
+        a.total_points = body.total_points
+        a.problem_points = None
+    if body.total_points is not None or body.problem_points is not None:
+        await rescore_assignment(db, a)
 
     if body.description is not None:
         # Strip + collapse-to-null so we don't store all-whitespace
@@ -1275,6 +1329,8 @@ class Deduction(BaseModel):
     step_ref: int | None = None
     # The class rule this deduction applied (`Course.rubric`), if any.
     rule_id: str | None = Field(default=None, max_length=40)
+    # Who sized it: the rule's own points, or the AI's judgment.
+    source: Literal["class_rule", "ai_judgment"] | None = None
 
 
 class BreakdownEntry(BaseModel):
@@ -1286,8 +1342,8 @@ class BreakdownEntry(BaseModel):
     # it back only while the grade still matches the AI's call — the moment
     # a teacher overrides the score, the client drops it (the AI's
     # justification no longer reconciles to the teacher's number). The
-    # immutable `ai_breakdown` snapshot is the AI's permanent record and is
-    # never touched here. `None` = no ledger to persist.
+    # AI's own call stays on `ai_breakdown`, which is never touched here.
+    # `None` = no ledger to persist.
     deductions: list[Deduction] | None = None
 
     @field_validator("score_status")
@@ -1779,7 +1835,7 @@ def _normalize_breakdown(entries: list[BreakdownEntry]) -> list[dict[str, Any]]:
     teacher's); we defend that contract here, too, by dropping any ledger
     whose `100 − Σ points_off` no longer reconciles to the saved percent.
     That way a stale ledger can never be persisted alongside a number it
-    doesn't explain. The immutable `ai_breakdown` is untouched."""
+    doesn't explain. `ai_breakdown` (the AI's call) is untouched."""
     seen: dict[str, dict[str, Any]] = {}
     for e in entries:
         if e.score_status == "full":
@@ -1814,6 +1870,7 @@ def _normalize_breakdown(entries: list[BreakdownEntry]) -> list[dict[str, Any]]:
                         "reason": d.reason,
                         "step_ref": d.step_ref,
                         "rule_id": d.rule_id,
+                        "source": d.source,
                     }
                     for d in e.deductions
                 ]
@@ -1869,7 +1926,9 @@ async def grade_submission(
         normalized = _normalize_breakdown(body.breakdown)
         grade.breakdown = normalized
         if normalized:
-            grade.final_score = sum(e["percent"] for e in normalized) / len(normalized)
+            grade.final_score = weighted_percent(
+                ((e["problem_id"], e["percent"]) for e in normalized), assignment_points(assignment),
+            )
             grade.graded_at = now
             # `reviewed_at` means "a teacher stands behind this grade". The
             # explicit Approve step (POST /mark-reviewed) exists so the
