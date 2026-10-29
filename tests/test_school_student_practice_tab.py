@@ -162,6 +162,26 @@ async def test_practice_detail_ships_full_problem_payload(
     assert prob["distractors"] == ["x=1", "x=-2", "x=5"]
 
 
+async def test_teacher_practice_detail_ships_what_students_see(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """The teacher's practice page opens each problem in full: question,
+    worked solution, and the answer choices the student runner builds
+    from final_answer + distractors. Without distractors on the teacher
+    payload, the teacher can't see what students pick from."""
+    p = await _publish_linked_practice(world)
+    r = await client.get(
+        f"/v1/teacher/assignments/{p['practice_id']}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200, r.text
+    (prob,) = r.json()["content"]["problems"]
+    assert prob["bank_item_id"] == str(p["variation_id"])
+    assert prob["final_answer"] == "x = 2 or x = 3"
+    assert prob["solution_steps"][0]["title"] == "Factor"
+    assert prob["distractors"] == ["x=1", "x=-2", "x=5"]
+
+
 async def test_practice_detail_rejects_non_practice_assignment(
     client: AsyncClient, world: dict[str, Any],
 ) -> None:
