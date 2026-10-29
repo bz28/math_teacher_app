@@ -51,6 +51,7 @@ from api.database import get_session_factory
 from api.models.assignment import Assignment
 from api.models.course import Course
 from api.models.question_bank import QuestionBankItem
+from api.services.bank import problem_ids_in_content
 
 logger = logging.getLogger(__name__)
 
@@ -197,6 +198,40 @@ async def checklist_views(
             grading_rules(courses.get(i.course_id), assignment),
         )
     return out
+
+
+async def homework_checklists(db: AsyncSession, assignment: Assignment) -> dict[str, dict[str, Any]]:
+    """For the homework page: every problem on `assignment` that requires
+    a drawing, with its checklist as this homework grades it (the
+    problem's points here, the rules the homework applies). `checklist`
+    None = not written yet; `can_write` False = it can't have one (no
+    answer key yet)."""
+    if assignment.type == "practice":
+        return {}
+    ids = []
+    for pid in problem_ids_in_content(assignment.content):
+        try:
+            ids.append(uuid.UUID(pid))
+        except ValueError:
+            continue
+    if not ids:
+        return {}
+    items = (await db.execute(
+        select(QuestionBankItem).where(
+            QuestionBankItem.id.in_(ids), QuestionBankItem.requires_drawing.is_(True),
+        )
+    )).scalars().all()
+    if not items:
+        return {}
+    rules = grading_rules(await db.get(Course, assignment.course_id), assignment)
+    points = assignment_points(assignment)
+    return {
+        str(i.id): {
+            "checklist": checklist_view(i, points.get(str(i.id)), rules),
+            "can_write": needs_checklist(i),
+        }
+        for i in items
+    }
 
 
 async def write_checklist(

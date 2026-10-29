@@ -170,6 +170,21 @@ async def test_approve_writes_the_checklist_from_the_final_question(
     assert (view["graph_points"], view["problem_points"]) == (8, 10)
 
 
+async def test_the_homework_page_reads_each_graph_problems_checklist(
+    hw: dict[str, Any], client: AsyncClient, writer: Writer,
+) -> None:
+    url = f"/v1/teacher/assignments/{hw['hw_id']}"
+    headers = _auth(hw["teacher_token"])
+    await _approve(client, hw)
+    (entry,) = (await client.get(url, headers=headers)).json()["graph_checklists"].values()
+    assert entry["can_write"] is True
+    assert entry["checklist"]["graph_points"] == 8
+    # This homework's points size it: 20 points scales the graph part.
+    await _set(Assignment, hw["hw_id"], total_points=20)
+    (entry,) = (await client.get(url, headers=headers)).json()["graph_checklists"].values()
+    assert entry["checklist"]["problem_points"] == 20
+
+
 async def test_a_question_without_a_drawing_gets_none(
     hw: dict[str, Any], client: AsyncClient, writer: Writer,
 ) -> None:
