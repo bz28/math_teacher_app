@@ -2113,6 +2113,8 @@ def student_next_step(
     check: IntegrityCheckSubmission | None,
     *,
     grade_published: bool,
+    integrity_enabled: bool,
+    ai_grading_enabled: bool,
     now: datetime,
 ) -> NextStep | None:
     """What a student still has to do on homework they turned in: the
@@ -2128,14 +2130,20 @@ def student_next_step(
     None once a grade is published (the loop has moved on, and a nudge
     next to a grade reads as a demand), after a disputed reading (nothing
     else for the student to do), and while the reading is still coming.
+    The toggles are read as they are now, not as they were at submit: a
+    teacher who switched the check off has nothing waiting on the chat,
+    and with both off nothing waits on the confirm either.
     Nudge only: nothing here gates grading.
     """
     if grade_published or sub.extraction_flagged_at is not None:
         return None
     if sub.extraction is not None and sub.extraction_confirmed_at is None:
-        return NEXT_STEP_CONFIRM_READING
+        if integrity_enabled or ai_grading_enabled:
+            return NEXT_STEP_CONFIRM_READING
+        return None
     if (
-        check is not None
+        integrity_enabled
+        and check is not None
         and check.status in OPEN_STATUSES
         and not _is_abandoned(check, now)
     ):

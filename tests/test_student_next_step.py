@@ -146,3 +146,43 @@ async def test_published_grade_ends_the_nudge(
         await s.commit()
     got = await _next_steps(client, world)
     assert got == {"list": None, "dashboard": "absent", "detail": None}
+
+
+async def _set_toggles(world: dict[str, Any], *, integrity: bool, ai_grading: bool) -> None:
+    async with get_session_factory()() as s:
+        a = (await s.execute(
+            select(Assignment).where(Assignment.id == world["assignment_id"])
+        )).scalar_one()
+        a.integrity_check_enabled = integrity
+        a.ai_grading_enabled = ai_grading
+        await s.commit()
+
+
+async def test_switching_the_check_off_ends_the_finish_nudge(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """The teacher turned the check off after the student started it:
+    nothing waits on the chat any more."""
+    sub_id = await _submission(
+        world, extraction=EXTRACTION, extraction_confirmed_at=datetime.now(UTC),
+    )
+    await _check(sub_id, "in_progress")
+    await _set_toggles(world, integrity=False, ai_grading=True)
+    assert await _next_steps(client, world) == _all(None)
+
+
+@pytest.mark.parametrize(
+    ("integrity", "ai_grading", "expected"),
+    [
+        (False, True, "confirm_reading"),  # AI grading still waits on it
+        (True, False, "confirm_reading"),  # the check starts from it
+        (False, False, None),  # nothing reads the confirm any more
+    ],
+)
+async def test_confirm_nudge_follows_what_still_needs_it(
+    client: AsyncClient, world: dict[str, Any],
+    integrity: bool, ai_grading: bool, expected: str | None,
+) -> None:
+    await _submission(world, extraction=EXTRACTION)
+    await _set_toggles(world, integrity=integrity, ai_grading=ai_grading)
+    assert await _next_steps(client, world) == _all(expected)

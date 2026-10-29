@@ -1100,12 +1100,18 @@ async def _next_steps(
     db: AsyncSession, submission_ids: list[uuid.UUID],
 ) -> dict[uuid.UUID, NextStep | None]:
     """`student_next_step` for each of a student's submissions, in three
-    queries whatever the count. Loads only the columns the rule reads —
+    queries whatever the count, against the homework's toggles as they
+    are now. Loads only the columns the rule reads —
     a submission row also carries every page's image."""
     if not submission_ids:
         return {}
-    subs = (await db.execute(
-        select(Submission)
+    rows = (await db.execute(
+        select(
+            Submission,
+            Assignment.integrity_check_enabled,
+            Assignment.ai_grading_enabled,
+        )
+        .join(Assignment, Assignment.id == Submission.assignment_id)
         .options(load_only(
             Submission.id,
             Submission.extraction,
@@ -1113,7 +1119,7 @@ async def _next_steps(
             Submission.extraction_flagged_at,
         ))
         .where(Submission.id.in_(submission_ids))
-    )).scalars().all()
+    )).all()
     checks = {
         c.submission_id: c for c in (await db.execute(
             select(IntegrityCheckSubmission)
@@ -1133,9 +1139,12 @@ async def _next_steps(
     return {
         sub.id: student_next_step(
             sub, checks.get(sub.id),
-            grade_published=sub.id in published, now=now,
+            grade_published=sub.id in published,
+            integrity_enabled=integrity_on,
+            ai_grading_enabled=ai_grading_on,
+            now=now,
         )
-        for sub in subs
+        for sub, integrity_on, ai_grading_on in rows
     }
 
 
