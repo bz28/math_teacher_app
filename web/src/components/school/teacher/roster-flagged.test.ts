@@ -50,14 +50,22 @@ test("tutor_pivot is a learning signal, not a flag", () => {
   );
 });
 
-test("turn-cap inconclusive and unreadable checks flag", () => {
-  for (const reason of ["turn_cap", "unreadable"] as const) {
+test("inconclusive (turn cap, or no recorded reason) and unreadable checks flag", () => {
+  for (const reason of ["turn_cap", "unreadable", null] as const) {
     assert.equal(
       isFlaggedSubmission({ ...base, integrity_overview: overview({ incomplete_reason: reason }) }),
       true,
-      reason,
+      String(reason),
     );
   }
+  // Still running: no verdict yet, nothing to flag.
+  assert.equal(
+    isFlaggedSubmission({
+      ...base,
+      integrity_overview: overview({ overall_status: "in_progress" }),
+    }),
+    false,
+  );
 });
 
 test("a check the student didn't finish never flags", () => {

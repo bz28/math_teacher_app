@@ -145,13 +145,7 @@ async def test_never_confirmed_needs_the_check_switched_on(
     assert rows[str(subs["never_confirmed"])]["unfinished_check"] is None
 
 
-async def test_inbox_flagged_count_matches_roster_filter(
-    client: AsyncClient, world: dict[str, Any],
-) -> None:
-    """The inbox's "N flagged" counts exactly the rows the review page's
-    Flagged filter lists: turn cap, unreadable, disputed. Didn't-finish
-    rows are marked on the roster but never flagged."""
-    await _seed(world)
+async def _inbox_flagged(client: AsyncClient, world: dict[str, Any]) -> int:
     async with get_session_factory()() as s:
         course_id = (await s.execute(
             select(Assignment.course_id)
@@ -169,7 +163,80 @@ async def test_inbox_flagged_count_matches_roster_filter(
     )
     assert r.status_code == 200, r.text
     (row,) = [x for x in r.json()["rows"] if x["assignment_id"] == str(world["assignment_id"])]
-    assert row["flagged"] == 3
+    return int(row["flagged"])
+
+
+async def test_inbox_flagged_count_matches_roster_filter(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """The inbox's "N flagged" counts exactly the rows the review page's
+    Flagged filter lists: turn cap, unreadable, disputed. Didn't-finish
+    rows are marked on the roster but never flagged."""
+    await _seed(world)
+    assert await _inbox_flagged(client, world) == 3
+
+
+async def test_a_close_with_no_recorded_reason_is_inconclusive_everywhere(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """A no-verdict close whose reason was never recorded (no fixed copy
+    for the backfill or the sweep to read) is "Inconclusive" — not a
+    didn't-finish — and the flagged count includes it, so the pill, the
+    banner and the count agree."""
+    subs = await _seed(world)
+    async with get_session_factory()() as s:
+        await s.execute(text(
+            "UPDATE integrity_check_submissions SET incomplete_reason = NULL "
+            "WHERE submission_id = :sid"
+        ), {"sid": subs["turn_cap"]})
+        await s.commit()
+    row = (await _rows(client, world))[str(subs["turn_cap"])]
+    assert row["unfinished_check"] is None
+    assert row["integrity_overview"]["disposition"] is None
+    assert row["integrity_overview"]["incomplete_reason"] is None
+    assert await _inbox_flagged(client, world) == 3
+
+
+async def test_one_bad_row_never_stalls_the_sweep(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """Each close runs in its own savepoint: a row that throws is skipped
+    and logged, and the rest of the batch still closes and commits."""
+    from unittest.mock import patch
+
+    from api.core import integrity_pipeline
+    from api.core.integrity_pipeline import finalize_abandoned_checks
+
+    subs = await _seed(world)
+    bad, good = subs["not_started"], subs["left_partway"]
+    async with get_session_factory()() as s:
+        await s.execute(text(
+            "UPDATE integrity_check_submissions SET status = 'awaiting_student', "
+            "incomplete_reason = NULL, updated_at = :ts "
+            "WHERE submission_id IN (:bad, :good)"
+        ), {"ts": datetime.now(UTC) - STALE, "bad": bad, "good": good})
+        await s.commit()
+
+    real = integrity_pipeline._force_finalize_abandoned
+
+    async def flaky(check: IntegrityCheckSubmission, db: Any) -> None:
+        if check.submission_id == bad:
+            raise RuntimeError("bad row")
+        await real(check, db)
+
+    with patch.object(integrity_pipeline, "_force_finalize_abandoned", flaky):
+        async with get_session_factory()() as s:
+            assert await finalize_abandoned_checks(s) == 1
+
+    got = await _reasons()
+    assert got[good] == "not_started"
+    assert got[bad] is None
+    async with get_session_factory()() as s:
+        status = (await s.execute(
+            select(IntegrityCheckSubmission.status)
+            .where(IntegrityCheckSubmission.submission_id == bad)
+        )).scalar_one()
+    assert status == "awaiting_student"  # left for the next pass
 
 
 # ── Migration backfill ──

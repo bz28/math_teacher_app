@@ -42,8 +42,14 @@ export function isFlaggedSubmission(sub: FlaggedInput): boolean {
   // A teacher who marked the check reviewed has handled it.
   if (overview.resolution !== "unresolved") return false;
   if (overview.disposition === "flag_for_review") return true;
+  if (overview.incomplete_reason === "unreadable") return true;
+  // No verdict, and not because the student walked away: the turn cap,
+  // or an old close with no recorded reason. Both wear the
+  // "Inconclusive" pill, so both are in the list.
   return (
-    overview.incomplete_reason === "unreadable" ||
-    overview.incomplete_reason === "turn_cap"
+    overview.overall_status === "complete" &&
+    !overview.disposition &&
+    overview.incomplete_reason !== "not_started" &&
+    overview.incomplete_reason !== "left_partway"
   );
 }

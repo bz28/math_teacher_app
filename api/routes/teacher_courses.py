@@ -16,7 +16,7 @@ from api.core.class_rubric import (
     credit_guidance,
     rubric_revision,
 )
-from api.core.integrity_pipeline import INCOMPLETE_TURN_CAP
+from api.core.integrity_pipeline import UNFINISHED_REASONS
 from api.core.subjects import VALID_SUBJECTS
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
@@ -171,9 +171,11 @@ def _dirty_case() -> Any:
 
 def flagged_case() -> Any:
     """Counts submissions needing teacher attention from the integrity
-    pipeline — flagged disposition, unreadable extraction, a turn-cap
-    inconclusive check, an AI-grading skip with no grade, or student-raised
-    'reader got something wrong' before confirm.
+    pipeline — flagged disposition, unreadable extraction, an inconclusive
+    check (no verdict, and not because the student walked away: the turn
+    cap, or an old close with no recorded reason — the roster shows both
+    as "Inconclusive"), an AI-grading skip with no grade, or
+    student-raised 'reader got something wrong' before confirm.
 
     The one definition of "flagged": the courses dashboard, the needs-
     attention queue and the per-homework inbox all sum this, and the
@@ -212,7 +214,12 @@ def flagged_case() -> Any:
             and_(
                 IntegrityCheckSubmission.status == "complete",
                 IntegrityCheckSubmission.disposition.is_(None),
-                IntegrityCheckSubmission.incomplete_reason == INCOMPLETE_TURN_CAP,
+                or_(
+                    IntegrityCheckSubmission.incomplete_reason.is_(None),
+                    IntegrityCheckSubmission.incomplete_reason.notin_(
+                        UNFINISHED_REASONS,
+                    ),
+                ),
                 integrity_unresolved,
             ),
             1,
