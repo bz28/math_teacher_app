@@ -59,13 +59,12 @@ _PROGRESS_BATCH = 5
 
 # The solver now and then writes a line break as the two characters
 # backslash + n, which the student sees verbatim ("…51°)\n\n(b)…").
-# Outside math that pair is never anything else; inside math it starts
-# \neq, \nabla, \nu…, so math is left alone. Outside math, a LaTeX
-# command the model forgot to wrap (a bare \neq) is kept too.
+# Math is left alone: there the pair starts \neq, \nabla, \notin…
+# Outside math, a run of two or more is always line breaks, and a single
+# one is a line break unless a letter follows — then it may be a bare
+# LaTeX command (\notin, \nRightarrow), so it is kept.
 _MATH = re.compile(r"(\$\$.*?\$\$|(?<!\\)\$.*?(?<!\\)\$|\\\(.*?\\\)|\\\[.*?\\\])", re.DOTALL)
-_LITERAL_NEWLINE = re.compile(
-    r"(?<!\\)\\n(?!(?:e|eq|eg|abla|u|ot|i|mid|ewline|oindent|leq|geq|cong|sim|parallel|exists)\b)"
-)
+_LITERAL_NEWLINE = re.compile(r"(?<!\\)(?:(?:\\n){2,}|\\n(?![A-Za-z]))")
 
 
 def real_newlines(text: str) -> str:
@@ -73,7 +72,7 @@ def real_newlines(text: str) -> str:
     if "\\n" not in text:
         return text
     return "".join(
-        part if i % 2 else _LITERAL_NEWLINE.sub("\n", part)
+        part if i % 2 else _LITERAL_NEWLINE.sub(lambda m: "\n" * (len(m.group()) // 2), part)
         for i, part in enumerate(_MATH.split(text))
     )
 
@@ -441,13 +440,6 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
         doc_metadata = build_attachment_metadata(len(doc_ids), images) if doc_ids else None
 
         constraint_text = job.constraint
-        if is_practice:
-            # Practice is answered one value at a time (part_labels.py).
-            # An upload is copied verbatim, so it only gets the backstop.
-            constraint_text = (
-                f"{job.constraint}\n\n{PRACTICE_SINGLE_ANSWER_RULE}"
-                if job.constraint else PRACTICE_SINGLE_ANSWER_RULE
-            )
         if job.parent_question_id:
             parent = (await db.execute(
                 select(QuestionBankItem).where(QuestionBankItem.id == job.parent_question_id)
@@ -484,8 +476,17 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
                     f"{_json.dumps(parent.figure_spec, indent=2)}"
                 )
             constraint_text = (
-                f"{seed_block}\n\nAdditional constraint: {constraint_text}"
-                if constraint_text else seed_block
+                f"{seed_block}\n\nAdditional constraint: {job.constraint}"
+                if job.constraint else seed_block
+            )
+        if is_practice:
+            # Practice is answered one value at a time (part_labels.py).
+            # Last, so it reads as the final word over the teacher's brief
+            # and any reference question. An upload is copied verbatim, so
+            # it only gets the backstop.
+            constraint_text = (
+                f"{constraint_text}\n\n{PRACTICE_SINGLE_ANSWER_RULE}"
+                if constraint_text else PRACTICE_SINGLE_ANSWER_RULE
             )
 
         # The set's title is often the only place its topic is named
@@ -750,8 +751,6 @@ async def regenerate_one(
     is_practice = (await db.execute(
         select(Assignment.type).where(Assignment.id == item.originating_assignment_id)
     )).scalar_one_or_none() == "practice"
-    if is_practice:
-        parts.append(PRACTICE_SINGLE_ANSWER_RULE)
 
     has_instructions = bool(instructions and instructions.strip())
     if has_instructions:
@@ -762,6 +761,9 @@ async def regenerate_one(
             "Generate a fresh question on the same topic and constraint. "
             "Do not reuse the original question's wording."
         )
+    if is_practice:
+        # Last, after the teacher's instructions: the product rule wins.
+        parts.append(PRACTICE_SINGLE_ANSWER_RULE)
 
     user_message = "\n\n".join(parts)
 

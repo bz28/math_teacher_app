@@ -67,6 +67,16 @@ MULTI_PART = [
     "(i) Find the slope.\n(ii) Write the equation.",
     # Upper-case labels.
     "(A) Find x. (B) Find y.",
+    # Numbered parts, each opening a line or a sentence.
+    "Answer each.\n1. Find the slope.\n2. Find the intercept.",
+    "1) Find the slope of $\\ell$.\n2) Write its equation.",
+    "(1) Find x.\n(2) Find y.",
+    "Solve the system. (1) Find x. (2) Find y.",
+    # Glued to the part's first word, at a line start.
+    "(a)Find x.(b)Find y.",
+    "(a)Find x(b)Find y",
+    # A run that starts at a later letter.
+    "(c) Find the slope.\n(d) Find the intercept.",
 ]
 
 SINGLE_ANSWER = [
@@ -83,15 +93,27 @@ SINGLE_ANSWER = [
     # Equation numbers.
     "Subtract (1) from (2) to get $y = 3$.",
     "(1) $2x + y = 5$\n(2) $x - y = 1$\nSolve the system.",
-    # Numbered steps in a worked answer.
-    "**Construction Summary:**\n\n1. Draw transversal $PQ$.\n2. At $Q$: strike an arc.",
     # A single (a) is a variable, not a part.
     "The constant (a) must be positive.",
     # "part" in prose.
     "Part of the line lies above the axis.",
     "$\\angle A + \\angle B + \\angle C = 180°$",
+    # Labels that name or list things mid-sentence.
+    "Copper (I) oxide or copper (II) oxide",
+    "Which of statements (i) and (ii) are true?",
+    "In part 1 of its trip the train goes north; in part 2 it goes east",
+    "Pick one: (A) 3 (B) 4",
+    "x = (a) + (b)",
+    "Are lines (a) and (b) parallel?",
     "",
     None,
+]
+
+# A worked answer's numbered lines are its steps, not parts.
+ANSWER_STEPS = [
+    "**Construction Summary:**\n\n1. Draw transversal $PQ$.\n2. At $Q$: strike an arc.",
+    "Two conditionals:\n1. If two lines are perpendicular, they meet at a right angle.\n"
+    "2. If two lines meet at a right angle, they are perpendicular.",
 ]
 
 
@@ -105,6 +127,19 @@ def test_multi_part_text_has_part_labels(text: str) -> None:
 def test_single_answer_text_has_none(text: str | None) -> None:
     assert not has_part_labels(text)
     assert not mig.has_part_labels(text)
+
+
+@pytest.mark.parametrize("text", ANSWER_STEPS)
+def test_numbered_steps_in_an_answer_are_not_parts(text: str) -> None:
+    assert not has_part_labels(text, numbered=False)
+    assert not mig.has_part_labels(text, numbered=False)
+    assert not is_multi_part("Construct the line.", text)
+    # The same lines in a question are numbered parts.
+    assert has_part_labels(text)
+
+
+def test_part_n_still_counts_in_an_answer() -> None:
+    assert has_part_labels("**Part 1:** $x = 2$\n\n**Part 2:** $y = 3$", numbered=False)
 
 
 def test_either_side_makes_it_multi_part() -> None:
@@ -122,9 +157,17 @@ def test_either_side_makes_it_multi_part() -> None:
      "never intersect.\n\n$$\\boxed{\\text{No solution}}$$"),
     # Math is left alone: \neq, \nabla, \nu start with backslash-n.
     ("$x \\neq 3$ and $\\nabla f$", "$x \\neq 3$ and $\\nabla f$"),
-    ("$$a \\ne b$$\\nso $\\nu = 2$", "$$a \\ne b$$\nso $\\nu = 2$"),
-    # A bare LaTeX command outside math is kept too.
+    ("$$a \\ne b$$\\n\\nso $\\nu = 2$", "$$a \\ne b$$\n\nso $\\nu = 2$"),
+    # Outside math, a single one before a letter may be a bare LaTeX
+    # command, so it is kept; a run of two or more is always line breaks.
+    ("x \\notin A", "x \\notin A"),
+    ("p \\nRightarrow q", "p \\nRightarrow q"),
+    ("\\nu", "\\nu"),
     ("x \\neq 3", "x \\neq 3"),
+    ("\\n\\nThe answer", "\n\nThe answer"),
+    ("x=2\\n", "x=2\n"),
+    ("\\n1.", "\n1."),
+    ("so:\\n $x$", "so:\n $x$"),
     # A LaTeX line break followed by n is not a literal newline.
     ("a \\\\n b", "a \\\\n b"),
     ("plain", "plain"),
@@ -140,6 +183,14 @@ def test_real_newlines(raw: str, want: str) -> None:
 ])
 def test_migration_reads_every_stored_shape(raw: Any, has: bool) -> None:
     assert mig._has_options(raw) is has
+
+
+def test_migration_reads_an_answer_with_literal_newlines_as_rendered() -> None:
+    # Prod 354df559: its "(b)" follows a literal backslash-n pair.
+    answer = "**(a)** $x = 12$\\n\\n**(b)** Corresponding Angles Converse Postulate"
+    assert mig.is_multi_part("Solve.", answer)
+    assert mig.is_multi_part("(a) Find x.\n(b) Name the postulate.", "$x = 12$")
+    assert not mig.is_multi_part("Solve.", "$x = 12$")
 
 
 # ── generation ──
@@ -309,3 +360,14 @@ async def test_a_direct_practice_set_keeps_its_problem_list_order() -> None:
             )).scalar_one()
             got = [it.id for it in await approved_practice_items(s, practice)]
         assert got == want
+
+
+def test_look_alike_variations_serve_multi_part_items_without_options() -> None:
+    from api.routes.school_student_practice import _serialize
+
+    def item(answer: str) -> QuestionBankItem:
+        return QuestionBankItem(id=uuid.uuid4(), question="Solve.", final_answer=answer,
+                                distractors=["1", "2", "3"], difficulty="easy")
+
+    assert _serialize(item("**(a)** $x = 1$\n\n**(b)** $y = 2$")).distractors == []
+    assert _serialize(item("$x = 1$")).distractors == ["1", "2", "3"]

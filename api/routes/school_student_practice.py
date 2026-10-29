@@ -677,7 +677,8 @@ def _serialize(item: QuestionBankItem) -> VariationPayload:
         bank_item_id=str(item.id),
         question=item.question,
         final_answer=item.final_answer,
-        distractors=list(item.distractors or []),
+        # Multi-part look-alikes are free response, as on the practice page.
+        distractors=[] if is_multi_part(item.question, item.final_answer) else list(item.distractors or []),
         solution_steps=_student_solution_steps(item.solution_steps),
         difficulty=item.difficulty,
         figure_svg=item.figure_svg,
