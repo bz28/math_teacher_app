@@ -3694,7 +3694,7 @@ export interface paths {
          *     teacher right now, one row per submission, prioritized.
          *
          *     Reuses the exact predicates the courses dashboard and Submissions
-         *     inbox use (_to_review_case / _flagged_case), so the queue can never
+         *     inbox use (_to_review_case / flagged_case), so the queue can never
          *     disagree with the per-course pills. Owner-gated: only submissions on
          *     published homework the teacher owns, non-preview students, dropped
          *     after un-enrollment via the SectionEnrollment guard.
@@ -6305,6 +6305,8 @@ export interface components {
             disposition: string | null;
             /** Headline */
             headline: string | null;
+            /** Incomplete Reason */
+            incomplete_reason: ("not_started" | "left_partway" | "turn_cap") | null;
             /** Inline Variant Result */
             inline_variant_result: string | null;
             /** Inline Variant Used */
