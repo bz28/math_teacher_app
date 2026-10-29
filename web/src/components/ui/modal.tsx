@@ -22,6 +22,8 @@ interface ModalProps {
    *  readers announce more than "dialog". */
   label?: string;
   labelledById?: string;
+  /** id of the element holding the dialog's message, for aria-describedby. */
+  describedById?: string;
 }
 
 const FOCUSABLE_SELECTOR =
@@ -36,6 +38,7 @@ export function Modal({
   outerClassName,
   label,
   labelledById,
+  describedById,
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -134,6 +137,7 @@ export function Modal({
             aria-modal="true"
             aria-label={labelledById ? undefined : label}
             aria-labelledby={labelledById}
+            aria-describedby={describedById}
           >
             {children}
           </motion.div>

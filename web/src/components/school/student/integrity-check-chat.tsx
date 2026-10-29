@@ -13,6 +13,7 @@ import {
 import { ExtractionView } from "@/components/school/shared/extraction-view";
 import { MathText } from "@/components/shared/math-text";
 import { Modal } from "@/components/ui/modal";
+import { shouldOpenOwnWordsNudge } from "./own-words-nudge";
 import { cn } from "@/lib/utils";
 import { useDeviceType } from "./use-device-type";
 import { useTurnTelemetry } from "./use-turn-telemetry";
@@ -290,13 +291,7 @@ export function IntegrityCheckChat({
       // Only reset telemetry after the turn is persisted on the
       // server; a failed POST keeps the signals intact for retry.
       telemetry.reset();
-      if (
-        next.nudge_own_words &&
-        !state?.nudge_own_words &&
-        next.overall_status === "in_progress"
-      ) {
-        setOwnWordsOpen(true);
-      }
+      if (shouldOpenOwnWordsNudge(state, next)) setOwnWordsOpen(true);
       setState(next);
       setPendingStudentMessage(null);
       setTurnStartedAt(Date.now());
@@ -773,6 +768,7 @@ function OwnWordsNudge({
       onClose={onClose}
       className="max-w-sm"
       labelledById="integrity-own-words-title"
+      describedById="integrity-own-words-body"
     >
       <h2
         id="integrity-own-words-title"
@@ -780,7 +776,10 @@ function OwnWordsNudge({
       >
         Answer in your own words
       </h2>
-      <p className="mt-2 text-sm leading-relaxed text-text-secondary">
+      <p
+        id="integrity-own-words-body"
+        className="mt-2 text-sm leading-relaxed text-text-secondary"
+      >
         Even a guess helps. If something&rsquo;s confusing, ask about it
         &mdash; that&rsquo;s a good answer too.
       </p>

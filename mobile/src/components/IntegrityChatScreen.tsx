@@ -94,6 +94,7 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
   // and never blocks sending. Mirrors web.
   const [ownWordsOpen, setOwnWordsOpen] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+  const inputRef = useRef<TextInput>(null);
   const turnStart = useRef<number>(Date.now());
   const lastActivity = useRef<number>(Date.now());
   const telemetry = useTurnTelemetry();
@@ -225,6 +226,12 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
     },
     [input, sending, stuckUsed, nudgeWasOn, submissionId, telemetry, markActivity],
   );
+
+  // Straight back to typing once the own-words sheet is dismissed.
+  const closeOwnWords = useCallback(() => {
+    setOwnWordsOpen(false);
+    inputRef.current?.focus();
+  }, []);
 
   const canSend = input.trim().length >= MIN_INTEGRITY_MESSAGE_CHARS;
   // One hint at a time: a too-short draft shows the 5-char floor hint;
@@ -519,6 +526,7 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
             )}
             <View style={styles.inputRow}>
               <TextInput
+                ref={inputRef}
                 style={styles.input}
                 value={input}
                 onChangeText={(t) => {
@@ -575,7 +583,7 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
         visible={ownWordsOpen}
         transparent
         animationType="slide"
-        onRequestClose={() => setOwnWordsOpen(false)}
+        onRequestClose={closeOwnWords}
       >
         <View style={styles.sheetOverlay}>
           <View style={[styles.sheet, shadows.lg]} accessibilityViewIsModal>
@@ -587,7 +595,7 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
               Even a guess helps. If something's confusing, ask about it — that's a good answer
               too.
             </Text>
-            <Button label="Got it" onPress={() => setOwnWordsOpen(false)} />
+            <Button label="Got it" onPress={closeOwnWords} />
           </View>
         </View>
       </Modal>
