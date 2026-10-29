@@ -33,6 +33,7 @@ from api.core.geometry import figure_point_names, render_figure_or_none
 from api.core.image_utils import to_content_block
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
 from api.core.llm_schemas import GENERATE_QUESTIONS_SCHEMA, REGENERATE_QA_SCHEMA
+from api.core.part_labels import PRACTICE_SINGLE_ANSWER_RULE, is_multi_part
 from api.core.practice import generate_distractors
 from api.core.subjects import get_config
 from api.database import get_session_factory
@@ -55,6 +56,26 @@ _inflight_jobs: set[asyncio.Task[None]] = set()
 # Commit every N persisted questions during bulk generation so the
 # frontend polling banner ticks visibly without N+1 transactions.
 _PROGRESS_BATCH = 5
+
+# The solver now and then writes a line break as the two characters
+# backslash + n, which the student sees verbatim ("…51°)\n\n(b)…").
+# Outside math that pair is never anything else; inside math it starts
+# \neq, \nabla, \nu…, so math is left alone. Outside math, a LaTeX
+# command the model forgot to wrap (a bare \neq) is kept too.
+_MATH = re.compile(r"(\$\$.*?\$\$|(?<!\\)\$.*?(?<!\\)\$|\\\(.*?\\\)|\\\[.*?\\\])", re.DOTALL)
+_LITERAL_NEWLINE = re.compile(
+    r"(?<!\\)\\n(?!(?:e|eq|eg|abla|u|ot|i|mid|ewline|oindent|leq|geq|cong|sim|parallel|exists)\b)"
+)
+
+
+def real_newlines(text: str) -> str:
+    """Turn literal backslash-n pairs outside math into line breaks."""
+    if "\\n" not in text:
+        return text
+    return "".join(
+        part if i % 2 else _LITERAL_NEWLINE.sub("\n", part)
+        for i, part in enumerate(_MATH.split(text))
+    )
 
 
 def _render_step_figures(
@@ -376,6 +397,11 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
     )).scalar_one_or_none()
     unit_name = unit.name if unit else course.name
 
+    assignment_title, assignment_type = (await db.execute(
+        select(Assignment.title, Assignment.type).where(Assignment.id == job.originating_assignment_id)
+    )).one_or_none() or (None, None)
+    is_practice = assignment_type == "practice"
+
     # 1. Get question texts — either extract from uploaded images or
     # generate via AI, depending on job mode.
     if job.mode == "upload":
@@ -415,6 +441,13 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
         doc_metadata = build_attachment_metadata(len(doc_ids), images) if doc_ids else None
 
         constraint_text = job.constraint
+        if is_practice:
+            # Practice is answered one value at a time (part_labels.py).
+            # An upload is copied verbatim, so it only gets the backstop.
+            constraint_text = (
+                f"{job.constraint}\n\n{PRACTICE_SINGLE_ANSWER_RULE}"
+                if job.constraint else PRACTICE_SINGLE_ANSWER_RULE
+            )
         if job.parent_question_id:
             parent = (await db.execute(
                 select(QuestionBankItem).where(QuestionBankItem.id == job.parent_question_id)
@@ -451,16 +484,15 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
                     f"{_json.dumps(parent.figure_spec, indent=2)}"
                 )
             constraint_text = (
-                f"{seed_block}\n\nAdditional constraint: {job.constraint}"
-                if job.constraint else seed_block
+                f"{seed_block}\n\nAdditional constraint: {constraint_text}"
+                if constraint_text else seed_block
             )
 
         # The set's title is often the only place its topic is named
         # (units are commonly just "Unit 3"). A variation already carries
         # its topic in the reference question, so it goes without.
-        assignment_title = None if job.parent_question_id else (await db.execute(
-            select(Assignment.title).where(Assignment.id == job.originating_assignment_id)
-        )).scalar_one_or_none()
+        if job.parent_question_id:
+            assignment_title = None
 
         question_dicts = await generate_questions(
             unit_name=unit_name,
@@ -530,6 +562,9 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
         user_id=str(job.created_by_id),
         generation_job_id=str(job.id),
     )
+    for s in solutions:
+        if s.get("final_answer"):
+            s["final_answer"] = real_newlines(s["final_answer"])
 
     # 2b. Generate 3 MCQ distractors per question. Stored on the bank
     # item so the school-student practice loop can serve MCQs with
@@ -543,6 +578,10 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
     async def make_distractors(idx: int, q: dict[str, Any], s: dict[str, Any]) -> list[str]:
         final = s.get("final_answer")
         if not final or final.startswith("(solution failed"):
+            return []
+        # A multi-part practice problem would be a give-away MCQ: its
+        # wrong options answer one part, the right one answers all.
+        if is_practice and is_multi_part(q["text"], final):
             return []
         async with distractors_sem:
             try:
@@ -708,6 +747,11 @@ async def regenerate_one(
     ]
     if item.generation_prompt:
         parts.append(f"Original generation constraint: {item.generation_prompt}")
+    is_practice = (await db.execute(
+        select(Assignment.type).where(Assignment.id == item.originating_assignment_id)
+    )).scalar_one_or_none() == "practice"
+    if is_practice:
+        parts.append(PRACTICE_SINGLE_ANSWER_RULE)
 
     has_instructions = bool(instructions and instructions.strip())
     if has_instructions:
@@ -766,7 +810,7 @@ async def regenerate_one(
     item.solution_steps = (
         _render_step_figures(new_steps) if isinstance(new_steps, list) else None
     )
-    item.final_answer = str(new_answer) if new_answer else ""
+    item.final_answer = real_newlines(str(new_answer)) if new_answer else ""
     # Re-resolve the figure from the regenerated payload. If the new
     # question no longer needs a figure (LLM omitted the spec), we
     # clear the stale one — otherwise the diagram on disk would
@@ -779,7 +823,9 @@ async def regenerate_one(
     # distractors were keyed off the old wrong-answer patterns and would
     # be misleading on the new problem. Failure here is non-fatal —
     # we drop to None and let the next student-facing fetch handle it.
-    if item.final_answer:
+    if is_practice and is_multi_part(item.question, item.final_answer):
+        item.distractors = None
+    elif item.final_answer:
         try:
             item.distractors = await generate_distractors(
                 item.question,

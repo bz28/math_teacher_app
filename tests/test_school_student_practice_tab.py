@@ -162,6 +162,29 @@ async def test_practice_detail_ships_full_problem_payload(
     assert prob["distractors"] == ["x=1", "x=-2", "x=5"]
 
 
+async def test_practice_detail_serves_a_multi_part_problem_without_options(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """A teacher edited the answer into parts after its options were
+    written: the student gets it free response, never a give-away MCQ
+    (api/core/part_labels.py). Nothing stored is changed."""
+    p = await _publish_linked_practice(world)
+    async with get_session_factory()() as s:
+        item = await s.get(QuestionBankItem, p["variation_id"])
+        assert item is not None
+        item.final_answer = "**(a)** $x = 2$\n\n**(b)** $x = 3$"
+        await s.commit()
+    r = await client.get(
+        f"/v1/school/student/practice/{p['practice_id']}",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["problems"][0]["distractors"] is None
+    async with get_session_factory()() as s:
+        item = await s.get(QuestionBankItem, p["variation_id"])
+        assert item is not None and item.distractors == ["x=1", "x=-2", "x=5"]
+
+
 async def test_practice_detail_rejects_non_practice_assignment(
     client: AsyncClient, world: dict[str, Any],
 ) -> None:
