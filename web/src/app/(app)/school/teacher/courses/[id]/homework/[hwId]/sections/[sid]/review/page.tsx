@@ -40,6 +40,7 @@ import {
   type TeacherIntegrityTranscriptTurn,
   type TeacherRubric,
   type ClassRubricRule,
+  type TeacherGraphCheck,
   type TeacherSubmissionDetail,
   type TeacherSubmissionDetailProblem,
   type TeacherSubmissionDrawing,
@@ -47,6 +48,7 @@ import {
   type TeacherSubmissionStep,
 } from "@/lib/api";
 import { RuleSuggestion } from "@/components/school/teacher/_pieces/rule-suggestion";
+import { GraphCheckReview, openGraphItems } from "@/components/school/teacher/_pieces/graph-check-review";
 import { effectiveRubric, rubricChanged, rubricFields } from "@/lib/rubric";
 import { deductionPoints, earnedPoints, formatPoints } from "@/lib/points";
 
@@ -186,6 +188,25 @@ function teacherOverrodeAi(
     entry.score_status === "partial" &&
     Math.round(entry.percent) !== Math.round(ai.percent)
   );
+}
+
+// The AI's call on a graph problem, with the teacher's ✗ on items the
+// drawing check left unclear taken off — the grade the AI's check and
+// her calls make together. Measuring "did she override the AI" against
+// this keeps a ✗ from reading as an override (and "revert" from undoing
+// it); ✓ changes nothing, since an unclear item already kept its points.
+function withGraphCalls(
+  ai: AiGradeEntry | null,
+  graph: TeacherGraphCheck | null | undefined,
+): AiGradeEntry | null {
+  if (!ai || !graph || graph.overridden || graph.points <= 0) return ai;
+  const off = graph.items
+    .filter((i) => i.verdict === "unclear" && i.teacher === "no")
+    .reduce((sum, i) => sum + (i.points * 100) / graph.points, 0);
+  if (off === 0) return ai;
+  const percent = Math.min(Math.max(ai.percent - off, 0), 100);
+  const score_status = percent >= 100 ? "full" : percent <= 0 ? "zero" : "partial";
+  return { ...ai, percent, score_status };
 }
 
 // Always-on AI confidence indicator for a single grade. Reads the
@@ -971,7 +992,29 @@ function HomeworkSectionReview({
       const nextBreakdown = existing
         ? prior.map((b) => (b.problem_id === problemId ? nextEntry : b))
         : [...prior, nextEntry];
-      setDetail({ ...detail, breakdown: nextBreakdown });
+      // A hand re-score of a graph problem takes it off the checklist
+      // (the server's note_hand_edits does the same on this save): mirror
+      // that now so the checklist and the roster stop asking for calls.
+      const reScored = existing != null && Math.abs(existing.percent - percent) > 1e-6;
+      const problems = reScored
+        ? detail.problems.map((p) =>
+            p.bank_item_id === problemId && p.graph && !p.graph.overridden
+              ? { ...p, graph: { ...p.graph, overridden: true, open_items: 0 } }
+              : p,
+          )
+        : detail.problems;
+      setDetail({ ...detail, breakdown: nextBreakdown, problems });
+      if (problems.some((p, i) => p !== detail.problems[i])) {
+        setRoster((prev) =>
+          prev
+            ? prev.map((e) =>
+                e.submission?.id === detail.submission_id
+                  ? { ...e, submission: { ...e.submission, graph_items_open: openGraphItems(problems) } }
+                  : e,
+              )
+            : prev,
+        );
+      }
       void persistBreakdown(detail.submission_id, nextBreakdown);
     },
     [detail, persistBreakdown],
@@ -1445,6 +1488,60 @@ function HomeworkSectionReview({
     [],
   );
 
+  // The teacher's ✓ / ✗ on a graph checklist item the drawing check
+  // couldn't decide. The server re-scores the problem; mirror its entry,
+  // its graph check and the homework score onto the open detail and the
+  // roster row. Errors share the saveError channel.
+  const [graphBusy, setGraphBusy] = useState<{ problemId: string; n: number } | null>(null);
+  const handleGraphVerdict = useCallback(
+    async (submissionId: string, problemId: string, n: number, verdict: "yes" | "no") => {
+      setGraphBusy({ problemId, n });
+      setSaveError((prev) => (prev?.forSubmissionId === submissionId ? null : prev));
+      try {
+        const res = await teacher.setGraphItemVerdict(submissionId, { problem_id: problemId, n, verdict });
+        // Built from the detail this click was made on (it's for this
+        // submission: the panel only shows the open one), so the roster
+        // row gets the same values in the same pass.
+        const d = detail && detail.submission_id === submissionId ? detail : null;
+        const breakdown = d ? (d.breakdown ?? []).map((e) => (e.problem_id === problemId ? res.entry : e)) : null;
+        const problems = d
+          ? d.problems.map((p) => (p.bank_item_id === problemId ? { ...p, graph: res.graph } : p))
+          : null;
+        setDetail((cur) =>
+          cur && cur.submission_id === submissionId && breakdown && problems
+            ? { ...cur, breakdown, problems, final_score: res.final_score, grade_dirty: res.grade_dirty }
+            : cur,
+        );
+        setRoster((prev) =>
+          prev
+            ? prev.map((e) =>
+                e.submission?.id === submissionId
+                  ? {
+                      ...e,
+                      submission: {
+                        ...e.submission,
+                        final_score: res.final_score,
+                        grade_dirty: res.grade_dirty,
+                        ...(breakdown ? { breakdown } : {}),
+                        ...(problems ? { graph_items_open: openGraphItems(problems) } : {}),
+                      },
+                    }
+                  : e,
+              )
+            : prev,
+        );
+      } catch (e) {
+        setSaveError({
+          forSubmissionId: submissionId,
+          message: e instanceof Error ? e.message : "Failed to save your call on the graph",
+        });
+      } finally {
+        setGraphBusy(null);
+      }
+    },
+    [detail],
+  );
+
   // Undo an approval — clears reviewed_at server-side, then mirrors it
   // back to null on the roster row + open detail so the submission drops
   // to "not reviewed" without a refetch. Reuses markingReviewedId as the
@@ -1831,6 +1928,10 @@ function HomeworkSectionReview({
                 onUnmarkReviewed={() =>
                   void handleUnmarkReviewed(selectedEntry.submission!.id)
                 }
+                onGraphVerdict={(problemId, n, verdict) =>
+                  void handleGraphVerdict(selectedEntry.submission!.id, problemId, n, verdict)
+                }
+                graphBusy={graphBusy}
                 marking={markingReviewedId === selectedEntry.submission.id}
                 savingGrade={savingGradeIds.has(selectedEntry.submission.id)}
                 regrading={regradingSubmissionId === selectedEntry.submission.id}
@@ -2508,6 +2609,11 @@ function aiGradePollDelay(elapsedMs: number): number {
   return 10_000;
 }
 
+/** A graph item the drawing check couldn't decide, waiting on her. */
+function hasGraphToCheck(entry: RosterEntry): boolean {
+  return (entry.submission?.graph_items_open ?? 0) > 0;
+}
+
 function hasLowConfidence(entry: RosterEntry): boolean {
   const breakdown = entry.submission?.breakdown;
   if (!breakdown) return false;
@@ -2772,7 +2878,7 @@ function TriageRoster({
       continue;
     }
     if (!e.submission) notSubmitted.push(e);
-    else if (isFlagged(e) || hasLowConfidence(e)) needsEyes.push(e);
+    else if (isFlagged(e) || hasLowConfidence(e) || hasGraphToCheck(e)) needsEyes.push(e);
     // Ungraded gets its own group. It used to fall into "AI confident"
     // — technically true (nothing was flagged) and substantively a lie,
     // because the AI hadn't looked at the work at all. That was almost
@@ -3060,6 +3166,15 @@ function rowStatusLabel(
       dotClass: "bg-[color:var(--color-error)]",
     };
   }
+  // A graph item the check couldn't decide holds up Approve — say so
+  // before any graded/published state reads as finished.
+  if (hasGraphToCheck(entry) && !sub.reviewed_at) {
+    const n = sub.graph_items_open ?? 0;
+    return {
+      text: `${n === 1 ? "1 graph item" : `${n} graph items`} to check`,
+      dotClass: "bg-[color:var(--color-warning)]",
+    };
+  }
   // The AI skipped it (unreadable photo, or too long to grade in one
   // pass) and never produced a grade — call it out distinctly so the
   // teacher knows this row needs a manual pass, not just an unopened
@@ -3138,6 +3253,8 @@ function SubmissionDetailPanel({
   onIntegrityResolved,
   onMarkReviewed,
   onUnmarkReviewed,
+  onGraphVerdict,
+  graphBusy,
   marking,
   savingGrade,
   regrading,
@@ -3185,6 +3302,10 @@ function SubmissionDetailPanel({
   ) => void;
   onMarkReviewed: () => void;
   onUnmarkReviewed: () => void;
+  /** The teacher's ✓ / ✗ on an unclear graph checklist item. */
+  onGraphVerdict: (problemId: string, n: number, verdict: "yes" | "no") => void;
+  /** The graph item whose call is saving, if any. */
+  graphBusy: { problemId: string; n: number } | null;
   marking: boolean;
   savingGrade: boolean;
   regrading: boolean;
@@ -3331,11 +3452,17 @@ function SubmissionDetailPanel({
   const problemMeta = useMemo(
     () =>
       detail.problems.map((p) => {
-        const ai = aiByPosition.get(p.position) ?? null;
+        const ai = withGraphCalls(aiByPosition.get(p.position) ?? null, p.graph);
         const entry = breakdownByProblem.get(p.bank_item_id) ?? null;
         const overridden = teacherOverrodeAi(entry, ai);
         // Confident = high-band AI grade that the teacher hasn't moved.
-        const confident = isConfidentAi(ai) && !overridden && entry !== null;
+        // A graph item the check couldn't decide is never folded away —
+        // not while it waits on her, nor the moment she decides it.
+        const confident =
+          isConfidentAi(ai) &&
+          !overridden &&
+          entry !== null &&
+          !p.graph?.items.some((it) => it.verdict === "unclear");
         const collapsed = confident && !manuallyExpandedIds.has(p.bank_item_id);
         return {
           id: p.bank_item_id,
@@ -3402,6 +3529,13 @@ function SubmissionDetailPanel({
   // pill doesn't flash "n/n graded" for the round trip.
   const handGraded = (detail.ai_breakdown?.length ?? 0) === 0;
   const approved = !!detail.reviewed_at || (handGraded && allGraded);
+  // Graph checklist items the drawing check couldn't decide. Their
+  // points are kept until she calls each one; Approve waits on them.
+  const graphItemsOpen = openGraphItems(detail.problems);
+  const graphGate =
+    graphItemsOpen > 0
+      ? `Check ${graphItemsOpen === 1 ? "1 graph item" : `${graphItemsOpen} graph items`} first`
+      : null;
   const toggleExpand = useCallback(
     (id: string) => {
       setExpandState((s) => {
@@ -3915,22 +4049,24 @@ function SubmissionDetailPanel({
                     : "Grade every problem before you can approve this submission"
                 }
               >
-                {allGraded
-                  ? "Not reviewed"
-                  : `Not reviewed · ${gradedProblemCount}/${totalProblems} graded`}
+                {!allGraded
+                  ? `Not reviewed · ${gradedProblemCount}/${totalProblems} graded`
+                  : graphGate ?? "Not reviewed"}
               </span>
               <button
                 type="button"
                 onClick={onMarkReviewed}
-                disabled={marking || savingGrade || regrading || !allGraded}
+                disabled={marking || savingGrade || regrading || !allGraded || graphGate !== null}
                 title={
                   regrading
                     ? "Regrading — approve once the new grade lands"
                     : savingGrade
                       ? "Saving your grade edit — approve once it finishes"
-                      : allGraded
-                        ? "Approve — mark this submission reviewed"
-                        : `Grade every problem first (${gradedProblemCount} of ${totalProblems} graded)`
+                      : !allGraded
+                        ? `Grade every problem first (${gradedProblemCount} of ${totalProblems} graded)`
+                        : graphGate
+                          ? `${graphGate}: mark each one Shown or Missing on its problem`
+                          : "Approve — mark this submission reviewed"
                 }
                 className="rounded-[--radius-md] border border-[color:var(--color-success)]/40 bg-[color:var(--color-success)]/10 px-3.5 py-1.5 text-xs font-bold text-[color:var(--color-success)] transition-colors hover:border-[color:var(--color-success)]/60 disabled:cursor-not-allowed disabled:opacity-45"
               >
@@ -4260,7 +4396,7 @@ function SubmissionDetailPanel({
                 key={`${detail.submission_id}-${p.bank_item_id}`}
                 problem={p}
                 entry={breakdownByProblem.get(p.bank_item_id) ?? null}
-                aiGrade={aiByPosition.get(p.position) ?? null}
+                aiGrade={meta?.ai ?? null}
                 focused={i === focusedIndex}
                 collapsed={meta?.collapsed ?? false}
                 collapsible={meta?.confident ?? false}
@@ -4286,6 +4422,8 @@ function SubmissionDetailPanel({
                 onFeedbackChange={(text) =>
                   onFeedbackChange(p.bank_item_id, text)
                 }
+                onGraphVerdict={(n, verdict) => onGraphVerdict(p.bank_item_id, n, verdict)}
+                graphBusyItem={graphBusy?.problemId === p.bank_item_id ? graphBusy.n : null}
                 onOpenPage={() =>
                   setGalleryPage(p.pages.length > 0 ? p.pages[0]! - 1 : 0)
                 }
@@ -4812,6 +4950,8 @@ function ProblemGradeRow({
   rowRef,
   onChange,
   onFeedbackChange,
+  onGraphVerdict,
+  graphBusyItem,
   onOpenPage,
   reportBase,
   ruleText,
@@ -4854,6 +4994,10 @@ function ProblemGradeRow({
   rowRef: (el: HTMLDivElement | null) => void;
   onChange: (status: GradeStatus, partialPercent?: number) => void;
   onFeedbackChange: (text: string) => void;
+  /** The teacher's ✓ / ✗ on one of this problem's unclear graph items. */
+  onGraphVerdict: (n: number, verdict: "yes" | "no") => void;
+  /** This problem's graph item whose call is saving, if any. */
+  graphBusyItem: number | null;
   /** Opens the work gallery on this problem's first tagged page. */
   onOpenPage: () => void;
 }) {
@@ -5511,6 +5655,13 @@ function ProblemGradeRow({
           when the AI supplied a `deductions` breakdown (additive: rows
           without it keep showing just the reasoning hero above). Anchors
           each deduction to the matching student-work step. */}
+      {/* The drawing, item by item: what the graph part of the grade was
+          charged against. Items the check couldn't decide wait here for
+          her call. */}
+      {problem.graph && (
+        <GraphCheckReview graph={problem.graph} busyItem={graphBusyItem} onVerdict={onGraphVerdict} />
+      )}
+
       {deductions !== null && (
         <GradeReceipt
           deductions={deductions}
@@ -5844,6 +5995,15 @@ function GradeReceipt({
                   <span className="mt-1 flex">
                     <span className="rounded-full bg-[color:var(--color-primary-bg)] px-2 py-0.5 text-[11px] font-medium text-primary">
                       Class rule
+                    </span>
+                  </span>
+                ) : d.source === "graph_checklist" ? (
+                  <span className="mt-1 flex">
+                    <span
+                      className="rounded-full border border-border-light px-2 py-0.5 text-[11px] font-medium text-text-secondary"
+                      title="Not on the drawing — this item's points from the graph checklist."
+                    >
+                      Graph checklist
                     </span>
                   </span>
                 ) : (
