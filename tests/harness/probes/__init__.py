@@ -13,6 +13,7 @@ from tests.harness.probes.extraction_fidelity import ExtractionFidelityProbe
 from tests.harness.probes.generation import GenerationProbe
 from tests.harness.probes.geometry import GeometryProbe
 from tests.harness.probes.grading import GradingProbe
+from tests.harness.probes.graph_check import GraphCheckProbe
 from tests.harness.probes.integrity import IntegrityProbe
 from tests.harness.probes.latex import LatexProbe
 from tests.harness.probes.rubric_suggest import RubricSuggestProbe
@@ -44,4 +45,8 @@ PROBES: dict[str, Callable[[int], Probe]] = {
     # The requires-drawing classification call vs the regex vs the labels.
     "drawing-flag": lambda count: DrawingFlagProbe(),
     "rubric-suggest": lambda count: RubricSuggestProbe(),
+    # Graph checklist check: synthetic graphs with known features judged
+    # against a fixed checklist; guards "never yes for what isn't drawn".
+    # Replays from _cassettes/graph_check/.
+    "graph-check": lambda count: GraphCheckProbe(),
 }

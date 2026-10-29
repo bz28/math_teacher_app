@@ -1630,3 +1630,105 @@ RUBRIC_RULE_SUGGESTION_SCHEMA: ToolSchema = {
         "additionalProperties": False,
     },
 }
+
+
+# What a correct graph for one question must visibly show, written once
+# per question from its answer key. Each item is judged later against a
+# crop of the student's drawing, so it has to be something a picture can
+# settle on its own.
+GRAPH_CHECKLIST_SCHEMA: ToolSchema = {
+    "name": "return_graph_checklist",
+    "description": "List what a correct graph for this question must visibly show.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "items": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 6,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "text": {
+                            "type": "string",
+                            "description": (
+                                "One feature, stated so someone looking only at the "
+                                "drawing can say yes or no: what is drawn and where, "
+                                "with the exact values from the answer key (e.g. "
+                                "\"Vertical asymptote drawn at x = 2\"). Never "
+                                "\"correct\" or \"accurate\" without saying what."
+                            ),
+                        },
+                        "points": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "Points this feature is worth.",
+                        },
+                        "rule_id": {
+                            "type": ["string", "null"],
+                            "description": (
+                                "The bracketed id of the class rule this item is, "
+                                "when it is exactly that rule; null otherwise."
+                            ),
+                        },
+                    },
+                    "required": ["text", "points", "rule_id"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        "required": ["items"],
+        "additionalProperties": False,
+    },
+}
+
+# One look at one student's drawing against that checklist. The model sees
+# the crop and the item text only: never the question, the answer key or
+# the student's written work, which is what primed the full-page reader to
+# describe the graph the student meant rather than the one on the page.
+DRAWING_CHECK_SCHEMA: ToolSchema = {
+    "name": "return_drawing_check",
+    "description": "Say, item by item, whether this drawing shows each feature.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "in_view": {
+                "type": "string",
+                "enum": ["whole", "cut_off", "not_found"],
+                "description": (
+                    "whole: the entire drawing is in the image. cut_off: part of it "
+                    "runs past an edge. not_found: no graph or drawing for this "
+                    "problem is in the image."
+                ),
+            },
+            "items": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "n": {"type": "integer", "description": "The item's number, as given."},
+                        "verdict": {
+                            "type": "string",
+                            "enum": ["yes", "no", "unclear"],
+                            "description": (
+                                "yes: clearly drawn as described. no: visibly missing, "
+                                "or drawn differently. unclear: this image can't settle it."
+                            ),
+                        },
+                        "seen": {
+                            "type": "string",
+                            "description": (
+                                "One short sentence on what is actually drawn for this "
+                                "item, e.g. \"Dashed vertical line at x = 3, unlabeled.\""
+                            ),
+                        },
+                    },
+                    "required": ["n", "verdict", "seen"],
+                    "additionalProperties": False,
+                },
+            },
+        },
+        "required": ["in_view", "items"],
+        "additionalProperties": False,
+    },
+}
