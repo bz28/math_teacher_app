@@ -6206,17 +6206,6 @@
       },
       "UpdateCourseRequest": {
         "properties": {
-          "grade_level": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Grade Level"
-          },
           "name": {
             "anyOf": [
               {
@@ -6238,17 +6227,6 @@
               }
             ],
             "title": "Status"
-          },
-          "subject": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Subject"
           }
         },
         "title": "UpdateCourseRequest",

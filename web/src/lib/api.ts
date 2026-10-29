@@ -1510,7 +1510,7 @@ export const teacher = {
       body: JSON.stringify(data),
     });
   },
-  updateCourse(id: string, data: Record<string, unknown>) {
+  updateCourse(id: string, data: { name: string }) {
     return apiFetch<{ status: string }>(`/teacher/courses/${id}`, {
       method: "PATCH",
       body: JSON.stringify(data),

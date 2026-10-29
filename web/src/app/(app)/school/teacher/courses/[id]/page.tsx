@@ -278,9 +278,7 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
           ← My Courses
         </Link>
         <div className="mt-3 flex items-baseline justify-between gap-4">
-          <h1 className="font-serif text-[40px] leading-[1.05] tracking-[-0.02em] text-text-primary">
-            {course.name}
-          </h1>
+          <CourseTitle course={course} onRenamed={reloadCourse} />
           <button
             type="button"
             onClick={() => setTab("settings")}
@@ -404,7 +402,7 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
         {tab === "insights" && <StudentInsightsTab courseId={course.id} />}
         {tab === "submissions" && <SubmissionsTab courseId={course.id} />}
         {tab === "grades" && <GradesTab courseId={course.id} />}
-        {tab === "settings" && <SettingsTab course={course} onChanged={reloadCourse} />}
+        {tab === "settings" && <SettingsTab course={course} />}
         </ErrorBoundary>
       </div>
     </div>
@@ -417,6 +415,125 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
  * row, the underlined tab bar, then a content slab — so the first paint
  * settles into the workspace instead of blanking to "Loading…".
  */
+// The course name is the page title; clicking it renames the course.
+// Subject and grade level are set once, in New course.
+function CourseTitle({ course, onRenamed }: { course: TeacherCourse; onRenamed: () => Promise<void> }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(course.name);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const wasEditingRef = useRef(false);
+
+  useEffect(() => {
+    if (wasEditingRef.current && !editing) triggerRef.current?.focus();
+    wasEditingRef.current = editing;
+  }, [editing]);
+
+  const cancel = () => {
+    setEditing(false);
+    setError(null);
+  };
+
+  const save = async () => {
+    const name = draft.trim();
+    if (!name) {
+      setError("Course name can't be empty");
+      return;
+    }
+    if (name === course.name) {
+      cancel();
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await teacher.updateCourse(course.id, { name });
+      await onRenamed();
+      setEditing(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't rename the course");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const titleType = "font-serif text-[40px] leading-[1.05] tracking-[-0.02em] text-text-primary";
+
+  if (!editing) {
+    return (
+      <h1 className={titleType}>
+        <button
+          ref={triggerRef}
+          type="button"
+          onClick={() => {
+            setDraft(course.name);
+            setEditing(true);
+          }}
+          title="Click to rename"
+          className="cursor-text text-left transition-colors hover:text-primary"
+        >
+          {course.name}
+        </button>
+      </h1>
+    );
+  }
+
+  return (
+    <form
+      className="min-w-0 flex-1"
+      onSubmit={(e) => {
+        e.preventDefault();
+        save();
+      }}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="text"
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setError(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.preventDefault();
+              cancel();
+            }
+          }}
+          autoFocus
+          disabled={saving}
+          maxLength={200}
+          aria-label="Course name"
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? "course-rename-error" : undefined}
+          className={`${titleType} min-w-0 basis-full rounded-[--radius-md] border border-primary bg-surface px-2 py-1 focus:outline-none disabled:opacity-50 sm:basis-auto sm:flex-1`}
+        />
+        <button
+          type="submit"
+          disabled={saving}
+          className="rounded-[--radius-md] bg-primary px-3 py-1.5 text-xs font-bold text-white hover:bg-primary-dark disabled:opacity-50"
+        >
+          {saving ? "Saving…" : "Save"}
+        </button>
+        <button
+          type="button"
+          onClick={cancel}
+          disabled={saving}
+          className="rounded-[--radius-md] border border-border-light px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-[color:var(--color-surface-alt-2)] disabled:opacity-50"
+        >
+          Cancel
+        </button>
+      </div>
+      {error && (
+        <p id="course-rename-error" role="alert" className="mt-1 text-xs text-[color:var(--color-error)]">
+          {error}
+        </p>
+      )}
+    </form>
+  );
+}
+
 function CourseWorkspaceSkeleton() {
   return (
     <div className="mx-auto max-w-6xl" aria-busy="true" aria-live="polite">

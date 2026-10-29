@@ -6801,14 +6801,10 @@ export interface components {
         };
         /** UpdateCourseRequest */
         UpdateCourseRequest: {
-            /** Grade Level */
-            grade_level?: number | null;
             /** Name */
             name?: string | null;
             /** Status */
             status?: string | null;
-            /** Subject */
-            subject?: string | null;
         };
         /** UpdateDocumentRequest */
         UpdateDocumentRequest: {

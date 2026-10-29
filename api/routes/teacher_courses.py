@@ -79,8 +79,6 @@ class CreateCourseRequest(BaseModel):
 
 class UpdateCourseRequest(BaseModel):
     name: CourseName | None = None
-    subject: CourseSubject | None = None
-    grade_level: CourseGrade | None = None
     status: CourseStatus | None = None
 
 
@@ -645,10 +643,6 @@ async def update_course(
         return {"status": "ok"}
     if body.name is not None:
         course.name = body.name
-    if body.subject is not None:
-        course.subject = body.subject
-    if body.grade_level is not None:
-        course.grade_level = body.grade_level
     if body.status is not None:
         course.status = body.status
     await db.commit()
