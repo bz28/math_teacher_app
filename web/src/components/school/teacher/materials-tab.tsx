@@ -911,8 +911,9 @@ function BulkActionBar({
     <div
       role="region"
       aria-label="Bulk file actions"
-      className="fixed inset-x-0 z-30 mx-auto flex w-fit items-center gap-2 rounded-full border border-border-light bg-surface/90 px-3 py-2 shadow-lg backdrop-blur-md materials-bulk-bar-enter"
-      style={{ bottom: "max(1.5rem, env(safe-area-inset-bottom))" }}
+      // Above the teacher bottom nav (h-16) on a phone; on desktop,
+      // 1.5rem up and clear of the safe area.
+      className="fixed inset-x-0 bottom-[5.5rem] z-30 mx-auto flex w-fit items-center gap-2 rounded-full border border-border-light bg-surface/90 px-3 py-2 shadow-lg backdrop-blur-md materials-bulk-bar-enter md:bottom-[max(1.5rem,env(safe-area-inset-bottom))]"
     >
       <span className="ml-1 inline-flex items-center gap-1.5 rounded-full bg-primary-bg px-3 py-1 text-xs font-bold text-primary">
         <span className="tabular-nums">{count}</span>
