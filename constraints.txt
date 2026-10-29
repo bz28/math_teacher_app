@@ -19,7 +19,7 @@
 #
 # To upgrade a package: bump it here, run the backend checks, and open a PR.
 # To regenerate wholesale, from a venv with the dev extra installed:
-#   pip freeze | grep -iE '^(alembic|anthropic|asyncpg|bcrypt|email-validator|fastapi|httpx|mypy|pillow|playwright|pydantic-settings|pyjwt|pytest|pytest-asyncio|python-jose|resend|ruff|sentry-sdk|slowapi|sqlalchemy|stripe|types-python-jose|uvicorn)=='
+#   pip freeze | grep -iE '^(alembic|anthropic|asyncpg|bcrypt|email-validator|fastapi|httpx|mypy|pillow|playwright|pypdfium2|pydantic-settings|pyjwt|pytest|pytest-asyncio|python-jose|resend|ruff|sentry-sdk|slowapi|sqlalchemy|stripe|types-python-jose|uvicorn)=='
 
 alembic==1.18.5
 anthropic==0.116.0
@@ -33,6 +33,7 @@ pillow==12.3.0
 playwright==1.61.0
 pydantic-settings==2.14.2
 pyjwt==2.13.0
+pypdfium2==5.14.0
 pytest==9.1.1
 pytest-asyncio==1.4.0
 python-jose==3.5.0

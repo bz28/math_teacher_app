@@ -30,6 +30,7 @@ dependencies = [
     "resend==2.32.2",
     "stripe==15.5.1",
     "pillow==12.3.0",  # EXIF-transpose + downscale student photos before vision (api/core/image_utils) — RUNTIME dep, imported at app startup
+    "pypdfium2==5.14.0",  # render PDF pages to images so a drawing on a PDF upload can be cropped (api/core/image_utils) — RUNTIME dep
 ]
 
 [tool.setuptools.packages.find]

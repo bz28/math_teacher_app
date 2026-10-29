@@ -381,6 +381,22 @@ def _format_visual_work(v: dict[str, Any]) -> str:
     return line
 
 
+def _format_drawing_answer(v: dict[str, Any]) -> str:
+    """What the student wrote on a drawing that is checked apart from the
+    grader (`graph_part`): its labeled points and marked answer only. A
+    drawing whose reads disagree, or that a zoomed look couldn't find,
+    credits nothing read off it, as `_format_visual_work` says."""
+    if v.get("unconfirmed"):
+        return (
+            "drawing (checked separately) — UNCONFIRMED: what is written on it couldn't be "
+            "read reliably. Credit no point or answer read off it, and have the teacher "
+            "check the photo (see the UNCONFIRMED rule)"
+        )
+    points = ", ".join(v.get("labeled_points") or []) or "none"
+    ans = v.get("answer_on_drawing") or "none"
+    return f"drawing (checked separately) — labeled points: {points} — answer marked on drawing: {ans}"
+
+
 def _bucket_visual_work_by_position(
     visual_work: list[dict[str, Any]], valid_positions: set[int],
 ) -> tuple[dict[int, list[dict[str, Any]]], list[dict[str, Any]]]:
@@ -470,9 +486,14 @@ def _build_problem_set_block(problems: list[dict[str, Any]], *, with_points: boo
         lines.append(
             f"Answer key: {p.get('final_answer') or '(no answer key)'}"
         )
+        part = p.get("graph_part")
         if with_points and p.get("points"):
-            lines.append(f"Worth: {p['points']} points")
-        if p.get("requires_drawing"):
+            lines.append(f"Worth: {part.work_points if part else p['points']} points")
+        if part:
+            # The drawing is checked against its checklist, apart from the
+            # grader (`graph_grading`); this grade is the written work's.
+            lines.append(_graph_part_line(part.linked_rules))
+        elif p.get("requires_drawing"):
             lines.append("Requires a drawing: yes")
         elif _MENTIONS_DRAWING.search(p.get("question") or ""):
             # The wording says "graph" but the teacher's flag says no
@@ -485,6 +506,21 @@ def _build_problem_set_block(problems: list[dict[str, Any]], *, with_points: boo
             )
         lines.append("")
     return "\n".join(lines)
+
+
+def _graph_part_line(linked_rules: set[str]) -> str:
+    line = (
+        "Drawing: checked separately. Grade only the written work and the final answer, "
+        "as if they were the whole problem: 100% means the work and the answer are fully "
+        "right. Never credit or deduct for the drawing, or for a missing one. The drawing "
+        "is the student's method for what it shows: don't deduct for written steps it "
+        "replaces (finding a point on a graph needs no algebra). An answer the student "
+        "marked only on the drawing still counts as their final answer."
+    )
+    if linked_rules:
+        ids = ", ".join(f"[{r}]" for r in sorted(linked_rules))
+        line += f" Class rules {ids} are checked with the drawing: don't apply them here."
+    return line
 
 
 _MENTIONS_DRAWING = re.compile(
@@ -602,7 +638,12 @@ def _build_user_message(
             lines.append("Student's drawings:")
             if problem_visuals:
                 for v in problem_visuals:
-                    lines.append(f"  {_format_visual_work(v)}")
+                    # A drawing checked apart from the grader shows only
+                    # what the student wrote on it: the grader still
+                    # credits an answer marked there, but never sees the
+                    # reader's account of the lines, so it can't grade them.
+                    line = _format_drawing_answer(v) if p.get("graph_part") else _format_visual_work(v)
+                    lines.append(f"  {line}")
             elif unattributed_visuals:
                 # A drawing exists somewhere that couldn't be tied to a
                 # problem — say so, rather than asserting there is none.
@@ -640,8 +681,11 @@ def _build_user_message(
             lines.append(f"  {_format_step(s)}")
         for fa in unattributed_finals:
             lines.append(f"  Final answer: {_format_final_answer(fa)}")
+        # When every drawing on the homework is checked apart from the
+        # grader, an untied one is shown as the graph parts are.
+        apart = all(p.get("graph_part") for p in problems if p.get("requires_drawing"))
         for v in unattributed_visuals:
-            lines.append(f"  Drawing: {_format_visual_work(v)}")
+            lines.append(f"  Drawing: {_format_drawing_answer(v) if apart else _format_visual_work(v)}")
         lines.append("</student_work>")
 
     return "\n".join(lines)
@@ -662,7 +706,10 @@ async def grade_submission_with_ai(
         extraction: Output of extract_student_work() — contains steps
             and final_answers.
         problems: List of dicts with {position, question, final_answer}
-            from the HW's bank items.
+            from the HW's bank items. A problem carrying a `graph_part`
+            (`graph_grading.GraphPart`) is graded on its written work and
+            answer only, worth the work part's points; its drawing is
+            checked apart (`graph_grading`).
         rubric: The effective rubric — the homework's own fields plus the
             class rules it applies (`class_rubric.effective_rubric`). Optional.
         user_id: For cost-tracking attribution.
@@ -782,7 +829,9 @@ def _cap_confidence_for_unconfirmed_drawings(
     unconfirmed drawing, or a submission extracted before drawings were
     inventoried. Deterministic, so the teacher is always pointed at the
     photo whatever the model returned. Unflagged problems are untouched —
-    their drawings aren't used."""
+    their drawings aren't used. A problem whose drawing is checked apart
+    (`graph_part`) is capped too: an answer marked on an unconfirmed
+    drawing is still the grader's to credit or not."""
     flagged = {p.get("position") for p in problems if p.get("requires_drawing")}
     if "visual_work" not in extraction:
         positions = flagged
