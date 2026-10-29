@@ -11,6 +11,7 @@ const mockedApi = api as jest.Mocked<typeof api>;
 
 const STUCK_LABEL = "I'm stuck — not sure how to explain this";
 const STUCK_MESSAGE = "I'm stuck — I'm not sure how to explain this.";
+const NUDGE = "Give it a try in your own words — even a guess helps.";
 
 const STATE = {
   submission_id: "sub-1",
@@ -154,34 +155,34 @@ describe("IntegrityChatScreen", () => {
     expect(await waitForText("That's okay — let's start small.")).toBeTruthy();
     // Spent: the chip disables with a nudge, and a second tap sends nothing.
     expect(screen.getByLabelText(STUCK_LABEL)).toBeDisabled();
-    expect(screen.getByText("Try putting it in your own words — even a guess helps.")).toBeTruthy();
+    expect(screen.getByText(NUDGE)).toBeTruthy();
     fireEvent.press(screen.getByLabelText(STUCK_LABEL));
     await flush();
     expect(mockedApi.postIntegrityTurn).toHaveBeenCalledTimes(1);
   });
 
-  it("after the stuck tap, holds typed replies to a few words", async () => {
+  it("after the stuck tap, turns back a bare don't-know but sends compact math", async () => {
     mockedApi.getIntegrityState.mockResolvedValue({ ...STATE, stuck_tap_used: true } as never);
     mockedApi.postIntegrityTurn.mockResolvedValue({ ...STATE, stuck_tap_used: true } as never);
     render(<IntegrityChatScreen submissionId="sub-1" onExit={jest.fn()} />);
 
     await waitForText("How did you get your answer?");
     const composer = screen.getByPlaceholderText("Explain how you solved it…");
-    // Over the plain 5-char floor, under "a few words".
-    fireEvent.changeText(composer, "no idea");
+    // Over the plain 5-char floor, but only a don't-know. One hint, not two.
+    fireEvent.changeText(composer, "I have no idea");
     await flush();
-    expect(screen.getByText("Add a few words — even a guess helps.")).toBeTruthy();
+    expect(screen.getAllByText(NUDGE)).toHaveLength(1);
     expect(screen.getByLabelText("Send")).toBeDisabled();
 
-    // An honest short answer clears the bar.
-    fireEvent.changeText(composer, "x = 4");
+    // A compact math answer clears the bar.
+    fireEvent.changeText(composer, "y=2x+3");
     await flush();
-    expect(screen.queryByText("Add a few words — even a guess helps.")).toBeNull();
+    expect(screen.queryByText(NUDGE)).toBeNull();
     fireEvent.press(screen.getByLabelText("Send"));
     await flush();
     expect(mockedApi.postIntegrityTurn).toHaveBeenCalledWith(
       "sub-1",
-      "x = 4",
+      "y=2x+3",
       expect.any(Number),
       expect.objectContaining({ device_type: "mobile" }),
       false,

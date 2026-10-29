@@ -74,7 +74,7 @@ interface Props {
 // few words. The server writes the canonical text into the transcript —
 // this copy is only the optimistic echo and must match it.
 const STUCK_MESSAGE = "I'm stuck — I'm not sure how to explain this.";
-const STUCK_USED_HINT = "Try putting it in your own words — even a guess helps.";
+const STUCK_USED_HINT = "Give it a try in your own words — even a guess helps.";
 
 /**
  * Kid-facing conversational integrity chat.
@@ -292,16 +292,29 @@ export function IntegrityCheckChat({
       // a turn that finished right at the threshold.
       lastActivityRef.current = Date.now();
     } catch (err) {
+      const status = err instanceof ApiError ? err.status : null;
+      const rejected = status === 400 || status === 409;
       // A 400 carries the server's own student-facing reason (e.g. the
       // stuck tap was already spent in another tab) — show it verbatim.
       setError(
-        err instanceof ApiError && err.status === 400
+        status === 400 && err instanceof Error
           ? err.message
           : "Couldn't send that — try again.",
       );
       setPendingStudentMessage(null);
       // Hand a typed draft back; a stuck tap has no draft to restore.
       if (!stuck) setMessage(trimmed);
+      // The server said no on the merits — our view may be stale (tap
+      // spent in another tab, check finished). Refetch so the chip and
+      // composer reflect it, as mobile does.
+      if (rejected) {
+        schoolStudent
+          .getIntegrityState(submissionId)
+          .then(setState)
+          .catch(() => {
+            /* keep current state; the error line already says it failed */
+          });
+      }
     } finally {
       setSending(false);
     }
@@ -325,8 +338,13 @@ export function IntegrityCheckChat({
     );
   }
 
-  const canSend =
-    !sending && !isComplete && meetsTypedMinimum(message, stuckUsed);
+  const draftOk = meetsTypedMinimum(message, stuckUsed);
+  const canSend = !sending && !isComplete && draftOk;
+  // One hint at a time. Once the tap is spent, a single nudge beside the
+  // disabled chip covers both "why is this greyed out" and "that draft
+  // won't send"; it clears as soon as the draft is sendable. Before the
+  // tap, only the plain 5-char floor hint under the composer can show.
+  const showStuckUsedHint = stuckUsed && !draftOk;
 
   const hasReference = state.problems.length > 0;
 
@@ -604,12 +622,12 @@ export function IntegrityCheckChat({
                   type="button"
                   onClick={() => void handleSend(true)}
                   disabled={sending || stuckUsed}
-                  aria-describedby={stuckUsed ? "integrity-stuck-used-hint" : undefined}
+                  aria-describedby={showStuckUsedHint ? "integrity-stuck-used-hint" : undefined}
                   className="inline-flex items-center rounded-full border border-border-light bg-bg-subtle px-3 py-1 text-xs font-medium text-text-secondary transition-colors enabled:hover:border-primary enabled:hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   I&rsquo;m stuck — not sure how to explain this
                 </button>
-                {stuckUsed && (
+                {showStuckUsedHint && (
                   <span
                     id="integrity-stuck-used-hint"
                     className="text-xs text-text-muted"
@@ -685,10 +703,9 @@ export function IntegrityCheckChat({
               <div className="mt-1 flex items-start justify-between gap-2">
                 <p className="text-xs text-text-muted">
                   {message.length > 0 &&
-                    !meetsTypedMinimum(message, stuckUsed) &&
-                    (stuckUsed
-                      ? "Add a few words — even a guess helps."
-                      : `Try a sentence or two (${MIN_MESSAGE_CHARS}+ characters).`)}
+                    !stuckUsed &&
+                    !draftOk &&
+                    `Try a sentence or two (${MIN_MESSAGE_CHARS}+ characters).`}
                 </p>
                 {/* Plain Enter inserts a newline; only ⌘/Ctrl+Enter
                     sends (phone-typer safety). Surface that so desktop

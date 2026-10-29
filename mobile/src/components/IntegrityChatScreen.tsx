@@ -49,7 +49,7 @@ const BUDGET_LABEL = "~5 min";
 // a few words. The server writes the canonical text — this copy is only the
 // optimistic echo and must match it.
 const STUCK_MESSAGE = "I'm stuck — I'm not sure how to explain this.";
-const STUCK_USED_HINT = "Try putting it in your own words — even a guess helps.";
+const STUCK_USED_HINT = "Give it a try in your own words — even a guess helps.";
 
 interface Props {
   submissionId: string;
@@ -218,7 +218,16 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
   );
 
   const canSend = meetsIntegrityMinimum(input, stuckUsed);
-  const belowThreshold = input.trim().length > 0 && !canSend;
+  // One hint at a time. Once the tap is spent, a single nudge covers both
+  // "why is the chip greyed out" and "that draft won't send", clearing as
+  // soon as the draft is sendable. Before the tap, only the 5-char floor hint.
+  const hint = stuckUsed
+    ? canSend
+      ? null
+      : STUCK_USED_HINT
+    : input.trim().length > 0 && !canSend
+      ? `Add a little more — at least ${MIN_INTEGRITY_MESSAGE_CHARS} characters. Stuck? Tap the line above.`
+      : null;
 
   // ── Pre-chat states ───────────────────────────────────
   // Timeout fallback takes precedence: a stalled "Preparing…" wait gets a
@@ -530,15 +539,10 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
               <Ionicons name="help-circle-outline" size={14} color={colors.textSecondary} />
               <Text style={styles.stuckChipText}>I'm stuck — not sure how to explain this</Text>
             </AnimatedPressable>
-            {stuckUsed && <Text style={styles.thresholdHint}>{STUCK_USED_HINT}</Text>}
             {sendError ? (
               <Text style={styles.sendErrorText}>{sendError}</Text>
-            ) : belowThreshold ? (
-              <Text style={styles.thresholdHint}>
-                {stuckUsed
-                  ? "Add a few words — even a guess helps."
-                  : `Add a little more — at least ${MIN_INTEGRITY_MESSAGE_CHARS} characters. Stuck? Tap the line above.`}
-              </Text>
+            ) : hint ? (
+              <Text style={styles.thresholdHint}>{hint}</Text>
             ) : null}
           </View>
         )}
