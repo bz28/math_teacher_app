@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import ARRAY, JSON, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -80,6 +80,13 @@ class Assignment(Base):
     # v1: reference panel for the teacher during manual grading.
     # Future AI PR: fed directly to the grader as typed fields.
     rubric: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    # What the homework is worth, and each problem's share of it — see
+    # api/core/homework_points.py. `problem_points` is {problem_id: points}
+    # once the teacher sets one by hand; null = `total_points` split evenly.
+    total_points: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=100, server_default="100",
+    )
+    problem_points: Mapped[dict[str, int] | None] = mapped_column(JSON, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
