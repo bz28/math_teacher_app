@@ -30,6 +30,9 @@ def upgrade() -> None:
     conn = op.get_bind()
     rows = conn.execute(sa.text("SELECT id, rubric FROM assignments WHERE rubric IS NOT NULL"))
     for row in rows:
+        # A JSON null passes IS NOT NULL but arrives as None; it has nothing to move.
+        if row.rubric is None:
+            continue
         rubric = row.rubric if isinstance(row.rubric, dict) else json.loads(row.rubric)
         if not isinstance(rubric, dict) or not any(k in rubric for k in _MOVED):
             continue
