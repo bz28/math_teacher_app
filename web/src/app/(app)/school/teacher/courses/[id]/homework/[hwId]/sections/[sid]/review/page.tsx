@@ -23,7 +23,6 @@ import {
   ResolveIntegrityControl,
   RowDispositionPill,
   UNFINISHED_CHECK_COPY,
-  UNFINISHED_CHECK_FOOTNOTE,
   UNFINISHED_CHECK_TITLE,
   type IntegrityActivityNotableTurnLite,
 } from "@/components/school/teacher/_pieces/integrity-pieces";
@@ -6323,7 +6322,7 @@ const VERDICT_LEGEND_ITEMS: { key: IntegrityBannerKey; description: string }[] =
   { key: "tutor_pivot", description: "Student got stuck and the AI walked them through it. Their submitted work doesn't reflect what they could do alone." },
   { key: "flag_for_review", description: "Submitted work is correct but the student couldn't explain it. Most likely cheating signal — open the conversation to decide." },
   { key: "needs_review", description: "Check ran but couldn't reach a verdict (e.g. ran out of turns). Manual review recommended." },
-  { key: "unfinished", description: "The student didn't finish the check — never confirmed their reading, never answered, or left partway. Not a flag — there's just no understanding signal; grade their written work as usual." },
+  { key: "unfinished", description: "The student didn't finish the check — never confirmed their reading, never answered, or left partway. Not a flag — there's just no understanding signal. Grade their written work; if they never confirmed the reading, it hasn't been AI-graded, so grade it by hand." },
   { key: "skipped_unreadable", description: "Vision couldn't read the student's submission. Grade manually, or have them re-submit." },
   { key: "extracting", description: "Vision is still parsing the student's work. The verdict will arrive shortly." },
   { key: "in_progress", description: "Student is actively chatting with the AI. Verdict pending." },
@@ -6748,9 +6747,9 @@ function IntegrityBanner({
                     {shownSummary}
                   </p>
                 )}
-                {key === "unfinished" && (
+                {key === "unfinished" && unfinished && (
                   <p className="mt-1 text-xs leading-relaxed text-text-muted">
-                    {UNFINISHED_CHECK_FOOTNOTE}
+                    {UNFINISHED_CHECK_COPY[unfinished].footnote}
                   </p>
                 )}
                 {key === "in_progress" && overviewFallback && (

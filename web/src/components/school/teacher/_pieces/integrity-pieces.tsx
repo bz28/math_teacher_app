@@ -137,31 +137,39 @@ const ROW_UNFINISHED_STYLE =
  *  banner body. Each says what happened, then what the grade rests on,
  *  so the teacher never has to guess whether this was held against the
  *  student. */
+/** `footnote` is what the teacher does next. It differs for a reading
+ *  never confirmed: AI grading waits on that confirm, so that work has
+ *  no AI grade to review — "as usual" would be untrue. */
 export const UNFINISHED_CHECK_COPY: Record<
   UnfinishedCheck,
-  { tooltip: string; body: string }
+  { tooltip: string; body: string; footnote: string }
 > = {
   never_confirmed: {
     tooltip: "Never confirmed the AI's reading of their work, so the check didn't run",
     body:
       "They never confirmed the AI's reading of their work, and the check " +
       "starts from that confirmation, so it never ran.",
+    footnote:
+      "Not a flag. Their work hasn't been AI-graded because they never " +
+      "confirmed the reading — grade it by hand.",
   },
   not_started: {
     tooltip: "Confirmed their reading but never answered the check",
     body:
       "They confirmed their reading but never answered the check's first " +
       "question.",
+    footnote:
+      "Not a flag — there's just no understanding signal for this one. " +
+      "Grade their written work as usual.",
   },
   left_partway: {
     tooltip: "Started the check and left before it finished",
     body: "They started the check and left before it finished.",
+    footnote:
+      "Not a flag — there's just no understanding signal for this one. " +
+      "Grade their written work as usual.",
   },
 };
-
-export const UNFINISHED_CHECK_FOOTNOTE =
-  "Not a flag — there's just no understanding signal for this one. " +
-  "Grade their written work as usual.";
 
 export const UNFINISHED_CHECK_TITLE = "Didn't finish the understanding check";
 
