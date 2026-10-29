@@ -2899,6 +2899,9 @@ async def get_submission_detail(
             seen.append(raw_page)
 
     extraction_finals: dict[int, str] = {}
+    # How many non-empty reads each position has: with exactly one, the
+    # teacher is shown that read (see the priority order below).
+    extraction_reads: dict[int, int] = {}
     overlaid = apply_extraction_edits(sub.extraction, sub.extraction_edits)
     # The extraction blob is model output persisted verbatim, so treat its
     # confidence as untrusted input rather than a guaranteed float. The
@@ -2938,6 +2941,7 @@ async def get_submission_detail(
             # nothing and points nowhere.
             if answer_latex or answer_plain:
                 _record_page(fa_pos, fa)
+                extraction_reads[fa_pos] = extraction_reads.get(fa_pos, 0) + 1
             # The tool schema doesn't enforce one entry per position, so
             # duplicates are possible. The grader renders every candidate;
             # the teacher's cell is a single line, so the first non-empty
@@ -3207,14 +3211,18 @@ async def get_submission_detail(
         # Priority order for the answer the teacher sees:
         #   1. The student's confirm-screen edit — a human claim about
         #      what they wrote, so it outranks any machine read and is
-        #      honored even when Vision's confidence was too low for (3).
-        #   2. The AI grader's echo from `grade.breakdown`. Post-grading
+        #      honored even when Vision's confidence was too low for (2) and (4).
+        #   2. The extractor's final answer when it read exactly one
+        #      for the problem: what the student wrote, word for word.
+        #   3. The AI grader's echo from `grade.breakdown`. Post-grading
         #      only, and null whenever the model declined to restate the
-        #      answer — the gap (3) exists to cover.
-        #   3. The extractor's own final answer, readable-confidence
-        #      only. Present from confirm time, which is what makes an
-        #      answer visible in the window before grading runs.
-        #   4. The student's typed answer at submit. The endpoint that
+        #      answer. It paraphrases, and fills in what the key has and
+        #      the student didn't write (units like "rad/min"), so it is
+        #      used only to settle two or more reads.
+        #   4. The extractor's first read, readable-confidence only.
+        #      Present from confirm time, which is what makes an answer
+        #      visible in the window before grading runs.
+        #   5. The student's typed answer at submit. The endpoint that
         #      wrote this column was removed the same day it shipped
         #      (0967e198 → 2f0e4867, 2026-04-08, ~45 minutes apart) when
         #      typed answers gave way to required photos, so it is empty
@@ -3223,15 +3231,13 @@ async def get_submission_detail(
         #      cheaper than being wrong about whether a submission
         #      exists from that window.
         #
-        # (2) stays above (3) on purpose. The echo is the answer the
-        # grade was actually computed against — it reflects how the
-        # model resolved duplicate candidates for one position, and it
-        # is normalized to the same problem the score and feedback talk
-        # about. Promoting the raw read above it would let the cell
-        # disagree with the verdict printed beside it.
+        # (3) stays above (4) because, with duplicate reads for one
+        # position, the echo says which one the grade was computed
+        # against; the first read might not be it.
         edited_final = (edits.get(f"{pos}:final") or "").strip()
         student_answer = (
             edited_final
+            or (extraction_finals.get(pos) if extraction_reads.get(pos) == 1 else None)
             or ai_answers.get(str(pid))
             or extraction_finals.get(pos)
             or answers_map.get(str(pid))
