@@ -230,3 +230,14 @@ async def test_a_hand_grade_is_weighted_by_points(client: AsyncClient) -> None:
     )
     assert res.status_code == 200
     assert (await _row(sub)).final_score == 75.0
+
+
+async def test_the_total_is_what_the_problems_add_up_to(client: AsyncClient) -> None:
+    """A total set below the problem count still gives each problem 1."""
+    world = await _seed_hw(n_problems=2)
+    async with get_session_factory()() as s:
+        hw = (await s.execute(select(Assignment).where(Assignment.id == world["assignment_id"]))).scalar_one()
+        hw.total_points = 1
+        await s.commit()
+    res = await client.get(f"/v1/teacher/assignments/{world['assignment_id']}", headers=_auth(world["teacher_token"]))
+    assert res.json()["points"]["total"] == 2

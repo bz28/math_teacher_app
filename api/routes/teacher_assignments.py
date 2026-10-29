@@ -987,7 +987,9 @@ async def get_assignment(
     result["rubric"] = a.rubric
     by_problem = assignment_points(a)
     result["points"] = {
-        "total": sum(by_problem.values()) if a.problem_points else a.total_points,
+        # The sum, not `total_points`: a total below the problem count
+        # still gives every problem 1 point.
+        "total": sum(by_problem.values()),
         "by_problem": by_problem,
         "custom": a.problem_points is not None,
     }
