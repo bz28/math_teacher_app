@@ -11,6 +11,7 @@ import {
   type IntegrityResolutionOutcome,
   type TeacherIntegrityDetail,
   type TeacherIntegrityTranscriptTurn,
+  type UnfinishedCheck,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
@@ -124,19 +125,91 @@ const ROW_RESOLVED_COPY: Record<IntegrityResolutionOutcome, string> = {
 const ROW_RESOLVED_STYLE =
   "border border-border-light bg-transparent font-semibold text-text-muted";
 
+// "Didn't finish the check". Every other pill here is either FILLED (an
+// AI verdict) or a SOLID outline with ✓ (a teacher's resolution); this
+// is the one state that marks an absence, so it's a DASHED outline in
+// neutral ink with a half-filled ◐. No red or amber: it raises scrutiny,
+// it is not a flag (it never counts toward "flagged").
+const ROW_UNFINISHED_STYLE =
+  "border border-dashed border-text-muted/70 bg-transparent font-semibold text-text-secondary";
+
+/** One line per "didn't finish" state — the row tooltip and the review
+ *  banner body. Each says what happened, then what the grade rests on,
+ *  so the teacher never has to guess whether this was held against the
+ *  student. */
+export const UNFINISHED_CHECK_COPY: Record<
+  UnfinishedCheck,
+  { tooltip: string; body: string }
+> = {
+  never_confirmed: {
+    tooltip: "Never confirmed the AI's reading of their work, so the check didn't run",
+    body:
+      "They never confirmed the AI's reading of their work, and the check " +
+      "starts from that confirmation, so it never ran.",
+  },
+  not_started: {
+    tooltip: "Confirmed their reading but never answered the check",
+    body:
+      "They confirmed their reading but never answered the check's first " +
+      "question.",
+  },
+  left_partway: {
+    tooltip: "Started the check and left before it finished",
+    body: "They started the check and left before it finished.",
+  },
+};
+
+export const UNFINISHED_CHECK_FOOTNOTE =
+  "Not a flag — there's just no understanding signal for this one. The " +
+  "grade is based on their written work alone.";
+
+export const UNFINISHED_CHECK_TITLE = "Didn't finish the understanding check";
+
+export function UnfinishedCheckPill({
+  state,
+  className,
+}: {
+  state: UnfinishedCheck;
+  className?: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px]",
+        ROW_UNFINISHED_STYLE,
+        className,
+      )}
+      title={UNFINISHED_CHECK_COPY[state].tooltip}
+    >
+      <span aria-hidden>◐</span>
+      Didn&apos;t finish check
+    </span>
+  );
+}
+
 /** Queue-row disposition pill. Shows only on actionable verdicts
- *  (flag / tutored / inconclusive). Pass / needs_practice / in-
- *  progress render null, keeping clean rows visually quiet. Once a
- *  teacher resolves the check, the loud verdict pill collapses to a
- *  muted "reviewed" outline carrying the chosen outcome — handled
- *  history, no longer an alarm. */
+ *  (flag / tutored / inconclusive) and on a check the student didn't
+ *  finish. Pass / needs_practice / in-progress render null, keeping
+ *  clean rows visually quiet. Once a teacher resolves the check, the
+ *  loud verdict pill collapses to a muted "reviewed" outline carrying
+ *  the chosen outcome — handled history, no longer an alarm. */
 export function RowDispositionPill({
   overview,
+  unfinished,
   className,
 }: {
   overview: IntegrityOverview | null;
+  /** The row's `unfinished_check`. Set even with no overview at all —
+   *  a never-confirmed reading means the check never got a row. */
+  unfinished?: UnfinishedCheck | null;
   className?: string;
 }) {
+  const resolved =
+    overview?.overall_status === "complete" &&
+    overview.resolution !== "unresolved";
+  if (unfinished && !resolved) {
+    return <UnfinishedCheckPill state={unfinished} className={className} />;
+  }
   if (!overview) return null;
   if (overview.overall_status !== "complete") return null;
   // Resolved → quiet outline pill with the outcome, regardless of the
@@ -322,10 +395,11 @@ const RESOLUTION_LABEL: Record<IntegrityResolutionOutcome, string> = {
   contacted: "Contacted student",
 };
 
-/** True for a terminal check the roster surfaces as needing the
- *  teacher's eyes — the states the "Mark reviewed" action can clear.
- *  Mirrors the review-page `isFlagged` + the backend flagged aggregate
- *  (flag_for_review / unreadable / inconclusive). `tutor_pivot` is NOT
+/** True for a terminal check with no settled verdict — the states the
+ *  "Mark reviewed" action can clear: flag_for_review, unreadable, and
+ *  any complete check without a disposition (turn-cap inconclusive, or
+ *  one the student didn't finish — a teacher who has followed up with
+ *  the student can record that). `tutor_pivot` is NOT
  *  here: it's a learning outcome (student got it wrong on paper, AI
  *  tutored them — "a learning signal, not a cheating signal"), surfaced
  *  as an informational pill, and the backend aggregate excludes it too. */

@@ -2207,6 +2207,14 @@ export const teacher = {
   },
 };
 
+/** Why a complete check carries no disposition. */
+export type IntegrityIncompleteReason = "not_started" | "left_partway" | "turn_cap";
+
+/** The roster's "Didn't finish the check" state. never_confirmed = the
+ *  student never confirmed the reading, so the check never ran (only
+ *  after the same 12h deadline an abandoned check gets). */
+export type UnfinishedCheck = "never_confirmed" | "not_started" | "left_partway";
+
 export interface IntegrityOverview {
   overall_status: "complete" | "in_progress";
   disposition: IntegrityDisposition | null;
@@ -2221,6 +2229,10 @@ export interface IntegrityOverview {
    *  marks the check reviewed; the other outcomes drop it from the
    *  roster's flagged filter. */
   resolution: IntegrityResolution;
+  /** Why a complete check has no disposition, plus "unreadable" for a
+   *  skipped check — both read complete + null disposition otherwise.
+   *  Lets the roster's Flagged filter mirror the server count. */
+  incomplete_reason: IntegrityIncompleteReason | "unreadable" | null;
 }
 
 export interface TeacherSubmissionRow {
@@ -2263,6 +2275,8 @@ export interface TeacherSubmissionRow {
    *  the normal path. */
   ai_grading_status: string | null;
   integrity_overview: IntegrityOverview | null;
+  /** "Didn't finish the check" — its own pill and banner, never flagged. */
+  unfinished_check: UnfinishedCheck | null;
   /** Student explicitly said "Reader got something wrong" on the
    *  post-submit confirm screen. Non-null = no AI grading or
    *  integrity ran — teacher grades manually. Folded into the
@@ -3323,6 +3337,10 @@ export interface TeacherIntegrityDetail {
   // no AI verdict ran (skipped_unreadable / force-finalize) — the banner
   // falls back to the hardcoded INTEGRITY_STYLE label in those cases.
   headline: string | null;
+  /** Why a complete check has no disposition. not_started / left_partway
+   *  = the student didn't finish; turn_cap = inconclusive. Null when the
+   *  agent reached a verdict or the check is still open. */
+  incomplete_reason: IntegrityIncompleteReason | null;
   inline_variant_used: boolean;
   inline_variant_result: IntegrityInlineVariantResult | null;
   activity_summary: IntegrityActivitySummary | null;
