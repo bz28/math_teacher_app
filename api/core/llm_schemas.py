@@ -935,8 +935,9 @@ INTEGRITY_EXTRACT_SCHEMA: ToolSchema = {
                             "type": "string",
                             "description": (
                                 "What is on the page, concretely: which lines or "
-                                "curves are plotted (name them by equation when "
-                                "readable), labeled points, axes and scale, shading, "
+                                "curves are drawn (by what they look like; an "
+                                "equation only if the student wrote it beside the "
+                                "line), labeled points, axes and scale, shading, "
                                 "arrows, table headings. Empty when present is false."
                             ),
                         },
