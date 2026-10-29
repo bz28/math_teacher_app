@@ -159,7 +159,8 @@ class Submission(Base):
     extraction_confirmed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True,
     )
-    # Stamped when the student hits "Reader got something wrong" on
+    # Stamped when the student picks "Most of it is wrong" (after
+    # "Something looks wrong") on
     # the confirm screen. Mutually exclusive with
     # extraction_confirmed_at — a submission is either confirmed
     # (grading ran) or flagged (teacher grades manually, no AI calls

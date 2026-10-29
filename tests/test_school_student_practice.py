@@ -1932,7 +1932,9 @@ async def test_flag_with_note_and_edits_persists_both_and_never_grades(
             headers=_auth(world["student_token"]),
             json={
                 "note": "  It read my 7s as 1s  ",
-                "edits": {"1:1": "x = 7", "99:99": "stale key"},
+                # "1:final" is typed back to what was read — not a fix,
+                # so it must not reach the teacher's count.
+                "edits": {"1:1": "x = 7", "99:99": "stale key", "1:final": "5"},
             },
         )
         await drain_integrity_background_tasks()

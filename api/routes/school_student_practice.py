@@ -2224,7 +2224,7 @@ async def confirm_extraction(
 
     This is the single choke-point that gates grading on student
     confirmation. Called from "Confirm — this is my work" on the
-    confirm screen; "Reader got something wrong" calls /flag-extraction
+    confirm screen; "Something looks wrong" → "Most of it is wrong" calls /flag-extraction
     instead, which stamps extraction_flagged_at and deliberately does
     NOT spawn grading.
     """
@@ -2305,7 +2305,8 @@ async def flag_extraction_submission(
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Student said "Reader got something wrong" on the confirm screen.
+    """Student said most of the reading is wrong ("Something looks wrong"
+    → "Most of it is wrong") on the confirm screen.
 
     Stamps `extraction_flagged_at` and sends the submission straight
     to the teacher — does NOT spawn integrity or AI grading, and the

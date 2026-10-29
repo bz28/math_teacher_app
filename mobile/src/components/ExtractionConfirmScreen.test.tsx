@@ -130,6 +130,36 @@ describe("ExtractionConfirmScreen", () => {
     expect(onDone).toHaveBeenCalled();
   });
 
+  it("a line typed back to what was read isn't sent as an edit", async () => {
+    mockedApi.getSubmission.mockResolvedValue(SUBMISSION as never);
+    mockedApi.confirmExtraction.mockResolvedValue({ status: "ok", already_confirmed: false } as never);
+    render(<ExtractionConfirmScreen assignmentId="a" onDone={jest.fn()} onIntegrityCheck={jest.fn()} />);
+
+    await waitForText("Did we read this right?");
+    fireEvent.changeText(screen.getByDisplayValue("x equals 2"), "x equals 3");
+    await flush();
+    fireEvent.changeText(screen.getByDisplayValue("x equals 3"), "x equals 2 ");
+    await flush();
+    fireEvent.press(screen.getByText("Looks right"));
+    await flush();
+
+    expect(mockedApi.confirmExtraction).toHaveBeenCalledWith("sub-1", {});
+  });
+
+  it("a failed flag says so instead of failing silently", async () => {
+    mockedApi.getSubmission.mockResolvedValue(SUBMISSION as never);
+    mockedApi.flagExtraction.mockRejectedValue(new Error("Request failed (500)") as never);
+    const onDone = jest.fn();
+    render(<ExtractionConfirmScreen assignmentId="a" onDone={onDone} onIntegrityCheck={jest.fn()} />);
+
+    fireEvent.press(await waitForText("Something looks wrong"));
+    fireEvent.press(await waitForText("Most of it is wrong"));
+    fireEvent.press(await waitForText("Send to my teacher"));
+
+    expect(await waitForText("Couldn't send it to your teacher. Try again.")).toBeTruthy();
+    expect(onDone).not.toHaveBeenCalled();
+  });
+
   it("skips straight to the note when there's no line to fix", async () => {
     mockedApi.getSubmission.mockResolvedValue({
       ...SUBMISSION,

@@ -133,28 +133,50 @@ def validate_edits_against_extraction(
     target on `extraction`. Returns a sanitized {key: text} map (text
     coerced to str, leading/trailing whitespace trimmed).
 
-    Called from the confirm endpoint so we never persist stale or
-    fabricated keys. Length and value validation (max chars, type
+    Also drops no-op edits: a value that every row under its key
+    already reads (in either of its two fields — clients seed the input
+    from one or the other). A student who touched a line and left it as
+    read hasn't corrected anything, so the teacher's "edited by student"
+    marks and count stay truthful whatever the client sends. A cleared
+    row ("") is never a no-op.
+
+    Called from the confirm and flag endpoints so we never persist stale
+    or fabricated keys. Length and value validation (max chars, type
     checks) happen one layer up, against the request body.
     """
     if extraction is None or not edits:
         return {}
 
-    valid_keys: set[str] = set()
+    # Per key, what each targeted row currently reads. A `:final` key can
+    # target several rows (positions aren't unique), and the overlay
+    # rewrites all of them, so a value is a no-op only if every row
+    # already reads it.
+    reads: dict[str, list[set[str]]] = {}
     for step in extraction.get("steps") or []:
         key = _step_key(step.get("problem_position"), step.get("step_num"))
         if key is not None:
-            valid_keys.add(key)
+            reads.setdefault(key, []).append(
+                _row_texts(step.get("latex"), step.get("plain_english")),
+            )
     for fa in extraction.get("final_answers") or []:
         key = _final_key(fa.get("problem_position"))
         if key is not None:
-            valid_keys.add(key)
+            reads.setdefault(key, []).append(
+                _row_texts(fa.get("answer_latex"), fa.get("answer_plain")),
+            )
 
     sanitized: dict[str, str] = {}
     for key, value in edits.items():
-        if key not in valid_keys:
+        if key not in reads:
             continue
         if not isinstance(value, str):
             continue
-        sanitized[key] = value.strip()
+        text = value.strip()
+        if text and all(text in row for row in reads[key]):
+            continue
+        sanitized[key] = text
     return sanitized
+
+
+def _row_texts(*fields: Any) -> set[str]:
+    return {f.strip() for f in fields if isinstance(f, str) and f.strip()}

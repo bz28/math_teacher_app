@@ -35,11 +35,14 @@ interface Props {
   /** Student confirmed the reader got it right (with optional edits
    *  applied). Parent transitions to the chat / submitted view. */
   onContinue: () => void;
-  /** Student said the reader got something wrong. We fire the flag
-   *  endpoint here and hand control back to the parent, which
-   *  transitions onward — the flag is a signal for the teacher, not
-   *  a gate. */
-  onFlagged: () => void;
+  /** Student said most of the reading is wrong ("Most of it is wrong").
+   *  We fire the flag endpoint here and hand control back to the
+   *  parent, which transitions onward — the flag is a signal for the
+   *  teacher, not a gate. `detailsDropped` is true when the student
+   *  sent a note or edits the server did not store (it was already
+   *  flagged, or had moved on), so the terminal doesn't claim they
+   *  went along. */
+  onFlagged: (result: { detailsDropped: boolean }) => void;
 }
 
 /**
@@ -232,8 +235,8 @@ function EditableRow({
       // Empty save: on an already-edited row this is the student's
       // "wipe my edit" gesture — drop it so the original Vision read
       // stands again. On a never-edited row it's a no-op (we don't
-      // surface deletion of original Vision rows here; that's what
-      // the "Reader got something wrong" flag is for).
+      // surface deletion of original Vision rows here; a reading that
+      // wrong is what "Something looks wrong" → "Most of it" is for).
       if (isEdited) onClearEdit(editKey);
       return;
     }
@@ -376,6 +379,18 @@ export function SubmissionExtractionConfirmView({
   const [note, setNote] = useState("");
   const flagTitleId = useId();
   const problemsRef = useRef<HTMLDivElement>(null);
+  // Switching steps unmounts the button that had focus; land it on the
+  // new step's heading so keyboard and screen-reader users aren't
+  // dropped onto <body> (and a phone keyboard doesn't pop for an
+  // optional note). Opening is handled by Modal's own initial focus.
+  const stepHeadingRef = useRef<HTMLHeadingElement>(null);
+  const prevFlagStep = useRef<typeof flagStep>(null);
+  useEffect(() => {
+    if (prevFlagStep.current !== null && flagStep !== null) {
+      stepHeadingRef.current?.focus();
+    }
+    prevFlagStep.current = flagStep;
+  }, [flagStep]);
   const canFixLines = useMemo(() => hasEditableLines(extraction), [extraction]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -494,6 +509,7 @@ export function SubmissionExtractionConfirmView({
   function startFixing() {
     setFlagStep(null);
     setFixMode(true);
+    setError(null);
     // The flag button sits below the problems; bring the lines (and
     // the hint above them) back into view.
     problemsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -502,21 +518,26 @@ export function SubmissionExtractionConfirmView({
   async function handleFlag() {
     setSubmitting(true);
     setError(null);
+    // Whether this request carried anything for the teacher. If the
+    // server didn't store it (already flagged, or the state moved on),
+    // the terminal must not claim it went along.
+    const sentDetails = !!note.trim() || Object.keys(editsRef.current).length > 0;
     try {
-      await schoolStudent.flagExtractionSubmission(submissionId, {
+      const res = await schoolStudent.flagExtractionSubmission(submissionId, {
         note,
         edits: editsRef.current,
       });
       setFlagStep(null);
-      onFlagged();
+      onFlagged({ detailsDropped: sentDetails && !!res.already_flagged });
     } catch (e) {
       // 409 = server already past the confirm/flag decision (student
       // confirmed in another tab, or the submission was already
       // flagged). Exit to the terminal and let the parent re-route
-      // rather than looping on "Try again".
+      // rather than looping on "Try again". Nothing from this request
+      // was stored.
       if (e instanceof ApiError && e.status === 409) {
         setFlagStep(null);
-        onFlagged();
+        onFlagged({ detailsDropped: sentDetails });
         return;
       }
       setSubmitting(false);
@@ -675,7 +696,9 @@ export function SubmissionExtractionConfirmView({
           <div>
             <h2
               id={flagTitleId}
-              className="font-serif text-2xl leading-tight text-text-primary"
+              ref={stepHeadingRef}
+              tabIndex={-1}
+              className="font-serif text-2xl leading-tight text-text-primary focus:outline-none"
             >
               How much did we get wrong?
             </h2>
@@ -738,7 +761,9 @@ export function SubmissionExtractionConfirmView({
           <div>
             <h2
               id={flagTitleId}
-              className="font-serif text-2xl leading-tight text-text-primary"
+              ref={stepHeadingRef}
+              tabIndex={-1}
+              className="font-serif text-2xl leading-tight text-text-primary focus:outline-none"
             >
               Send it to your teacher
             </h2>

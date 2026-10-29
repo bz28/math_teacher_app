@@ -2593,7 +2593,7 @@ const FLAGGED_DISPOSITIONS = new Set(["flag_for_review"]);
 function isFlagged(entry: RosterEntry): boolean {
   const sub = entry.submission;
   if (!sub) return false;
-  // Student-raised "reader got something wrong" routes straight to
+  // A student-flagged reading ("most of it is wrong") routes straight to
   // manual grading and is the strongest "needs your eyes" signal.
   if (sub.extraction_flagged_at) return true;
   const overview = sub.integrity_overview;
@@ -4018,7 +4018,7 @@ function SubmissionDetailPanel({
             {detail.extraction_flagged_at && (
               <span
                 className="ml-1.5 font-semibold text-[color:var(--color-error)] "
-                title="Student flagged: 'Reader got something wrong' — the AI doesn't grade a reading the student disputes, so grade from the photo"
+                title="The student said most of the reading was wrong — the AI doesn't grade a reading the student disputes, so grade from the photo"
               >
                 · student-flagged reading ·{" "}
                 {detail.ai_breakdown ? "check the AI grade against the photo" : "grade manually"}

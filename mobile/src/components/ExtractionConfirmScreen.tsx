@@ -66,6 +66,7 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
   const [flagStep, setFlagStep] = useState<"choose" | "note" | null>(null);
   const [fixMode, setFixMode] = useState(false);
   const [note, setNote] = useState("");
+  const [flagError, setFlagError] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   // Elapsed sense + give-up fallback for the "Reading your work…" wait.
   const [prepElapsedMs, setPrepElapsedMs] = useState(0);
@@ -141,20 +142,41 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
   const doFlag = useCallback(async () => {
     if (!state || acting) return;
     setActing(true);
+    setFlagError(null);
     try {
       await flagExtraction(state.submission_id, { note, edits });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onDone();
-    } catch {
+    } catch (e) {
       setActing(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      // The server's own detail when it sent one (e.g. "already confirmed");
+      // a plain retry line for network / 5xx failures.
+      const msg = e instanceof Error ? e.message : "";
+      setFlagError(
+        msg && !msg.startsWith("Request failed") ? msg : "Couldn't send it to your teacher. Try again.",
+      );
+      // If the submission moved on (confirmed or flagged elsewhere), re-read
+      // it so the screen settles on the right state instead of looping.
+      getSubmission(assignmentId).then(setState).catch(() => {});
     }
-  }, [state, acting, note, edits, onDone]);
+  }, [state, acting, note, edits, onDone, assignmentId]);
 
   const startFixing = useCallback(() => {
     setFlagStep(null);
     setFixMode(true);
     scrollRef.current?.scrollTo({ y: 0, animated: true });
+  }, []);
+
+  // Record a line's text, dropping it when it's back to what was read —
+  // touching a field isn't a correction (matches web's commit()).
+  const setLine = useCallback((key: string, text: string, original: string) => {
+    setEdits((e) => {
+      const next = { ...e };
+      if (text.trim() === original.trim()) delete next[key];
+      else next[key] = text;
+      return next;
+    });
   }, []);
 
   // ── States ────────────────────────────────────────────
@@ -315,6 +337,9 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
             // The backend keys edits by problem_position, so only positioned
             // groups are editable; unattributed "Other work" stays read-only.
             const editable = g.position != null;
+            const finalOriginal = g.finalAnswer
+              ? g.finalAnswer.answer_plain || g.finalAnswer.answer_latex
+              : "";
             return (
               <View key={g.position ?? "other"} style={styles.problem}>
                 <Text style={styles.problemNum}>
@@ -337,7 +362,7 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
                       key={`${s.step_num}-${i}`}
                       style={fieldStyle}
                       value={edits[key] ?? original}
-                      onChangeText={(t) => setEdits((e) => ({ ...e, [key]: t }))}
+                      onChangeText={(t) => setLine(key, t, original)}
                       multiline
                       placeholder="(blank to remove this line)"
                       placeholderTextColor={colors.textMuted}
@@ -349,8 +374,8 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
                     <Text style={styles.answerLabel}>Answer</Text>
                     <TextInput
                       style={[...fieldStyle, styles.answerField]}
-                      value={edits[`${g.position}:final`] ?? (g.finalAnswer.answer_plain || g.finalAnswer.answer_latex)}
-                      onChangeText={(t) => setEdits((e) => ({ ...e, [`${g.position}:final`]: t }))}
+                      value={edits[`${g.position}:final`] ?? finalOriginal}
+                      onChangeText={(t) => setLine(`${g.position}:final`, t, finalOriginal)}
                       placeholder="(blank to remove)"
                       placeholderTextColor={colors.textMuted}
                     />
@@ -428,12 +453,17 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
               placeholder="For example: it read my 7s as 1s on problem 3"
               placeholderTextColor={colors.textMuted}
               accessibilityLabel="What did it get wrong? (optional)"
+              // The card sits at the bottom of the scroll; once the keyboard
+              // is up (KeyboardAvoidingView shrinks the view), bring it back
+              // into sight so the student can see what they type.
+              onFocus={() => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 250)}
             />
             <Text style={styles.noteMeta}>
               {editCount > 0
                 ? `The ${editCount === 1 ? "line" : `${editCount} lines`} you fixed will go too.`
                 : "Your teacher sees this with your photos."}
             </Text>
+            {flagError && <Text style={styles.flagError}>{flagError}</Text>}
             <Button label="Send to my teacher" onPress={doFlag} loading={acting} />
             <Button
               label="Back"
@@ -453,9 +483,11 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
                 disabled={acting}
               />
             </View>
-            <Text style={styles.flagHint}>
-              Fix a few lines yourself, or send it to your teacher to grade from your photos.
-            </Text>
+            {canFixLines && (
+              <Text style={styles.flagHint}>
+                Fix a few lines yourself, or send it to your teacher to grade from your photos.
+              </Text>
+            )}
           </>
         )}
       </ScrollView>
@@ -592,6 +624,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   nextTitle: { ...typography.body, fontSize: 14, fontWeight: "600", color: colors.primaryDark },
   nextBody: { ...typography.body, fontSize: 13, lineHeight: 19, color: colors.primaryDark },
   actions: { gap: spacing.md, marginTop: spacing.lg },
+  flagError: { ...typography.body, fontSize: 13, color: colors.error },
   flagHint: { ...typography.caption, color: colors.textMuted, fontSize: 12, textAlign: "center" },
 
   centered: {

@@ -37,8 +37,8 @@ type Mode =
       files: SubmissionFile[];
     }
   | { kind: "integrity_chat" }
-  /** Student flagged "reader got something wrong" on the confirm
-   *  screen. Submission is routed to the teacher for manual
+  /** Student flagged the reading ("Something looks wrong" → "Most of
+   *  it is wrong") on the confirm screen. Submission is routed to the teacher for manual
    *  grading; no AI calls run. Terminal — nothing else to do. */
   | { kind: "extraction_flagged" };
 
@@ -65,6 +65,9 @@ export default function HomeworkPage() {
   // naturally skips the confirm branch, so this flag only covers the
   // brief window before their first turn.
   const [confirmedThisSession, setConfirmedThisSession] = useState(false);
+  // Set when this session's flag carried a note/edits the server didn't
+  // store (already flagged, or state moved on) — the terminal says so.
+  const [flagDetailsDropped, setFlagDetailsDropped] = useState(false);
   // Post-publish view filter — flips the problems list to show only
   // partial/zero rows. Default off so the student lands on the
   // complete record; flipping the toggle is the "go fix what I got
@@ -88,7 +91,7 @@ export default function HomeworkPage() {
 
         // Routing precedence (top match wins):
         //
-        // 1. Flagged   — student said "reader got it wrong". Nothing
+        // 1. Flagged   — student said most of the reading is wrong. Nothing
         //                downstream ran; go straight to the terminal.
         // 2. Extracting — Vision hasn't finished yet. Show the
         //                preparing spinner + poll.
@@ -270,7 +273,8 @@ export default function HomeworkPage() {
             setMode({ kind: "integrity_chat" });
           }
         }}
-        onFlagged={async () => {
+        onFlagged={async ({ detailsDropped }) => {
+          setFlagDetailsDropped(detailsDropped);
           // Flag skips grading + integrity. Re-fetch in case the
           // server had already moved on (e.g. someone confirmed in
           // another tab) so the student lands on the right terminal.
@@ -285,7 +289,7 @@ export default function HomeworkPage() {
   }
 
   if (mode.kind === "extraction_flagged") {
-    return <ExtractionFlaggedTerminalView />;
+    return <ExtractionFlaggedTerminalView detailsDropped={flagDetailsDropped} />;
   }
 
   if (mode.kind === "integrity_chat" && hw.submission_id) {
