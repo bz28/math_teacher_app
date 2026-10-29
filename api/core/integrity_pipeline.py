@@ -1445,13 +1445,20 @@ async def process_student_turn(
         # the only tool in a response that already has text and the agent
         # expects the student to answer, the reply is complete — don't
         # spend another model call just to acknowledge the label (its
-        # tool_result is in the transcript for next turn). A reply flagged
-        # wrapping_up keeps looping so the agent can submit its verdict and
-        # finish instead of leaving the check open after a goodbye.
-        if text_reply and all(
-            getattr(b, "name", "") == TOOL_LABEL_REPLY
-            and (getattr(b, "input", {}) or {}).get("wrapping_up") is not True
-            for b in tool_uses
+        # tool_result is in the transcript for next turn). Keep looping
+        # instead when the agent is done talking, so it can submit and
+        # finish rather than leave the check open after a goodbye: it said
+        # so (wrapping_up), or — the deterministic signal that doesn't rely
+        # on the flag — every sampled problem already has its verdict and
+        # only finish_check is left.
+        if (
+            text_reply
+            and all(
+                getattr(b, "name", "") == TOOL_LABEL_REPLY
+                and (getattr(b, "input", {}) or {}).get("wrapping_up") is not True
+                for b in tool_uses
+            )
+            and not await _all_verdicts_in(check.id, db)
         ):
             break
 
@@ -1571,6 +1578,17 @@ async def _apply_tool_call(
     if tool_name == TOOL_FINISH_CHECK:
         return await _apply_finish_check(check, raw_input, db)
     return f"rejected: unknown tool '{tool_name}'"
+
+
+async def _all_verdicts_in(check_id: uuid.UUID, db: AsyncSession) -> bool:
+    """True when no sampled problem is still waiting on its verdict."""
+    pending = (await db.execute(
+        select(func.count(IntegrityCheckProblem.id)).where(
+            IntegrityCheckProblem.integrity_check_submission_id == check_id,
+            IntegrityCheckProblem.status == PROBLEM_STATUS_PENDING,
+        )
+    )).scalar_one()
+    return int(pending) == 0
 
 
 def _apply_label_reply(
