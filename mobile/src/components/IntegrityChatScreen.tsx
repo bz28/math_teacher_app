@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Animated,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -24,7 +25,7 @@ import {
   type IntegrityState,
 } from "../services/api";
 import { groupExtraction } from "../utils/extraction";
-import { useColors, spacing, typography, radii, type ColorPalette } from "../theme";
+import { useColors, spacing, typography, radii, shadows, type ColorPalette } from "../theme";
 import { useReducedMotion } from "../utils/useReducedMotion";
 import { useTurnTelemetry } from "../utils/turnTelemetry";
 
@@ -88,6 +89,10 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
   // Inactivity nudge + extended-window state.
   const [nudgeVisible, setNudgeVisible] = useState(false);
   const [timeoutExtended, setTimeoutExtended] = useState(false);
+  // "Answer in your own words" sheet. Opens when a reply flips the server's
+  // nudge_own_words on (not on resume, not again while the same streak runs)
+  // and never blocks sending. Mirrors web.
+  const [ownWordsOpen, setOwnWordsOpen] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const turnStart = useRef<number>(Date.now());
   const lastActivity = useRef<number>(Date.now());
@@ -97,6 +102,7 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
   const isPreparing = (s: IntegrityState) => s.overall_status === "extracting";
   const complete = state?.overall_status === "complete";
   const stuckUsed = state?.stuck_tap_used ?? false;
+  const nudgeWasOn = state?.nudge_own_words ?? false;
 
   // Poll only while the check is still preparing. Tracks elapsed time and
   // gives up after PREPARE_TIMEOUT_MS so a stalled pipeline never spins
@@ -189,6 +195,9 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
           telemetry.collect(),
           stuck,
         );
+        if (next.nudge_own_words && !nudgeWasOn && next.overall_status === "in_progress") {
+          setOwnWordsOpen(true);
+        }
         setState(next);
         setPending(null);
         telemetry.reset();
@@ -214,7 +223,7 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
         setSending(false);
       }
     },
-    [input, sending, stuckUsed, submissionId, telemetry, markActivity],
+    [input, sending, stuckUsed, nudgeWasOn, submissionId, telemetry, markActivity],
   );
 
   const canSend = input.trim().length >= MIN_INTEGRITY_MESSAGE_CHARS;
@@ -560,6 +569,28 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
           </View>
         )}
       </KeyboardAvoidingView>
+      {/* Calm bottom sheet after two non-answers in a row — the house sheet
+          (AccountScreen's "About Veradic AI"), one button, no warning tone. */}
+      <Modal
+        visible={ownWordsOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setOwnWordsOpen(false)}
+      >
+        <View style={styles.sheetOverlay}>
+          <View style={[styles.sheet, shadows.lg]} accessibilityViewIsModal>
+            <View style={styles.sheetHandle} />
+            <Text style={styles.sheetTitle} accessibilityRole="header">
+              Answer in your own words
+            </Text>
+            <Text style={styles.sheetBody}>
+              Even a guess helps. If something's confusing, ask about it — that's a good answer
+              too.
+            </Text>
+            <Button label="Got it" onPress={() => setOwnWordsOpen(false)} />
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -630,6 +661,31 @@ function Centered({
 const makeStyles = (colors: ColorPalette) =>
   StyleSheet.create({
     container: { flex: 1, backgroundColor: colors.background },
+    sheetOverlay: { flex: 1, backgroundColor: colors.overlayDark, justifyContent: "flex-end" },
+    sheet: {
+      backgroundColor: colors.white,
+      borderTopLeftRadius: radii.xl,
+      borderTopRightRadius: radii.xl,
+      paddingHorizontal: spacing.xxl,
+      paddingBottom: spacing.xxxl + 12,
+      paddingTop: spacing.lg,
+    },
+    sheetHandle: {
+      height: 3,
+      width: 40,
+      borderRadius: 2,
+      backgroundColor: colors.primary,
+      alignSelf: "center",
+      marginBottom: spacing.xl,
+    },
+    sheetTitle: { ...typography.heading, color: colors.text, marginBottom: spacing.xs },
+    sheetBody: {
+      ...typography.body,
+      color: colors.textSecondary,
+      fontSize: 14,
+      lineHeight: 20,
+      marginBottom: spacing.lg,
+    },
     flex: { flex: 1 },
     header: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.sm },
     backButton: { flexDirection: "row", alignItems: "center", gap: 2, paddingVertical: spacing.xs },

@@ -19,6 +19,7 @@ const STATE = {
   overall_status: "awaiting_student",
   disposition: null,
   stuck_tap_used: false,
+  nudge_own_words: false,
   problems: [{ problem_id: "p1", hw_position: 3, status: "pending", question: "What is 2+2?" }],
   transcript: [
     { ordinal: 0, role: "agent", content: "How did you get your answer?", created_at: "x", is_variant_probe: false },
@@ -202,6 +203,40 @@ describe("IntegrityChatScreen", () => {
     );
   });
 
+  it("opens the own-words sheet once when a reply turns the nudge on", async () => {
+    const IN_PROGRESS = { ...STATE, overall_status: "in_progress" };
+    mockedApi.getIntegrityState.mockResolvedValue(STATE as never);
+    mockedApi.postIntegrityTurn.mockResolvedValue({ ...IN_PROGRESS, nudge_own_words: true } as never);
+    render(<IntegrityChatScreen submissionId="sub-1" onExit={jest.fn()} />);
+    await waitForText("How did you get your answer?");
+    expect(screen.queryByText("Answer in your own words")).toBeNull();
+
+    fireEvent.changeText(screen.getByPlaceholderText("Explain how you solved it…"), "dunno really");
+    await flush();
+    fireEvent.press(screen.getByLabelText("Send"));
+    await flush();
+    expect(screen.getByText("Answer in your own words")).toBeTruthy();
+
+    // Dismissed, it stays closed while the same streak continues.
+    fireEvent.press(screen.getByText("Got it"));
+    await flush();
+    expect(screen.queryByText("Answer in your own words")).toBeNull();
+    fireEvent.changeText(screen.getByPlaceholderText("Explain how you solved it…"), "no idea man");
+    await flush();
+    fireEvent.press(screen.getByLabelText("Send"));
+    await flush();
+    expect(screen.queryByText("Answer in your own words")).toBeNull();
+  });
+
+  it("never opens the sheet on resume", async () => {
+    mockedApi.getIntegrityState.mockResolvedValue(
+      { ...STATE, overall_status: "in_progress", nudge_own_words: true } as never,
+    );
+    render(<IntegrityChatScreen submissionId="sub-1" onExit={jest.fn()} />);
+    await waitForText("How did you get your answer?");
+    expect(screen.queryByText("Answer in your own words")).toBeNull();
+  });
+
   it("times out the 'Preparing…' wait and offers a retry instead of spinning forever", async () => {
     jest.useFakeTimers();
     try {
@@ -225,4 +260,5 @@ describe("IntegrityChatScreen", () => {
       jest.useRealTimers();
     }
   });
+
 });
