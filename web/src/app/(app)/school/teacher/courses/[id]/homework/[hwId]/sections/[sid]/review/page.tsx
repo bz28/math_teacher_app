@@ -6737,6 +6737,14 @@ function IntegrityBanner({
                     {UNFINISHED_CHECK_COPY[unfinished].footnote}
                   </p>
                 )}
+                {/* Neutral note, not a flag: 3+ replies in a row the
+                    agent read as not trying. Context for the teacher's
+                    own read of the chat; the verdict is unchanged. */}
+                {integrity?.didnt_engage && (
+                  <p className="mt-1.5 text-xs text-text-muted">
+                    Didn&rsquo;t engage with the questions.
+                  </p>
+                )}
                 {key === "in_progress" && overviewFallback && (
                   <p className="mt-1.5 text-xs text-text-muted">
                     {overviewFallback.complete_count} of{" "}

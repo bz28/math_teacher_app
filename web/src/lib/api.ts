@@ -3206,6 +3206,10 @@ export interface IntegrityStateResponse {
   /** Closed because the student didn't finish it (never answered / left
    *  partway). The chat says so instead of the "thanks" closing. */
   closed_unfinished: boolean;
+  /** True when the agent read the student's last two replies as not
+   *  trying ("idk", filler). The chat shows a one-time, non-blocking
+   *  "answer in your own words" popup; nothing is refused. */
+  nudge_own_words: boolean;
 }
 
 // ── Teacher integrity detail (mirror api/routes/integrity_check.py) ──
@@ -3341,6 +3345,9 @@ export interface TeacherIntegrityDetail {
   resolved_at: string | null;
   problems: TeacherIntegrityProblemRow[];
   transcript: TeacherIntegrityTranscriptTurn[];
+  /** Three or more replies in a row the agent read as not trying.
+   *  Shown as a neutral note beside the summary — never a flag. */
+  didnt_engage: boolean;
 }
 
 // ── Contact endpoints ──
