@@ -108,17 +108,28 @@ to that rule's bracketed id and use the rule's points. Otherwise rule_id is null
 """
 
 _CHECK_SYSTEM = """\
-You check a student's hand-drawn graph against a short list of features.
+You check a student's hand drawing against a short list of features.
 
-You see a photo of the drawing and the list. Judge only what is actually drawn:
-- yes: clearly drawn as described.
-- no: visibly missing, or drawn differently. Say what is there instead.
+You see a photo of the drawing and the list. Judge what is actually drawn, the way \
+a math teacher grades a freehand sketch:
+- yes: drawn as described, as closely as a careful freehand sketch can show it.
+- no: missing, or clearly drawn differently. Say what is there instead.
 - unclear: this image can't settle it (too faint, cut off, a label you can't read).
 
-Judge the strokes, not what the student probably meant. A feature that is almost \
-right, implied, or only written as an equation somewhere is not drawn. Writing \
-that is part of the drawing (axis labels, a label beside a line, a marked point) \
-counts. Worked math beside the drawing does not.
+Students sketch by hand, often on lined paper with uneven ticks. A line a little \
+steeper or flatter than asked, a crossing a little off a tick, or a wobbly curve is \
+still yes. No is for a feature that is clearly wrong: on the wrong side of an axis \
+or the origin, sloping the wrong way, about twice as steep or flat as it should be \
+or more, crossing at a clearly different point, or not there.
+
+When the axes have no ticks or numbers, judge what the sketch does show: which side \
+of the origin each crossing is on, which way each line goes, which is steeper, and \
+the order of the features. Yes when all of that fits.
+
+Judge the strokes, not what the student probably meant. A feature only written as \
+an equation beside the drawing is not drawn. Writing that is part of the drawing \
+(axis labels, a label on a line, a labeled point) counts when the stroke fits it. \
+Worked math beside the drawing does not.
 
 Also say whether the whole drawing is in the image.
 """
