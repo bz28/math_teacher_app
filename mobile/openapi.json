@@ -2750,6 +2750,22 @@
         "title": "LoginVerifyMfaRequest",
         "type": "object"
       },
+      "MarkGraphChecklistCheckedRequest": {
+        "description": "`version`: the checklist the teacher was shown (its `version`).",
+        "properties": {
+          "version": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "MarkGraphChecklistCheckedRequest",
+        "type": "object"
+      },
       "MarkTourSeenRequest": {
         "properties": {
           "persona": {
@@ -19145,7 +19161,7 @@
     },
     "/v1/teacher/question-bank/{item_id}/graph-checklist/checked": {
       "post": {
-        "description": "The teacher read the AI's checklist and it looks right. Nothing in\nit changes; rewriting it from the answer key unchecks it again.",
+        "description": "The teacher read the checklist and it looks right. Its items don't\nchange; it is now checked against the current question and answer\nkey, so a later change to either unchecks it again. Refused with 409\nwhen the checklist isn't the version she was shown.",
         "operationId": "mark_graph_checklist_checked_v1_teacher_question_bank__item_id__graph_checklist_checked_post",
         "parameters": [
           {
@@ -19159,6 +19175,16 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkGraphChecklistCheckedRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {

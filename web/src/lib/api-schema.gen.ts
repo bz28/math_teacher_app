@@ -3937,8 +3937,10 @@ export interface paths {
         put?: never;
         /**
          * Mark Graph Checklist Checked
-         * @description The teacher read the AI's checklist and it looks right. Nothing in
-         *     it changes; rewriting it from the answer key unchecks it again.
+         * @description The teacher read the checklist and it looks right. Its items don't
+         *     change; it is now checked against the current question and answer
+         *     key, so a later change to either unchecks it again. Refused with 409
+         *     when the checklist isn't the version she was shown.
          */
         post: operations["mark_graph_checklist_checked_v1_teacher_question_bank__item_id__graph_checklist_checked_post"];
         delete?: never;
@@ -5496,6 +5498,14 @@ export interface components {
             code: string;
             /** Mfa Pending Token */
             mfa_pending_token: string;
+        };
+        /**
+         * MarkGraphChecklistCheckedRequest
+         * @description `version`: the checklist the teacher was shown (its `version`).
+         */
+        MarkGraphChecklistCheckedRequest: {
+            /** Version */
+            version: string;
         };
         /** MarkTourSeenRequest */
         MarkTourSeenRequest: {
@@ -13865,7 +13875,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkGraphChecklistCheckedRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

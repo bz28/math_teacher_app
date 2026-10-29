@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 import uuid
 from dataclasses import asdict
@@ -125,11 +126,35 @@ def to_stored(
     return stored
 
 
-def is_checked(stored: dict[str, Any]) -> bool:
-    """The teacher has looked at this checklist: she edited it, or said it
-    looks right. A checklist the AI writes (again) starts unchecked, and
-    one stored before this key existed reads as unchecked too."""
-    return bool(stored.get("teacher_edited") or stored.get("checked"))
+def is_checked(item: QuestionBankItem, stored: dict[str, Any]) -> bool:
+    """The teacher has looked at this checklist against the question and
+    answer key as they are now: she edited it, or said it looks right,
+    since they last changed. A checklist the AI writes (again) starts
+    unchecked, one stored before this key existed reads as unchecked,
+    and an edited one reads as unchecked once the text it was edited
+    against changes (`key_changed`).
+
+    Per question, not per homework: the checklist lives on the bank item,
+    so checking it on one homework checks it on every homework it's on."""
+    return bool(stored.get("teacher_edited") or stored.get("checked")) and not key_changed(item, stored)
+
+
+def key_changed(item: QuestionBankItem, stored: dict[str, Any]) -> bool:
+    """The question or answer key changed after the teacher edited the
+    checklist. Her items stay (`current_checklist`), but she hasn't seen
+    them against the new text."""
+    return bool(stored.get("teacher_edited")) and stored.get("source") != source_of(item)
+
+
+def checklist_version(stored: dict[str, Any]) -> str:
+    """Names the exact checklist the teacher was shown, so marking it
+    checked can refuse a version she never saw (another tab's edit, a
+    rewrite that landed meanwhile)."""
+    raw = json.dumps(
+        {k: stored.get(k) for k in ("items", "points", "source", "teacher_edited", "asks_for_drawing")},
+        sort_keys=True, ensure_ascii=False,
+    )
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
 def grading_rules(course: Course | None, assignment: Assignment | None) -> list[dict[str, Any]]:
@@ -175,7 +200,9 @@ def checklist_view(
         "graph_points": sum(i.points for i in items),
         "problem_points": problem_points,
         "teacher_edited": bool(stored.get("teacher_edited")),
-        "checked": is_checked(stored),
+        "checked": is_checked(item, stored),
+        "key_changed": key_changed(item, stored),
+        "version": checklist_version(stored),
         "asks_for_drawing": stored.get("asks_for_drawing", True) is not False,
     }
 
