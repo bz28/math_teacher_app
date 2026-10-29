@@ -31,6 +31,10 @@ interface Props {
    *  it to tag a `source_page`, the strip handles that). */
   submittedFiles: SubmissionFile[];
   extraction: IntegrityExtraction;
+  /** The homework's understanding-check toggle. Off, confirming leads
+   *  straight to the submitted view, so the "Next: a quick chat" panel
+   *  would promise a step that never comes. */
+  integrityCheckEnabled: boolean;
   /** Student confirmed the reader got it right (with optional edits
    *  applied). Parent transitions to the chat / submitted view. */
   onContinue: () => void;
@@ -346,6 +350,7 @@ export function SubmissionExtractionConfirmView({
   submissionId,
   submittedFiles,
   extraction,
+  integrityCheckEnabled,
   onContinue,
   onFlagged,
 }: Props) {
@@ -595,7 +600,9 @@ export function SubmissionExtractionConfirmView({
       )}
 
       {/* "What's next" panel sits right above the buttons so the
-          student reads it the moment before they choose. */}
+          student reads it the moment before they choose. Only when the
+          check is on — otherwise confirming is the last step. */}
+      {integrityCheckEnabled && (
       <div className="mt-8 rounded-[--radius-md] border border-primary/30 bg-primary-bg/40 px-4 py-3.5">
         <p className="text-sm font-semibold text-text-primary">
           Next: a quick chat about your work
@@ -613,6 +620,7 @@ export function SubmissionExtractionConfirmView({
           get credit for what you understand.
         </p>
       </div>
+      )}
 
       {editCount > 0 && (
         <p className="mt-4 text-xs text-text-secondary">

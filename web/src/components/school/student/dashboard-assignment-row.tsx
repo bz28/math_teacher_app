@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { DashboardAssignment } from "@/lib/api";
 import { CourseAvatar } from "./dashboard-card";
 import { UrgencyPill } from "./urgency-pill";
+import { NEXT_STEP_COPY } from "./next-step";
 
 /**
  * Row used inside Due this week and Overdue subsections on the
@@ -31,7 +32,15 @@ export function DashboardAssignmentRow({
           {assignment.course_name} · {assignment.section_name}
         </div>
       </div>
-      <UrgencyPill dueAt={assignment.due_at} />
+      {/* Turned-in work with a step left shows that step instead of a
+          due date — it's already in, so urgency would be wrong. */}
+      {assignment.next_step ? (
+        <span className="shrink-0 rounded-full bg-primary-bg px-2.5 py-0.5 text-xs font-semibold text-primary group-hover:bg-primary group-hover:text-white">
+          {NEXT_STEP_COPY[assignment.next_step].label}
+        </span>
+      ) : (
+        <UrgencyPill dueAt={assignment.due_at} />
+      )}
       <svg
         className="h-4 w-4 shrink-0 text-text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
         viewBox="0 0 24 24"

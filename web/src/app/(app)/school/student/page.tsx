@@ -170,17 +170,21 @@ export default function SchoolStudentDashboard() {
 
   const { first_name, due_this_week, overdue, in_review, recently_graded } = data;
   const dueCount = due_this_week.length + overdue.length;
+  // Turned in, one step left (confirm the reading / finish the check).
+  // Its own card above Due: it's the quickest thing on the page to finish.
+  const oneMoreStep = in_review.filter((a) => a.next_step);
+  const waiting = in_review.length - oneMoreStep.length;
 
   return (
     <div className="mx-auto max-w-3xl">
       <div className="dashboard-card-enter">
         <Greeting firstName={first_name} />
 
-        {in_review.length > 0 && (
+        {waiting > 0 && (
           <p className="mb-6 text-sm text-text-secondary">
             <span className="font-semibold text-text-primary">
-              {in_review.length}{" "}
-              {in_review.length === 1 ? "assignment" : "assignments"}
+              {waiting}{" "}
+              {waiting === 1 ? "assignment" : "assignments"}
             </span>{" "}
             submitted — waiting for your teacher.
           </p>
@@ -188,6 +192,15 @@ export default function SchoolStudentDashboard() {
       </div>
 
       <div className="space-y-6">
+        {oneMoreStep.length > 0 && (
+          <div className="dashboard-card-enter" style={{ animationDelay: "40ms" }}>
+            <DashboardCard title="One more step" count={oneMoreStep.length}>
+              {oneMoreStep.map((a) => (
+                <DashboardAssignmentRow key={`step-${a.assignment_id}`} assignment={a} />
+              ))}
+            </DashboardCard>
+          </div>
+        )}
         <div
           data-tour-id={TOUR_IDS.studentHomework}
           className="dashboard-card-enter"
