@@ -1146,6 +1146,9 @@ export interface GraphChecklistItem {
   points: number;
   rule_id: string | null;
   rule_text: string | null;
+  /** What the linked rule makes this item worth, when it sets points
+   *  (the save counts it so); null: the item keeps its own points. */
+  rule_points: number | null;
   values_to_check: string[];
 }
 

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { teacher, type GraphChecklistItem, type HomeworkGraphChecklist } from "@/lib/api";
 import { numberInputClass } from "@/components/school/teacher/_pieces/problem-points";
+import { splitValues } from "@/lib/checklist-values";
 
 const MAX_ITEMS = 6;
 const MAX_ITEM_CHARS = 200;
@@ -12,7 +13,20 @@ const capClass =
 const linkButtonClass =
   "min-h-8 rounded-[--radius-sm] px-1.5 text-xs font-semibold text-primary hover:bg-primary-bg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary disabled:opacity-50";
 
-type Draft = { text: string; points: string; rule_id: string | null; rule_text: string | null };
+type Draft = {
+  text: string;
+  points: string;
+  rule_id: string | null;
+  rule_text: string | null;
+  /** Set when the linked rule fixes the item's points. */
+  rule_points: number | null;
+};
+
+const EMPTY_DRAFT: Draft = { text: "", points: "1", rule_id: null, rule_text: null, rule_points: null };
+
+/** What an item counts for, as the save checks it: the rule's points
+ *  when its rule sets some, else its own. */
+const draftPoints = (d: Draft) => d.rule_points ?? (Number(d.points) || 0);
 
 /**
  * Inside a graph problem's "Grading ▾": what the drawing must show, each
@@ -24,14 +38,18 @@ export function GraphChecklistPanel({
   entry,
   bankItemId,
   problemPoints,
+  lookedAgain,
   onChanged,
   onEditQuestion,
 }: {
   entry: HomeworkGraphChecklist;
   bankItemId: string;
   problemPoints: number;
-  /** Re-read the homework after a save. */
-  onChanged: () => Promise<void> | void;
+  /** The page has looked once more since loading (a checklist being
+   *  written in the background has had time to land). */
+  lookedAgain: boolean;
+  /** Re-read the checklists after a save; throws when the read fails. */
+  onChanged: () => Promise<void>;
   /** Opens the question in the Workshop; absent once published. */
   onEditQuestion?: () => void;
 }) {
@@ -41,31 +59,35 @@ export function GraphChecklistPanel({
   const [error, setError] = useState<string | null>(null);
   const [confirmRewrite, setConfirmRewrite] = useState(false);
 
-  // Just approved: the checklist is written in the background in a few
-  // seconds. Look once more before offering to write it by hand.
-  const [waited, setWaited] = useState(false);
-  useEffect(() => {
-    if (checklist || !can_write || waited) return;
-    const t = setTimeout(() => {
-      setWaited(true);
-      void onChanged();
-    }, 8000);
-    return () => clearTimeout(t);
-  }, [checklist, can_write, waited, onChanged]);
+  // After a save, the new checklist replaces the old one only once it
+  // has been read back, so the old one never flashes in between.
+  const reread = async () => {
+    try {
+      await onChanged();
+    } catch {
+      setError("Saved, but the new checklist didn't load. Reload the page to see it.");
+    }
+  };
+
+  const startEditing = (drafts: Draft[]) => {
+    setError(null);
+    setConfirmRewrite(false);
+    setEditing(drafts);
+  };
 
   const rewrite = async () => {
     setBusy(true);
     setError(null);
     try {
       await teacher.rewriteGraphChecklist(bankItemId);
-      setConfirmRewrite(false);
-      setEditing(null);
-      await onChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't write the checklist. Try again.");
-    } finally {
       setBusy(false);
+      return;
     }
+    await reread();
+    setConfirmRewrite(false);
+    setBusy(false);
   };
 
   const save = async (drafts: Draft[]) => {
@@ -81,14 +103,32 @@ export function GraphChecklistPanel({
     setError(null);
     try {
       await teacher.updateGraphChecklist(bankItemId, items);
-      setEditing(null);
-      await onChanged();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't save the checklist.");
-    } finally {
       setBusy(false);
+      return;
     }
+    await reread();
+    setEditing(null);
+    setBusy(false);
   };
+
+  if (editing) {
+    return (
+      <ChecklistEditor
+        drafts={editing}
+        problemPoints={problemPoints}
+        busy={busy}
+        error={error}
+        onChange={setEditing}
+        onCancel={() => {
+          setEditing(null);
+          setError(null);
+        }}
+        onSave={save}
+      />
+    );
+  }
 
   if (!can_write) {
     return (
@@ -113,10 +153,10 @@ export function GraphChecklistPanel({
     return (
       <Section>
         <p className="text-xs text-text-secondary" aria-live="polite">
-          {waited
+          {lookedAgain
             ? "No checklist yet."
             : "Writing the checklist from the answer key…"}
-          {waited && (
+          {lookedAgain && (
             <>
               {" "}
               <button type="button" onClick={rewrite} disabled={busy} className={linkButtonClass}>
@@ -135,35 +175,23 @@ export function GraphChecklistPanel({
       <Section>
         <p className="text-xs leading-relaxed text-text-secondary">
           This question doesn&rsquo;t seem to ask for a drawing, so it has no
-          graph checklist and is graded like any other problem. If that&rsquo;s
-          right, turn off &ldquo;Requires a drawing&rdquo; on the question.
-          {onEditQuestion && (
-            <>
-              {" "}
-              <button type="button" onClick={onEditQuestion} className={linkButtonClass}>
-                Open the question ↗
-              </button>
-            </>
-          )}
+          graph checklist and is graded like any other problem.
+          {onEditQuestion
+            ? " If that\u2019s right, turn off \u201cRequires a drawing\u201d on the question."
+            : " If it does ask for one, write the checklist yourself."}
         </p>
+        <div className="-ml-1.5 flex flex-wrap gap-1">
+          <button type="button" onClick={() => startEditing([EMPTY_DRAFT])} className={linkButtonClass}>
+            Write a checklist anyway
+          </button>
+          {onEditQuestion && (
+            <button type="button" onClick={onEditQuestion} className={linkButtonClass}>
+              Open the question ↗
+            </button>
+          )}
+        </div>
+        <ErrorLine error={error} />
       </Section>
-    );
-  }
-
-  if (editing) {
-    return (
-      <ChecklistEditor
-        drafts={editing}
-        problemPoints={problemPoints}
-        busy={busy}
-        error={error}
-        onChange={setEditing}
-        onCancel={() => {
-          setEditing(null);
-          setError(null);
-        }}
-        onSave={save}
-      />
     );
   }
 
@@ -178,7 +206,8 @@ export function GraphChecklistPanel({
           )}
           <button
             type="button"
-            onClick={() => setEditing(checklist.items.map(toDraft))}
+            onClick={() => startEditing(checklist.items.map(toDraft))}
+            disabled={busy}
             className={linkButtonClass}
           >
             Edit
@@ -187,14 +216,13 @@ export function GraphChecklistPanel({
             type="button"
             onClick={() => (checklist.teacher_edited ? setConfirmRewrite(true) : void rewrite())}
             disabled={busy}
-            aria-label="Rewrite from answer key"
             className={linkButtonClass}
           >
             {busy ? (
               "Writing…"
             ) : (
               <>
-                Rewrite<span className="hidden sm:inline"> from answer key</span>
+                Rewrite<span className="sr-only sm:not-sr-only"> from answer key</span>
               </>
             )}
           </button>
@@ -239,7 +267,13 @@ export function GraphChecklistPanel({
 }
 
 function toDraft(item: GraphChecklistItem): Draft {
-  return { text: item.text, points: String(item.points), rule_id: item.rule_id, rule_text: item.rule_text };
+  return {
+    text: item.text,
+    points: String(item.points),
+    rule_id: item.rule_id,
+    rule_text: item.rule_text,
+    rule_points: item.rule_points,
+  };
 }
 
 function Section({ actions, children }: { actions?: React.ReactNode; children: React.ReactNode }) {
@@ -257,7 +291,7 @@ function Section({ actions, children }: { actions?: React.ReactNode; children: R
 
 function ItemRow({ item }: { item: GraphChecklistItem }) {
   const parts = splitValues(item.text, item.values_to_check);
-  const marked = new Set(parts.filter((p) => p.value).map((p) => p.value));
+  const marked = new Set(parts.flatMap((p) => p.values ?? []));
   const unmarked = item.values_to_check.filter((v) => !marked.has(v));
   const one = item.values_to_check.length === 1;
   return (
@@ -265,7 +299,7 @@ function ItemRow({ item }: { item: GraphChecklistItem }) {
       <div className="min-w-0">
         <p className="text-sm leading-snug text-text-primary">
           {parts.map((p, i) =>
-            p.value ? (
+            p.values ? (
               <mark
                 key={i}
                 className="bg-transparent text-inherit underline decoration-[color:var(--color-warning)] decoration-2 underline-offset-[3px]"
@@ -300,24 +334,6 @@ function ItemRow({ item }: { item: GraphChecklistItem }) {
       </span>
     </li>
   );
-}
-
-/** `text` cut around the numbers in `values`, matched the way the server
- *  found them (`drawing_check._numbers`: digits, trailing zeros dropped). */
-function splitValues(text: string, values: string[]): { text: string; value?: string }[] {
-  if (values.length === 0) return [{ text }];
-  const wanted = new Set(values);
-  const parts: { text: string; value?: string }[] = [];
-  let last = 0;
-  for (const m of text.matchAll(/\d+(?:\.\d+)?/g)) {
-    const n = m[0].includes(".") ? m[0].replace(/0+$/, "").replace(/\.$/, "") : m[0];
-    if (!wanted.has(n)) continue;
-    if (m.index > last) parts.push({ text: text.slice(last, m.index) });
-    parts.push({ text: m[0], value: n });
-    last = m.index + m[0].length;
-  }
-  if (last < text.length) parts.push({ text: text.slice(last) });
-  return parts;
 }
 
 /** How the problem's points split: the graph part (checked from the
@@ -375,7 +391,7 @@ function ChecklistEditor({
 }) {
   const set = (i: number, patch: Partial<Draft>) =>
     onChange(drafts.map((d, j) => (j === i ? { ...d, ...patch } : d)));
-  const graph = drafts.reduce((sum, d) => sum + (Number(d.points) || 0), 0);
+  const graph = drafts.reduce((sum, d) => sum + draftPoints(d), 0);
   const over = graph >= problemPoints;
   return (
     <Section>
@@ -398,9 +414,9 @@ function ChecklistEditor({
                 type="text"
                 inputMode="numeric"
                 aria-label={`Points for item ${i + 1}`}
-                value={d.points}
-                disabled={Boolean(d.rule_id)}
-                title={d.rule_id ? "Set by the class rule" : undefined}
+                value={d.rule_points !== null ? String(d.rule_points) : d.points}
+                disabled={d.rule_points !== null}
+                title={d.rule_points !== null ? "Set by the class rule" : undefined}
                 onFocus={(e) => e.target.select()}
                 onChange={(e) => set(i, { points: e.target.value })}
                 className={numberInputClass}
@@ -420,7 +436,7 @@ function ChecklistEditor({
                 Class rule{d.rule_text ? ` · ${d.rule_text}` : ""} ·{" "}
                 <button
                   type="button"
-                  onClick={() => set(i, { rule_id: null, rule_text: null })}
+                  onClick={() => set(i, { rule_id: null, rule_text: null, rule_points: null })}
                   className="font-semibold underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 >
                   Unlink
@@ -433,7 +449,7 @@ function ChecklistEditor({
       {drafts.length < MAX_ITEMS && (
         <button
           type="button"
-          onClick={() => onChange([...drafts, { text: "", points: "1", rule_id: null, rule_text: null }])}
+          onClick={() => onChange([...drafts, EMPTY_DRAFT])}
           className={linkButtonClass}
         >
           + Add an item

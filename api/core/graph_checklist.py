@@ -149,10 +149,22 @@ def checklist_view(
         items = fit_checklist(items, int(stored.get("points") or problem_points), problem_points, rules)
     else:
         items = link_rules(items, rules)
-    rule_text = {r["id"]: r.get("text") for r in rules}
+    by_id = {r["id"]: r for r in rules}
+
+    def rule_points(rule_id: str | None) -> int | None:
+        p = (by_id.get(rule_id) or {}).get("points") if rule_id else None
+        return p if isinstance(p, int) and p > 0 else None
+
     return {
         # `rule_text`: the linked rule's wording, for "from class rule · …".
-        "items": [{**asdict(i), "rule_text": rule_text.get(i.rule_id)} for i in items],
+        # `rule_points`: what the rule makes the item worth when it sets
+        # points (the editor counts it so, as the save checks it); None
+        # when the item keeps its own points.
+        "items": [
+            {**asdict(i), "rule_text": (by_id.get(i.rule_id) or {}).get("text"),
+             "rule_points": rule_points(i.rule_id)}
+            for i in items
+        ],
         "graph_points": sum(i.points for i in items),
         "problem_points": problem_points,
         "teacher_edited": bool(stored.get("teacher_edited")),

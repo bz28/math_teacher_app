@@ -565,9 +565,20 @@ def test_values_the_key_never_gives_are_flagged() -> None:
     question = "Sketch two periods of $y = -2 + 3\\tan(5x - 30°)$."
     key = "Period: 36°. Points: (-3°, -5), (6°, -2), (15°, 1)."
     assert values_not_given("Curve passes through (-3°, -5) and (6°, -2)", question, key) == []
-    assert values_not_given("Vertical asymptotes at x = -1.5° and x = 16.5°", question, key) == ["1.5", "16.5"]
-    # 0 is the axes; ½ is 1/2.
-    assert values_not_given("Crosses the y-axis at (0, −½)", "f(x) = (x+1)/(x-2)") == []
+    assert values_not_given("Vertical asymptotes at x = -1.5° and x = 16.5°", question, key) == ["-1.5", "16.5"]
+    # 0 is the axes; −½ is -1 over 2, as \\tfrac12 is.
+    assert values_not_given("Crosses the y-axis at (0, −½)", "y-intercept $(0, -\\tfrac12)$") == []
+
+
+def test_value_matching_reads_signs_decimals_and_exponents() -> None:
+    # A sign flip is a different value; a subtraction gives the negative.
+    assert values_not_given("Asymptote at x = -3", "x = 3") == ["-3"]
+    assert values_not_given("Crosses at (0, -3)", "y = x - 3") == []
+    # An exponent isn't a value the graph shows.
+    assert values_not_given("Crosses at (2, 0)", "y = x^2 - 4") == ["2"]
+    assert values_not_given("Through (0.5, 1,000)", "points .5 and 1000, then 1") == []
+    # Each value once, in the order it appears.
+    assert values_not_given("At 7, then 9, then 7 again", "") == ["7", "9"]
 
 
 async def test_writer_flags_values_it_worked_out(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -577,7 +588,7 @@ async def test_writer_flags_values_it_worked_out(monkeypatch: pytest.MonkeyPatch
     ]})
     monkeypatch.setattr(drawing_check, "call_claude_json", reply)
     items = (await write_graph_checklist("Graph f(x) = (x+1)/(x-2).", "VA x = 2, HA y = 1", 10)).items
-    assert [i.values_to_check for i in items] == [[], ["0.5"]]
+    assert [i.values_to_check for i in items] == [[], ["-0.5"]]
 
 
 async def test_writer_can_say_no_drawing_is_asked(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -587,3 +598,20 @@ async def test_writer_can_say_no_drawing_is_asked(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(drawing_check, "call_claude_json", reply)
     written = await write_graph_checklist("Find the hypotenuse.", "12", 10)
     assert written == WrittenChecklist([], asks_for_drawing=False)
+
+
+async def test_a_teacher_save_keeps_the_note_on_items_she_left_alone(
+    hw: dict[str, Any], client: AsyncClient, writer: Writer,
+) -> None:
+    writer.reply = [
+        ChecklistItem("Asymptote at x = 24", 3, values_to_check=["24"]),
+        ChecklistItem("Asymptote at x = 60", 3, values_to_check=["60"]),
+    ]
+    await _approve(client, hw)
+    r = await _put(client, hw, [
+        {"text": "Asymptote at x = 24", "points": 2, "rule_id": None},
+        {"text": "Asymptote at x = 48", "points": 3, "rule_id": None},
+    ])
+    assert r.status_code == 200, r.text
+    view = await _view(client, hw)
+    assert [i["values_to_check"] for i in view["items"]] == [["24"], []]

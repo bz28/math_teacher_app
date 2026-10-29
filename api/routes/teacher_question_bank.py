@@ -22,11 +22,13 @@ from api.core.drawing_requirement import classify_requires_drawing
 from api.core.entitlements import Entitlement, check_entitlement
 from api.core.graph_checklist import (
     checklist_views,
+    current_checklist,
     due,
     homework_context,
     needs_checklist,
     schedule_write,
     source_of,
+    stored_items,
     to_stored,
     write_checklist,
 )
@@ -1347,8 +1349,17 @@ async def update_graph_checklist(
                 "points — leave at least 1 for the work and answer"
             ),
         )
+    # An item she left as it was keeps its "check these values" note; an
+    # item she wrote or reworded is hers to vouch for.
+    unchecked = {i.text: i.values_to_check for i in stored_items(current_checklist(item))}
     item.graph_checklist = to_stored(
-        [ChecklistItem(text=i.text, points=i.points, rule_id=i.rule_id) for i in body.items],
+        [
+            ChecklistItem(
+                text=i.text, points=i.points, rule_id=i.rule_id,
+                values_to_check=list(unchecked.get(i.text, [])),
+            )
+            for i in body.items
+        ],
         points, source=source_of(item), teacher_edited=True,
     )
     await record_activity(

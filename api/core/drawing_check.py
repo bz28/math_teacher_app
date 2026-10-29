@@ -126,21 +126,40 @@ class WrittenChecklist:
     asks_for_drawing: bool = True
 
 
-_NUMBER = re.compile(r"\d+(?:\.\d+)?")
-_UNICODE_FRACTIONS = {"½": " 1/2 ", "⅓": " 1/3 ", "⅔": " 2/3 ", "¼": " 1/4 ", "¾": " 3/4 "}
+# A number, with its sign. A minus counts when it sits right before the
+# digits ("(0, -3)", "x - 3" both give -3), so x = 3 doesn't vouch for
+# x = -3. "1,000" is one number; ".5" is 0.5. Exponents ("x^2") aren't
+# values a graph shows, so they're skipped.
+_NUMBER = re.compile(r"(?<![\w.^])(-\s?)?(\d{1,3}(?:,\d{3})+(?!\d)|\d+(?:\.\d+)?|\.\d+)")
+_LATEX_FRACTION = re.compile(r"\\[dt]?frac(?:\{(\d+)\}\{(\d+)\}|(\d)(\d))")
+_UNICODE_FRACTIONS = {"½": "1/2", "⅓": "1/3", "⅔": "2/3", "¼": "1/4", "¾": "3/4"}
 
 
-def _numbers(text: str) -> set[str]:
+def _numbers(text: str) -> list[str]:
+    """The numbers in `text`, in order, normalized ("2.50" is "2.5",
+    "−½" is -1 over 2). Mirrored by `splitValues` in graph-checklist.tsx."""
+    text = text.replace("−", "-")
+    text = _LATEX_FRACTION.sub(lambda m: f"{m[1] or m[3]}/{m[2] or m[4]}", text)
     for k, v in _UNICODE_FRACTIONS.items():
         text = text.replace(k, v)
-    return {n.rstrip("0").rstrip(".") if "." in n else n for n in _NUMBER.findall(text)}
+    out = []
+    for m in _NUMBER.finditer(text):
+        if text[: m.start()].endswith("^{"):
+            continue
+        n = m[2].replace(",", "")
+        if n.startswith("."):
+            n = "0" + n
+        if "." in n:
+            n = n.rstrip("0").rstrip(".")
+        out.append("0" if n == "0" else f"-{n}" if m[1] else n)
+    return out
 
 
 def values_not_given(text: str, *sources: str) -> list[str]:
-    """The numbers in `text` that none of `sources` contains, in order.
-    0 always counts as given (the axes)."""
-    given = set().union(*(_numbers(s) for s in sources)) | {"0"}
-    return sorted(_numbers(text) - given, key=lambda n: text.find(n))
+    """The numbers in `text` that none of `sources` contains, in the
+    order they appear. 0 always counts as given (the axes)."""
+    given = {n for s in sources for n in _numbers(s)} | {"0"}
+    return list(dict.fromkeys(n for n in _numbers(text) if n not in given))
 
 
 @dataclass

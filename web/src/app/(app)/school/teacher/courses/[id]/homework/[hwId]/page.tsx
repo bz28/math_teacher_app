@@ -207,15 +207,30 @@ export default function HomeworkDetailPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId]);
 
-  // A checklist changed (saved, rewritten, or written in the background
-  // since approving): re-read the homework without the loading state.
+  // A checklist changed (saved, rewritten, written in the background
+  // since approving, or resized by a points or rules change): re-read
+  // only the checklists, so a refetch can't undo another field's
+  // optimistic edit that is still saving. Throws when the read fails.
   const refreshChecklists = useCallback(async () => {
-    try {
-      setHw(await teacher.assignment(assignmentId));
-    } catch {
-      // Keep what's on screen; the next full reload picks it up.
-    }
+    const fresh = await teacher.assignment(assignmentId);
+    setHw((h) => (h ? { ...h, graph_checklists: fresh.graph_checklists } : h));
   }, [assignmentId]);
+
+  // Just approved: a checklist is written in the background in a few
+  // seconds. Look once more for the whole page (not once per problem)
+  // before the panels offer to write one by hand.
+  const [checklistsLookedAgain, setChecklistsLookedAgain] = useState(false);
+  const checklistPending = Object.values(hw?.graph_checklists ?? {}).some(
+    (e) => !e.checklist && e.can_write,
+  );
+  useEffect(() => {
+    if (!checklistPending || checklistsLookedAgain) return;
+    const t = setTimeout(() => {
+      setChecklistsLookedAgain(true);
+      refreshChecklists().catch(() => undefined);
+    }, 8000);
+    return () => clearTimeout(t);
+  }, [checklistPending, checklistsLookedAgain, refreshChecklists]);
 
   // Pick up any gen job(s) the wizard kicked off for this HW. The
   // wizard stashes a JSON array of job ids in sessionStorage on
@@ -665,7 +680,8 @@ export default function HomeworkDetailPage({
             assignmentId,
             empty ? { clear_rubric: true } : { rubric: merged },
           )
-          .then(() => undefined),
+          // Skipped or restored class rules change the checklists' links.
+          .then(() => refreshChecklists().catch(() => undefined)),
     );
   };
 
@@ -695,7 +711,11 @@ export default function HomeworkDetailPage({
       "points",
       () => setHw((h) => (h ? { ...h, points: next } : h)),
       () => setHw((h) => (h ? { ...h, points: prev } : h)),
-      () => teacher.updateAssignment(assignmentId, change).then(() => undefined),
+      // New points resize the graph checklists.
+      () =>
+        teacher
+          .updateAssignment(assignmentId, change)
+          .then(() => refreshChecklists().catch(() => undefined)),
     );
   };
 
@@ -1117,6 +1137,7 @@ export default function HomeworkDetailPage({
                           : () => void openWorkshopForProblem(p.bank_item_id)
                       }
                       checklist={hw.graph_checklists?.[p.bank_item_id]}
+                      checklistLookedAgain={checklistsLookedAgain}
                       onChecklistChanged={refreshChecklists}
                     />
                   ))}
@@ -1694,12 +1715,14 @@ function ProblemRow({
   validatePoints,
   onEdit,
   checklist,
+  checklistLookedAgain,
   onChecklistChanged,
 }: {
   problem: AssignmentProblem;
   /** Present for a problem that requires a drawing. */
   checklist?: HomeworkGraphChecklist;
-  onChecklistChanged: () => Promise<void> | void;
+  checklistLookedAgain: boolean;
+  onChecklistChanged: () => Promise<void>;
   /** What it's worth; null for practice (ungraded: no points, no
    *  grading details). */
   points: number | null;
@@ -1799,6 +1822,7 @@ function ProblemRow({
               entry={checklist}
               bankItemId={problem.bank_item_id}
               problemPoints={points}
+              lookedAgain={checklistLookedAgain}
               onChanged={onChecklistChanged}
               onEditQuestion={onEdit}
             />
