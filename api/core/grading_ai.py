@@ -967,17 +967,43 @@ def _reconcile_deductions(
     }]
 
 
-def _rule_deductions(raw_deductions: Any, rules: dict[str, int | None]) -> list[dict[str, Any]]:
-    """The model's deductions that cite a class rule it was given and
-    take something off."""
-    return [
-        d for d in raw_deductions or []
-        if isinstance(d, dict)
-        and d.get("rule_id") in rules
-        and isinstance(d.get("points_off"), (int, float))
-        and not isinstance(d.get("points_off"), bool)
-        and round(d["points_off"]) > 0
-    ]
+def _rule_lines_on_full(
+    raw_deductions: Any, rules: dict[str, int | None], points: int,
+) -> list[dict[str, Any]]:
+    """The class-rule lines on a grade the grader called full: one per
+    rule it was given, sized in percent of the problem, together leaving
+    at least 1%.
+
+    A rule cited twice keeps its first line, as `_charge_in_points`
+    charges it. A rule with points costs those points of the problem's
+    `points`; one without keeps the grader's sizing. Each line is a whole
+    percent, the unit `_reconcile_deductions` sums in, so the ledger always
+    reconciles and every line keeps its rule_id. Capping at 99 can leave
+    a rule cheaper here than its points; `_charge_in_points` charges the
+    full points afterwards, which may take the grade to zero.
+    """
+    lines: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    room = 99
+    for d in raw_deductions or []:
+        if not isinstance(d, dict):
+            continue
+        rid, po = d.get("rule_id"), d.get("points_off")
+        if rid not in rules or rid in seen:
+            continue
+        if not isinstance(po, (int, float)) or isinstance(po, bool) or round(po) <= 0:
+            continue
+        fixed = rules[rid]
+        if fixed == 0:
+            continue
+        size = round(fixed * 100 / points) if fixed is not None and points > 0 else round(po)
+        size = min(max(size, 1), room)
+        if size <= 0:
+            break
+        seen.add(rid)
+        room -= size
+        lines.append({**d, "points_off": size})
+    return lines
 
 
 def _charge_in_points(
@@ -1056,6 +1082,7 @@ def _build_breakdown(
     pos_to_step_count: dict[Any, int] | None = None,
     rules: dict[str, int | None] | None = None,
     points: dict[str, int] | None = None,
+    rule_texts: dict[str, str] | None = None,
 ) -> tuple[list[dict[str, Any]], float | None]:
     """Turn the model's raw per-problem grades into the actionable
     breakdown the teacher edits, plus the averaged `ai_score`.
@@ -1086,7 +1113,8 @@ def _build_breakdown(
     when out of range, so a review-UI highlight can't anchor to a step that
     doesn't exist. The raw grades on `ai_breakdown` are updated to the
     same final call (status, percent, ledger); the model's reasoning and
-    confidence stay as it wrote them.
+    confidence stay as it wrote them, except on a full call a class rule
+    turns partial, whose reasoning names the rules (`rule_texts`).
     """
     for g in grades:
         raw_conf = g.get("confidence")
@@ -1113,10 +1141,16 @@ def _build_breakdown(
         # rule silently costs nothing. Only the rule lines are kept: the
         # grader's own judgment was full credit.
         if status == "full":
-            cited = _rule_deductions(raw_deductions, rules or {})
-            if cited:
-                status, raw_deductions = "partial", cited
-                percent = max(1.0, 100.0 - sum(round(d["points_off"]) for d in cited))
+            lines = _rule_lines_on_full(
+                raw_deductions, rules or {}, points.get(bid, 0) if points else 100,
+            )
+            if lines:
+                status, raw_deductions = "partial", lines
+                percent = 100.0 - sum(d["points_off"] for d in lines)
+                # The grader's reasoning argues full credit; the call is
+                # now the rules', so the note names them.
+                names = [(rule_texts or {}).get(d["rule_id"]) or "a class rule" for d in lines]
+                g["reasoning"] = " ".join(f"Class rule: {n}." for n in names) + " Otherwise full credit."
         # `feedback` lands directly in the textarea the teacher edits
         # before publishing — it must be student-voice prose, not the
         # internal-grading explanation. We pull from `student_feedback`
@@ -1373,6 +1407,7 @@ async def run_ai_grading_for_submission(
         grades, pos_to_bid, submission_id=str(submission_id),
         pos_to_step_count=pos_to_step_count,
         rules={r["id"]: r.get("points") for r in (rubric or {}).get("rules", [])},
+        rule_texts={r["id"]: r.get("text") or "" for r in (rubric or {}).get("rules", [])},
         # A graph problem's grader grade is the work part's.
         points={bid: parts[bid].work_points if bid in parts else n for bid, n in points.items()},
     )

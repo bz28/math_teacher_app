@@ -449,6 +449,19 @@ def test_a_grader_deduction_citing_a_rule_the_checklist_owns_is_given_back() -> 
     assert _ledger_adds_up(out)
 
 
+def test_a_rule_the_checklist_owns_is_given_back_from_a_full_call_too() -> None:
+    # The grader called the work full but cited r1 three times; the
+    # forced-partial line keeps r1's tag, so combine can give it back.
+    part = GraphPart([ChecklistItem("Axes labeled", 1, rule_id="r1"), ChecklistItem("Line drawn", 2)], 5)
+    line = {"points_off": 50, "reason": "axes", "step_ref": None, "rule_id": "r1"}
+    work = _work("full", 100, line, line, line, rules={"r1": 1})
+    assert work["score_status"] == "partial"
+    out = combine(work, part, _check("no", "yes"))
+    assert out["percent"] == pytest.approx(80)
+    assert [(d["source"], d["rule_id"]) for d in out["deductions"]] == [("graph_checklist", "r1")]
+    assert _ledger_adds_up(out)
+
+
 def test_mixed_verdicts_and_work_add_up() -> None:
     work = _work("partial", 75, {"points_off": 25, "reason": "slip", "step_ref": None, "rule_id": None}, work_points=6)
     part = GraphPart([ChecklistItem("A", 2), ChecklistItem("B", 1), ChecklistItem("C", 1)], 10)

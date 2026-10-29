@@ -146,6 +146,35 @@ def test_a_full_call_without_a_rule_line_stays_full() -> None:
         assert sum(d["points_off"] for d in e["deductions"]) == 0
 
 
+def test_a_rule_cited_again_and_again_on_a_full_call_is_charged_once() -> None:
+    # The cold review's repro: r1 three times at 50% on a 2-point problem
+    # with a 1-point units rule. One class-rule line, 1 of 2 off.
+    e = _one(_full((50, "r1"), (50, "r1"), (50, "r1")), 2, {"r1": 1})
+    assert e["score_status"] == "partial" and e["percent"] == 50.0
+    assert [(d["rule_id"], d["source"]) for d in e["deductions"]] == [("r1", "class_rule")]
+
+
+def test_an_oversized_rule_with_no_points_keeps_its_tag() -> None:
+    e = _one(_full((150, "r1")), 10, {"r1": None})
+    assert [d["source"] for d in e["deductions"]] == ["class_rule"]
+    assert sum(d["points_off"] for d in e["deductions"]) == pytest.approx(100 - e["percent"])
+
+
+def test_a_rule_worth_more_than_the_problem_takes_it_to_zero_tagged() -> None:
+    e = _one(_full((5, "r1")), 2, {"r1": 5})
+    assert e["score_status"] == "zero" and e["percent"] == 0.0
+    assert [d["source"] for d in e["deductions"]] == ["class_rule"]
+
+
+def test_a_converted_call_names_its_rules_in_the_reasoning() -> None:
+    grade = {**_full((5, "r1")), "reasoning": "All correct, full credit."}
+    _build_breakdown(
+        [grade], {1: "p1"}, points={"p1": 10}, rules={"r1": 1},
+        rule_texts={"r1": "Final answers need units"},
+    )
+    assert grade["reasoning"] == "Class rule: Final answers need units. Otherwise full credit."
+
+
 def test_the_raw_grade_carries_the_final_call() -> None:
     """The review page reads the raw grade as the AI's call."""
     grade = _partial(95, (5, "r1"))
