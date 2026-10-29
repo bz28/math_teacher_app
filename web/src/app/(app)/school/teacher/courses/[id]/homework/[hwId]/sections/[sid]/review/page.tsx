@@ -462,6 +462,9 @@ function HomeworkSectionReview({
   // publish action is HW-wide, so the soft publish-confirm must count
   // these too — snapshotted at fetch time like the counters above.
   const [flaggedOtherSections, setFlaggedOtherSections] = useState(0);
+  // Other-section submissions about to be published that still have
+  // graph items waiting on the teacher's ✓/✗ — same snapshot rule.
+  const [graphOtherSections, setGraphOtherSections] = useState(0);
   // Submission currently being marked reviewed via the explicit no-edit
   // affordance. Single slot — only one student is open at a time.
   const [markingReviewedId, setMarkingReviewedId] = useState<string | null>(null);
@@ -549,6 +552,7 @@ function HomeworkSectionReview({
         let otherPendingReviewed = 0;
         let otherDirtyReviewed = 0;
         let otherFlagged = 0;
+        let otherGraph = 0;
         // The teacher's own rehearsal, if she left one in this section.
         // Held aside rather than skipped: it belongs on the roster so
         // she can open it and see what grading her students' work will
@@ -601,10 +605,12 @@ function HomeworkSectionReview({
             otherPending += 1;
             if (r.reviewed_at) otherPendingReviewed += 1;
             if (isFlaggedUnresolved) otherFlagged += 1;
+            if ((r.graph_items_open ?? 0) > 0) otherGraph += 1;
           } else if (r.grade_dirty) {
             otherDirty += 1;
             if (r.reviewed_at) otherDirtyReviewed += 1;
             if (isFlaggedUnresolved) otherFlagged += 1;
+            if ((r.graph_items_open ?? 0) > 0) otherGraph += 1;
           }
         }
         setPendingOtherSections(otherPending);
@@ -613,6 +619,7 @@ function HomeworkSectionReview({
         setPendingReviewedOtherSections(otherPendingReviewed);
         setDirtyReviewedOtherSections(otherDirtyReviewed);
         setFlaggedOtherSections(otherFlagged);
+        setGraphOtherSections(otherGraph);
         const merged: RosterEntry[] = s.students
           .map((st) => ({
             student_id: st.id,
@@ -1184,12 +1191,14 @@ function HomeworkSectionReview({
     gradedInSection,
     reviewedToPublishInSection,
     flaggedToPublishInSection,
+    graphToPublishInSection,
   } = useMemo(() => {
     let pending = 0;
     let dirty = 0;
     let graded = 0;
     let reviewedToPublish = 0;
     let flaggedToPublish = 0;
+    let graphToPublish = 0;
     for (const e of roster ?? []) {
       const s = e.submission;
       if (!s || s.final_score === null) continue;
@@ -1222,6 +1231,10 @@ function HomeworkSectionReview({
       ) {
         flaggedToPublish += 1;
       }
+      // Soft publish-confirm: a grade about to go out with graph items
+      // still waiting on her ✓/✗. Those items keep their points until
+      // she marks them, so the score can still drop.
+      if ((isPending || isDirty) && hasGraphToCheck(e)) graphToPublish += 1;
     }
     return {
       pendingInSection: pending,
@@ -1229,6 +1242,7 @@ function HomeworkSectionReview({
       gradedInSection: graded,
       reviewedToPublishInSection: reviewedToPublish,
       flaggedToPublishInSection: flaggedToPublish,
+      graphToPublishInSection: graphToPublish,
     };
   }, [roster]);
   const pendingTotal = pendingInSection + pendingOtherSections;
@@ -1297,6 +1311,7 @@ function HomeworkSectionReview({
   // HW-wide, so the soft confirm counts both the loaded section and the
   // snapshotted other-section flags.
   const flaggedToPublishTotal = flaggedToPublishInSection + flaggedOtherSections;
+  const graphToPublishTotal = graphToPublishInSection + graphOtherSections;
 
   // Publish every pending-or-dirty submission on the HW. Backend is
   // idempotent. On success we mirror the publish timestamp onto every
@@ -1352,6 +1367,7 @@ function HomeworkSectionReview({
           // we don't track the reviewed-flag split — that path keeps the
           // snapshot, refreshed on next open like the other counters.)
           setFlaggedOtherSections(0);
+          setGraphOtherSections(0);
         }
         // If the open student's grade was part of the publish, clear
         // the local dirty flag on detail too so the strip updates
@@ -1562,14 +1578,18 @@ function HomeworkSectionReview({
   }, [polling, assignmentId, pollKick]);
 
   const onPublishClick = useCallback(() => {
-    if (unreviewedToPublishTotal === 0 && flaggedToPublishTotal === 0) {
+    if (
+      unreviewedToPublishTotal === 0 &&
+      flaggedToPublishTotal === 0 &&
+      graphToPublishTotal === 0
+    ) {
       void handlePublish(false).then((ok) => {
         if (!ok) setPublishConfirmOpen(true);
       });
     } else {
       setPublishConfirmOpen(true);
     }
-  }, [unreviewedToPublishTotal, flaggedToPublishTotal, handlePublish]);
+  }, [unreviewedToPublishTotal, flaggedToPublishTotal, graphToPublishTotal, handlePublish]);
 
   // Explicit approval — the teacher's deliberate "I've vouched for this"
   // click on the Approve button of an AI grade (hand grades self-approve
@@ -2085,6 +2105,7 @@ function HomeworkSectionReview({
         reviewedToPublish={reviewedToPublishTotal}
         unreviewedToPublish={unreviewedToPublishTotal}
         flaggedToPublish={flaggedToPublishTotal}
+        graphToPublish={graphToPublishTotal}
         publishing={publishing}
         error={publishError}
         onConfirm={handlePublish}
@@ -2235,6 +2256,7 @@ function PublishConfirmDialog({
   reviewedToPublish,
   unreviewedToPublish,
   flaggedToPublish,
+  graphToPublish,
   publishing,
   error,
   onConfirm,
@@ -2254,6 +2276,10 @@ function PublishConfirmDialog({
    *  them for review and the teacher hasn't resolved yet. Drives the
    *  soft confirm — a warning, never a block. */
   flaggedToPublish: number;
+  /** Submissions about to be published with graph items still waiting
+   *  on the teacher's ✓/✗. Those items keep their points until marked.
+   *  A warning, never a block. */
+  graphToPublish: number;
   publishing: boolean;
   error: string | null;
   onConfirm: (reviewedOnly?: boolean) => void;
@@ -2316,6 +2342,27 @@ function PublishConfirmDialog({
             : "submissions are flagged for review"}{" "}
           and not yet resolved. Publish anyway, or close this and review
           {flaggedToPublish === 1 ? " it" : " them"} first?
+        </p>
+      )}
+      {/* Graph items the check couldn't decide. Its own quiet look,
+       *  with the "?" the checklist uses for those items, so it doesn't
+       *  read as a second unapproved warning. */}
+      {graphToPublish > 0 && (
+        <p className="mt-3 flex gap-2 rounded-[--radius-md] border border-border-light bg-[color:var(--color-surface-alt-2)] px-3 py-2 text-xs text-text-secondary">
+          <span
+            aria-hidden
+            className="mt-px inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[color:var(--color-warning-dark)]/30 bg-[color:var(--color-warning-bg)] text-[10px] font-bold text-[color:var(--color-warning-dark)]"
+          >
+            ?
+          </span>
+          <span>
+            <span className="font-semibold text-text-primary">{graphToPublish}</span>{" "}
+            {graphToPublish === 1
+              ? "grade still has graph items to check"
+              : "grades still have graph items to check"}
+            . Those items count as correct until you mark them; a ✗ lowers
+            the score the next time you publish.
+          </span>
         </p>
       )}
       {otherSections > 0 && (

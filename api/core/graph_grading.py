@@ -16,7 +16,9 @@ question, the answer key or the written work (`check_problem_drawing`).
     the teacher to check (`needs_check`). The check couldn't tell, so the
     teacher decides; it is never a silent zero.
 
-Not wired into grading yet: the eval measures it first.
+Grading runs it on each problem that requires a drawing and has a
+current checklist (`graph_part`); the teacher's ✓/✗ settles each
+unclear item.
 """
 
 from __future__ import annotations
