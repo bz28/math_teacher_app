@@ -29,7 +29,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, NamedTuple
 
-from sqlalchemy import func, select
+from sqlalchemy import case, exists, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.integrity_ai import (
@@ -2158,8 +2158,65 @@ async def finalize_abandoned_checks(
     )).scalars().all()
     for check in stale:
         await _force_finalize_abandoned(check, db)
+    healed = await record_missing_incomplete_reasons(db)
+    if healed:
+        logger.info("recorded incomplete_reason on %d closed checks", healed)
     await db.commit()
     return len(stale)
+
+
+# What the release before incomplete_reason wrote when it force-closed a
+# check: the abandoned close's headline and the turn cap's summary. The
+# cz1000095 backfill keys on the same two strings.
+_LEGACY_ABANDONED_HEADLINE = "Interview incomplete"
+_LEGACY_TURN_CAP_SUMMARY_PREFIX = "Conversation hit the turn cap"
+
+
+async def record_missing_incomplete_reasons(db: AsyncSession) -> int:
+    """Give a reason to checks the previous release closed without one.
+
+    During a deploy the old container keeps serving after the migration
+    ran, and its force-closes write no incomplete_reason — so the teacher
+    would see neither "Didn't finish" nor "Inconclusive". The sweep calls
+    this every pass to fill them in with the backfill's rule. Idempotent:
+    it only touches rows whose reason is still NULL, and only the two
+    legacy shapes, so an agent's verdict (it has a disposition) and a
+    current close (it has a reason) are never matched. Returns how many
+    rows it filled. The caller commits.
+    """
+    unexplained = (
+        (IntegrityCheckSubmission.status == STATUS_COMPLETE)
+        & IntegrityCheckSubmission.disposition.is_(None)
+        & IntegrityCheckSubmission.incomplete_reason.is_(None)
+    )
+    answered = exists().where(
+        IntegrityConversationTurn.integrity_check_submission_id
+        == IntegrityCheckSubmission.id,
+        IntegrityConversationTurn.role == ROLE_STUDENT,
+    )
+    abandoned = await db.execute(
+        update(IntegrityCheckSubmission)
+        .where(
+            unexplained,
+            IntegrityCheckSubmission.headline == _LEGACY_ABANDONED_HEADLINE,
+        )
+        .values(incomplete_reason=case(
+            (answered, INCOMPLETE_LEFT_PARTWAY), else_=INCOMPLETE_NOT_STARTED,
+        ))
+        .execution_options(synchronize_session=False)
+    )
+    capped = await db.execute(
+        update(IntegrityCheckSubmission)
+        .where(
+            unexplained,
+            IntegrityCheckSubmission.overall_summary.startswith(
+                _LEGACY_TURN_CAP_SUMMARY_PREFIX, autoescape=True,
+            ),
+        )
+        .values(incomplete_reason=INCOMPLETE_TURN_CAP)
+        .execution_options(synchronize_session=False)
+    )
+    return int(abandoned.rowcount or 0) + int(capped.rowcount or 0)  # type: ignore[attr-defined]
 
 
 _SOFT_NUDGE_MARKER = "(Wrap up:"

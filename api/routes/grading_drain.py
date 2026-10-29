@@ -61,7 +61,9 @@ async def drain_grading_queue(
     should key on `failed`.
 
     The same clock also closes understanding checks the student walked
-    away from (`abandoned_checks`). That's the one other piece of work
+    away from (`abandoned_checks`), and records the reason on any the
+    previous release closed without one (see
+    record_missing_incomplete_reasons). That's the one other piece of work
     only time can trigger, and the teacher's "Didn't finish the check"
     marker is wrong until it runs, so it rides here rather than waiting
     for someone to open a page. It runs first — one indexed query, where

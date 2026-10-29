@@ -189,12 +189,9 @@ def _backfill_sql() -> list[str]:
     return stmts
 
 
-async def test_migration_backfills_existing_rows(
-    client: AsyncClient, world: dict[str, Any],
-) -> None:
-    """Rows written before the column existed carry their reason only in
-    the fixed copy the force-finalizes wrote. The backfill recovers it —
-    and leaves the agent's own verdicts alone."""
+async def _seed_legacy_rows(world: dict[str, Any]) -> dict[str, uuid.UUID]:
+    """Seed every state, then rewind the check rows to what the release
+    before incomplete_reason wrote: the reason only in the fixed copy."""
     subs = await _seed(world)
     async with get_session_factory()() as s:
         checks = {
@@ -224,19 +221,68 @@ async def test_migration_backfills_existing_rows(
         verdict.disposition = "pass"
         verdict.headline = "Interview incomplete"  # can't happen; proves the guard
         await s.commit()
+    return subs
+
+
+async def _reasons() -> dict[uuid.UUID, str | None]:
+    async with get_session_factory()() as s:
+        return {
+            c.submission_id: c.incomplete_reason for c in (await s.execute(
+                select(IntegrityCheckSubmission)
+            )).scalars().all()
+        }
+
+
+async def test_migration_backfills_existing_rows(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """Rows written before the column existed carry their reason only in
+    the fixed copy the force-finalizes wrote. The backfill recovers it —
+    and leaves the agent's own verdicts alone."""
+    subs = await _seed_legacy_rows(world)
 
     async with get_session_factory()() as s:
         for stmt in _backfill_sql():
             await s.execute(text(stmt))
         await s.commit()
 
-    async with get_session_factory()() as s:
-        got = {
-            c.submission_id: c.incomplete_reason for c in (await s.execute(
-                select(IntegrityCheckSubmission)
-            )).scalars().all()
-        }
+    got = await _reasons()
     assert got[subs["not_started"]] == "not_started"
     assert got[subs["left_partway"]] == "left_partway"
     assert got[subs["turn_cap"]] == "turn_cap"
     assert got[subs["unreadable"]] is None
+
+
+async def test_sweep_records_reasons_the_old_release_left_out(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """During a deploy the old container closes checks without a reason
+    after the migration ran. The abandoned sweep fills them in with the
+    backfill's rule, and running it again changes nothing."""
+    from api.core.integrity_pipeline import (
+        finalize_abandoned_checks,
+        record_missing_incomplete_reasons,
+    )
+
+    subs = await _seed_legacy_rows(world)
+    async with get_session_factory()() as s:
+        await finalize_abandoned_checks(s)
+
+    got = await _reasons()
+    assert got[subs["not_started"]] == "not_started"
+    assert got[subs["left_partway"]] == "left_partway"
+    assert got[subs["turn_cap"]] == "turn_cap"
+    assert got[subs["unreadable"]] is None  # an agent verdict is never touched
+
+    # Idempotent: a second pass matches nothing, and a reason already on
+    # a row (here, set by hand) is never rewritten.
+    async with get_session_factory()() as s:
+        await s.execute(text(
+            "UPDATE integrity_check_submissions SET incomplete_reason = 'turn_cap' "
+            "WHERE submission_id = :sid"
+        ), {"sid": subs["not_started"]})
+        await s.commit()
+    async with get_session_factory()() as s:
+        assert await record_missing_incomplete_reasons(s) == 0
+        await s.commit()
+    assert (await _reasons())[subs["not_started"]] == "turn_cap"
