@@ -654,7 +654,7 @@ async def test_teacher_submission_detail_surfaces_edited_final_pre_grading(
     Without this, the edit only surfaces once the AI grader writes its
     breakdown, which leaves a confusing UI window where the student's
     correction looks lost. Mirrors the priority order documented at
-    teacher_assignments.py: edited > extracted > AI echo > None."""
+    teacher_assignments.py: edited > single read > AI echo > first read > None."""
     submission_id = await _submit_and_stage_extraction(
         client, world, _READABLE_EXTRACTION, '{"1:final": "16 apples"}',
     )
@@ -761,18 +761,10 @@ async def test_teacher_submission_detail_unreadable_still_honors_edit(
     assert r.json()["problems"][0]["student_answer"] == "16 apples"
 
 
-async def test_teacher_submission_detail_ai_echo_outranks_extraction(
-    client: AsyncClient, world: dict[str, Any]
-) -> None:
-    """Once grading has run, the teacher sees the answer the grade was
-    actually computed against, not the raw read. The echo reflects how
-    the model resolved the extraction (duplicate candidates, blanks) and
-    is delimited for display, so promoting the raw read above it would
-    let the cell disagree with the verdict printed beside it. The
-    extraction fills the cell only when the echo has nothing."""
-    submission_id = await _submit_and_stage_extraction(
-        client, world, _READABLE_EXTRACTION,
-    )
+async def _graded_with_echo(
+    client: AsyncClient, world: dict[str, Any], extraction: str, echo: str,
+) -> str:
+    submission_id = await _submit_and_stage_extraction(client, world, extraction)
     async with get_session_factory()() as s:
         s.add(SubmissionGrade(
             submission_id=uuid.UUID(submission_id),
@@ -780,16 +772,40 @@ async def test_teacher_submission_detail_ai_echo_outranks_extraction(
                 "problem_id": str(world["primary_id"]),
                 "score_status": "full",
                 "percent": 100.0,
-                "student_answer": "$x = 5$",
+                "student_answer": echo,
             }],
         ))
         await s.commit()
-
     r = await client.get(
         f"/v1/teacher/submissions/{submission_id}",
         headers=_auth(world["teacher_token"]),
     )
-    assert r.json()["problems"][0]["student_answer"] == "$x = 5$"
+    return r.json()["problems"][0]["student_answer"]
+
+
+async def test_teacher_submission_detail_single_read_outranks_ai_echo(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """With one read of the answer, the teacher sees what the student
+    wrote. The grader's echo paraphrases and fills in what the key has,
+    such as units the student never wrote."""
+    assert await _graded_with_echo(
+        client, world, _READABLE_EXTRACTION, "$5$ rad/min",
+    ) == "$5$"
+
+
+async def test_teacher_submission_detail_ai_echo_settles_duplicate_reads(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """With two reads for one problem, the echo says which one the grade
+    was computed against, so it outranks the first read."""
+    two_reads = (
+        '{"steps": [], "final_answers": ['
+        '{"problem_position": 1, "answer_latex": "7", "answer_plain": "seven"},'
+        '{"problem_position": 1, "answer_latex": "9", "answer_plain": "nine"}'
+        '], "confidence": 0.9}'
+    )
+    assert await _graded_with_echo(client, world, two_reads, "$9$") == "$9$"
 
 
 async def test_teacher_submission_detail_extraction_fills_null_ai_echo(
