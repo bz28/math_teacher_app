@@ -614,10 +614,11 @@ export function SubmissionExtractionConfirmView({
         {/* The reason to go through with it. This is where students
             drop off in prod (25 of 96 submissions never confirmed), so
             the "your teacher reads it" line lives here too, not only
-            inside the chat they haven't reached yet. */}
+            inside the chat they haven't reached yet. It never says the
+            chat changes the grade: it doesn't. */}
         <p className="mt-2 text-sm font-semibold text-primary-dark">
-          Your teacher reads it when grading — it&rsquo;s the best way to
-          get credit for what you understand.
+          Your teacher reads it alongside your work — it&rsquo;s the best
+          way to show them what you understand.
         </p>
       </div>
       )}

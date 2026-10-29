@@ -401,14 +401,14 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
                 Your teacher uses a quick chat to hear how you worked through a problem, in your own
                 words. No trick questions, nothing to look up — just explain your thinking.
               </Text>
-              {/* Why it's worth finishing — honest framing: the teacher reads
-                  it and decides, the chat doesn't move a score on its own. */}
+              {/* Why it's worth finishing — honest framing: the chat doesn't
+                  affect the grade, so nothing here may promise credit. */}
               <View style={styles.introNudge}>
                 <Text style={styles.introNudgeText}>
                   <Text style={styles.introNudgeStrong}>
-                    Your teacher reads this conversation when they grade your work.
+                    Your teacher reads this conversation alongside your work.
                   </Text>{" "}
-                  Explaining your thinking here is the best way to get credit for what you
+                  Explaining your thinking here is the best way to show them what you
                   understand.
                 </Text>
               </View>
