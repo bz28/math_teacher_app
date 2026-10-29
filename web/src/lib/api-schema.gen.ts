@@ -4773,6 +4773,8 @@ export interface components {
             reason: string;
             /** Rule Id */
             rule_id?: string | null;
+            /** Source */
+            source?: ("class_rule" | "ai_judgment") | null;
             /** Step Ref */
             step_ref?: number | null;
         };

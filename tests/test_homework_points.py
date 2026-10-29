@@ -28,6 +28,10 @@ def test_even_split_gives_the_remainder_to_the_first_problems() -> None:
     assert even_split(100, 0) == []
 
 
+def test_no_problem_is_ever_worth_nothing() -> None:
+    assert even_split(3, 7) == [1] * 7
+
+
 def test_hand_set_points_fill_a_new_problem_with_the_average() -> None:
     assert problem_points(100, {"a": 10, "b": 30}, ["a", "b", "c"]) == {"a": 10, "b": 30, "c": 20}
     assert problem_points(30, None, ["a", "b", "c"]) == {"a": 10, "b": 10, "c": 10}
@@ -85,6 +89,19 @@ def test_ai_judgment_rounds_to_half_a_point_and_never_to_nothing() -> None:
     assert e["deductions"][0]["source"] == "ai_judgment"
     e = _one(_partial(87, (13, None)), 10)  # 1.3 points
     assert e["percent"] == 85.0
+
+
+def test_small_ai_lines_are_rounded_together_not_one_by_one() -> None:
+    # Three 1% slips on a 4-point problem are 0.12 points: half a point
+    # in all, not half a point each.
+    e = _one(_partial(97, (1, None), (1, None), (1, None)), 4)
+    assert e["percent"] == 87.5
+    assert sum(d["points_off"] for d in e["deductions"]) == 12.5
+
+
+def test_many_lines_still_add_up_to_the_rounded_total() -> None:
+    e = _one(_partial(88, (3, None), (3, None), (3, None), (3, None)), 10)  # 1.2 points
+    assert e["percent"] == 90.0
 
 
 def test_nothing_takes_off_more_than_the_problem_is_worth() -> None:
@@ -178,6 +195,21 @@ async def test_points_must_cover_exactly_the_problems(client: AsyncClient) -> No
     assert (await client.patch(url, json={"problem_points": {a: 5}}, headers=headers)).status_code == 400
     assert (await client.patch(url, json={"total_points": 1}, headers=headers)).status_code == 400
     assert (await client.patch(url, json={"problem_points": {a: 0}}, headers=headers)).status_code == 422
+
+
+async def test_a_teacher_save_keeps_the_deduction_source(client: AsyncClient) -> None:
+    world = await _seed_hw(n_problems=1)
+    sub = world["submission_ids"][0]
+    res = await client.patch(
+        f"/v1/teacher/submissions/{sub}/grade",
+        json={"breakdown": [{
+            "problem_id": world["bank_item_id"], "score_status": "partial", "percent": 90,
+            "deductions": [{"points_off": 10, "reason": "No unit", "rule_id": None, "source": "class_rule"}],
+        }]},
+        headers=_auth(world["teacher_token"]),
+    )
+    assert res.status_code == 200
+    assert (await _row(sub)).breakdown[0]["deductions"][0]["source"] == "class_rule"
 
 
 async def test_a_hand_grade_is_weighted_by_points(client: AsyncClient) -> None:

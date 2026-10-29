@@ -917,10 +917,6 @@ def _reconcile_deductions(
     }]
 
 
-def _round_half(x: float) -> float:
-    return round(x * 2) / 2
-
-
 def _charge_in_points(
     entry: dict[str, Any], points: int, rules: dict[str, int | None],
 ) -> None:
@@ -930,8 +926,9 @@ def _charge_in_points(
     The model grades in percent; the teacher sets points. A deduction
     citing a class rule that names points costs exactly those points, and
     each rule is charged once per problem. Every other deduction is the
-    AI's own sizing ("AI judgment"), rounded to the nearest half point and
-    never below one, so a real deduction can't round away. Nothing takes
+    AI's own sizing ("AI judgment"). Their total is rounded to the nearest
+    half point, and to at least half a point so a real deduction can't
+    round away, then shared out by largest remainder. Nothing takes
     off more than the problem is worth. `points_off` stays a percent of
     the problem, as the review page reads it; `source` says who sized it.
     Full and zero grades keep their status; only a partial is re-sized.
@@ -954,8 +951,7 @@ def _charge_in_points(
                 "step_ref": None, "rule_id": None, "source": "ai_judgment",
             })
     charged: set[str] = set()
-    kept: list[dict[str, Any]] = []
-    off = 0.0
+    sized: list[tuple[dict[str, Any], float]] = []
     for d in entry["deductions"]:
         rid = d.get("rule_id")
         if rid in charged:
@@ -963,7 +959,22 @@ def _charge_in_points(
         if rid:
             charged.add(rid)
         fixed = rules.get(rid) if rid else None
-        pts = float(fixed) if fixed is not None else max(0.5, _round_half(d["points_off"] * points / 100))
+        sized.append((d, float(fixed) if fixed is not None else d["points_off"] * points / 100))
+    own = [i for i, (d, _) in enumerate(sized) if rules.get(d.get("rule_id") or "") is None]
+    raw_own = sum(sized[i][1] for i in own)
+    if own and raw_own > 0:
+        # Largest remainder, in half points, so the lines add up exactly.
+        halves = [sized[i][1] * 2 for i in own]
+        units = [int(h) for h in halves]
+        for k in sorted(range(len(own)), key=lambda k: halves[k] - units[k], reverse=True)[
+            : max(1, round(raw_own * 2)) - sum(units)
+        ]:
+            units[k] += 1
+        for k, i in enumerate(own):
+            sized[i] = (sized[i][0], units[k] / 2)
+    kept: list[dict[str, Any]] = []
+    off = 0.0
+    for d, pts in sized:
         pts = min(pts, points - off)
         if pts <= 0:
             continue

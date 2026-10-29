@@ -3,7 +3,7 @@
 import asyncio
 import uuid
 from datetime import UTC, datetime
-from typing import Annotated, Any, Protocol
+from typing import Annotated, Any, Literal, Protocol
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
@@ -1327,6 +1327,8 @@ class Deduction(BaseModel):
     step_ref: int | None = None
     # The class rule this deduction applied (`Course.rubric`), if any.
     rule_id: str | None = Field(default=None, max_length=40)
+    # Who sized it: the rule's own points, or the AI's judgment.
+    source: Literal["class_rule", "ai_judgment"] | None = None
 
 
 class BreakdownEntry(BaseModel):
@@ -1338,8 +1340,8 @@ class BreakdownEntry(BaseModel):
     # it back only while the grade still matches the AI's call — the moment
     # a teacher overrides the score, the client drops it (the AI's
     # justification no longer reconciles to the teacher's number). The
-    # immutable `ai_breakdown` snapshot is the AI's permanent record and is
-    # never touched here. `None` = no ledger to persist.
+    # AI's own call stays on `ai_breakdown`, which is never touched here.
+    # `None` = no ledger to persist.
     deductions: list[Deduction] | None = None
 
     @field_validator("score_status")
@@ -1831,7 +1833,7 @@ def _normalize_breakdown(entries: list[BreakdownEntry]) -> list[dict[str, Any]]:
     teacher's); we defend that contract here, too, by dropping any ledger
     whose `100 − Σ points_off` no longer reconciles to the saved percent.
     That way a stale ledger can never be persisted alongside a number it
-    doesn't explain. The immutable `ai_breakdown` is untouched."""
+    doesn't explain. `ai_breakdown` (the AI's call) is untouched."""
     seen: dict[str, dict[str, Any]] = {}
     for e in entries:
         if e.score_status == "full":
@@ -1866,6 +1868,7 @@ def _normalize_breakdown(entries: list[BreakdownEntry]) -> list[dict[str, Any]]:
                         "reason": d.reason,
                         "step_ref": d.step_ref,
                         "rule_id": d.rule_id,
+                        "source": d.source,
                     }
                     for d in e.deductions
                 ]

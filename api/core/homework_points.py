@@ -30,10 +30,12 @@ MAX_TOTAL_POINTS = 1000
 
 
 def even_split(total: int, count: int) -> list[int]:
-    """`total` in whole points over `count` problems, remainder first."""
+    """`total` in whole points over `count` problems, remainder first.
+    Every problem is worth at least 1, so a total smaller than the
+    problem count (problems added after it was set) can't make one free."""
     if count <= 0:
         return []
-    base, extra = divmod(total, count)
+    base, extra = divmod(max(total, count), count)
     return [base + 1 if i < extra else base for i in range(count)]
 
 

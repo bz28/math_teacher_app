@@ -1298,6 +1298,21 @@
             ],
             "title": "Rule Id"
           },
+          "source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "class_rule",
+                  "ai_judgment"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
           "step_ref": {
             "anyOf": [
               {
