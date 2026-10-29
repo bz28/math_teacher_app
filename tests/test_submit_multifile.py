@@ -392,3 +392,18 @@ async def test_submit_accepts_pdf_pages_at_the_minimum_size_and_typed_pages(
         ]},
     )
     assert r.status_code == 200, r.text
+
+
+async def test_submit_accepts_tablet_handwriting_over_a_small_paper_picture(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """Cold review on #957: vector strokes over a 300×388 'paper' raster
+    were measured as a 388 px scan and refused with no override."""
+    from tests.test_image_utils import tablet_pdf
+
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"files": [tablet_pdf((300, 388)), tablet_pdf((1, 1))]},
+    )
+    assert r.status_code == 200, r.text

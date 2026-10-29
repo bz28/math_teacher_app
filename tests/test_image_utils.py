@@ -363,6 +363,28 @@ def pdf_of(pages: list[Image.Image], dpi: float = 72) -> str:
     return _b64(buf.getvalue())
 
 
+def tablet_pdf(paper: tuple[int, int]) -> str:
+    """A page the way a tablet note app exports one: a small raster
+    'paper' stretched over a letter page, with the writing as vector
+    strokes on top."""
+    import pypdfium2 as pdfium
+    import pypdfium2.raw as pdfium_c
+
+    pdf = pdfium.PdfDocument(base64.b64decode(pdf_of([Image.new("RGB", paper, "white")], dpi=paper[0] / 8.5)))
+    page = pdf[0]
+    for line in range(12):
+        y = 700.0 - line * 50
+        stroke = pdfium_c.FPDFPageObj_CreateNewPath(72.0, y)
+        for step in range(1, 20):
+            pdfium_c.FPDFPath_LineTo(stroke, 72.0 + step * 20, y + (8 if step % 2 else -8))
+        pdfium_c.FPDFPath_SetDrawMode(stroke, 0, True)
+        pdfium_c.FPDFPage_InsertObject(page.raw, stroke)
+    page.gen_content()
+    buf = io.BytesIO()
+    pdf.save(buf)
+    return _b64(buf.getvalue())
+
+
 class TestPdfScanLongEdges:
     def test_measures_the_photo_behind_each_page(self) -> None:
         pages = [Image.new("RGB", (1600, 1200), "white"), Image.new("RGB", (320, 240), "white")]
@@ -400,6 +422,19 @@ class TestPdfScanLongEdges:
         pdf.save(buf)
         assert pdf_scan_long_edges(_b64(buf.getvalue())) == [None]
 
+    @pytest.mark.parametrize("paper", [(300, 388), (1, 1)])
+    def test_tablet_handwriting_over_a_small_paper_picture_isnt_a_scan(
+        self, paper: tuple[int, int],
+    ) -> None:
+        # Cold review on #957: a tablet app's page is vector strokes over a
+        # small raster "paper" stretched across the page. Measured as a scan
+        # it came out [388] / [1] and was refused with no way round it.
+        assert pdf_scan_long_edges(tablet_pdf(paper)) == [None]
+
+    def test_a_real_small_scan_is_still_measured(self) -> None:
+        # No text, no strokes, one small photo filling the page: a scan.
+        assert pdf_scan_long_edges(pdf_of([Image.new("RGB", (240, 320), "white")], dpi=30)) == [320]
+
     def test_unreadable_pdf_has_no_pages(self) -> None:
         assert pdf_scan_long_edges(_b64(_PDF_HEADER + b"pdf")) == []
 
@@ -421,6 +456,37 @@ class TestPdfPageChecks:
         assert checks["sideways_pages"] == []
         preview = Image.open(io.BytesIO(base64.b64decode(checks["preview"])))
         assert preview.height == 640  # page 1 when nothing is sideways
+
+    def test_renders_at_the_checks_own_size(self) -> None:
+        # The reader's 2400 px would hold the PDF lock ~9x longer for the
+        # same answer: the sideways check reads 800 px.
+        from api.core.image_utils import _ORIENTATION_EDGE
+
+        assert _ORIENTATION_EDGE == 800
+        checks = pdf_page_checks(pdf_of([_page_of_writing()]))
+        preview = Image.open(io.BytesIO(base64.b64decode(checks["preview"])))
+        assert max(preview.size) == 640
+
+    def test_a_page_that_wont_render_still_counts(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        import pypdfium2 as pdfium
+
+        page = _page_of_writing()
+        pdf = pdf_of([page, page.rotate(90, expand=True), page.rotate(90, expand=True)])
+        real_render = pdfium.PdfPage.render
+        calls = {"n": 0}
+
+        def flaky(self: object, *a: object, **k: object) -> object:
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise RuntimeError("bad page")
+            return real_render(self, *a, **k)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(pdfium.PdfPage, "render", flaky)
+        checks = pdf_page_checks(pdf)
+        # Page 2 is counted but not flagged, so the wording ("Page 3 of
+        # this PDF", "only some pages") stays right.
+        assert checks["page_count"] == 3
+        assert checks["sideways_pages"] == [3]
 
     def test_unreadable_pdf_reports_nothing(self) -> None:
         assert pdf_page_checks(_b64(_PDF_HEADER + b"pdf")) == {
