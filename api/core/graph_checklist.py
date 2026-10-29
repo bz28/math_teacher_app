@@ -125,6 +125,13 @@ def to_stored(
     return stored
 
 
+def is_checked(stored: dict[str, Any]) -> bool:
+    """The teacher has looked at this checklist: she edited it, or said it
+    looks right. A checklist the AI writes (again) starts unchecked, and
+    one stored before this key existed reads as unchecked too."""
+    return bool(stored.get("teacher_edited") or stored.get("checked"))
+
+
 def grading_rules(course: Course | None, assignment: Assignment | None) -> list[dict[str, Any]]:
     """The class rules the grader applies to this homework: the class's,
     minus any the homework skips."""
@@ -168,6 +175,7 @@ def checklist_view(
         "graph_points": sum(i.points for i in items),
         "problem_points": problem_points,
         "teacher_edited": bool(stored.get("teacher_edited")),
+        "checked": is_checked(stored),
         "asks_for_drawing": stored.get("asks_for_drawing", True) is not False,
     }
 

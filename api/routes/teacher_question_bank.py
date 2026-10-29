@@ -1370,6 +1370,29 @@ async def update_graph_checklist(
     return await _item_response(db, item)
 
 
+@router.post("/question-bank/{item_id}/graph-checklist/checked")
+async def mark_graph_checklist_checked(
+    item: QuestionBankItem = Depends(get_bank_item),
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """The teacher read the AI's checklist and it looks right. Nothing in
+    it changes; rewriting it from the answer key unchecks it again."""
+    stored = current_checklist(item)
+    if stored is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This question has no graph checklist yet",
+        )
+    item.graph_checklist = {**stored, "checked": True}
+    await record_activity(
+        db, current_user, "bank_item.edit", "bank_item", item.id,
+        {"title": item.title, "fields": ["graph_checklist"]},
+    )
+    await db.commit()
+    return await _item_response(db, item)
+
+
 @router.post("/question-bank/{item_id}/graph-checklist/rewrite")
 @limiter.limit("6/minute")
 async def rewrite_graph_checklist(

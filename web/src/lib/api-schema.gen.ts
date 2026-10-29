@@ -3926,6 +3926,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/teacher/question-bank/{item_id}/graph-checklist/checked": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark Graph Checklist Checked
+         * @description The teacher read the AI's checklist and it looks right. Nothing in
+         *     it changes; rewriting it from the answer key unchecks it again.
+         */
+        post: operations["mark_graph_checklist_checked_v1_teacher_question_bank__item_id__graph_checklist_checked_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teacher/question-bank/{item_id}/graph-checklist/rewrite": {
         parameters: {
             query?: never;
@@ -13812,6 +13833,39 @@ export interface operations {
                 "application/json": components["schemas"]["UpdateGraphChecklistRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_graph_checklist_checked_v1_teacher_question_bank__item_id__graph_checklist_checked_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

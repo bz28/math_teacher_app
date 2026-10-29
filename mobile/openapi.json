@@ -19143,6 +19143,57 @@
         ]
       }
     },
+    "/v1/teacher/question-bank/{item_id}/graph-checklist/checked": {
+      "post": {
+        "description": "The teacher read the AI's checklist and it looks right. Nothing in\nit changes; rewriting it from the answer key unchecks it again.",
+        "operationId": "mark_graph_checklist_checked_v1_teacher_question_bank__item_id__graph_checklist_checked_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "item_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Item Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Mark Graph Checklist Checked V1 Teacher Question Bank  Item Id  Graph Checklist Checked Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Mark Graph Checklist Checked",
+        "tags": [
+          "teacher"
+        ]
+      }
+    },
     "/v1/teacher/question-bank/{item_id}/graph-checklist/rewrite": {
       "post": {
         "description": "Write the checklist again from the question and answer key,\nreplacing the teacher's edits. Awaited, like regenerate: the teacher\nasked for it and is waiting for it. On failure her checklist stays.",
