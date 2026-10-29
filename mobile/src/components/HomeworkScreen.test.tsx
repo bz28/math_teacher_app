@@ -54,6 +54,14 @@ const GRADED = {
   ],
 };
 
+const PROPS = {
+  assignmentId: "hw1",
+  onBack: jest.fn(),
+  onSubmitted: jest.fn(),
+  onConfirmReading: jest.fn(),
+  onFinishCheck: jest.fn(),
+};
+
 const colorOf = (text: string) => StyleSheet.flatten(screen.getByText(text).props.style).color;
 
 describe("HomeworkScreen graded breakdown", () => {
@@ -64,7 +72,7 @@ describe("HomeworkScreen graded breakdown", () => {
   });
 
   it("labels each row by the problem's real position, joined on problem_id", async () => {
-    render(<HomeworkScreen assignmentId="hw1" onBack={jest.fn()} onSubmitted={jest.fn()} />);
+    render(<HomeworkScreen {...PROPS} />);
 
     // The stale row (problem_id no longer in the assignment) gets the fallback.
     expect(await waitForText("Additional feedback")).toBeTruthy();
@@ -78,7 +86,7 @@ describe("HomeworkScreen graded breakdown", () => {
   });
 
   it("colors each percent by its score_status, mirroring scoreColor", async () => {
-    render(<HomeworkScreen assignmentId="hw1" onBack={jest.fn()} onSubmitted={jest.fn()} />);
+    render(<HomeworkScreen {...PROPS} />);
     await waitForText("Additional feedback");
 
     expect(colorOf("100%")).toBe(colors.success); // full
@@ -105,7 +113,7 @@ describe("HomeworkScreen sideways pages", () => {
   });
 
   async function addPhoto() {
-    render(<HomeworkScreen assignmentId="hw1" onBack={jest.fn()} onSubmitted={jest.fn()} />);
+    render(<HomeworkScreen {...PROPS} />);
     await fireEvent.press(await waitForText("Add your work"));
   }
 
@@ -134,5 +142,43 @@ describe("HomeworkScreen sideways pages", () => {
     await addPhoto();
     expect(await screen.findByLabelText("Rotate page a quarter turn clockwise")).toBeTruthy();
     expect(screen.queryByText(/looks sideways/)).toBeNull();
+  });
+});
+
+describe("HomeworkScreen one more step", () => {
+  const IN_REVIEW = {
+    ...GRADED,
+    submission_id: "sub1",
+    grade_published_at: null,
+    final_score: null,
+    breakdown: null,
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockedApi.getSubmission.mockResolvedValue({ files: [] } as never);
+  });
+
+  it("takes an unconfirmed reading back to the confirm screen", async () => {
+    mockedApi.getHomework.mockResolvedValue({ ...IN_REVIEW, next_step: "confirm_reading" } as never);
+    render(<HomeworkScreen {...PROPS} />);
+    expect(await waitForText(/Check we read it right/)).toBeTruthy();
+    await fireEvent.press(screen.getByText("Confirm your reading"));
+    expect(PROPS.onConfirmReading).toHaveBeenCalled();
+    expect(PROPS.onFinishCheck).not.toHaveBeenCalled();
+  });
+
+  it("takes an open check back into the chat for this submission", async () => {
+    mockedApi.getHomework.mockResolvedValue({ ...IN_REVIEW, next_step: "finish_check" } as never);
+    render(<HomeworkScreen {...PROPS} />);
+    await fireEvent.press(await waitForText("Finish the quick check"));
+    expect(PROPS.onFinishCheck).toHaveBeenCalledWith("sub1");
+  });
+
+  it("shows no step when there's nothing left to do", async () => {
+    mockedApi.getHomework.mockResolvedValue({ ...IN_REVIEW, next_step: null } as never);
+    render(<HomeworkScreen {...PROPS} />);
+    expect(await waitForText("Submitted — in review")).toBeTruthy();
+    expect(screen.queryByText("One more step")).toBeNull();
   });
 });

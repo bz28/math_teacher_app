@@ -24,6 +24,7 @@ import {
 import { errorMessage } from "../utils/errorMessage";
 import { orientationCheckCopy } from "../utils/orientationCheckCopy";
 import { scoreColor } from "../utils/scoreColor";
+import { NEXT_STEP_COPY } from "../utils/nextStep";
 import { useColors, spacing, typography, radii, type ColorPalette } from "../theme";
 
 const MAX_FILES = 10;
@@ -33,6 +34,11 @@ interface Props {
   onBack: () => void;
   /** Called after a successful submit so the host can open the review/confirm step. */
   onSubmitted: () => void;
+  /** Back into the confirm screen for turned-in work whose reading the
+   *  student never confirmed (they left before tapping Confirm). */
+  onConfirmReading: () => void;
+  /** Back into an open understanding check ("Save & exit" lands home). */
+  onFinishCheck: (submissionId: string) => void;
 }
 
 /** A staged page the student hasn't turned in yet. */
@@ -56,7 +62,13 @@ const stillSideways = (f: StagedFile) => f.sideways && f.rotation % 180 === 0;
 
 const newId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
-export function HomeworkScreen({ assignmentId, onBack, onSubmitted }: Props) {
+export function HomeworkScreen({
+  assignmentId,
+  onBack,
+  onSubmitted,
+  onConfirmReading,
+  onFinishCheck,
+}: Props) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [hw, setHw] = useState<HomeworkDetail | null>(null);
@@ -226,13 +238,27 @@ export function HomeworkScreen({ assignmentId, onBack, onSubmitted }: Props) {
           ))}
 
           {hw.submitted ? (
-            <SubmittedStatus
-              hw={hw}
-              files={submittedFiles}
-              onZoom={setZoomFile}
-              styles={styles}
-              colors={colors}
-            />
+            <>
+              {hw.next_step && hw.submission_id ? (
+                <NextStepCard
+                  step={hw.next_step}
+                  onPress={() =>
+                    hw.next_step === "confirm_reading"
+                      ? onConfirmReading()
+                      : onFinishCheck(hw.submission_id!)
+                  }
+                  styles={styles}
+                  colors={colors}
+                />
+              ) : null}
+              <SubmittedStatus
+                hw={hw}
+                files={submittedFiles}
+                onZoom={setZoomFile}
+                styles={styles}
+                colors={colors}
+              />
+            </>
           ) : (
             <View style={styles.submitBlock}>
               <Text style={styles.submitLabel}>Turn in your work</Text>
@@ -408,6 +434,37 @@ function ProblemBlock({
           ))}
         </View>
       )}
+    </View>
+  );
+}
+
+/** "One more step" on turned-in work — the only way back into the confirm
+ *  screen or an open check once the student has left them. Primary-tinted,
+ *  not a warning: the work is in and nothing waits on this. */
+function NextStepCard({
+  step,
+  onPress,
+  styles,
+  colors,
+}: {
+  step: NonNullable<HomeworkDetail["next_step"]>;
+  onPress: () => void;
+  styles: ReturnType<typeof makeStyles>;
+  colors: ColorPalette;
+}) {
+  const copy = NEXT_STEP_COPY[step];
+  return (
+    <View style={styles.nextStepCard}>
+      <View style={styles.statusRow}>
+        <Ionicons
+          name={step === "confirm_reading" ? "document-text-outline" : "chatbubble-ellipses-outline"}
+          size={18}
+          color={colors.primary}
+        />
+        <Text style={styles.statusTitle}>One more step</Text>
+      </View>
+      <Text style={styles.nextStepHint}>{copy.hint}</Text>
+      <Button label={copy.label} onPress={onPress} />
     </View>
   );
 }
@@ -644,6 +701,14 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     gap: spacing.md,
     marginTop: spacing.lg,
   },
+  nextStepCard: {
+    backgroundColor: colors.primaryBg,
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    gap: spacing.md,
+    marginTop: spacing.lg,
+  },
+  nextStepHint: { ...typography.body, fontSize: 14, lineHeight: 20, color: colors.textSecondary },
   statusRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   statusTitle: { ...typography.bodyBold, fontSize: 16, color: colors.text, flex: 1 },
   statusScore: { ...typography.bodyBold, fontSize: 18 },
