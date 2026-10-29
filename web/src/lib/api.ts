@@ -1138,6 +1138,34 @@ export interface HomeworkPoints {
   custom: boolean;
 }
 
+/** One feature a correct graph must show, worth whole points. A linked
+ *  item takes its class rule's points. `values_to_check`: numbers the
+ *  question and answer key never give (the AI worked them out). */
+export interface GraphChecklistItem {
+  text: string;
+  points: number;
+  rule_id: string | null;
+  rule_text: string | null;
+  values_to_check: string[];
+}
+
+/** A graph question's checklist as this homework grades it. */
+export interface GraphChecklist {
+  items: GraphChecklistItem[];
+  graph_points: number;
+  problem_points: number | null;
+  teacher_edited: boolean;
+  /** False: the AI read the question as asking for no drawing. */
+  asks_for_drawing: boolean;
+}
+
+/** Per graph problem on a homework: its checklist (null = not written
+ *  yet) and whether it can have one (false: no answer key yet). */
+export interface HomeworkGraphChecklist {
+  checklist: GraphChecklist | null;
+  can_write: boolean;
+}
+
 /** One of a class's grading rules — every homework in the course
  *  inherits it unless that homework skips it. `points` is how much a
  *  problem loses when the rule is broken (null: the AI sizes it). */
@@ -1661,6 +1689,8 @@ export const teacher = {
       answer_key: unknown;
       rubric: TeacherRubric | null;
       points: HomeworkPoints;
+      /** Keyed by problem id; only problems that require a drawing. */
+      graph_checklists: Record<string, HomeworkGraphChecklist>;
     }>(`/teacher/assignments/${assignmentId}`);
   },
   createAssignment(courseId: string, data: {
@@ -2043,6 +2073,19 @@ export const teacher = {
   },
   revertBankItem(itemId: string) {
     return apiFetch<BankItem>(`/teacher/question-bank/${itemId}/revert`, { method: "POST" });
+  },
+  /** Replace a graph question's checklist with the teacher's own. */
+  updateGraphChecklist(itemId: string, items: { text: string; points: number; rule_id: string | null }[]) {
+    return apiFetch<unknown>(`/teacher/question-bank/${itemId}/graph-checklist`, {
+      method: "PUT",
+      body: JSON.stringify({ items }),
+    });
+  },
+  /** Write the checklist again from the answer key, replacing edits. */
+  rewriteGraphChecklist(itemId: string) {
+    return apiFetch<unknown>(`/teacher/question-bank/${itemId}/graph-checklist/rewrite`, {
+      method: "POST",
+    });
   },
   approveBankItem(itemId: string, options?: { assignmentId?: string }) {
     return apiFetch<{ status: string }>(`/teacher/question-bank/${itemId}/approve`, {

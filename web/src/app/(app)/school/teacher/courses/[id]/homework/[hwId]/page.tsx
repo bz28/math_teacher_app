@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useRef, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FigureDisplay } from "@/components/shared/figure-display";
@@ -17,6 +17,7 @@ import {
   type TeacherSection,
   type TeacherRubric,
   type HomeworkPoints,
+  type HomeworkGraphChecklist,
 } from "@/lib/api";
 import { normalizeRubric } from "@/lib/rubric";
 import { evenSplit, MAX_TOTAL_POINTS, pointsRange } from "@/lib/points";
@@ -40,6 +41,7 @@ import {
   type PointsChange,
 } from "@/components/school/teacher/_pieces/problem-points";
 import { WorkshopModal } from "@/components/school/teacher/workshop-modal";
+import { GraphChecklistPanel } from "@/components/school/teacher/_pieces/graph-checklist";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface AssignmentProblem {
@@ -98,6 +100,7 @@ export default function HomeworkDetailPage({
         content: unknown;
         rubric: TeacherRubric | null;
         points: HomeworkPoints;
+        graph_checklists: Record<string, HomeworkGraphChecklist>;
       })
     | null
   >(null);
@@ -202,6 +205,16 @@ export default function HomeworkDetailPage({
   useEffect(() => {
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignmentId]);
+
+  // A checklist changed (saved, rewritten, or written in the background
+  // since approving): re-read the homework without the loading state.
+  const refreshChecklists = useCallback(async () => {
+    try {
+      setHw(await teacher.assignment(assignmentId));
+    } catch {
+      // Keep what's on screen; the next full reload picks it up.
+    }
   }, [assignmentId]);
 
   // Pick up any gen job(s) the wizard kicked off for this HW. The
@@ -1103,6 +1116,8 @@ export default function HomeworkDetailPage({
                           ? undefined
                           : () => void openWorkshopForProblem(p.bank_item_id)
                       }
+                      checklist={hw.graph_checklists?.[p.bank_item_id]}
+                      onChecklistChanged={refreshChecklists}
                     />
                   ))}
                 </ul>
@@ -1678,8 +1693,13 @@ function ProblemRow({
   onPointsChange,
   validatePoints,
   onEdit,
+  checklist,
+  onChecklistChanged,
 }: {
   problem: AssignmentProblem;
+  /** Present for a problem that requires a drawing. */
+  checklist?: HomeworkGraphChecklist;
+  onChecklistChanged: () => Promise<void> | void;
   /** What it's worth; null for practice (ungraded: no points, no
    *  grading details). */
   points: number | null;
@@ -1774,9 +1794,19 @@ function ProblemRow({
               <span className="shrink-0 text-xs text-text-muted">Locked while published</span>
             )}
           </div>
-          <p className="text-xs text-text-secondary">
-            Graded by AI using the rules below.
-          </p>
+          {checklist ? (
+            <GraphChecklistPanel
+              entry={checklist}
+              bankItemId={problem.bank_item_id}
+              problemPoints={points}
+              onChanged={onChecklistChanged}
+              onEditQuestion={onEdit}
+            />
+          ) : (
+            <p className="text-xs text-text-secondary">
+              Graded by AI using the rules below.
+            </p>
+          )}
         </div>
       )}
     </li>
