@@ -67,16 +67,12 @@ async def test_patch_rubric_stores_the_four_fields(
         client,
         world,
         {
-            "full_credit": "Correct answer with work shown.",
-            "partial_credit": "Right method, arithmetic slip.",
             "common_mistakes": "Dropping the negative.",
             "notes": "Half credit if unsimplified.",
         },
     )
     assert res.status_code == 200
     assert await _rubric_of(world["assignment_id"]) == {
-        "full_credit": "Correct answer with work shown.",
-        "partial_credit": "Right method, arithmetic slip.",
         "common_mistakes": "Dropping the negative.",
         "notes": "Half credit if unsimplified.",
     }
@@ -109,7 +105,7 @@ async def test_patch_rubric_rejects_unknown_keys(
     await _link_teacher_to_course(world["teacher_id"], course_id)
 
     res = await _patch_rubric(
-        client, world, {"full_credit": "ok", "grading_mode": "answer_only"},
+        client, world, {"notes": "ok", "grading_mode": "answer_only"},
     )
     assert res.status_code == 422
     assert await _rubric_of(world["assignment_id"]) is None
@@ -144,11 +140,11 @@ async def test_patch_rubric_drops_blank_fields(
     await _link_teacher_to_course(world["teacher_id"], course_id)
 
     res = await _patch_rubric(
-        client, world, {"full_credit": "  Correct answer.  ", "notes": "   "},
+        client, world, {"common_mistakes": "  Dropping the sign.  ", "notes": "   "},
     )
     assert res.status_code == 200
     assert await _rubric_of(world["assignment_id"]) == {
-        "full_credit": "Correct answer.",
+        "common_mistakes": "Dropping the sign.",
     }
 
 
@@ -182,6 +178,6 @@ async def test_patch_rubric_all_blank_stores_null_not_empty_dict(
     course_id = await _course_id_for(world["assignment_id"])
     await _link_teacher_to_course(world["teacher_id"], course_id)
 
-    res = await _patch_rubric(client, world, {"full_credit": "   ", "notes": ""})
+    res = await _patch_rubric(client, world, {"common_mistakes": "   ", "notes": ""})
     assert res.status_code == 200
     assert await _rubric_of(world["assignment_id"]) is None

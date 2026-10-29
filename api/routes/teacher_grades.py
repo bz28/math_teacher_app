@@ -24,6 +24,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.audit_log import log_student_record_access
+from api.core.homework_points import problem_points
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
@@ -32,6 +33,7 @@ from api.models.section_enrollment import SectionEnrollment
 from api.models.user import User
 from api.routes.teacher_assignments import _is_grade_dirty
 from api.routes.teacher_courses import get_teacher_course
+from api.services.bank import problem_ids_in_content
 
 router = APIRouter()
 
@@ -255,7 +257,10 @@ async def get_section_gradebook(
     past_due = past_due_by_section.get(section_id, set())
 
     assignments = (await db.execute(
-        select(Assignment.id, Assignment.title, Assignment.due_at)
+        select(
+            Assignment.id, Assignment.title, Assignment.due_at,
+            Assignment.total_points, Assignment.problem_points, Assignment.content,
+        )
         .where(Assignment.id.in_(assigned))
         .order_by(Assignment.due_at.desc().nulls_last(), Assignment.title)
     )).all() if assigned else []
@@ -342,6 +347,9 @@ async def get_section_gradebook(
                 "due_at": a.due_at.isoformat() if a.due_at else None,
                 "avg_percent": _avg(column_scores[a.id]),
                 "counted_count": len(column_scores[a.id]),
+                "total_points": sum(problem_points(
+                    a.total_points, a.problem_points, problem_ids_in_content(a.content),
+                ).values()),
             }
             for a in assignments
         ],

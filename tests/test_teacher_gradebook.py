@@ -139,6 +139,9 @@ async def test_gradebook_grid_columns_and_cells(client: AsyncClient) -> None:
     assert body["section"]["name"] == "Period 1"
     # Newest homework first; Period 3's homework isn't a column here.
     assert [a["title"] for a in body["assignments"]] == ["HW_B", "HW_A", "HW_C"]
+    # Each column carries what its homework is worth: these have no
+    # problems, so nothing.
+    assert {a["total_points"] for a in body["assignments"]} == {0}
     # The preview student never appears.
     students = {s["name"]: s for s in body["students"]}
     assert set(students) == {"Ava Brooks", "Ben Chen"}

@@ -62,7 +62,7 @@
       },
       "AssignmentRubric": {
         "additionalProperties": false,
-        "description": "The teacher-authored grading rubric, as the UI actually collects it.\n\nThis used to be a bare `dict[str, Any]`, which meant the API accepted\nany shape at all \u2014 a gap `api/models/llm_payload.py` already called\nout (\"no key whitelist, value validation or length cap\"). Two things\nmade it worth closing:\n\n* Every reader assumes `str`. The teacher review page renders these\n  through `MathText`, the homework page's `normalizeRubric` calls\n  `.trim()` on them, and `grading_ai._build_rubric_block` interpolates\n  them into a prompt. A list or a number reaching any of those is a\n  crash or a garbled prompt, not a graceful degrade \u2014 and a crash here\n  takes the whole grading page down behind an error boundary, with no\n  way out of it from the UI.\n* These four fields are rendered verbatim into an LLM prompt, so an\n  unbounded string is an unbounded prompt.\n\n`extra=\"forbid\"` rather than ignore: the only writer is the rubric\neditor, which emits exactly these four keys, so an unexpected key\nmeans a client bug and a 422 says so instead of silently dropping the\nteacher's work. (`grading_mode` appears in a stale comment on\n`Assignment.rubric` but has never been written.)",
+        "description": "The teacher-authored grading rubric, as the UI actually collects it.\n\nThis used to be a bare `dict[str, Any]`, which meant the API accepted\nany shape at all \u2014 a gap `api/models/llm_payload.py` already called\nout (\"no key whitelist, value validation or length cap\"). Two things\nmade it worth closing:\n\n* Every reader assumes `str`. The teacher review page renders these\n  through `MathText`, the homework page's `normalizeRubric` calls\n  `.trim()` on them, and `grading_ai._build_rubric_block` interpolates\n  them into a prompt. A list or a number reaching any of those is a\n  crash or a garbled prompt, not a graceful degrade \u2014 and a crash here\n  takes the whole grading page down behind an error boundary, with no\n  way out of it from the UI.\n* These fields are rendered verbatim into an LLM prompt, so an\n  unbounded string is an unbounded prompt.\n\n`extra=\"forbid\"` rather than ignore: the only writer is the rubric\neditor, which emits exactly these keys, so an unexpected key\nmeans a client bug and a 422 says so instead of silently dropping the\nteacher's work. (`grading_mode` appears in a stale comment on\n`Assignment.rubric` but has never been written.) Full and partial\ncredit guidance live on the class (`class_rubric.CreditGuidance`).",
         "properties": {
           "common_mistakes": {
             "anyOf": [
@@ -75,17 +75,6 @@
             ],
             "title": "Common Mistakes"
           },
-          "full_credit": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Full Credit"
-          },
           "notes": {
             "anyOf": [
               {
@@ -96,17 +85,6 @@
               }
             ],
             "title": "Notes"
-          },
-          "partial_credit": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Partial Credit"
           },
           "skipped_rule_ids": {
             "anyOf": [
@@ -1121,6 +1099,38 @@
           "name"
         ],
         "title": "CreateUnitRequest",
+        "type": "object"
+      },
+      "CreditGuidance": {
+        "additionalProperties": false,
+        "description": "The class's full- and partial-credit guidance. Empty or None goes\nback to the default.",
+        "properties": {
+          "full_credit": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Credit"
+          },
+          "partial_credit": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partial Credit"
+          }
+        },
+        "title": "CreditGuidance",
         "type": "object"
       },
       "DashboardAssignment": {
@@ -5306,6 +5316,11 @@
             },
             "title": "Pages",
             "type": "array"
+          },
+          "points": {
+            "default": 0,
+            "title": "Points",
+            "type": "integer"
           },
           "position": {
             "title": "Position",
@@ -16401,7 +16416,7 @@
     },
     "/v1/teacher/courses/{course_id}/rubric": {
       "get": {
-        "description": "The class's grading rules \u2014 every homework in it inherits them.",
+        "description": "The class's grading rules and credit guidance \u2014 every homework in it\ninherits them. A credit field the class never set is null (the default).",
         "operationId": "get_course_rubric_v1_teacher_courses__course_id__rubric_get",
         "parameters": [
           {
@@ -16569,6 +16584,67 @@
           }
         ],
         "summary": "List Rubric Suggestions",
+        "tags": [
+          "teacher"
+        ]
+      }
+    },
+    "/v1/teacher/courses/{course_id}/rubric/credit": {
+      "put": {
+        "description": "Set what the AI uses for mistakes no rule covers. Leaves the rules\nand their revision alone, so it never collides with the rules editor.",
+        "operationId": "update_course_credit_guidance_v1_teacher_courses__course_id__rubric_credit_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreditGuidance"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Course Credit Guidance V1 Teacher Courses  Course Id  Rubric Credit Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Course Credit Guidance",
         "tags": [
           "teacher"
         ]
