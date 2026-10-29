@@ -2064,12 +2064,17 @@ export interface paths {
         put?: never;
         /**
          * Check Page Orientation
-         * @description Does a page the student just added look sideways?
+         * @description Do the pages the student just added read upright, at a size the
+         *     reader can make out?
          *
-         *     Backs the "This page looks sideways — rotate it?" nudge on the
-         *     upload screen. Free (a pixel check, no model call) and advisory:
-         *     it never rotates anything — the student does, with the rotate
-         *     button, and the turn is applied at submit.
+         *     Backs the upload screen, which holds Submit while a page reads as
+         *     sideways and refuses a PDF page that turn-in would. Free (a pixel
+         *     check, no model call). It never rotates anything — the student does,
+         *     with the rotate button, and the turn is applied at submit.
+         *
+         *     Orientation is enforced on the client only, never at submit: the
+         *     check can be wrong, and the student's "It's already upright" has to
+         *     be able to overrule it. Turn-in enforces the size floor alone.
          */
         post: operations["check_page_orientation_v1_school_student_homework_page_orientation_post"];
         delete?: never;
@@ -3173,26 +3178,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/teacher/courses/{course_id}/rubric-suggestions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Rubric Suggestions
-         * @description A class's offers by status — the declined list lets a "no" be undone.
-         */
-        get: operations["list_rubric_suggestions_v1_teacher_courses__course_id__rubric_suggestions_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/teacher/courses/{course_id}/rubric/credit": {
         parameters: {
             query?: never;
@@ -3709,7 +3694,7 @@ export interface paths {
          *     teacher right now, one row per submission, prioritized.
          *
          *     Reuses the exact predicates the courses dashboard and Submissions
-         *     inbox use (_to_review_case / _flagged_case), so the queue can never
+         *     inbox use (_to_review_case / flagged_case), so the queue can never
          *     disagree with the per-course pills. Owner-gated: only submissions on
          *     published homework the teacher owns, non-preview students, dropped
          *     after un-enrollment via the SectionEnrollment guard.
@@ -4068,27 +4053,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/teacher/rubric-suggestions/{suggestion_id}/decide": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Decide Rubric Suggestion
-         * @description Record the teacher's answer: add to the class rubric, add to this
-         *     homework only, or decline (never offered again).
-         */
-        post: operations["decide_rubric_suggestion_v1_teacher_rubric_suggestions__suggestion_id__decide_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/teacher/submissions/{submission_id}": {
         parameters: {
             query?: never;
@@ -4270,27 +4234,6 @@ export interface paths {
          *     for a full Vision read on every regrade to paper over.
          */
         post: operations["regrade_submission_v1_teacher_submissions__submission_id__regrade_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/teacher/submissions/{submission_id}/rubric-suggestion": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Suggest Rubric Rule
-         * @description After a teacher lowers an AI grade with a comment: the rule to offer
-         *     adding to the class rubric, or null. Never changes a rubric.
-         */
-        post: operations["suggest_rubric_rule_v1_teacher_submissions__submission_id__rubric_suggestion_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4675,8 +4618,6 @@ export interface components {
         };
         /** CreateCourseRequest */
         CreateCourseRequest: {
-            /** Description */
-            description?: string | null;
             /** Grade Level */
             grade_level?: number | null;
             /** Name */
@@ -4866,18 +4807,6 @@ export interface components {
             section_name: string;
             /** Title */
             title: string;
-        };
-        /** DecideRequest */
-        DecideRequest: {
-            /**
-             * Action
-             * @enum {string}
-             */
-            action: "add_class" | "add_homework" | "decline";
-            /** Points */
-            points?: number | null;
-            /** Text */
-            text?: string | null;
         };
         /**
          * Deduction
@@ -5593,8 +5522,16 @@ export interface components {
         };
         /** PageOrientationResponse */
         PageOrientationResponse: {
+            /** Page Count */
+            page_count: number;
+            /** Preview */
+            preview: string | null;
             /** Sideways */
             sideways: boolean;
+            /** Sideways Pages */
+            sideways_pages: number[];
+            /** Too Small Pages */
+            too_small_pages: number[];
         };
         /**
          * PasteEvent
@@ -6314,18 +6251,6 @@ export interface components {
              */
             id: string;
         };
-        /** SuggestRequest */
-        SuggestRequest: {
-            /** Comment */
-            comment: string;
-            /**
-             * Problem Id
-             * Format: uuid
-             */
-            problem_id: string;
-            /** Teacher Percent */
-            teacher_percent: number;
-        };
         /** SuggestUnitsRequest */
         SuggestUnitsRequest: {
             /** Document Ids */
@@ -6380,6 +6305,8 @@ export interface components {
             disposition: string | null;
             /** Headline */
             headline: string | null;
+            /** Incomplete Reason */
+            incomplete_reason: ("not_started" | "left_partway" | "turn_cap") | null;
             /** Inline Variant Result */
             inline_variant_result: string | null;
             /** Inline Variant Used */
@@ -6803,16 +6730,10 @@ export interface components {
         };
         /** UpdateCourseRequest */
         UpdateCourseRequest: {
-            /** Description */
-            description?: string | null;
-            /** Grade Level */
-            grade_level?: number | null;
             /** Name */
             name?: string | null;
             /** Status */
             status?: string | null;
-            /** Subject */
-            subject?: string | null;
         };
         /** UpdateDocumentRequest */
         UpdateDocumentRequest: {
@@ -12446,41 +12367,6 @@ export interface operations {
             };
         };
     };
-    list_rubric_suggestions_v1_teacher_courses__course_id__rubric_suggestions_get: {
-        parameters: {
-            query?: {
-                status_filter?: "declined" | "pending";
-            };
-            header?: never;
-            path: {
-                course_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     update_course_credit_guidance_v1_teacher_courses__course_id__rubric_credit_put: {
         parameters: {
             query?: never;
@@ -14096,43 +13982,6 @@ export interface operations {
             };
         };
     };
-    decide_rubric_suggestion_v1_teacher_rubric_suggestions__suggestion_id__decide_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                suggestion_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["DecideRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_submission_detail_v1_teacher_submissions__submission_id__get: {
         parameters: {
             query?: never;
@@ -14314,43 +14163,6 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    suggest_rubric_rule_v1_teacher_submissions__submission_id__rubric_suggestion_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                submission_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SuggestRequest"];
-            };
-        };
         responses: {
             /** @description Successful Response */
             200: {

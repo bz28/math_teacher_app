@@ -22,6 +22,14 @@ import {
   sniffUploadType,
   submitErrorMessage,
 } from "@/lib/submit-errors";
+import {
+  boundedPageCheck,
+  onlySomePagesSideways,
+  pdfTooSmallError,
+  sidewaysHint,
+  sidewaysPrompt,
+  stillSideways,
+} from "@/lib/page-orientation";
 import { fileToBase64, formatFileSize } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
@@ -70,7 +78,8 @@ interface StagedFile {
   mediaType: "image/jpeg" | "image/png" | "application/pdf";
   /** Raw base64 (no data: prefix). What the API expects in `files`. */
   base64: string;
-  /** data: URL preview for image rows. Null for PDFs and error rows. */
+  /** data: URL preview for image rows, and for a PDF once the server
+   *  has rendered one of its pages. Null otherwise. */
   previewUrl: string | null;
   /** Per-row error message; valid files stay alongside. */
   error?: string;
@@ -78,16 +87,25 @@ interface StagedFile {
    *  server stores the page turned this way, so the preview here is
    *  exactly what the teacher and the AI reader get. */
   rotation: number;
-  /** The server's free pixel check thinks the writing runs up and down
-   *  as photographed. Advisory — drives the "looks sideways" nudge. */
-  sideways: boolean;
+  /** Pages in the file: 1 for a photo, one per page for a PDF. */
+  pageCount: number;
+  /** Pages (1-based, within the file) the server's free pixel check
+   *  reads as sideways, as sent. While any still is, turn-in is held. */
+  sidewaysPages: number[];
+  /** The student said "It's already upright" — the check can be wrong. */
+  upright: boolean;
+  /** The page check hasn't answered yet; turn-in waits for it. */
+  checking: boolean;
 }
 
-/** Still sideways after the student's turns? A half turn leaves a
- *  sideways page sideways, so the nudge only clears on a quarter turn. */
-function stillSideways(f: StagedFile): boolean {
-  return f.sideways && f.rotation % 180 === 0;
-}
+/** The fields every new row starts with. */
+const UNCHECKED = {
+  rotation: 0,
+  pageCount: 1,
+  sidewaysPages: [] as number[],
+  upright: false,
+  checking: false,
+};
 
 /**
  * Turn any submit failure into a student-safe line — a technical
@@ -136,7 +154,18 @@ export function SubmissionPanel({
   const reduceMotion = useReducedMotion();
   const isLate = dueAt ? new Date(dueAt) < new Date() : false;
   const validCount = stagedFiles.filter((f) => !f.error && f.base64).length;
-  const canSubmit = validCount > 0 && !submitting && !preparing;
+  // Files the check still reads as sideways, by their turn-in page
+  // number. Turn-in waits until there are none.
+  const sidewaysPages = stagedFiles
+    .filter((f) => !f.error)
+    .flatMap((f, i) => (stillSideways(f) ? [i + 1] : []));
+  const checking = stagedFiles.some((f) => f.checking && !f.error);
+  const canSubmit =
+    validCount > 0 &&
+    !submitting &&
+    !preparing &&
+    !checking &&
+    sidewaysPages.length === 0;
 
   // Why the submit CTA is disabled, in the student's words. Mirrors the
   // `canSubmit` condition above so a student never stalls on a faded
@@ -148,7 +177,11 @@ export function SubmissionPanel({
       ? null
       : stagedFiles.length === 0
         ? "Add at least one readable file to turn in."
-        : "None of these files can be turned in yet — fix or remove the ones flagged above, then add one that's ready.";
+        : validCount === 0
+          ? "None of these files can be turned in yet — fix or remove the ones flagged above, then add one that's ready."
+          : checking
+            ? "Checking your pages…"
+            : sidewaysHint(sidewaysPages);
 
   const newRowId = () =>
     typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -163,16 +196,18 @@ export function SubmissionPanel({
     base64: "",
     previewUrl: null,
     error: message,
-    rotation: 0,
-    sideways: false,
+    ...UNCHECKED,
   });
 
-  /** Stage one file. Returns the row, plus the image blob for the
-   *  sideways check (null for PDFs and error rows). */
+  /** Stage one file. Returns the row, plus what to send the page check:
+   *  the photo's blob, or the whole PDF (null for error rows). */
   async function stageOne(
     file: File,
-  ): Promise<{ row: StagedFile; blob: Blob | null }> {
-    const done = (row: StagedFile, blob: Blob | null = null) => ({ row, blob });
+  ): Promise<{ row: StagedFile; check: Blob | string | null }> {
+    const done = (row: StagedFile, check: Blob | string | null = null) => ({
+      row,
+      check,
+    });
     // What the file IS, not what it is called. `File.type` is the
     // browser's lookup of the FILENAME's extension, so anything renamed
     // `.png` passed this gate and then 400'd at the server — after a
@@ -211,16 +246,19 @@ export function SubmissionPanel({
       }
       try {
         const base64 = await fileToBase64(file);
-        return done({
-          id: newRowId(),
-          filename: file.name,
-          size: file.size,
-          mediaType: "application/pdf",
+        return done(
+          {
+            id: newRowId(),
+            filename: file.name,
+            size: file.size,
+            mediaType: "application/pdf",
+            base64,
+            previewUrl: null,
+            ...UNCHECKED,
+            checking: true,
+          },
           base64,
-          previewUrl: null,
-          rotation: 0,
-          sideways: false,
-        });
+        );
       } catch {
         return done(errorRow(file, "Could not read file"));
       }
@@ -250,8 +288,8 @@ export function SubmissionPanel({
           mediaType,
           base64,
           previewUrl: dataUrl,
-          rotation: 0,
-          sideways: false,
+          ...UNCHECKED,
+          checking: true,
         },
         blob,
       );
@@ -265,20 +303,29 @@ export function SubmissionPanel({
     }
   }
 
-  /** Ask the server whether a staged page looks sideways. Advisory and
-   *  best-effort: any failure just means no nudge. */
-  async function checkSideways(id: string, blob: Blob) {
-    try {
-      const { sideways } = await schoolStudent.pageOrientation(
-        await orientationCheckCopy(blob),
-      );
-      if (!sideways) return;
-      setStagedFiles((prev) =>
-        prev.map((f) => (f.id === id ? { ...f, sideways: true } : f)),
-      );
-    } catch {
-      // No nudge. The tip and the rotate button still work.
-    }
+  /** Ask the server whether a staged file reads upright (every page of
+   *  a PDF, as the reader sees it) and, for a PDF, whether any page is
+   *  too small to read. Best-effort: if the check fails, nothing is
+   *  held — turn-in still enforces the size floor. */
+  async function checkPages(id: string, check: Blob | string) {
+    const pdf = typeof check === "string";
+    // Null on failure, timeout (CHECK_HOLD_MS) or a malformed answer:
+    // nothing is held. The tip and the rotate button still work.
+    const res = await boundedPageCheck(async () =>
+      schoolStudent.pageOrientation(pdf ? check : await orientationCheckCopy(check)),
+    );
+    // Built whole, then applied in one step — never half an answer.
+    const update: Partial<StagedFile> = res
+      ? {
+          pageCount: pdf ? res.pageCount : 1,
+          sidewaysPages: res.sidewaysPages,
+          ...(res.preview ? { previewUrl: `data:image/jpeg;base64,${res.preview}` } : {}),
+          ...(res.tooSmallPages.length > 0 ? { error: pdfTooSmallError(res.tooSmallPages) } : {}),
+        }
+      : {};
+    setStagedFiles((prev) =>
+      prev.map((f) => (f.id === id ? { ...f, ...update, checking: false } : f)),
+    );
   }
 
   async function handleFiles(files: FileList | File[]) {
@@ -293,7 +340,7 @@ export function SubmissionPanel({
       // and slices to the cap. This honors MAX_FILES even when two
       // batches commit out-of-order (drop + picker race), without the
       // earlier read-only updater anti-pattern.
-      const staged: { row: StagedFile; blob: Blob | null }[] = [];
+      const staged: { row: StagedFile; check: Blob | string | null }[] = [];
       for (const file of list) {
         staged.push(await stageOne(file));
       }
@@ -303,8 +350,8 @@ export function SubmissionPanel({
       });
       // After the rows exist, so a fast answer has a row to land on.
       // A row sliced off by the cap just never matches.
-      for (const { row, blob } of staged) {
-        if (blob) void checkSideways(row.id, blob);
+      for (const { row, check } of staged) {
+        if (check) void checkPages(row.id, check);
       }
     } finally {
       inFlightRef.current -= 1;
@@ -314,6 +361,12 @@ export function SubmissionPanel({
 
   function removeStagedFile(id: string) {
     setStagedFiles((prev) => prev.filter((f) => f.id !== id));
+  }
+
+  function markUpright(id: string) {
+    setStagedFiles((prev) =>
+      prev.map((f) => (f.id === id ? { ...f, upright: true } : f)),
+    );
   }
 
   function rotateStaged(id: string) {
@@ -375,12 +428,6 @@ export function SubmissionPanel({
   }
 
   const atCap = stagedFiles.length >= MAX_FILES;
-  // Pages the check still reads as sideways, by their turn-in page
-  // number — named on the confirm step so a student doesn't lock in a
-  // page the reader will misread.
-  const sidewaysPages = stagedFiles
-    .filter((f) => !f.error)
-    .flatMap((f, i) => (stillSideways(f) ? [i + 1] : []));
 
   return (
     <div className="mt-8 overflow-hidden rounded-[--radius-lg] border border-border bg-surface shadow-[0_1px_2px_rgba(20,19,15,0.04)]">
@@ -467,16 +514,20 @@ export function SubmissionPanel({
               const pageNumber = stagedFiles
                 .slice(0, i + 1)
                 .filter((s) => !s.error).length;
+              const sideways = !f.error && stillSideways(f);
               return (
               <li
                 key={f.id}
                 className={cn(
-                  "flex min-h-[44px] items-center gap-3 rounded-[--radius-md] border px-3 py-2",
+                  "rounded-[--radius-md] border",
                   f.error
                     ? "border-error-border bg-error-light/50"
-                    : "border-border bg-surface",
+                    : sideways
+                      ? "border-warning/40 bg-warning-bg/40"
+                      : "border-border bg-surface",
                 )}
               >
+                <div className="flex min-h-[44px] items-center gap-3 px-3 py-2">
                 {f.error ? (
                   <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded bg-error/10 text-error">
                     <AlertTriangleIcon className="h-5 w-5" strokeWidth={2} />
@@ -516,20 +567,17 @@ export function SubmissionPanel({
                   <p className="text-xs text-text-muted">
                     {formatFileSize(f.size)}
                     {f.mediaType === "application/pdf" ? " · PDF" : ""}
+                    {f.pageCount > 1 ? ` · ${f.pageCount} pages` : ""}
                   </p>
                   {f.error && (
                     <p className="mt-0.5 text-xs font-medium text-error">
                       {f.error}
                     </p>
                   )}
-                  {stillSideways(f) && (
-                    <p className="mt-0.5 flex items-center gap-1 text-xs font-semibold text-warning-dark">
-                      <AlertTriangleIcon className="h-3.5 w-3.5 shrink-0 text-warning" strokeWidth={2} />
-                      Looks sideways — rotate it so the writing reads across
-                    </p>
-                  )}
                 </div>
-                {f.previewUrl && !f.error && (
+                {/* Turning a PDF turns every page, so a PDF with only
+                    some pages sideways gets no rotate button. */}
+                {f.previewUrl && !f.error && !onlySomePagesSideways(f) && (
                   <button
                     type="button"
                     onClick={() => rotateStaged(f.id)}
@@ -538,7 +586,7 @@ export function SubmissionPanel({
                     title="Rotate a quarter turn"
                     className={cn(
                       "inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-[--radius-sm] transition-colors disabled:opacity-50",
-                      stillSideways(f)
+                      sideways
                         ? "bg-warning-bg text-warning-dark ring-1 ring-warning/40 hover:bg-warning/15"
                         : "text-text-muted hover:bg-bg-subtle hover:text-primary",
                     )}
@@ -577,6 +625,25 @@ export function SubmissionPanel({
                 >
                   <XIcon className="h-4 w-4" />
                 </button>
+                </div>
+                {sideways && (
+                  <div className="flex flex-col gap-1 border-t border-warning/25 px-3 pb-1.5 pt-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:pb-2">
+                    <p className="flex items-start gap-1.5 text-xs font-medium leading-relaxed text-warning-dark">
+                      <AlertTriangleIcon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" strokeWidth={2} />
+                      <span>{sidewaysPrompt(f)}</span>
+                    </p>
+                    {/* The check is a pixel heuristic and can be wrong —
+                        a student must never be stuck unable to turn in. */}
+                    <button
+                      type="button"
+                      onClick={() => markUpright(f.id)}
+                      disabled={submitting}
+                      className="inline-flex min-h-[36px] shrink-0 items-center self-start pl-5 text-xs font-semibold text-text-secondary underline decoration-border underline-offset-[3px] transition-colors hover:text-text-primary hover:decoration-text-muted disabled:opacity-50 sm:self-auto sm:pl-0"
+                    >
+                      It&apos;s already upright
+                    </button>
+                  </div>
+                )}
               </li>
               );
             })}
@@ -630,13 +697,7 @@ export function SubmissionPanel({
                 {sidewaysPages.length > 0 && (
                   <p className="mt-2 flex items-start gap-1.5 text-sm font-semibold text-warning-dark">
                     <AlertTriangleIcon className="mt-0.5 h-4 w-4 shrink-0 text-warning" strokeWidth={2} />
-                    <span>
-                      {sidewaysPages.length === 1
-                        ? `Page ${sidewaysPages[0]} still looks sideways.`
-                        : `Pages ${sidewaysPages.join(", ")} still look sideways.`}{" "}
-                      Rotate {sidewaysPages.length === 1 ? "it" : "them"} first so
-                      your work is read correctly.
-                    </span>
+                    <span>{sidewaysHint(sidewaysPages)}</span>
                   </p>
                 )}
               </div>
@@ -651,7 +712,7 @@ export function SubmissionPanel({
               </button>
               <button
                 onClick={doSubmit}
-                disabled={submitting}
+                disabled={!canSubmit}
                 className="order-1 inline-flex min-h-[44px] items-center justify-center rounded-[--radius-sm] bg-primary px-5 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-primary-dark disabled:opacity-50 sm:order-2"
               >
                 {submitting ? "Turning it in…" : "Turn it in"}

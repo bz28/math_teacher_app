@@ -292,6 +292,15 @@ export function IntegrityCheckChat({
       setError("Couldn't send that — try again.");
       setPendingStudentMessage(null);
       setMessage(trimmed);
+      // The turn 409s once the check has closed (finished, the turn
+      // cap, or past its deadline in a tab left open). Refetch so the
+      // composer goes away instead of failing on every retry — mobile
+      // does the same.
+      try {
+        setState(await schoolStudent.getIntegrityState(submissionId));
+      } catch {
+        /* keep current state; the error above already says it failed */
+      }
     } finally {
       setSending(false);
     }

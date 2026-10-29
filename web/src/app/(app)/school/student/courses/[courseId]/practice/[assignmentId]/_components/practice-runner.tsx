@@ -12,8 +12,8 @@ import { CheckIcon } from "@/components/ui/icons";
 import { useConfetti } from "@/components/ui/confetti";
 import { cn } from "@/lib/utils";
 import { LearnRunner } from "./learn-runner";
+import { buildChoices } from "@/lib/practice-choices";
 import {
-  buildChoices,
   encouragementFor,
   isLearnable,
   isSolved,

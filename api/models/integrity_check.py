@@ -69,6 +69,17 @@ class IntegrityCheckSubmission(Base):
     # via status alone).
     disposition: Mapped[str | None] = mapped_column(String(32), nullable=True)
     overall_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Why a `complete` check carries no disposition — set only by the
+    # server-side force-finalizes, null whenever the agent reached a
+    # verdict (and while the check is still open). One of:
+    #   not_started  — confirmed the reading, never answered the check
+    #   left_partway — answered at least once, then walked away
+    #   turn_cap     — talked until the hard turn cap, no verdict reached
+    # The first two are "didn't finish the check" to the teacher; the
+    # third is "inconclusive". Neither is a flag.
+    incomplete_reason: Mapped[str | None] = mapped_column(
+        String(32), nullable=True,
+    )
     # 4-8 word verdict title the teacher sees in the integrity banner.
     # Agent-generated in `finish_check` so the title reflects this chat
     # instead of a generic per-disposition label. Null when no AI verdict

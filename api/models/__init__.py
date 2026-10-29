@@ -22,7 +22,6 @@ from api.models import (  # noqa: F401
     practice_activity,
     question_bank,
     question_edit,
-    rubric_suggestion,
     school,
     section,
     section_enrollment,
