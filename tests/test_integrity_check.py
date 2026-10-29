@@ -25,6 +25,11 @@ from api.models.integrity_check import (
     IntegrityConversationTurn,
 )
 from api.models.question_bank import QuestionBankItem
+from api.routes.integrity_check import (
+    STUCK_MESSAGE,
+    STUCK_PHRASES,
+    meets_after_stuck_minimum,
+)
 from api.routes.school_student_practice import drain_integrity_background_tasks
 from tests.conftest import (
     PAGE_PNG,
@@ -482,6 +487,140 @@ async def test_turn_rejects_short_messages(
         json={"message": "x"},
     )
     assert r.status_code == 400
+
+
+async def _post_turn(
+    client: AsyncClient, world: dict[str, Any], submission_id: str,
+    body: dict[str, Any],
+) -> Any:
+    return await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+        headers=_auth(world["student_token"]),
+        json=body,
+    )
+
+
+async def _student_turn_contents(submission_id: str) -> list[str]:
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        rows = (await s.execute(
+            select(IntegrityConversationTurn.content)
+            .where(
+                IntegrityConversationTurn.integrity_check_submission_id == check.id,
+                IntegrityConversationTurn.role == "student",
+            )
+            .order_by(IntegrityConversationTurn.ordinal)
+        )).scalars().all()
+    return list(rows)
+
+
+async def test_stuck_tap_allowed_once_per_problem(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """The first stuck tap skips the typed minimum and lands the
+    server's canonical text; a second tap is rejected without writing a
+    turn or calling the agent."""
+    set_agent_script([[make_text("Opener")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    r = await client.get(
+        f"/v1/school/student/integrity/submissions/{submission_id}",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.json()["stuck_tap_used"] is False
+
+    set_agent_script([[make_text("That's okay — what did you do first?")]])
+    # Whatever text the client sends alongside the flag is ignored.
+    r = await _post_turn(client, world, submission_id, {"message": "", "stuck": True})
+    assert r.status_code == 200, r.text
+    assert r.json()["stuck_tap_used"] is True
+    assert await _student_turn_contents(submission_id) == [STUCK_MESSAGE]
+
+    r = await _post_turn(client, world, submission_id, {"stuck": True})
+    assert r.status_code == 400
+    assert "already used" in r.json()["detail"]
+    assert await _student_turn_contents(submission_id) == [STUCK_MESSAGE]
+
+    # Resume state still reports it spent.
+    r = await client.get(
+        f"/v1/school/student/integrity/submissions/{submission_id}",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.json()["stuck_tap_used"] is True
+
+
+async def test_legacy_stuck_text_counts_as_the_tap(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Installed mobile builds send the stuck phrase as a plain message
+    with no flag. It must spend the tap, and a repeat of it — flagged or
+    not — is rejected, so old clients can't sidestep the cap."""
+    legacy = "I'm stuck — not sure how to explain this."
+    assert legacy in STUCK_PHRASES
+    set_agent_script([[make_text("Opener")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    set_agent_script([[make_text("No problem — start with step one.")]])
+    r = await _post_turn(client, world, submission_id, {"message": legacy})
+    assert r.status_code == 200, r.text
+    assert r.json()["stuck_tap_used"] is True
+
+    r = await _post_turn(client, world, submission_id, {"message": legacy})
+    assert r.status_code == 400
+    r = await _post_turn(client, world, submission_id, {"message": STUCK_MESSAGE})
+    assert r.status_code == 400
+    r = await _post_turn(client, world, submission_id, {"stuck": True})
+    assert r.status_code == 400
+    assert await _student_turn_contents(submission_id) == [STUCK_MESSAGE]
+
+
+async def test_typed_minimum_rises_to_a_few_words_after_stuck_tap(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Before the tap: the plain 5-char floor. After it: 3+ words OR
+    12+ chars, so honest short answers ("x = 4") still go through."""
+    set_agent_script([[make_text("Opener")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    # Pre-tap, a 2-word 5-char reply is fine.
+    set_agent_script([[make_text("Okay, say more?")]])
+    r = await _post_turn(client, world, submission_id, {"message": "I did"})
+    assert r.status_code == 200, r.text
+
+    set_agent_script([[make_text("That's okay.")]])
+    r = await _post_turn(client, world, submission_id, {"stuck": True})
+    assert r.status_code == 200, r.text
+
+    for too_short in ("I did", "no idea", "dunno lol"):
+        r = await _post_turn(client, world, submission_id, {"message": too_short})
+        assert r.status_code == 400, too_short
+        assert "own words" in r.json()["detail"]
+    # The plain floor still applies first.
+    r = await _post_turn(client, world, submission_id, {"message": "idk"})
+    assert r.status_code == 400
+
+    for ok in ("x = 4", "factorization"):
+        set_agent_script([[make_text("Thanks.")]])
+        r = await _post_turn(client, world, submission_id, {"message": ok})
+        assert r.status_code == 200, (ok, r.text)
+
+    assert await _student_turn_contents(submission_id) == [
+        "I did", STUCK_MESSAGE, "x = 4", "factorization",
+    ]
+
+
+def test_meets_after_stuck_minimum_boundaries() -> None:
+    assert meets_after_stuck_minimum("a b c")  # 3 words
+    assert not meets_after_stuck_minimum("ab cd")  # 2 words, 5 chars
+    assert not meets_after_stuck_minimum("abcdefghijk")  # 11 chars
+    assert meets_after_stuck_minimum("abcdefghijkl")  # 12 chars
+    assert not meets_after_stuck_minimum("   no   idea   ")  # stripped
 
 
 async def test_turn_happy_path_verdict_then_finish(

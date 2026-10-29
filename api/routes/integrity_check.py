@@ -16,7 +16,7 @@ from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.audit_log import log_student_record_access
@@ -51,6 +51,40 @@ router = APIRouter(tags=["integrity"])
 # Min chars in a student message. Same 5-char floor we enforced on
 # answers in the quiz-style flow — prevents empty/"x"-spam.
 MIN_MESSAGE_CHARS = 5
+
+# ── The "I'm stuck" tap ─────────────────────────────────────────────
+# The honest exit: one tap sends a fixed "I can't explain this" turn that
+# skips the typed minimum. In prod it was most of the "don't know" turns,
+# often tapped repeatedly to coast through the check, so it's limited to
+# ONE use per problem. Per problem == per check today: the chat probes a
+# single problem (integrity_pipeline.MAX_SAMPLE = 1), and the inline
+# variant is a probe *of that same problem*, not a new one. Revisit if
+# MAX_SAMPLE grows (student turns carry no problem id).
+#
+# The server owns the wording: a tap arrives as `stuck: true` and the
+# canonical text below is what lands in the transcript the agent reads.
+STUCK_MESSAGE = "I'm stuck — I'm not sure how to explain this."
+# Every text that counts as a stuck tap: the canonical one plus the exact
+# string the mobile client sent as a plain message before the `stuck`
+# flag existed (builds already on phones still do). Matching them means
+# an old client — or a student who types the phrase verbatim — can't
+# sidestep the one-use cap, and taps already in the DB count with no
+# backfill.
+STUCK_PHRASES = (
+    STUCK_MESSAGE,
+    "I'm stuck — not sure how to explain this.",
+)
+MAX_STUCK_TAPS = 1
+
+# Once the stuck tap is spent, a typed reply has to be "a few words":
+# at least MIN_WORDS_AFTER_STUCK whitespace-separated words OR
+# MIN_CHARS_AFTER_STUCK characters. Either bar is enough, so an honest
+# short answer still goes through ("x = 4" is three words, "factorization"
+# is 13 chars) while "idk", "no idea", "dunno lol" don't. Only applies
+# after the tap is used — a student who never tapped keeps the plain
+# 5-char floor, so short "yes I did"-style replies aren't newly blocked.
+MIN_WORDS_AFTER_STUCK = 3
+MIN_CHARS_AFTER_STUCK = 12
 
 # Teacher resolution states for an integrity check (see
 # IntegrityCheckSubmission.resolution). "unresolved" is the default the
@@ -127,6 +161,10 @@ class IntegrityStateResponse(BaseModel):
     extraction: ExtractionOut | None
     problems: list[ProblemSummary]
     transcript: list[TurnOut]
+    # True once the student has used their one "I'm stuck" tap on the
+    # problem. The client disables the button and holds typed replies to
+    # the "a few words" bar; the turn endpoint enforces both regardless.
+    stuck_tap_used: bool
 
 
 # Per-event and array-length caps. A tampered client can't land
@@ -192,7 +230,11 @@ class TurnTelemetry(BaseModel):
 
 
 class TurnRequest(BaseModel):
-    message: str = Field(min_length=1, max_length=4000)
+    # Ignored when `stuck` is true (the server writes STUCK_MESSAGE).
+    message: str = Field(default="", max_length=4000)
+    # True when the student tapped "I'm stuck" instead of typing. Allowed
+    # MAX_STUCK_TAPS times per problem; skips the typed minimum.
+    stuck: bool = False
     # Clamped so a tampered client can't land negative/absurd values in
     # the teacher transcript. Upper bound = 24h; students can legitimately
     # leave the chat open, walk away, and come back much later than an
@@ -217,6 +259,31 @@ class ResolveRequest(BaseModel):
 
 
 # ── Helpers ─────────────────────────────────────────────────────────
+
+def meets_after_stuck_minimum(message: str) -> bool:
+    """The "a few words" bar for a typed reply once the stuck tap is
+    spent. See MIN_WORDS_AFTER_STUCK / MIN_CHARS_AFTER_STUCK."""
+    text = message.strip()
+    return (
+        len(text.split()) >= MIN_WORDS_AFTER_STUCK
+        or len(text) >= MIN_CHARS_AFTER_STUCK
+    )
+
+
+def _is_stuck_turn(turn: IntegrityConversationTurn) -> bool:
+    return turn.role == "student" and turn.content in STUCK_PHRASES
+
+
+async def _count_stuck_taps(check_id: uuid.UUID, db: AsyncSession) -> int:
+    count = (await db.execute(
+        select(func.count(IntegrityConversationTurn.id)).where(
+            IntegrityConversationTurn.integrity_check_submission_id == check_id,
+            IntegrityConversationTurn.role == "student",
+            IntegrityConversationTurn.content.in_(STUCK_PHRASES),
+        )
+    )).scalar_one()
+    return int(count)
+
 
 async def _load_my_submission(
     db: AsyncSession, submission_id: uuid.UUID, student_id: uuid.UUID,
@@ -436,6 +503,7 @@ async def _build_state_response(
             extraction=None,
             problems=[],
             transcript=[],
+            stuck_tap_used=False,
         )
     # Diagnosis-only rows are teacher-facing — the student isn't being
     # probed on them, so they have nothing to see (no chat reference,
@@ -453,6 +521,9 @@ async def _build_state_response(
         extraction=_first_extraction(chat_probed),
         problems=_problem_summaries(chat_probed, questions, hw_positions),
         transcript=_student_facing_transcript(turns),
+        stuck_tap_used=(
+            sum(1 for t in turns if _is_stuck_turn(t)) >= MAX_STUCK_TAPS
+        ),
     )
 
 
@@ -522,10 +593,30 @@ async def post_student_turn(
         )
 
     message = body.message.strip()
-    if len(message) < MIN_MESSAGE_CHARS:
+    is_stuck_tap = body.stuck or message in STUCK_PHRASES
+    stuck_used = await _count_stuck_taps(check.id, db) >= MAX_STUCK_TAPS
+    if is_stuck_tap:
+        if stuck_used:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "You've already used \"I'm stuck\" on this problem. "
+                    "Try putting it in your own words — even a guess helps."
+                ),
+            )
+        message = STUCK_MESSAGE
+    elif len(message) < MIN_MESSAGE_CHARS:
         raise HTTPException(
             status_code=400,
             detail=f"Message must be at least {MIN_MESSAGE_CHARS} characters",
+        )
+    elif stuck_used and not meets_after_stuck_minimum(message):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Try putting it in your own words — a few words is enough, "
+                "even a guess helps."
+            ),
         )
 
     # Enforce the hard turn cap at the endpoint too, in case the agent
