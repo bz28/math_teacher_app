@@ -1902,6 +1902,7 @@ export const teacher = {
       entry: GradeBreakdownEntry;
       graph: TeacherGraphCheck;
       grade_dirty: boolean;
+      graph_items_open: number;
     }>(`/teacher/submissions/${submissionId}/graph-items`, {
       method: "POST",
       body: JSON.stringify(body),

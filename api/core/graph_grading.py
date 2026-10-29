@@ -476,9 +476,11 @@ def set_teacher_verdict(
         )
         if i is not None:
             deductions.pop(i)
-    percent = min(max(percent, 0.0), 100.0)
+    # Snapped to the ends so taking a third off and putting it back lands
+    # on 100 again, and the status reads as `combine` would call it.
+    percent = 100.0 if percent >= 100 - 1e-6 else 0.0 if percent <= 1e-6 else percent
     entry["percent"] = percent
-    entry["score_status"] = "full" if percent >= 100 - 1e-9 else "zero" if percent <= 1e-9 else "partial"
+    entry["score_status"] = "full" if percent >= 100 else "zero" if percent <= 0 else "partial"
     if entry.get("deductions") is not None:
         entry["deductions"] = deductions
 

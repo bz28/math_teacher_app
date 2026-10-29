@@ -2124,6 +2124,8 @@ async def set_graph_item_verdict(
         "entry": entry,
         "graph": _graph_out(stored),
         "grade_dirty": _is_grade_dirty(grade),
+        # The roster's count across the homework (`list_submissions`).
+        "graph_items_open": open_item_count(grade.graph_checks),
     }
 
 

@@ -1286,7 +1286,9 @@ async def run_ai_grading_for_submission(
         if p["bank_item_id"] in parts:
             p["graph_part"] = parts[p["bank_item_id"]]
     # A regrade keeps a drawing check made against the same checklist and
-    # points: the drawing hasn't changed, so neither has its check.
+    # points: the drawing hasn't changed, so neither has its check. Not
+    # one that failed, found no drawing, or stood in for a blank problem:
+    # the regrade may be over a fresh read, so that one is looked at again.
     from api.core.graph_grading import ProblemGraphCheck, apply_graph_parts, check_graphs, split_graph_fields
 
     stored_checks = (await db.execute(
@@ -1296,6 +1298,8 @@ async def run_ai_grading_for_submission(
         pid: ProblemGraphCheck.from_stored(stored_checks[pid])
         for pid, part in parts.items()
         if (stored_checks.get(pid) or {}).get("checklist_key") == part.key
+        and not stored_checks[pid].get("note")
+        and stored_checks[pid].get("in_view") != "not_found"
     }
     drawing_checks = asyncio.ensure_future(check_graphs(
         extraction, sub.files or [], [p for p in problems if p["bank_item_id"] in parts.keys() - checks.keys()],
@@ -1359,7 +1363,8 @@ async def run_ai_grading_for_submission(
             e = by_bid.get(pos_to_bid.get(g.get("problem_position")) or "")
             if e and e["problem_id"] in parts:
                 g["work_percent"] = g.get("percent")
-                g["percent"], g["score_status"] = e["percent"], e["score_status"]
+                g.update(percent=e["percent"], score_status=e["score_status"],
+                         deductions=[dict(d) for d in e.get("deductions") or []])
     # The per-problem percents ai_score weighs, so a later points change
     # can re-weigh the AI's call without regrading (homework_points).
     result["problem_percents"] = {e["problem_id"]: e["percent"] for e in breakdown}

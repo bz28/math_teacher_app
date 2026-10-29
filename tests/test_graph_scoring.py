@@ -149,6 +149,7 @@ async def test_a_graph_problem_is_graded_in_two_parts() -> None:
     # The AI's call is the whole problem's grade; the grader's own is kept.
     ai = next(g for g in (row.ai_breakdown or {})["grades"] if g["problem_position"] == 1)
     assert ai["percent"] == pytest.approx(70) and ai["work_percent"] == 100
+    assert ai["deductions"] == e["deductions"]
     assert row.ai_score == pytest.approx(85)
 
 
@@ -210,6 +211,13 @@ async def test_a_blank_graph_problem_earns_no_graph_points() -> None:
     stored = (row.graph_checks or {})[w["graph_id"]]
     assert stored["note"] == "not_drawn" and {i["verdict"] for i in stored["items"]} == {"no"}
 
+    # A regrade over a read that finds the drawing looks at it: a stand-in
+    # for a blank problem is never reused.
+    again = _Look("yes", "yes")
+    await _grade(w["sub_id"], again, force=True)
+    stored = ((await _row(w["sub_id"])).graph_checks or {})[w["graph_id"]]
+    assert again.calls == 1 and stored["note"] is None
+
 
 # ── the teacher's review ───────────────────────────────────────────
 
@@ -261,6 +269,7 @@ async def test_a_tick_keeps_the_points_and_a_cross_takes_them_off(client: AsyncC
     body = r.json()
     assert body["entry"]["percent"] == pytest.approx(70) and body["final_score"] == pytest.approx(85)
     assert body["graph"]["open_items"] == 0 and body["graph"]["items"][1]["teacher"] == "no"
+    assert body["graph_items_open"] == 0
     row = await _row(w["sub_id"])
     e = _entry(row, w["graph_id"])
     assert e["score_status"] == "partial"
