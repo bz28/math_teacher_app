@@ -4675,8 +4675,6 @@ export interface components {
         };
         /** CreateCourseRequest */
         CreateCourseRequest: {
-            /** Description */
-            description?: string | null;
             /** Grade Level */
             grade_level?: number | null;
             /** Name */
@@ -6803,8 +6801,6 @@ export interface components {
         };
         /** UpdateCourseRequest */
         UpdateCourseRequest: {
-            /** Description */
-            description?: string | null;
             /** Grade Level */
             grade_level?: number | null;
             /** Name */

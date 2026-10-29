@@ -12,7 +12,6 @@ export function SettingsTab({ course, onChanged }: { course: TeacherCourse; onCh
   const [name, setName] = useState(course.name);
   const [subject, setSubject] = useState(course.subject);
   const [gradeLevel, setGradeLevel] = useState(course.grade_level?.toString() ?? "");
-  const [description, setDescription] = useState(course.description ?? "");
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,8 +21,7 @@ export function SettingsTab({ course, onChanged }: { course: TeacherCourse; onCh
   const dirty =
     name !== course.name ||
     subject !== course.subject ||
-    gradeLevel !== (course.grade_level?.toString() ?? "") ||
-    description !== (course.description ?? "");
+    gradeLevel !== (course.grade_level?.toString() ?? "");
 
   const save = async () => {
     if (!name.trim()) {
@@ -44,7 +42,6 @@ export function SettingsTab({ course, onChanged }: { course: TeacherCourse; onCh
         name: name.trim(),
         subject,
         grade_level: gradeLevel ? Number(gradeLevel) : null,
-        description: description.trim() || null,
       });
       setJustSaved(true);
       setTimeout(() => setJustSaved(false), 2000);
@@ -100,15 +97,6 @@ export function SettingsTab({ course, onChanged }: { course: TeacherCourse; onCh
             onChange={(e) => setGradeLevel(e.target.value)}
             min={1}
             max={12}
-            className="w-full rounded-[--radius-md] border border-border-light bg-surface px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
-          />
-        </Field>
-        <Field label="Description">
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            rows={2}
-            maxLength={1000}
             className="w-full rounded-[--radius-md] border border-border-light bg-surface px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none"
           />
         </Field>

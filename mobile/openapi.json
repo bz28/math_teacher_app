@@ -630,18 +630,6 @@
       },
       "CreateCourseRequest": {
         "properties": {
-          "description": {
-            "anyOf": [
-              {
-                "maxLength": 2000,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
           "grade_level": {
             "anyOf": [
               {
@@ -6218,18 +6206,6 @@
       },
       "UpdateCourseRequest": {
         "properties": {
-          "description": {
-            "anyOf": [
-              {
-                "maxLength": 2000,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description"
-          },
           "grade_level": {
             "anyOf": [
               {
