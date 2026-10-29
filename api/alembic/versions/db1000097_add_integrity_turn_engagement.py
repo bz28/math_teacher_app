@@ -1,7 +1,7 @@
 """add integrity_conversation_turns.engagement
 
 Revision ID: db1000097
-Revises: cv1000091
+Revises: cw1000092
 Create Date: 2026-10-29 00:00:00.000000
 
 The integrity agent's label for each student reply: answering /
@@ -19,7 +19,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "db1000097"
-down_revision: str | None = "cv1000091"
+down_revision: str | None = "cw1000092"
 branch_labels = None
 depends_on = None
 
