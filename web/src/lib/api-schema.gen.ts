@@ -4142,6 +4142,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/teacher/submissions/{submission_id}/graph-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Graph Item Verdict
+         * @description The teacher's ✓ or ✗ on a graph checklist item the drawing check
+         *     couldn't decide. ✓ keeps the item's points (the score doesn't move);
+         *     ✗ takes them off as their own line on the problem's breakdown. The
+         *     homework score follows. Approve waits until every such item has her
+         *     call (`mark_submission_reviewed`).
+         */
+        post: operations["set_graph_item_verdict_v1_teacher_submissions__submission_id__graph_items_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teacher/submissions/{submission_id}/mark-reviewed": {
         parameters: {
             query?: never;
@@ -4847,7 +4871,7 @@ export interface components {
             /** Rule Id */
             rule_id?: string | null;
             /** Source */
-            source?: ("class_rule" | "ai_judgment") | null;
+            source?: ("class_rule" | "ai_judgment" | "graph_checklist") | null;
             /** Step Ref */
             step_ref?: number | null;
         };
@@ -5169,6 +5193,18 @@ export interface components {
             rule_id?: string | null;
             /** Text */
             text: string;
+        };
+        /** GraphItemVerdictRequest */
+        GraphItemVerdictRequest: {
+            /** N */
+            n: number;
+            /** Problem Id */
+            problem_id: string;
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "yes" | "no";
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -6266,6 +6302,46 @@ export interface components {
             /** Filenames */
             filenames: string[];
         };
+        /**
+         * TeacherGraphCheck
+         * @description A graph problem's drawing check as its grade was charged: the
+         *     checklist frozen at grading time, with each item's verdict.
+         */
+        TeacherGraphCheck: {
+            /** Graph Points */
+            graph_points: number;
+            /** Items */
+            items: components["schemas"]["TeacherGraphCheckItem"][];
+            /** Note */
+            note?: string | null;
+            /** Open Items */
+            open_items: number;
+            /**
+             * Overridden
+             * @default false
+             */
+            overridden: boolean;
+            /** Points */
+            points: number;
+        };
+        /** TeacherGraphCheckItem */
+        TeacherGraphCheckItem: {
+            /** N */
+            n: number;
+            /** Points */
+            points: number;
+            /** Seen */
+            seen: string;
+            /** Teacher */
+            teacher?: ("yes" | "no") | null;
+            /** Text */
+            text: string;
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "yes" | "no" | "unclear";
+        };
         /** TeacherIntegrityDetail */
         TeacherIntegrityDetail: {
             activity_summary: components["schemas"]["IntegrityActivitySummary"] | null;
@@ -6411,6 +6487,7 @@ export interface components {
             drawings: components["schemas"]["TeacherSubmissionDrawing"][];
             /** Final Answer */
             final_answer: string | null;
+            graph?: components["schemas"]["TeacherGraphCheck"] | null;
             /**
              * Pages
              * @default []
@@ -14066,6 +14143,43 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_graph_item_verdict_v1_teacher_submissions__submission_id__graph_items_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GraphItemVerdictRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

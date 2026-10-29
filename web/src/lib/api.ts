@@ -1222,10 +1222,11 @@ export interface GradeDeduction {
   /** The class rule this deduction applied, if any (id into the grade's
    *  `rubric_snapshot.rules`). */
   rule_id?: string | null;
-  /** Where the deduction came from: a class rule (fixed points) or the
-   *  AI's own judgment (sized by the AI, rounded to half a point).
+  /** Where the deduction came from: a class rule (fixed points), the
+   *  AI's own judgment (sized by the AI, rounded to half a point), or a
+   *  graph checklist item the drawing doesn't show (the item's points).
    *  Absent on grades made before points existed and on hand edits. */
-  source?: "class_rule" | "ai_judgment" | null;
+  source?: "class_rule" | "ai_judgment" | "graph_checklist" | null;
 }
 
 /** One reusable grading setup the teacher already authored on another
@@ -1888,6 +1889,25 @@ export const teacher = {
       { method: "POST" },
     );
   },
+  /** The teacher's ✓ ("yes") or ✗ ("no") on a graph checklist item the
+   *  drawing check couldn't decide. Returns the problem's new breakdown
+   *  entry, its graph check, and the homework score. */
+  setGraphItemVerdict(
+    submissionId: string,
+    body: { problem_id: string; n: number; verdict: "yes" | "no" },
+  ) {
+    return apiFetch<{
+      status: string;
+      final_score: number | null;
+      entry: GradeBreakdownEntry;
+      graph: TeacherGraphCheck;
+      grade_dirty: boolean;
+      graph_items_open: number;
+    }>(`/teacher/submissions/${submissionId}/graph-items`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
   /** Undo an approval — clear reviewed_at. The inverse of markReviewed;
    *  the grade is untouched, only the review stamp is cleared, so the
    *  submission drops back to "not reviewed". Idempotent (a no-op on an
@@ -2240,6 +2260,9 @@ export interface TeacherSubmissionRow {
   /** This submission's grading-queue job, if one exists. `running`
    *  means a grade is in flight; `failed` means the last try gave up. */
   grading_job_status: "queued" | "running" | "done" | "skipped" | "failed" | null;
+  /** Graph checklist items the drawing check couldn't decide; Approve
+   *  waits on them. */
+  graph_items_open?: number;
 }
 
 export type AiGradeBlock =
@@ -2315,6 +2338,35 @@ export interface TeacherSubmissionDetailProblem {
   units_not_in_work: string[];
   /** What this problem is worth on this homework. */
   points: number;
+  /** The drawing check, item by item, when this problem was graded in
+   *  two parts (its question has a graph checklist). Null otherwise. */
+  graph?: TeacherGraphCheck | null;
+}
+
+export interface TeacherGraphCheckItem {
+  n: number;
+  text: string;
+  points: number;
+  /** The check's call: "yes" earns the points, "no" takes them off,
+   *  "unclear" keeps them until the teacher decides. */
+  verdict: "yes" | "no" | "unclear";
+  /** What the check saw, in its words. */
+  seen: string;
+  /** The teacher's ✓ / ✗ on an unclear item. */
+  teacher?: "yes" | "no" | null;
+}
+
+export interface TeacherGraphCheck {
+  /** The problem's points, and the share the checklist covers. */
+  points: number;
+  graph_points: number;
+  items: TeacherGraphCheckItem[];
+  /** Unclear items still waiting on the teacher; Approve waits on these. */
+  open_items: number;
+  /** She re-scored the problem by hand; the checklist no longer sets it. */
+  overridden: boolean;
+  /** "not_drawn" (no drawing anywhere) or "failed" (the check couldn't run). */
+  note?: string | null;
 }
 
 export interface TeacherSubmissionDetail {

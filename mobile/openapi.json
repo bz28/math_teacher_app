@@ -1313,7 +1313,8 @@
               {
                 "enum": [
                   "class_rule",
-                  "ai_judgment"
+                  "ai_judgment",
+                  "graph_checklist"
                 ],
                 "type": "string"
               },
@@ -2124,6 +2125,33 @@
           "points"
         ],
         "title": "GraphChecklistItemIn",
+        "type": "object"
+      },
+      "GraphItemVerdictRequest": {
+        "properties": {
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "problem_id": {
+            "title": "Problem Id",
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "yes",
+              "no"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "problem_id",
+          "n",
+          "verdict"
+        ],
+        "title": "GraphItemVerdictRequest",
         "type": "object"
       },
       "HTTPValidationError": {
@@ -4822,6 +4850,107 @@
         "title": "SuggestUnitsRequest",
         "type": "object"
       },
+      "TeacherGraphCheck": {
+        "description": "A graph problem's drawing check as its grade was charged: the\nchecklist frozen at grading time, with each item's verdict.",
+        "properties": {
+          "graph_points": {
+            "title": "Graph Points",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TeacherGraphCheckItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "open_items": {
+            "title": "Open Items",
+            "type": "integer"
+          },
+          "overridden": {
+            "default": false,
+            "title": "Overridden",
+            "type": "boolean"
+          },
+          "points": {
+            "title": "Points",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "points",
+          "graph_points",
+          "items",
+          "open_items"
+        ],
+        "title": "TeacherGraphCheck",
+        "type": "object"
+      },
+      "TeacherGraphCheckItem": {
+        "properties": {
+          "n": {
+            "title": "N",
+            "type": "integer"
+          },
+          "points": {
+            "title": "Points",
+            "type": "integer"
+          },
+          "seen": {
+            "title": "Seen",
+            "type": "string"
+          },
+          "teacher": {
+            "anyOf": [
+              {
+                "enum": [
+                  "yes",
+                  "no"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Teacher"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "verdict": {
+            "enum": [
+              "yes",
+              "no",
+              "unclear"
+            ],
+            "title": "Verdict",
+            "type": "string"
+          }
+        },
+        "required": [
+          "n",
+          "text",
+          "points",
+          "verdict",
+          "seen"
+        ],
+        "title": "TeacherGraphCheckItem",
+        "type": "object"
+      },
       "TeacherIntegrityDetail": {
         "properties": {
           "activity_summary": {
@@ -5343,6 +5472,16 @@
               }
             ],
             "title": "Final Answer"
+          },
+          "graph": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TeacherGraphCheck"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "pages": {
             "default": [],
@@ -19513,6 +19652,67 @@
           }
         ],
         "summary": "Grade Submission Now",
+        "tags": [
+          "teacher"
+        ]
+      }
+    },
+    "/v1/teacher/submissions/{submission_id}/graph-items": {
+      "post": {
+        "description": "The teacher's \u2713 or \u2717 on a graph checklist item the drawing check\ncouldn't decide. \u2713 keeps the item's points (the score doesn't move);\n\u2717 takes them off as their own line on the problem's breakdown. The\nhomework score follows. Approve waits until every such item has her\ncall (`mark_submission_reviewed`).",
+        "operationId": "set_graph_item_verdict_v1_teacher_submissions__submission_id__graph_items_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "submission_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Submission Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GraphItemVerdictRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Set Graph Item Verdict V1 Teacher Submissions  Submission Id  Graph Items Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Graph Item Verdict",
         "tags": [
           "teacher"
         ]

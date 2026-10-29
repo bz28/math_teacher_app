@@ -1,6 +1,7 @@
 """Teacher assignment management — CRUD + section assignment."""
 
 import asyncio
+import copy
 import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, Protocol
@@ -19,6 +20,7 @@ from api.core.constants import DEFAULT_HOMEWORK_INSTRUCTIONS, MAX_RUBRIC_FIELD_C
 from api.core.entitlements import Entitlement, check_entitlement
 from api.core.extraction_edits import apply_extraction_edits
 from api.core.graph_checklist import homework_checklists
+from api.core.graph_grading import VerdictError, note_hand_edits, open_item_count, open_items, set_teacher_verdict
 from api.core.homework_points import (
     DEFAULT_TOTAL_POINTS,
     MAX_TOTAL_POINTS,
@@ -1332,8 +1334,9 @@ class Deduction(BaseModel):
     step_ref: int | None = None
     # The class rule this deduction applied (`Course.rubric`), if any.
     rule_id: str | None = Field(default=None, max_length=40)
-    # Who sized it: the rule's own points, or the AI's judgment.
-    source: Literal["class_rule", "ai_judgment"] | None = None
+    # Who sized it: the rule's own points, the AI's judgment, or a graph
+    # checklist item the drawing doesn't show (`graph_grading`).
+    source: Literal["class_rule", "ai_judgment", "graph_checklist"] | None = None
 
 
 class BreakdownEntry(BaseModel):
@@ -1788,6 +1791,9 @@ async def list_submissions(
             # "Grade N ungraded" from this, so both agree with what the
             # grade-now / grade-pending endpoints will actually do.
             "ai_grade_block": ai_grade_block(sub, grade, a),
+            # Graph checklist items the drawing check couldn't decide, so
+            # the roster can file this student under "needs your eyes".
+            "graph_items_open": open_item_count(grade.graph_checks if grade else None),
             # Grading-queue state, so the review page can show a grade in
             # flight instead of offering the button again, and stop polling
             # once a job has settled without a grade (failed, skipped).
@@ -1927,6 +1933,9 @@ async def grade_submission(
 
     if body.breakdown is not None:
         normalized = _normalize_breakdown(body.breakdown)
+        # A graph problem she re-scores by hand is hers: its graph
+        # checklist stops setting its score (graph_grading).
+        grade.graph_checks = note_hand_edits(grade.graph_checks, grade.breakdown, normalized)
         grade.breakdown = normalized
         if normalized:
             grade.final_score = weighted_percent(
@@ -2038,6 +2047,15 @@ async def mark_submission_reviewed(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No grade to review yet",
         )
+    waiting = open_item_count(grade.graph_checks)
+    if waiting:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"{waiting} graph checklist item{'s' if waiting != 1 else ''} couldn't be "
+                "checked from the photo. Mark each one ✓ or ✗ before approving."
+            ),
+        )
 
     now = datetime.now(UTC)
     grade.reviewed_by = current_user.user_id
@@ -2048,6 +2066,67 @@ async def mark_submission_reviewed(
     )
     await db.commit()
     return {"status": "ok", "reviewed_at": now.isoformat()}
+
+
+class GraphItemVerdictRequest(BaseModel):
+    problem_id: str
+    n: int
+    verdict: Literal["yes", "no"]
+
+
+@router.post("/submissions/{submission_id}/graph-items")
+async def set_graph_item_verdict(
+    submission_id: uuid.UUID, body: GraphItemVerdictRequest,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """The teacher's ✓ or ✗ on a graph checklist item the drawing check
+    couldn't decide. ✓ keeps the item's points (the score doesn't move);
+    ✗ takes them off as their own line on the problem's breakdown. The
+    homework score follows. Approve waits until every such item has her
+    call (`mark_submission_reviewed`)."""
+    sub = (await db.execute(
+        select(Submission).where(Submission.id == submission_id)
+    )).scalar_one_or_none()
+    if not sub:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found")
+    assignment = await get_teacher_assignment(db, sub.assignment_id, current_user.user_id)
+    # Same row lock as PATCH /grade and the AI grader's write.
+    grade = (await db.execute(
+        select(SubmissionGrade)
+        .where(SubmissionGrade.submission_id == sub.id)
+        .with_for_update()
+    )).scalar_one_or_none()
+    stored = copy.deepcopy(((grade.graph_checks if grade else None) or {}).get(body.problem_id))
+    breakdown = copy.deepcopy((grade.breakdown if grade else None) or [])
+    entry = next((e for e in breakdown if e.get("problem_id") == body.problem_id), None)
+    if grade is None or stored is None or entry is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="This problem has no graph checklist grade")
+    try:
+        set_teacher_verdict(entry, stored, body.n, body.verdict)
+    except VerdictError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+    grade.breakdown = breakdown
+    grade.graph_checks = {**(grade.graph_checks or {}), body.problem_id: stored}
+    grade.final_score = weighted_percent(
+        ((e["problem_id"], e["percent"]) for e in breakdown), assignment_points(assignment),
+    )
+    grade.graded_at = datetime.now(UTC)
+    await record_activity(
+        db, current_user, "grade.graph_item", "submission", sub.id,
+        {"assignment_id": str(sub.assignment_id), "problem_id": body.problem_id, "n": body.n,
+         "verdict": body.verdict, "final_score": grade.final_score},
+    )
+    await db.commit()
+    return {
+        "status": "ok",
+        "final_score": grade.final_score,
+        "entry": entry,
+        "graph": _graph_out(stored),
+        "grade_dirty": _is_grade_dirty(grade),
+        # The roster's count across the homework (`list_submissions`).
+        "graph_items_open": open_item_count(grade.graph_checks),
+    }
 
 
 @router.post("/submissions/{submission_id}/unmark-reviewed")
@@ -2590,6 +2669,50 @@ class TeacherSubmissionDrawing(BaseModel):
     zoomed_labeled_points: list[str] = []
 
 
+class TeacherGraphCheckItem(BaseModel):
+    n: int
+    text: str
+    points: int
+    # The drawing check's call: "yes" earns the item's points, "no"
+    # takes them off, "unclear" keeps them until the teacher decides.
+    verdict: Literal["yes", "no", "unclear"]
+    # What the check saw, in its words — shown beside the verdict.
+    seen: str
+    # The teacher's ✓ ("yes") / ✗ ("no") on an unclear item.
+    teacher: Literal["yes", "no"] | None = None
+
+
+class TeacherGraphCheck(BaseModel):
+    """A graph problem's drawing check as its grade was charged: the
+    checklist frozen at grading time, with each item's verdict."""
+
+    points: int
+    graph_points: int
+    items: list[TeacherGraphCheckItem]
+    # Unclear items still waiting on the teacher; Approve waits on these.
+    open_items: int
+    # She re-scored the problem by hand, so the checklist no longer sets it.
+    overridden: bool = False
+    # "not_drawn": no drawing anywhere; "failed": the check couldn't run.
+    note: str | None = None
+
+
+def _graph_out(stored: dict[str, Any] | None) -> TeacherGraphCheck | None:
+    if not stored:
+        return None
+    items = [
+        TeacherGraphCheckItem(
+            n=i["n"], text=i.get("text") or "", points=int(i.get("points") or 0),
+            verdict=i["verdict"], seen=i.get("seen") or "", teacher=i.get("teacher"),
+        )
+        for i in stored.get("items") or []
+    ]
+    return TeacherGraphCheck(
+        points=int(stored.get("points") or 0), graph_points=sum(i.points for i in items), items=items,
+        open_items=len(open_items(stored)), overridden=bool(stored.get("overridden")), note=stored.get("note"),
+    )
+
+
 class TeacherSubmissionDetailProblem(BaseModel):
     bank_item_id: str
     position: int
@@ -2622,6 +2745,9 @@ class TeacherSubmissionDetailProblem(BaseModel):
     units_not_in_work: list[str] = []
     # What this problem is worth on this homework (homework_points).
     points: int = 0
+    # The drawing check, item by item, when this problem was graded in
+    # two parts (graph_grading). None on every other problem.
+    graph: TeacherGraphCheck | None = None
 
 
 class TeacherSubmissionDetail(BaseModel):
@@ -3120,6 +3246,7 @@ async def get_submission_detail(
             student_steps=steps_by_position.get(pos, []),
             requires_drawing=bool(item.requires_drawing),
             points=points.get(str(pid), 0),
+            graph=_graph_out(((grade.graph_checks if grade else None) or {}).get(str(pid))),
             drawings=drawings_by_position.get(pos, []),
             pages=sorted(pages_by_position.get(pos, [])),
             # Checked against the answer the teacher is shown, so the note

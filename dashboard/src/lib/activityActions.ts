@@ -147,6 +147,12 @@ export const ACTIVITY_ACTIONS: Record<ActivityFamily, ActivityAction[]> = {
       },
     },
     {
+      action: "grade.graph_item",
+      label: "Decided graph item",
+      detail: (m) =>
+        `Marked graph item ${num(m, "n") ?? "?"} ${m.verdict === "yes" ? "shown" : "missing"}`,
+    },
+    {
       action: "grade.unmark_reviewed",
       label: "Reopened",
       detail: () => "Reopened for review",
