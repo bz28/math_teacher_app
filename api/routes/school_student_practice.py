@@ -46,8 +46,9 @@ from api.core.image_utils import (
     PAGE_ROTATIONS,
     image_long_edge,
     page_looks_sideways,
+    pdf_page_checks,
+    pdf_scan_long_edges,
     rotate_upload,
-    validate_and_decode_image,
     validate_and_decode_upload,
 )
 from api.core.integrity_pipeline import (
@@ -537,13 +538,25 @@ class SubmitHomeworkRequest(BaseModel):
 
 
 class PageOrientationRequest(BaseModel):
-    # A downsized copy (~1024px long edge) of one page the student just
-    # added — enough to see which way the writing runs.
+    # A downsized copy (~1024px long edge) of one photo the student just
+    # added — enough to see which way the writing runs — or a PDF, whole.
     image: str
 
 
 class PageOrientationResponse(BaseModel):
+    # Any page reads as sideways. The one field older app builds read.
     sideways: bool
+    # Pages in the file: 1 for a photo, one per page for a PDF (0 when
+    # the PDF can't be read, which the checks then say nothing about).
+    page_count: int
+    # 1-based pages within this file that read as sideways.
+    sideways_pages: list[int]
+    # PDF pages under the size floor, which turn-in will refuse. Photos
+    # are measured on the device (this copy is downsized).
+    too_small_pages: list[int]
+    # PDFs only: a small JPEG of the first sideways page (else page 1),
+    # for the upload screen to show and turn in place of a photo.
+    preview: str | None
 
 
 class SubmitHomeworkResponse(BaseModel):
@@ -1934,21 +1947,34 @@ async def check_page_orientation(
     body: PageOrientationRequest,
     user: User = Depends(get_current_user_full),
 ) -> PageOrientationResponse:
-    """Does a page the student just added look sideways?
+    """Do the pages the student just added read upright, at a size the
+    reader can make out?
 
-    Backs the "This page looks sideways — rotate it?" nudge on the
-    upload screen. Free (a pixel check, no model call) and advisory:
-    it never rotates anything — the student does, with the rotate
-    button, and the turn is applied at submit.
+    Backs the upload screen, which holds Submit while a page reads as
+    sideways and refuses a PDF page that turn-in would. Free (a pixel
+    check, no model call). It never rotates anything — the student does,
+    with the rotate button, and the turn is applied at submit.
+
+    Orientation is enforced on the client only, never at submit: the
+    check can be wrong, and the student's "It's already upright" has to
+    be able to overrule it. Turn-in enforces the size floor alone.
     """
     b64 = body.image.split(",", 1)[1] if body.image.startswith("data:") else body.image
     try:
-        validate_and_decode_image(b64)
+        _, media_type = validate_and_decode_upload(b64)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    # Image decoding is CPU work — keep it off the event loop.
+    # Image decoding and PDF rendering are CPU work — off the event loop.
+    if media_type == "application/pdf":
+        pdf = await asyncio.to_thread(pdf_page_checks, b64)
+        return PageOrientationResponse(sideways=bool(pdf["sideways_pages"]), **pdf)
+    sideways = await asyncio.to_thread(page_looks_sideways, b64)
     return PageOrientationResponse(
-        sideways=await asyncio.to_thread(page_looks_sideways, b64),
+        sideways=sideways,
+        page_count=1,
+        sideways_pages=[1] if sideways else [],
+        too_small_pages=[],
+        preview=None,
     )
 
 
@@ -2007,7 +2033,24 @@ async def submit_homework(
                 status_code=400,
                 detail=f"File {i + 1}: {e}",
             ) from e
-        if media_type != "application/pdf":
+        if media_type == "application/pdf":
+            # A PDF page is held to the same floor as a photo: a phone
+            # photo saved as a PDF reads no better than the photo. A PDF
+            # that can't be opened is left for the reader, as before.
+            edges = await asyncio.to_thread(pdf_scan_long_edges, b64)
+            small = next(
+                ((p, e) for p, e in enumerate(edges, 1) if e is not None and e < MIN_PAGE_LONG_EDGE),
+                None,
+            )
+            if small is not None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"File {i + 1}, page {small[0]} is too small to read ({small[1]}px). "
+                        "Take it again closer up, so the page fills the screen."
+                    ),
+                )
+        else:
             try:
                 long_edge = image_long_edge(decoded)
             except Exception as e:
@@ -2030,7 +2073,7 @@ async def submit_homework(
             except Exception as e:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"File {i + 1}: couldn't read this image to rotate it",
+                    detail=f"File {i + 1}: couldn't read this file to rotate it",
                 ) from e
             # Count what is stored, not what was sent.
             total_bytes += len(b64) * 3 // 4
