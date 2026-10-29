@@ -744,11 +744,13 @@ export function NewHomeworkModal({
               <button
                 type="button"
                 onClick={onSaveDraft}
-                disabled={busy || !detailsValid}
+                disabled={busy || !detailsValid || !pointsValid}
                 title={
-                  detailsValid
-                    ? "Create the draft and finish setup later"
-                    : "Add a title and a unit first"
+                  !detailsValid
+                    ? "Add a title and a unit first"
+                    : !pointsValid
+                      ? `Set the points to a whole number from 1 to ${MAX_TOTAL_POINTS} first`
+                      : "Create the draft and finish setup later"
                 }
                 className="-mx-1 inline-flex min-h-[44px] items-center px-2 text-xs font-semibold text-text-muted hover:text-text-primary disabled:opacity-50"
               >

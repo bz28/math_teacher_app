@@ -367,28 +367,59 @@ function CreditGuidance({
     return !t || t === CREDIT_DEFAULTS[f] ? null : t;
   };
 
-  const save = (next: Pick<ClassRubric, CreditField>) => {
-    setSaveState("saving");
-    setSaveError(null);
-    teacher
-      .updateCourseCredit(courseId, next)
-      .then((res) => {
-        onSaved({ full_credit: res.full_credit, partial_credit: res.partial_credit });
+  // Saves run one at a time and each sends what the teacher wants for
+  // BOTH fields as of when it goes out, so a second edit made while the
+  // first is in flight can't be overwritten by it. A draft stays on
+  // screen until the server has its text; a failed save keeps it there.
+  const confirmed = useRef(credit);
+  const wanted = useRef(credit);
+  const queue = useRef<Promise<void>>(Promise.resolve());
+
+  const enqueue = () => {
+    queue.current = queue.current.then(async () => {
+      const body = { ...wanted.current };
+      setSaveState("saving");
+      setSaveError(null);
+      try {
+        const res = await teacher.updateCourseCredit(courseId, body);
+        const next = { full_credit: res.full_credit, partial_credit: res.partial_credit };
+        confirmed.current = next;
+        onSaved(next);
+        setDrafts((d) => {
+          const out = { ...d };
+          for (const { field } of CREDIT_FIELDS) {
+            const draft = out[field];
+            if (draft !== null && stored(draft, field) === next[field]) out[field] = null;
+          }
+          return out;
+        });
         setSaveState("saved");
-      })
-      .catch((e: unknown) => {
+      } catch (e: unknown) {
+        wanted.current = { ...confirmed.current };
         setSaveState("error");
         setSaveError(e instanceof Error ? e.message : "Couldn't save");
-      });
+      }
+    });
   };
 
   const commit = (f: CreditField) => {
     const draft = drafts[f];
     if (draft === null) return;
-    setDrafts((d) => ({ ...d, [f]: null }));
     const value = stored(draft, f);
-    if (value === credit[f]) return;
-    save({ ...credit, [f]: value });
+    if (value === wanted.current[f]) {
+      if (value === confirmed.current[f]) setDrafts((d) => ({ ...d, [f]: null }));
+      return;
+    }
+    wanted.current = { ...wanted.current, [f]: value };
+    enqueue();
+  };
+
+  const resetToStandard = (f: CreditField) => {
+    // Shown as a draft until the save lands, so the old text doesn't
+    // linger on screen meanwhile.
+    setDrafts((d) => ({ ...d, [f]: CREDIT_DEFAULTS[f] }));
+    wanted.current = { ...wanted.current, [f]: null };
+    enqueue();
   };
 
   return (
@@ -422,7 +453,7 @@ function CreditGuidance({
                 {credit[field] !== null && drafts[field] === null && (
                   <button
                     type="button"
-                    onClick={() => save({ ...credit, [field]: null })}
+                    onClick={() => resetToStandard(field)}
                     disabled={saveState === "saving"}
                     className="min-h-8 rounded-[--radius-sm] px-2 text-xs font-semibold text-primary hover:bg-primary-bg disabled:opacity-50"
                   >

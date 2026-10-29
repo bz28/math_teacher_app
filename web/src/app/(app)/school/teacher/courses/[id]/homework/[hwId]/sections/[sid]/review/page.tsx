@@ -3716,6 +3716,9 @@ function SubmissionDetailPanel({
 
   const showReadingCheck = needsReadingCheck(detail);
   const homeworkPoints = detail.problems.reduce((s, p) => s + p.points, 0);
+  // final_score weighs only the problems graded so far, so it reads as
+  // the homework's score only once every problem has a grade.
+  const fullyGraded = gradedCount === totalProblems;
 
   return (
     <div className="space-y-4">
@@ -3730,7 +3733,12 @@ function SubmissionDetailPanel({
               {detail.student_name}
             </span>
             <span className="text-xs text-text-muted">{detail.student_email}</span>
-            {detail.final_score !== null && homeworkPoints > 0 && (
+            {detail.final_score !== null && homeworkPoints > 0 && !fullyGraded && (
+              <span className="text-xs text-text-muted">
+                {gradedCount} of {totalProblems} graded
+              </span>
+            )}
+            {detail.final_score !== null && homeworkPoints > 0 && fullyGraded && (
               <span className="text-sm" title="Points earned out of what the homework is worth">
                 <span className="font-mono font-bold tabular-nums text-text-primary">
                   {formatPoints(earnedPoints(detail.final_score, homeworkPoints))}/{homeworkPoints}

@@ -25,6 +25,23 @@ describe("deductionPoints", () => {
     assert.equal(lost, 1);
     assert.deepEqual(deductionPoints([5, 5, 5], 7, lost), [0.4, 0.3, 0.3]);
   });
+
+  it("adds up even when an older ledger took off more than the score shows", () => {
+    // 70% on 10 points, but the lines say 21% and 10%.
+    const lines = deductionPoints([21, 10], 10, 3);
+    assert.equal(Math.round(lines.reduce((s, x) => s + x, 0) * 10), 30);
+    assert.deepEqual(lines, [2, 1]);
+  });
+
+  it("adds up when an older ledger took off less than the score shows", () => {
+    const lines = deductionPoints([10, 5], 10, 2);
+    assert.equal(Math.round(lines.reduce((s, x) => s + x, 0) * 10), 20);
+    assert.deepEqual(lines, [1.3, 0.7]);
+  });
+
+  it("never gives points to a line that took nothing off", () => {
+    assert.deepEqual(deductionPoints([0, 10], 10, 1), [0, 1]);
+  });
 });
 
 describe("formatting", () => {

@@ -1689,7 +1689,7 @@ function ProblemRow({
   onEdit?: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const panelId = `grading-${problem.bank_item_id}`;
+  const panelId = `grading-${problem.position}-${problem.bank_item_id}`;
   // One box, placed beside the question on wide screens and under it on
   // a phone, where the question needs the width.
   const pointsBox = (where: string) =>
@@ -1724,7 +1724,7 @@ function ProblemRow({
                 type="button"
                 onClick={() => setOpen((o) => !o)}
                 aria-expanded={open}
-                aria-controls={panelId}
+                aria-controls={open ? panelId : undefined}
                 className="inline-flex min-h-8 items-center gap-1 text-xs font-semibold text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 Grading <span aria-hidden>{open ? "▴" : "▾"}</span>

@@ -30,15 +30,19 @@ export function earnedPoints(percent: number, worth: number): number {
 /** Each deduction (a percent of the problem) in points, to a tenth, so
  *  the lines add up exactly to `lost`, the points the receipt says the
  *  problem lost. Rounding each line on its own can leave the receipt a
- *  point off its own total; the tenths go to the lines that were rounded
- *  down the most instead. */
+ *  point off its own total, and older ledgers only matched their percent
+ *  to within a point, so the lines are scaled to `lost` together and the
+ *  tenths shared out by largest remainder. */
 export function deductionPoints(percentsOff: number[], worth: number, lost: number): number[] {
-  const exact = percentsOff.map((p) => (p * worth) / 100);
-  const tenths = exact.map((e) => Math.floor(e * 10 + 1e-9));
-  const target = Math.round(lost * 10);
+  const target = Math.max(0, Math.round(lost * 10));
+  const raw = percentsOff.map((p) => Math.max(0, p));
+  const sum = raw.reduce((s, p) => s + p, 0);
+  if (sum <= 0) return raw.map((_, i) => (i === raw.length - 1 ? target / 10 : 0));
+  const exact = raw.map((p) => (p / sum) * target);
+  const tenths = exact.map((e) => Math.floor(e + 1e-9));
   let left = target - tenths.reduce((s, t) => s + t, 0);
   const order = exact
-    .map((e, i) => ({ i, rem: e * 10 - tenths[i] }))
+    .map((e, i) => ({ i, rem: e - tenths[i] }))
     .sort((a, b) => b.rem - a.rem);
   for (const { i } of order) {
     if (left <= 0) break;
