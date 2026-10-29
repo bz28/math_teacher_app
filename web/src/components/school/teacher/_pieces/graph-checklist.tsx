@@ -187,9 +187,16 @@ export function GraphChecklistPanel({
             type="button"
             onClick={() => (checklist.teacher_edited ? setConfirmRewrite(true) : void rewrite())}
             disabled={busy}
+            aria-label="Rewrite from answer key"
             className={linkButtonClass}
           >
-            {busy ? "Writing…" : "Rewrite from answer key"}
+            {busy ? (
+              "Writing…"
+            ) : (
+              <>
+                Rewrite<span className="hidden sm:inline"> from answer key</span>
+              </>
+            )}
           </button>
         </>
       }
@@ -240,7 +247,8 @@ function Section({ actions, children }: { actions?: React.ReactNode; children: R
     <div className="space-y-2 border-t border-border-light pt-2.5">
       <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <span className={capClass}>What the graph must show</span>
-        {actions && <span className="flex flex-wrap items-center gap-1">{actions}</span>}
+        {/* -ml-1.5: the buttons' padding, so their text lines up with the caption when they wrap. */}
+        {actions && <span className="-ml-1.5 flex flex-wrap items-center gap-1">{actions}</span>}
       </div>
       {children}
     </div>
@@ -248,10 +256,27 @@ function Section({ actions, children }: { actions?: React.ReactNode; children: R
 }
 
 function ItemRow({ item }: { item: GraphChecklistItem }) {
+  const parts = splitValues(item.text, item.values_to_check);
+  const marked = new Set(parts.filter((p) => p.value).map((p) => p.value));
+  const unmarked = item.values_to_check.filter((v) => !marked.has(v));
+  const one = item.values_to_check.length === 1;
   return (
-    <li className="flex items-start justify-between gap-3 rounded-[--radius-sm] border border-border-light bg-surface px-3 py-2">
+    <li className="flex items-start justify-between gap-3 rounded-[--radius-sm] border border-border-light bg-surface px-2.5 py-2 sm:px-3">
       <div className="min-w-0">
-        <p className="text-sm leading-snug text-text-primary">{item.text}</p>
+        <p className="text-sm leading-snug text-text-primary">
+          {parts.map((p, i) =>
+            p.value ? (
+              <mark
+                key={i}
+                className="bg-transparent text-inherit underline decoration-[color:var(--color-warning)] decoration-2 underline-offset-[3px]"
+              >
+                {p.text}
+              </mark>
+            ) : (
+              p.text
+            ),
+          )}
+        </p>
         {item.rule_id && (
           <p className="mt-0.5 text-[11px] text-primary">
             Class rule{item.rule_text ? ` · ${item.rule_text}` : ""}
@@ -259,10 +284,11 @@ function ItemRow({ item }: { item: GraphChecklistItem }) {
         )}
         {item.values_to_check.length > 0 && (
           <p className="mt-0.5 text-[11px] text-[color:var(--color-warning-dark)]">
-            Check {item.values_to_check.length === 1 ? "this value" : "these values"}:{" "}
-            {item.values_to_check.join(", ")}. The answer key doesn&rsquo;t give{" "}
-            {item.values_to_check.length === 1 ? "it" : "them"}, so the AI worked{" "}
-            {item.values_to_check.length === 1 ? "it" : "them"} out.
+            {unmarked.length === 0
+              ? `Check the underlined ${one ? "value" : "values"}`
+              : `Check ${one ? "this value" : "these values"}: ${item.values_to_check.join(", ")}`}
+            . The answer key doesn&rsquo;t give {one ? "it" : "them"}, so the AI worked{" "}
+            {one ? "it" : "them"} out.
           </p>
         )}
       </div>
@@ -274,6 +300,24 @@ function ItemRow({ item }: { item: GraphChecklistItem }) {
       </span>
     </li>
   );
+}
+
+/** `text` cut around the numbers in `values`, matched the way the server
+ *  found them (`drawing_check._numbers`: digits, trailing zeros dropped). */
+function splitValues(text: string, values: string[]): { text: string; value?: string }[] {
+  if (values.length === 0) return [{ text }];
+  const wanted = new Set(values);
+  const parts: { text: string; value?: string }[] = [];
+  let last = 0;
+  for (const m of text.matchAll(/\d+(?:\.\d+)?/g)) {
+    const n = m[0].includes(".") ? m[0].replace(/0+$/, "").replace(/\.$/, "") : m[0];
+    if (!wanted.has(n)) continue;
+    if (m.index > last) parts.push({ text: text.slice(last, m.index) });
+    parts.push({ text: m[0], value: n });
+    last = m.index + m[0].length;
+  }
+  if (last < text.length) parts.push({ text: text.slice(last) });
+  return parts;
 }
 
 /** How the problem's points split: the graph part (checked from the
