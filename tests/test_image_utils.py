@@ -381,6 +381,25 @@ class TestPdfScanLongEdges:
         pdf.save(buf)
         assert pdf_scan_long_edges(_b64(buf.getvalue())) == [None]
 
+    def test_a_worksheet_over_a_faint_background_picture_isnt_a_scan(self) -> None:
+        # Typed text over a full-page 200 px background: the text is sharp,
+        # so the page must not be refused for the picture's size.
+        import pypdfium2 as pdfium
+        import pypdfium2.raw as pdfium_c
+
+        pdf = pdfium.PdfDocument(base64.b64decode(pdf_of([Image.new("RGB", (200, 260), "white")])))
+        page = pdf[0]
+        import ctypes
+
+        text = pdfium_c.FPDFPageObj_NewTextObj(pdf.raw, b"Helvetica", 12.0)
+        words = ctypes.create_string_buffer("Solve for x".encode("utf-16-le") + b"\0\0")
+        pdfium_c.FPDFText_SetText(text, ctypes.cast(words, ctypes.POINTER(pdfium_c.FPDF_WCHAR)))
+        pdfium_c.FPDFPage_InsertObject(page.raw, text)
+        page.gen_content()
+        buf = io.BytesIO()
+        pdf.save(buf)
+        assert pdf_scan_long_edges(_b64(buf.getvalue())) == [None]
+
     def test_unreadable_pdf_has_no_pages(self) -> None:
         assert pdf_scan_long_edges(_b64(_PDF_HEADER + b"pdf")) == []
 

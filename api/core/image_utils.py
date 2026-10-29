@@ -375,8 +375,9 @@ def _render_pdf(pdfium: Any, data_base64: str) -> list[str]:
 
 
 # A PDF page counts as a scan (a photo saved as a PDF) once pictures
-# cover this much of it. A typed or tablet-written page is mostly
-# vector, sharp at any size, so there is no pixel size to hold it to.
+# cover this much of it and it has no text. A typed or tablet-written
+# page is vector, sharp at any size, so there is no pixel size to hold it
+# to — and a worksheet with a faint background picture keeps its text.
 _PDF_SCAN_COVERAGE = 0.5
 
 
@@ -397,23 +398,27 @@ def pdf_scan_long_edges(data_base64: str) -> list[int | None]:
             pdf = pdfium.PdfDocument(base64.b64decode(data_base64))
         except Exception:  # noqa: BLE001 — an unreadable PDF has no pages to measure
             return []
+        out: list[int | None] = []
         try:
-            return [
-                _scan_long_edge(pdf[i], pdfium_c.FPDF_PAGEOBJ_IMAGE)
-                for i in range(min(len(pdf), _PDF_MAX_PAGES))
-            ]
+            for i in range(min(len(pdf), _PDF_MAX_PAGES)):
+                out.append(_scan_long_edge(pdf[i], pdfium_c.FPDF_PAGEOBJ_IMAGE, pdfium_c.FPDF_PAGEOBJ_TEXT))
+        except Exception:  # noqa: BLE001 — a page that won't load isn't refused
+            logger.warning("pdf measure: stopped after %d of %d pages", len(out), len(pdf), exc_info=True)
         finally:
             pdf.close()
+        return out
 
 
-def _scan_long_edge(page: Any, image_type: int) -> int | None:
+def _scan_long_edge(page: Any, image_type: int, text_type: int) -> int | None:
+    # Every doubt lets the page through: this can refuse a turn-in.
     try:
         page_w, page_h = page.get_size()
+        if next(iter(page.get_objects(filter=(text_type,))), None) is not None:
+            return None
         covered = 0.0
         px_per_pt = 0.0
         # Top level only: a picture nested in a form is positioned in the
-        # form's space, so its bounds would mislead; skipping it can only
-        # let a page through, never refuse one.
+        # form's space, so its bounds would mislead.
         for obj in page.get_objects(filter=(image_type,), max_depth=0):
             left, bottom, right, top = obj.get_bounds()
             if right <= left or top <= bottom:
