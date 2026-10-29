@@ -2954,13 +2954,15 @@ export const schoolStudent = {
       `/school/student/homework/${assignmentId}/problems/${bankItemId}/flagged`,
     );
   },
-  /** Free pixel check behind the upload screen's "looks sideways —
-   *  rotate it?" nudge. `image` is a small copy of one page. */
+  /** Free pixel check behind the upload screen's sideways block (and,
+   *  for a PDF, its too-small pages). `image` is a small copy of one
+   *  photo, or a whole PDF. */
   pageOrientation(image: string) {
-    return apiFetch<{ sideways: boolean }>(`/school/student/homework/page-orientation`, {
-      method: "POST",
-      body: JSON.stringify({ image }),
-    });
+    const json = JSON.stringify({ image });
+    return apiFetch<Schemas["PageOrientationResponse"]>(
+      `/school/student/homework/page-orientation`,
+      { method: "POST", body: json, timeout: uploadTimeoutFor(json.length) },
+    );
   },
   /** `rotations`: clockwise quarter turns per file, parallel to `files`
    *  — the server stores each page the way the student turned it. */
