@@ -56,6 +56,21 @@ describe("ExtractionConfirmScreen", () => {
     expect(onIntegrityCheck).toHaveBeenCalledWith("sub-1");
   });
 
+  it("confirm with the check off (AI grading on) leaves the screen — confirming is the last step", async () => {
+    mockedApi.getSubmission.mockResolvedValue({ ...SUBMISSION, integrity_check_enabled: false } as never);
+    mockedApi.confirmExtraction.mockResolvedValue({ status: "ok", already_confirmed: false } as never);
+    const onDone = jest.fn();
+    const onIntegrityCheck = jest.fn();
+    render(<ExtractionConfirmScreen assignmentId="a" onDone={onDone} onIntegrityCheck={onIntegrityCheck} />);
+
+    fireEvent.press(await waitForText("Looks right"));
+    await flush();
+
+    expect(mockedApi.confirmExtraction).toHaveBeenCalledWith("sub-1", {});
+    expect(onDone).toHaveBeenCalled();
+    expect(onIntegrityCheck).not.toHaveBeenCalled();
+  });
+
   it("sends OCR corrections, keyed by position:step_num, on confirm", async () => {
     mockedApi.getSubmission.mockResolvedValue(SUBMISSION as never);
     mockedApi.confirmExtraction.mockResolvedValue({ status: "ok", already_confirmed: false } as never);
