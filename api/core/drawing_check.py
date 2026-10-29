@@ -19,6 +19,7 @@ Not wired into grading yet: this is the piece the Step 2 eval measures.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
@@ -69,6 +70,19 @@ asymptote or reference line it names (a cosecant graphed from its sine curve nee
 the sine curve). Ask for nothing more: labels only if the question says to label, \
 or a class rule requires them.
 
+Only the drawing. The student's written work and final answer are graded \
+separately, so no item is about something written beside the graph ("The solution \
+(3, 0) is written", "States the system is inconsistent"). A label or a marked point \
+ON the graph is part of the drawing ("Intersection point marked at (3, 0)").
+
+Only the values the question and answer key give. Reading one off is fine (the line \
+y = -2x + 6 crosses the y-axis at (0, 6)); working out a new one is not (asymptotes \
+from a period). When the key doesn't give a feature's values, describe it without \
+them ("A vertical asymptote between each pair of branches").
+
+If the question doesn't ask the student to draw anything (it is a calculation, or \
+only reads a printed figure), set asks_for_drawing to false and list no items.
+
 Points: whole numbers, weighted by how much each feature matters. Together they \
 are the graph's share of the problem: leave at least 1 point for the written work \
 and the answer.
@@ -99,6 +113,34 @@ class ChecklistItem:
     text: str
     points: int
     rule_id: str | None = None
+    # Numbers in the item that the question and answer key never give:
+    # the writer worked them out, so the teacher checks them.
+    values_to_check: list[str] = field(default_factory=list)
+
+
+@dataclass
+class WrittenChecklist:
+    items: list[ChecklistItem]
+    # False when the writer read the question as asking for no drawing
+    # (a calculation, or a printed figure): the flag is likely wrong.
+    asks_for_drawing: bool = True
+
+
+_NUMBER = re.compile(r"\d+(?:\.\d+)?")
+_UNICODE_FRACTIONS = {"½": " 1/2 ", "⅓": " 1/3 ", "⅔": " 2/3 ", "¼": " 1/4 ", "¾": " 3/4 "}
+
+
+def _numbers(text: str) -> set[str]:
+    for k, v in _UNICODE_FRACTIONS.items():
+        text = text.replace(k, v)
+    return {n.rstrip("0").rstrip(".") if "." in n else n for n in _NUMBER.findall(text)}
+
+
+def values_not_given(text: str, *sources: str) -> list[str]:
+    """The numbers in `text` that none of `sources` contains, in order.
+    0 always counts as given (the axes)."""
+    given = set().union(*(_numbers(s) for s in sources)) | {"0"}
+    return sorted(_numbers(text) - given, key=lambda n: text.find(n))
 
 
 @dataclass
@@ -140,7 +182,7 @@ async def write_graph_checklist(
     *,
     class_rules: list[dict[str, Any]] | None = None,
     user_id: str | None = None,
-) -> list[ChecklistItem]:
+) -> WrittenChecklist:
     """The features a correct graph for `question` must show, for a
     problem worth `problem_points` in all. The model suggests the split:
     the items add up to the graph's share, and at least 1 point is left
@@ -153,7 +195,7 @@ async def write_graph_checklist(
     `problem_points` (`fit_checklist`). Empty when the problem has no
     room for a graph part (under 2 points)."""
     if problem_points < 2:
-        return []
+        return WrittenChecklist([])
     out = await call_claude_json(
         _CHECKLIST_SYSTEM,
         (
@@ -168,18 +210,25 @@ async def write_graph_checklist(
         temperature=0.0,
         user_id=user_id,
     )
+    if out.get("asks_for_drawing") is False:
+        return WrittenChecklist([], asks_for_drawing=False)
+    rule_text = " ".join(str(r.get("text") or "") for r in class_rules or [])
     items = []
     raw_items = out.get("items")
     for raw in raw_items if isinstance(raw_items, list) else []:
         if not isinstance(raw, dict) or not str(raw.get("text") or "").strip():
             continue
         rule_id = raw.get("rule_id")
+        text = str(raw["text"]).strip()[:MAX_CHECKLIST_ITEM_CHARS]
         items.append(ChecklistItem(
-            text=str(raw["text"]).strip()[:MAX_CHECKLIST_ITEM_CHARS],
+            text=text,
             points=_whole_points(raw.get("points")),
             rule_id=rule_id if isinstance(rule_id, str) else None,
+            values_to_check=values_not_given(text, question, final_answer, rule_text),
         ))
-    return fit_checklist(items[:MAX_CHECKLIST_ITEMS], problem_points, problem_points, class_rules)
+    return WrittenChecklist(
+        fit_checklist(items[:MAX_CHECKLIST_ITEMS], problem_points, problem_points, class_rules),
+    )
 
 
 def _parse_check(out: dict[str, Any], count: int) -> tuple[str, list[ItemResult]]:

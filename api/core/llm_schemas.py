@@ -1642,9 +1642,15 @@ GRAPH_CHECKLIST_SCHEMA: ToolSchema = {
     "input_schema": {
         "type": "object",
         "properties": {
+            "asks_for_drawing": {
+                "type": "boolean",
+                "description": (
+                    "False when the question doesn't ask the student to draw anything "
+                    "(a calculation, or only reading a printed figure); then list no items."
+                ),
+            },
             "items": {
                 "type": "array",
-                "minItems": 1,
                 "maxItems": 6,
                 "items": {
                     "type": "object",
@@ -1677,7 +1683,7 @@ GRAPH_CHECKLIST_SCHEMA: ToolSchema = {
                 },
             },
         },
-        "required": ["items"],
+        "required": ["asks_for_drawing", "items"],
         "additionalProperties": False,
     },
 }

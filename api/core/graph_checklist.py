@@ -100,18 +100,28 @@ def due(item: QuestionBankItem) -> bool:
 
 def stored_items(stored: dict[str, Any] | None) -> list[ChecklistItem]:
     return [
-        ChecklistItem(text=str(i["text"]), points=int(i["points"]), rule_id=i.get("rule_id"))
+        ChecklistItem(
+            text=str(i["text"]), points=int(i["points"]), rule_id=i.get("rule_id"),
+            values_to_check=list(i.get("values_to_check") or []),
+        )
         for i in (stored or {}).get("items") or []
     ]
 
 
 def to_stored(
     items: list[ChecklistItem], points: int, *, source: str, teacher_edited: bool,
+    asks_for_drawing: bool = True,
 ) -> dict[str, Any]:
-    return {
+    """`asks_for_drawing` False: the writer read the question as asking
+    for no drawing, so it has no items. Stored like any checklist, so it
+    isn't written again until the question or answer key changes."""
+    stored: dict[str, Any] = {
         "items": [asdict(i) for i in items], "points": points,
         "source": source, "teacher_edited": teacher_edited,
     }
+    if not asks_for_drawing:
+        stored["asks_for_drawing"] = False
+    return stored
 
 
 def grading_rules(course: Course | None, assignment: Assignment | None) -> list[dict[str, Any]]:
@@ -143,6 +153,7 @@ def checklist_view(
         "graph_points": sum(i.points for i in items),
         "problem_points": problem_points,
         "teacher_edited": bool(stored.get("teacher_edited")),
+        "asks_for_drawing": stored.get("asks_for_drawing", True) is not False,
     }
 
 
@@ -212,8 +223,8 @@ async def write_checklist(
     await db.rollback()
     if not points:
         return False
-    items = await write_graph_checklist(question, answer, points, class_rules=rules, user_id=user_id)
-    if not items:
+    written = await write_graph_checklist(question, answer, points, class_rules=rules, user_id=user_id)
+    if not written.items and written.asks_for_drawing:
         return False
     locked = (await db.execute(
         select(QuestionBankItem).where(QuestionBankItem.id == item_id)
@@ -227,7 +238,10 @@ async def write_checklist(
     ):
         await db.rollback()
         return False
-    locked.graph_checklist = to_stored(items, points, source=source, teacher_edited=False)
+    locked.graph_checklist = to_stored(
+        written.items, points, source=source, teacher_edited=False,
+        asks_for_drawing=written.asks_for_drawing,
+    )
     await db.commit()
     return True
 

@@ -18,7 +18,7 @@ from sqlalchemy import select
 
 from api.core import drawing_check, graph_checklist
 from api.core.checklist_points import fit_checklist
-from api.core.drawing_check import ChecklistItem, write_graph_checklist
+from api.core.drawing_check import ChecklistItem, WrittenChecklist, values_not_given, write_graph_checklist
 from api.core.graph_checklist import drain_checklist_tasks, needs_checklist, source_of, to_stored
 from api.database import get_session_factory
 from api.models.assignment import Assignment
@@ -36,7 +36,8 @@ RULE = {"id": "r1", "text": "Label every asymptote", "points": 2}
 
 class Writer:
     """Stands in for write_graph_checklist: records each call, answers
-    with `reply` (a list, or an exception to raise)."""
+    with `reply` (a list of items, a WrittenChecklist, or an exception
+    to raise)."""
 
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
@@ -53,7 +54,9 @@ class Writer:
             await self.during()
         if isinstance(self.reply, Exception):
             raise self.reply
-        return list(self.reply)
+        if isinstance(self.reply, WrittenChecklist):
+            return self.reply
+        return WrittenChecklist(list(self.reply))
 
 
 @pytest.fixture
@@ -174,6 +177,19 @@ async def test_a_question_without_a_drawing_gets_none(
     await _approve(client, hw)
     assert writer.calls == []
     assert await _view(client, hw) is None
+
+
+async def test_a_question_the_writer_reads_as_no_drawing_is_kept_empty(
+    hw: dict[str, Any], client: AsyncClient, writer: Writer,
+) -> None:
+    """Saved as "asks for no drawing", so the teacher sees why there is no
+    checklist and the next save doesn't pay for another call."""
+    writer.reply = WrittenChecklist([], asks_for_drawing=False)
+    await _approve(client, hw)
+    view = await _view(client, hw)
+    assert (view["items"], view["asks_for_drawing"]) == ([], False)
+    await _patch(client, hw, title="Renamed")
+    assert len(writer.calls) == 1
 
 
 async def test_a_failed_write_never_fails_the_approval(
@@ -503,7 +519,7 @@ async def test_writer_parses_defensively_and_holds_the_sum(monkeypatch: pytest.M
         "junk",
     ]})
     monkeypatch.setattr(drawing_check, "call_claude_json", reply)
-    items = await write_graph_checklist(QUESTION, ANSWER, 10, class_rules=[RULE])
+    items = (await write_graph_checklist(QUESTION, ANSWER, 10, class_rules=[RULE])).items
     assert "worth 10 points" in reply.calls[0]
     assert [i.text for i in items] == [
         "Vertical asymptote drawn at x = 2", "Horizontal asymptote drawn at y = 1",
@@ -520,11 +536,39 @@ async def test_writer_parses_defensively_and_holds_the_sum(monkeypatch: pytest.M
 async def test_writer_caps_the_item_count(monkeypatch: pytest.MonkeyPatch) -> None:
     reply = Reply({"items": [{"text": f"item {n}", "points": 1, "rule_id": None} for n in range(9)]})
     monkeypatch.setattr(drawing_check, "call_claude_json", reply)
-    assert len(await write_graph_checklist(QUESTION, ANSWER, 20)) == 6
+    assert len((await write_graph_checklist(QUESTION, ANSWER, 20)).items) == 6
 
 
 async def test_writer_skips_a_problem_with_no_room_for_a_graph_part(monkeypatch: pytest.MonkeyPatch) -> None:
     reply = Reply({"items": []})
     monkeypatch.setattr(drawing_check, "call_claude_json", reply)
-    assert await write_graph_checklist(QUESTION, ANSWER, 1) == []
+    assert (await write_graph_checklist(QUESTION, ANSWER, 1)).items == []
     assert reply.calls == []
+
+
+def test_values_the_key_never_gives_are_flagged() -> None:
+    question = "Sketch two periods of $y = -2 + 3\\tan(5x - 30°)$."
+    key = "Period: 36°. Points: (-3°, -5), (6°, -2), (15°, 1)."
+    assert values_not_given("Curve passes through (-3°, -5) and (6°, -2)", question, key) == []
+    assert values_not_given("Vertical asymptotes at x = -1.5° and x = 16.5°", question, key) == ["1.5", "16.5"]
+    # 0 is the axes; ½ is 1/2.
+    assert values_not_given("Crosses the y-axis at (0, −½)", "f(x) = (x+1)/(x-2)") == []
+
+
+async def test_writer_flags_values_it_worked_out(monkeypatch: pytest.MonkeyPatch) -> None:
+    reply = Reply({"asks_for_drawing": True, "items": [
+        {"text": "Vertical asymptote drawn at x = 2", "points": 3, "rule_id": None},
+        {"text": "Crosses the y-axis at (0, -0.5)", "points": 3, "rule_id": None},
+    ]})
+    monkeypatch.setattr(drawing_check, "call_claude_json", reply)
+    items = (await write_graph_checklist("Graph f(x) = (x+1)/(x-2).", "VA x = 2, HA y = 1", 10)).items
+    assert [i.values_to_check for i in items] == [[], ["0.5"]]
+
+
+async def test_writer_can_say_no_drawing_is_asked(monkeypatch: pytest.MonkeyPatch) -> None:
+    reply = Reply({"asks_for_drawing": False, "items": [
+        {"text": "No graph required", "points": 9, "rule_id": None},
+    ]})
+    monkeypatch.setattr(drawing_check, "call_claude_json", reply)
+    written = await write_graph_checklist("Find the hypotenuse.", "12", 10)
+    assert written == WrittenChecklist([], asks_for_drawing=False)
