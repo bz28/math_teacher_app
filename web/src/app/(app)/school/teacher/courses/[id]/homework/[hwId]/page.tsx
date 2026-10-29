@@ -20,6 +20,7 @@ import {
   type HomeworkGraphChecklist,
 } from "@/lib/api";
 import { normalizeRubric } from "@/lib/rubric";
+import { buildChoices } from "@/lib/practice-choices";
 import { evenSplit, MAX_TOTAL_POINTS, pointsRange } from "@/lib/points";
 import { useAuthStore } from "@/stores/auth";
 import {
@@ -52,6 +53,9 @@ interface AssignmentProblem {
   figure_svg: string | null;
   solution_steps: { title: string; description: string }[] | null;
   final_answer: string | null;
+  /** Practice only: the wrong options the student runner mixes with
+   *  final_answer to make each problem multiple choice. */
+  distractors?: string[] | null;
   difficulty: string;
 }
 
@@ -1781,7 +1785,7 @@ function ProblemRow({
   useEffect(() => {
     if (reveal !== undefined) rowRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [reveal]);
-  const panelId = `grading-${problem.position}-${problem.bank_item_id}`;
+  const panelId = `${points === null ? "problem" : "grading"}-${problem.position}-${problem.bank_item_id}`;
   const unchecked =
     !!checklist?.checklist && checklist.checklist.asks_for_drawing && !checklist.checklist.checked;
   // One box, placed beside the question on wide screens and under it on
@@ -1805,9 +1809,13 @@ function ProblemRow({
           {problem.position}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="line-clamp-2 text-[15px] leading-snug text-text-primary">
+          {/* Two lines while scanning; the whole question once open. */}
+          <div className={`${open ? "" : "line-clamp-2 "}text-[15px] leading-snug text-text-primary`}>
             <MathText text={problem.question} />
           </div>
+          {open && problem.figure_svg && (
+            <FigureDisplay svg={problem.figure_svg} className="mt-2 max-h-56" />
+          )}
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
             {pointsBox("order-last ml-auto flex sm:hidden")}
             <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
@@ -1824,15 +1832,26 @@ function ProblemRow({
                 Grading <span aria-hidden>{open ? "▴" : "▾"}</span>
               </button>
             ) : (
-              onEdit && (
+              <>
                 <button
                   type="button"
-                  onClick={onEdit}
-                  className="inline-flex min-h-8 items-center text-xs font-semibold text-primary hover:underline"
+                  onClick={() => setOpen((o) => !o)}
+                  aria-expanded={open}
+                  aria-controls={open ? panelId : undefined}
+                  className="inline-flex min-h-8 items-center gap-1 text-xs font-semibold text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 >
-                  Edit question
+                  Answer &amp; solution <span aria-hidden>{open ? "▴" : "▾"}</span>
                 </button>
-              )
+                {onEdit && (
+                  <button
+                    type="button"
+                    onClick={onEdit}
+                    className="inline-flex min-h-8 items-center text-xs font-semibold text-text-secondary hover:text-primary hover:underline"
+                  >
+                    Edit question
+                  </button>
+                )}
+              </>
             )}
             {points !== null && unchecked && (
               <button
@@ -1848,6 +1867,9 @@ function ProblemRow({
         </div>
         {pointsBox("hidden sm:flex")}
       </div>
+      {open && points === null && (
+        <PracticeProblemDetail id={panelId} problem={problem} />
+      )}
       {open && points !== null && (
         <div
           id={panelId}
@@ -1896,6 +1918,96 @@ function ProblemRow({
         </div>
       )}
     </li>
+  );
+}
+
+// What a practice student actually works with: the answer choices the
+// runner shows (same order: buildChoices is shared with the student
+// page) and the worked solution Learn walks through.
+function PracticeProblemDetail({ id, problem }: { id: string; problem: AssignmentProblem }) {
+  const choices = buildChoices(problem);
+  const correct = (problem.final_answer ?? "").trim();
+  const steps = problem.solution_steps ?? [];
+  const label =
+    "text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]";
+  return (
+    <div
+      id={id}
+      className="mt-3 ml-9 space-y-4 rounded-[--radius-md] border border-border-light bg-bg-subtle/40 px-3 py-3 text-sm"
+    >
+      {choices.length >= 2 ? (
+        <section>
+          <h4 className={label}>Answer choices students see</h4>
+          <ol className="mt-2 space-y-1.5">
+            {choices.map((c, i) => {
+              const isCorrect = c === correct;
+              return (
+                <li
+                  key={c}
+                  className={`flex items-start gap-2.5 rounded-[--radius-sm] border px-2.5 py-1.5 ${
+                    isCorrect
+                      ? "border-[color:var(--color-success-border)] bg-[color:var(--color-success-light)]"
+                      : "border-border-light bg-surface"
+                  }`}
+                >
+                  <span
+                    className={`mt-px shrink-0 font-mono text-xs font-bold ${
+                      isCorrect ? "text-[color:var(--color-success)]" : "text-text-muted"
+                    }`}
+                  >
+                    {String.fromCharCode(65 + i)}
+                  </span>
+                  <div className="min-w-0 flex-1 text-text-primary">
+                    <MathText text={c} />
+                  </div>
+                  {isCorrect && (
+                    <span className="shrink-0 text-[11px] font-semibold text-[color:var(--color-success)]">
+                      ✓ Correct
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+      ) : (
+        <section>
+          <h4 className={label}>Answer</h4>
+          <div className="mt-1.5 text-text-primary">
+            {correct ? <MathText text={correct} /> : <span className="text-text-muted">No answer set.</span>}
+          </div>
+          <p className="mt-1 text-xs text-text-muted">
+            No answer choices, so students don&apos;t get this one as multiple choice.
+          </p>
+        </section>
+      )}
+      <section>
+        <h4 className={label}>Worked solution</h4>
+        {steps.length > 0 ? (
+          <ol className="mt-2 space-y-2.5">
+            {steps.map((s, i) => (
+              <li key={i} className="flex items-start gap-2.5">
+                <span className="mt-px flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-border bg-surface font-mono text-[10px] font-bold text-text-secondary">
+                  {i + 1}
+                </span>
+                <div className="min-w-0 flex-1">
+                  {s.title && (
+                    <div className="font-semibold text-text-primary">
+                      <MathText text={s.title} />
+                    </div>
+                  )}
+                  <div className="mt-0.5 text-[13px] leading-relaxed text-text-secondary">
+                    <MathText text={s.description} />
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="mt-1.5 text-xs text-text-muted">No worked solution for this problem.</p>
+        )}
+      </section>
+    </div>
   );
 }
 
