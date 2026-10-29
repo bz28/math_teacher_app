@@ -967,6 +967,19 @@ def _reconcile_deductions(
     }]
 
 
+def _rule_deductions(raw_deductions: Any, rules: dict[str, int | None]) -> list[dict[str, Any]]:
+    """The model's deductions that cite a class rule it was given and
+    take something off."""
+    return [
+        d for d in raw_deductions or []
+        if isinstance(d, dict)
+        and d.get("rule_id") in rules
+        and isinstance(d.get("points_off"), (int, float))
+        and not isinstance(d.get("points_off"), bool)
+        and round(d["points_off"]) > 0
+    ]
+
+
 def _charge_in_points(
     entry: dict[str, Any], points: int, rules: dict[str, int | None],
 ) -> None:
@@ -1088,11 +1101,22 @@ def _build_breakdown(
         if not bid:
             continue
         status = g.get("score_status", "zero")
+        raw_deductions = g.get("deductions")
         percent = (
             100.0 if status == "full"
             else 0.0 if status == "zero"
             else max(1.0, min(99.0, float(g.get("percent", 0))))
         )
+        # A class rule the grader applied costs points even when it called
+        # the answer "full": the rule decides, not the verdict. Without
+        # this the ledger can't reconcile to 100% and is dropped, so the
+        # rule silently costs nothing. Only the rule lines are kept: the
+        # grader's own judgment was full credit.
+        if status == "full":
+            cited = _rule_deductions(raw_deductions, rules or {})
+            if cited:
+                status, raw_deductions = "partial", cited
+                percent = max(1.0, 100.0 - sum(round(d["points_off"]) for d in cited))
         # `feedback` lands directly in the textarea the teacher edits
         # before publishing — it must be student-voice prose, not the
         # internal-grading explanation. We pull from `student_feedback`
@@ -1117,7 +1141,7 @@ def _build_breakdown(
             # Itemized partial-credit receipt, reconciled to `percent` (the
             # source of truth for the score) — see _reconcile_deductions.
             "deductions": _reconcile_deductions(
-                g.get("deductions"),
+                raw_deductions,
                 percent,
                 fallback_reason=g.get("reasoning"),
                 submission_id=submission_id,

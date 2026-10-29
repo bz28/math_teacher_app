@@ -114,6 +114,38 @@ def test_a_ledger_short_of_the_percent_keeps_the_grade_partial() -> None:
     assert e["score_status"] == "partial" and e["percent"] == 99.0
 
 
+def _full(*deductions: tuple[float, str | None]) -> dict[str, Any]:
+    return {**_partial(100, *deductions), "score_status": "full", "percent": 100}
+
+
+def test_a_cited_rule_turns_a_full_call_partial() -> None:
+    # The grader called it full but listed the units rule (683d8bfa P2):
+    # the rule still costs its point, and its line stays on the receipt.
+    grade = _full((5, "r1"))
+    e = _one(grade, 10, {"r1": 1})
+    assert e["score_status"] == "partial" and e["percent"] == 90.0
+    assert [(d["rule_id"], d["source"]) for d in e["deductions"]] == [("r1", "class_rule")]
+    assert grade["score_status"] == "partial" and grade["percent"] == 90.0
+
+
+def test_a_full_call_drops_its_own_judgment_lines_but_keeps_rule_lines() -> None:
+    e = _one(_full((3, None), (5, "r1")), 10, {"r1": 1})
+    assert e["percent"] == 90.0
+    assert [d["rule_id"] for d in e["deductions"]] == ["r1"]
+
+
+def test_a_rule_with_no_points_is_sized_by_the_grader() -> None:
+    e = _one(_full((20, "r1")), 10, {"r1": None})
+    assert e["score_status"] == "partial" and e["percent"] == 80.0
+
+
+def test_a_full_call_without_a_rule_line_stays_full() -> None:
+    for grade in (_full(), _full((5, None)), _full((5, "not-a-class-rule")), _full((0, "r1"))):
+        e = _one(grade, 10, {"r1": 1})
+        assert e["score_status"] == "full" and e["percent"] == 100.0
+        assert sum(d["points_off"] for d in e["deductions"]) == 0
+
+
 def test_the_raw_grade_carries_the_final_call() -> None:
     """The review page reads the raw grade as the AI's call."""
     grade = _partial(95, (5, "r1"))
