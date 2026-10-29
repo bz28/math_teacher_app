@@ -454,8 +454,26 @@ export default function HomeworkDetailPage({
     const c = hw?.graph_checklists?.[p.bank_item_id]?.checklist;
     return !!c && c.asks_for_drawing && !c.checked;
   });
+  // Graph problems that can have a checklist but don't yet: being
+  // written in the background right after Approve, or that write failed.
+  const missingChecklists = problems.filter((p) => {
+    const e = hw?.graph_checklists?.[p.bank_item_id];
+    return !!e && !e.checklist && e.can_write;
+  });
+  const publishWarnings = {
+    noDueDate,
+    uncheckedChecklists: uncheckedChecklists.length,
+    missingChecklists: missingChecklists.length,
+    checklistsLookedAgain,
+  };
+  const anyPublishWarning =
+    noDueDate || uncheckedChecklists.length > 0 || missingChecklists.length > 0;
+  // The confirm reads the warnings live; once the teacher has dealt with
+  // every one (checked the last checklist from the open bar), close it
+  // rather than fall through to a warning that doesn't apply.
+  if (confirmingPublish && !anyPublishWarning) setConfirmingPublish(false);
   const handlePublishClick = () => {
-    if (noDueDate || uncheckedChecklists.length > 0) {
+    if (anyPublishWarning) {
       setConfirmingPublish(true);
       return;
     }
@@ -1147,6 +1165,7 @@ export default function HomeworkDetailPage({
                       checklistLookedAgain={checklistsLookedAgain}
                       onChecklistChanged={refreshChecklists}
                       reveal={reveal?.bankItemId === p.bank_item_id ? reveal.n : undefined}
+                      published={isPublished}
                     />
                   ))}
                 </ul>
@@ -1260,14 +1279,10 @@ export default function HomeworkDetailPage({
         onPublish={handlePublishClick}
         onUnpublish={unpublish}
         onPreviewAsStudent={onPreviewAsStudent}
-        confirming={
-          confirmingPublish
-            ? { noDueDate, uncheckedChecklists: uncheckedChecklists.length }
-            : null
-        }
+        confirming={confirmingPublish && anyPublishWarning ? publishWarnings : null}
         onReviewChecklists={() => {
           setConfirmingPublish(false);
-          const first = uncheckedChecklists[0];
+          const first = uncheckedChecklists[0] ?? missingChecklists[0];
           if (first) setReveal((r) => ({ bankItemId: first.bank_item_id, n: (r?.n ?? 0) + 1 }));
         }}
         onAddDueDate={() => {
@@ -1735,11 +1750,13 @@ function ProblemRow({
   checklistLookedAgain,
   onChecklistChanged,
   reveal,
+  published,
 }: {
   problem: AssignmentProblem;
   /** Changes when the page asks this row to open its Grading ▾ and
    *  scroll into view. */
   reveal?: number;
+  published: boolean;
   /** Present for a problem that requires a drawing. */
   checklist?: HomeworkGraphChecklist;
   checklistLookedAgain: boolean;
@@ -1867,6 +1884,7 @@ function ProblemRow({
               bankItemId={problem.bank_item_id}
               problemPoints={points}
               lookedAgain={checklistLookedAgain}
+              published={published}
               onChanged={onChecklistChanged}
               onEditQuestion={onEdit}
             />
@@ -2189,13 +2207,33 @@ function SubmissionStrip({
 // to the click target so the teacher doesn't have to hunt for the
 // dialog after pressing Publish on a long-scrolled HW.
 // ────────────────────────────────────────────────────────────────────
+type PublishWarnings = {
+  noDueDate: boolean;
+  uncheckedChecklists: number;
+  /** Graph problems whose checklist isn't written yet. */
+  missingChecklists: number;
+  /** The page has looked again for checklists being written; one still
+   *  missing has failed to write, not just not landed yet. */
+  checklistsLookedAgain: boolean;
+};
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
 /** The publish soft-confirm's warning. The no-due-date wording alone is
  *  unchanged from before checklists were checked. */
-function publishWarning({ noDueDate, uncheckedChecklists: n }: { noDueDate: boolean; uncheckedChecklists: number }) {
-  const checklists = `${n} graph checklist${n === 1 ? " hasn\u2019t" : "s haven\u2019t"} been checked`;
-  if (n > 0 && noDueDate) return `${checklists}, and there\u2019s no due date. Publish anyway?`;
-  if (n > 0) return `${checklists}. Every student\u2019s drawing is graded against ${n === 1 ? "it" : "them"}.`;
-  return "Publish without a due date? Students will see \u201cno due date\u201d.";
+function publishWarning(w: PublishWarnings) {
+  const parts = [
+    w.uncheckedChecklists > 0 &&
+      `${plural(w.uncheckedChecklists, "graph checklist hasn\u2019t", "graph checklists haven\u2019t")} been checked`,
+    w.missingChecklists > 0 &&
+      (w.checklistsLookedAgain
+        ? `${plural(w.missingChecklists, "graph problem has", "graph problems have")} no checklist yet`
+        : `${plural(w.missingChecklists, "graph checklist is", "graph checklists are")} still being written`),
+  ].filter((p): p is string => !!p);
+  if (parts.length === 0) return "Publish without a due date? Students will see \u201cno due date\u201d.";
+  if (w.noDueDate) parts.push("there\u2019s no due date");
+  const sentence = parts.length > 1 ? `${parts.slice(0, -1).join(", ")}, and ${parts.at(-1)}` : parts[0];
+  return `${sentence}. Publish anyway?`;
 }
 
 function ActionBar({
@@ -2224,7 +2262,7 @@ function ActionBar({
   onUnpublish: () => void;
   onPreviewAsStudent: () => void;
   /** Set while the publish soft-confirm is showing. */
-  confirming: { noDueDate: boolean; uncheckedChecklists: number } | null;
+  confirming: PublishWarnings | null;
   onReviewChecklists: () => void;
   onAddDueDate: () => void;
   onConfirmPublish: () => void;
@@ -2241,14 +2279,14 @@ function ActionBar({
               ⚠ {publishWarning(confirming)}
             </span>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
-              {confirming.uncheckedChecklists > 0 && (
+              {confirming.uncheckedChecklists + confirming.missingChecklists > 0 && (
                 <button
                   type="button"
                   onClick={onReviewChecklists}
                   disabled={busy}
                   className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-2 text-xs font-bold text-text-secondary hover:bg-[color:var(--color-surface-alt-2)] disabled:opacity-50"
                 >
-                  Review {confirming.uncheckedChecklists === 1 ? "it" : "them"}
+                  Review {confirming.uncheckedChecklists + confirming.missingChecklists === 1 ? "it" : "them"}
                 </button>
               )}
               {confirming.noDueDate && (
