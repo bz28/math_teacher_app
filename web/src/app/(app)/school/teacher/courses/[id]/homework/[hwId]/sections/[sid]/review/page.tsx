@@ -4349,6 +4349,31 @@ function SubmissionDetailPanel({
                   ? "They declined the scanned reading on the confirm screen, so no understanding check ran — and the AI grade below was made from that disputed reading. Check it against the photo; if it looks like a dodge, follow up with the student."
                   : "They declined the scanned reading on the confirm screen, so no AI grading or understanding check ran. If the photo really was misread, grade from the original work; if it looks like a dodge, follow up with the student."}
               </p>
+              {/* What the student told us when they flagged — the
+                  pointer to where the misread is. Older flags carry
+                  neither, and then nothing renders. */}
+              {detail.extraction_flag_note && (
+                <figure className="mt-2.5 border-l-2 border-[color:var(--color-error)]/50 pl-3">
+                  <figcaption className="text-[11px] font-semibold text-text-muted">
+                    What the student said was wrong
+                  </figcaption>
+                  <blockquote className="mt-0.5 whitespace-pre-line break-words text-sm text-text-primary">
+                    &ldquo;{detail.extraction_flag_note}&rdquo;
+                  </blockquote>
+                </figure>
+              )}
+              {detail.extraction_edit_count > 0 && (
+                <p className="mt-2 text-xs text-text-secondary">
+                  They fixed{" "}
+                  <span className="font-semibold text-text-primary">
+                    {detail.extraction_edit_count}{" "}
+                    {detail.extraction_edit_count === 1 ? "line" : "lines"}
+                  </span>{" "}
+                  before sending it — marked{" "}
+                  <span className="font-semibold text-primary">✎ edited by student</span>{" "}
+                  below, with what was originally read.
+                </p>
+              )}
             </div>
           </div>
         </div>

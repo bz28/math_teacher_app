@@ -3,8 +3,8 @@
 /**
  * Terminal screen shown after the student flagged the extraction as
  * wrong. No AI grading or integrity chat ran — the submission is
- * already in the teacher's inbox for manual grading. Student has
- * nothing else to do.
+ * already in the teacher's inbox for manual grading, with the student's
+ * note and any lines they fixed. Student has nothing else to do.
  */
 export function ExtractionFlaggedTerminalView() {
   return (
@@ -16,8 +16,8 @@ export function ExtractionFlaggedTerminalView() {
         Sent to your teacher
       </h1>
       <p className="mt-3 text-sm text-text-secondary">
-        You said the reader got your work wrong, so your homework is
-        going straight to your teacher for manual grading.
+        You said we misread most of your work, so your teacher will grade
+        it from your photos. Anything you told us or fixed went along too.
       </p>
       <p className="mt-4 text-xs text-text-muted">
         Nothing else to do — your teacher will follow up with a grade
