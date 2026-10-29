@@ -1,4 +1,33 @@
 {
+  "0a60ab99d3e12af18dc42928e436c4d6": {
+    "meta": {
+      "mode": "integrity_extract",
+      "model": "claude-sonnet-4-6",
+      "prompt": "||",
+      "recorded_at": 1793222191.670241
+    },
+    "response": {
+      "description": "A number line from -2 to beyond 10 with an open circle at 4 and a bold ray extending to the right toward positive infinity, representing the inequality x > 4.",
+      "elements": [
+        {
+          "description": "A horizontal number line with tick marks labeled from -2 to 10, with an arrow pointing to the right indicating it continues beyond 10.",
+          "type": "axis"
+        },
+        {
+          "description": "An open (hollow) circle drawn at the position of 4 on the number line, indicating that 4 is not included in the solution.",
+          "type": "point"
+        },
+        {
+          "description": "A bold, thick ray starting just to the right of the open circle at 4 and extending to the right past 10, following the number line in the positive direction. It does not cross any vertical axis.",
+          "type": "ray"
+        }
+      ],
+      "has_drawing": true,
+      "labeled_points": [],
+      "notes": "The open circle at 4 and the rightward ray together represent the graph of x > 4 on the number line. The ray begins at 4 (exclusive) and continues indefinitely to the right.",
+      "unlabeled_dots": 0
+    }
+  },
   "0c1330d44a29fd38a847626eace13ecd": {
     "meta": {
       "mode": "integrity_extract",
@@ -199,6 +228,69 @@
       "unlabeled_dots": 0
     }
   },
+  "48118c389b97b549dca53a97e39204be": {
+    "meta": {
+      "mode": "integrity_extract",
+      "model": "claude-opus-5-5",
+      "prompt": "You are a teacher reading a student's handwritten homework. Your job is to copy  ||",
+      "recorded_at": 1793222147.386629
+    },
+    "response": {
+      "confidence": 0.9,
+      "final_answers": [
+        {
+          "answer_latex": "(2, 3)",
+          "answer_plain": "(2, 3)",
+          "page_index": 1,
+          "problem_position": 1
+        }
+      ],
+      "steps": [
+        {
+          "latex": "y = 2x - 1",
+          "page_index": 1,
+          "plain_english": "Labeled '1.', student wrote y = 2x - 1",
+          "problem_position": 1,
+          "step_num": 1
+        },
+        {
+          "latex": "y = -x + 5",
+          "page_index": 1,
+          "plain_english": "Student wrote y = -x + 5",
+          "problem_position": 1,
+          "step_num": 2
+        },
+        {
+          "latex": "(2, 3)",
+          "page_index": 1,
+          "plain_english": "Student wrote the ordered pair (2, 3)",
+          "problem_position": 1,
+          "step_num": 3
+        }
+      ],
+      "visual_work": [
+        {
+          "answer_on_drawing": null,
+          "bbox": {
+            "x0": 0.5,
+            "x1": 0.95,
+            "y0": 0.14,
+            "y1": 0.48
+          },
+          "description": "Hand-drawn coordinate axes with tick marks on both axes and no numbers. Two straight lines are drawn and they cross in the first quadrant, a little right of the y-axis and above the x-axis. The intersection point is not labeled.",
+          "kind": "graph",
+          "labeled_points": [],
+          "page_index": 1,
+          "plotted_elements": [
+            "Line rising from left to right, crossing the y-axis just below the origin, running from the lower left (below the x-axis) to the upper right",
+            "Line falling from left to right, starting near the top of the y-axis, crossing the x-axis to the right of the origin, and running down to the lower right"
+          ],
+          "present": true,
+          "problem_position": 1
+        }
+      ]
+    }
+  },
   "609c67847c0db6e894314b84a93b8b1d": {
     "meta": {
       "mode": "integrity_extract",
@@ -262,6 +354,152 @@
       ]
     }
   },
+  "67952ed7908523ab32fc6e339f24579f": {
+    "meta": {
+      "mode": "integrity_extract",
+      "model": "claude-opus-5-5",
+      "prompt": "You are a teacher reading a student's handwritten homework. Your job is to copy  ||",
+      "recorded_at": 1793222114.342688
+    },
+    "response": {
+      "confidence": 0.9,
+      "final_answers": [
+        {
+          "answer_latex": "(2, 3)",
+          "answer_plain": "(2, 3)",
+          "page_index": 1,
+          "problem_position": 1
+        }
+      ],
+      "steps": [
+        {
+          "latex": "y = 2x - 1",
+          "page_index": 1,
+          "plain_english": "Labeled '1.', wrote the first equation y = 2x - 1",
+          "problem_position": 1,
+          "step_num": 1
+        },
+        {
+          "latex": "y = -x + 5",
+          "page_index": 1,
+          "plain_english": "Wrote the second equation y = -x + 5",
+          "problem_position": 1,
+          "step_num": 2
+        },
+        {
+          "latex": "2x - 1 = -x + 5",
+          "page_index": 1,
+          "plain_english": "Set the two expressions equal",
+          "problem_position": 1,
+          "step_num": 3
+        },
+        {
+          "latex": "3x = 6",
+          "page_index": 1,
+          "plain_english": "Simplified to 3x = 6",
+          "problem_position": 1,
+          "step_num": 4
+        },
+        {
+          "latex": "x = 2, y = 3",
+          "page_index": 1,
+          "plain_english": "Found x = 2, y = 3",
+          "problem_position": 1,
+          "step_num": 5
+        },
+        {
+          "latex": "(2, 3)",
+          "page_index": 1,
+          "plain_english": "Wrote the ordered pair (2, 3)",
+          "problem_position": 1,
+          "step_num": 6
+        }
+      ],
+      "visual_work": [
+        {
+          "answer_on_drawing": null,
+          "bbox": {
+            "x0": 0.5,
+            "x1": 0.95,
+            "y0": 0.14,
+            "y1": 0.48
+          },
+          "description": "Hand-drawn coordinate axes with tick marks, no numbers labeling the scale. Only one line is drawn: a steep line rising left to right, crossing near the origin, just below it on the y-axis. No second line, no marked intersection point, no labels.",
+          "kind": "graph",
+          "labeled_points": [],
+          "page_index": 1,
+          "plotted_elements": [
+            "single straight line rising steeply left-to-right, going from lower left (below the x-axis, left of the y-axis) to upper right, crossing the y-axis just below the origin"
+          ],
+          "present": true,
+          "problem_position": 1
+        }
+      ]
+    }
+  },
+  "7021d93913ac781f09c36ad14e3de156": {
+    "meta": {
+      "mode": "integrity_extract",
+      "model": "claude-opus-5-5",
+      "prompt": "You are a teacher reading a student's handwritten homework. Your job is to copy  ||",
+      "recorded_at": 1793222183.793909
+    },
+    "response": {
+      "confidence": 0.85,
+      "final_answers": [
+        {
+          "answer_latex": "x > 4",
+          "answer_plain": "x > 4",
+          "page_index": 1,
+          "problem_position": 1
+        }
+      ],
+      "steps": [
+        {
+          "latex": "2x - 3 > 5",
+          "page_index": 1,
+          "plain_english": "Wrote the inequality 2x - 3 > 5, labeled '1.'",
+          "problem_position": 1,
+          "step_num": 1
+        },
+        {
+          "latex": "2x > 8",
+          "page_index": 1,
+          "plain_english": "Added 3 to both sides: 2x > 8",
+          "problem_position": 1,
+          "step_num": 2
+        },
+        {
+          "latex": "x > 4",
+          "page_index": 1,
+          "plain_english": "Divided by 2: x > 4",
+          "problem_position": 1,
+          "step_num": 3
+        }
+      ],
+      "visual_work": [
+        {
+          "answer_on_drawing": "open circle at 4, shaded to the right",
+          "bbox": {
+            "x0": 0.05,
+            "x1": 0.95,
+            "y0": 0.29,
+            "y1": 0.37
+          },
+          "description": "Horizontal number line with tick marks labeled -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10. A circle at 4 that looks hollow (open), with the axis line passing through it. A thick ray is drawn from 4 to the right and ends in an arrowhead past 10.",
+          "kind": "number_line",
+          "labeled_points": [],
+          "page_index": 1,
+          "plotted_elements": [
+            "Circle at 4 that looks open/hollow, with the axis line running through it",
+            "Thick shaded ray starting at 4 and running right to an arrowhead past 10"
+          ],
+          "present": true,
+          "problem_position": 1
+        }
+      ]
+    }
+  },
   "7099d49122b6ef4887f9360fc26f7d1e": {
     "meta": {
       "mode": "integrity_extract",
@@ -292,6 +530,39 @@
       "has_drawing": true,
       "labeled_points": [],
       "notes": "The two curves cross each other once in the upper-center region (above the x-axis, near the y-axis). Both curves pass through or very near the origin area and extend to opposite lower corners, creating a large X shape overall. No coordinate labels are written beside any points.",
+      "unlabeled_dots": 0
+    }
+  },
+  "8971168b040b88797e219dfc4bc2a7fa": {
+    "meta": {
+      "mode": "integrity_extract",
+      "model": "claude-sonnet-4-6",
+      "prompt": "||",
+      "recorded_at": 1793222156.8413382
+    },
+    "response": {
+      "description": "A coordinate plane with two curves that cross each other in an X-shape near the center of the graph, one curving from upper-left to lower-right and the other from upper-right to lower-left, both passing through or near the origin.",
+      "elements": [
+        {
+          "description": "Horizontal x-axis extending from the left edge to the right edge of the drawing, with evenly spaced tick marks.",
+          "type": "axis"
+        },
+        {
+          "description": "Vertical y-axis extending from the top edge to the bottom edge of the drawing, with evenly spaced tick marks.",
+          "type": "axis"
+        },
+        {
+          "description": "A curve that starts at the upper-left area (above and slightly left of the y-axis), sweeps down and to the right crossing the y-axis near y=1, passes through the origin region, then continues curving down and to the left, ending at the lower-left below the x-axis. It has a slight S-shape or inflection near the origin.",
+          "type": "curve"
+        },
+        {
+          "description": "A curve that starts at the upper-right area (above and to the right of the y-axis), sweeps down and to the left crossing the x-axis to the right of the origin, passes through the center crossing region, then continues down and to the right, ending at the lower-right below the x-axis. It forms the other arm of the X-shape.",
+          "type": "curve"
+        }
+      ],
+      "has_drawing": true,
+      "labeled_points": [],
+      "notes": "The two curves cross each other roughly in the first quadrant slightly above and to the right of the origin, forming a prominent X-shape. Neither curve appears to be a straight line \u2014 both show gentle curvature consistent with cubic or similar functions. The left curve appears to pass through or very near the origin.",
       "unlabeled_dots": 0
     }
   },
@@ -741,6 +1012,35 @@
       "has_drawing": true,
       "labeled_points": [],
       "notes": "The straight line and the curve appear to intersect near the origin. The curve's shape (shallow near the origin, steepening upward to the right) is consistent with y = x\u00b3 or similar. The straight line has a consistent steep positive slope throughout.",
+      "unlabeled_dots": 0
+    }
+  },
+  "e68d8bcf68ec9d568c84bd91dc906558": {
+    "meta": {
+      "mode": "integrity_extract",
+      "model": "claude-sonnet-4-6",
+      "prompt": "||",
+      "recorded_at": 1793222121.465734
+    },
+    "response": {
+      "description": "A standard x-y coordinate plane with tick marks on both axes, and a single straight line drawn through the origin area, running from the lower-left to the upper-right at a steep angle.",
+      "elements": [
+        {
+          "description": "Horizontal x-axis running the full width of the drawing, with evenly spaced tick marks along it.",
+          "type": "axis"
+        },
+        {
+          "description": "Vertical y-axis running the full height of the drawing, with evenly spaced tick marks along it.",
+          "type": "axis"
+        },
+        {
+          "description": "A steep straight line running from the lower-left (below and to the left of the origin) to the upper-right (above and to the right of the origin), crossing both axes near the origin. It passes through or very close to the origin, leaning noticeably to the right as it goes upward.",
+          "type": "line"
+        }
+      ],
+      "has_drawing": true,
+      "labeled_points": [],
+      "notes": "The line appears to pass through or extremely close to the origin. Its steep positive slope and the way it crosses both axes near the center suggest it may represent a line such as y = 2x or similar. No coordinates are written beside any point.",
       "unlabeled_dots": 0
     }
   }

@@ -29,6 +29,7 @@ from api.core.image_utils import (
 )
 from api.core.llm_client import (
     MODEL_HAIKU,
+    MODEL_OPUS,
     MODEL_REASON,
     LLMMode,
     call_claude_conversation,
@@ -300,12 +301,12 @@ async def extract_student_work_from_pages(
     # silently strands a student's homework with no retry path, too high
     # costs a few cents on the densest page. Size it for the worst real
     # submission, not the median one.
-    # temperature=0 pins the read so the SAME photo extracts the SAME
-    # work + final answers on every run. The grading call downstream is
-    # already temp-0 (grading_ai.grade_submission_with_ai); pinning the
-    # extraction too makes the grade reproducible END-TO-END — without
-    # it a re-read of the identical paper could transcribe a step or
-    # final answer differently and drift the resulting grade.
+    # Opus reads handwriting far better than Sonnet (2 reading errors to
+    # 30 on 50 of the hardest real problems), but it always thinks, so it
+    # can't be pinned to temperature 0: two reads of the same photo can
+    # differ. The grade stays reproducible because the read is stored and
+    # a regrade reuses it (test_regrade_reuses_extraction). Its thinking
+    # counts toward max_tokens, hence the larger cap.
     result = await call_claude_vision(
         content,
         LLMMode.INTEGRITY_EXTRACT,
@@ -319,9 +320,8 @@ async def extract_student_work_from_pages(
         # prod (a student's `y = x` transcribed as the worksheet's
         # `y = √x`) is what surfaced it.
         system_prompt=_EXTRACT_SYSTEM,
-        model=MODEL_REASON,
-        max_tokens=16384,
-        temperature=0.0,
+        model=MODEL_OPUS,
+        max_tokens=32000,
         user_id=user_id,
         submission_id=str(submission_id) if submission_id else None,
         call_metadata={"phase": "vision_extract"},
@@ -977,8 +977,9 @@ async def run_agent_turn(
     `temperature=0.0` pins the verdict so an identical transcript yields
     the same disposition on every run — the precondition for measuring a
     judgment change (the integrity eval harness) rather than chasing
-    sampling noise. The integrity Vision extraction upstream is already
-    temp-0 (extract_student_work), so the whole chain is reproducible.
+    sampling noise. The Vision read upstream is not temp-0 (Opus always
+    thinks), but it is read once and stored, so the transcript this sees
+    is fixed.
 
     `submission_id` and `call_metadata` are forwarded to the LLM-call
     log so the admin dashboard can correlate the agent's calls with

@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     # cost-neutral. Env var override still available via LLM_MODEL_SONNET.
     llm_model_sonnet: str = "claude-sonnet-4-6"
     llm_model_haiku: str = "claude-haiku-4-5-20251001"
+    # Reads students' handwriting. On 50 of the hardest real problems,
+    # checked blind against the photos, it made 2 reading errors to
+    # Sonnet 4.6's 30.
+    llm_model_opus: str = "claude-opus-5-5"
 
     # Cost Alerting
     daily_cost_limit_usd: float = 50.0

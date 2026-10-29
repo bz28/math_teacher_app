@@ -1,8 +1,8 @@
 """Teacher-initiated regrade reuses the stored extraction.
 
-`Submission.extraction` is written once by the submit pipeline and the
-Vision read is temperature-0, so re-reading the same photo returns the
-same transcription at full price. Regrade used to pay for that re-read on
+`Submission.extraction` is written once by the submit pipeline.
+Re-reading the same photo costs a full Vision read, and can return a
+different transcription (the reader is not temperature-0). Regrade used to pay for that re-read on
 every rubric tweak — roughly half the AI cost of a regrade spent
 recomputing a value already on the row.
 
