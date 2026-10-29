@@ -143,14 +143,37 @@ class ProblemGraphCheck:
     note: str | None = None
 
     def stored(self, part: GraphPart) -> dict[str, Any]:
-        """The shape kept on `SubmissionGrade.graph_checks[problem_id]`."""
+        """The shape kept on `SubmissionGrade.graph_checks[problem_id]`.
+
+        The checklist is frozen with its verdicts, so the review page
+        shows what the grade was charged against even after the teacher
+        edits the checklist. `teacher`: her ✓ ("yes") or ✗ ("no") on an
+        unclear item (`set_teacher_verdict`); `overridden`: she changed
+        the problem's score by hand, so its unclear items no longer wait
+        on her (`note_hand_edits`)."""
         return {
             "checklist_key": part.key,
+            "points": part.points,
             "step": self.step,
             "in_view": self.in_view,
             "note": self.note,
-            "items": [{"n": r.n, "verdict": r.verdict, "seen": r.seen} for r in self.items],
+            "overridden": False,
+            "items": [
+                {"n": r.n, "text": i.text, "points": i.points, "rule_id": i.rule_id,
+                 "verdict": r.verdict, "seen": r.seen, "teacher": None}
+                for i, r in zip(part.items, self.items, strict=True)
+            ],
         }
+
+    @classmethod
+    def from_stored(cls, stored: dict[str, Any]) -> ProblemGraphCheck:
+        """The check a stored one recorded, without the teacher's calls:
+        a regrade re-applies the drawing check, not her review."""
+        return cls(
+            str(stored.get("step") or "none"), str(stored.get("in_view") or "not_found"),
+            [ItemResult(int(i["n"]), i["verdict"], str(i.get("seen") or "")) for i in stored.get("items") or []],
+            stored.get("note"),
+        )
 
 
 def _all(items: list[ChecklistItem], verdict: str, seen: str) -> list[ItemResult]:
@@ -370,3 +393,114 @@ def apply_graph_parts(
         for e in breakdown
     ]
     return out, weighted_percent(((e["problem_id"], e["percent"]) for e in out), points)
+
+
+def split_graph_fields(
+    combined: list[dict[str, Any]],
+    parts: dict[str, GraphPart],
+    checks: dict[str, ProblemGraphCheck | None],
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    """The breakdown as the teacher edits it (the `graph` and
+    `needs_check` fields `combine` adds lifted off), and each graph
+    problem's stored check for `SubmissionGrade.graph_checks`. A blank
+    problem (no check) is stored as every item "no"."""
+    breakdown, stored = [], {}
+    for e in combined:
+        entry = {k: v for k, v in e.items() if k not in ("graph", "needs_check")}
+        breakdown.append(entry)
+        pid = e["problem_id"]
+        if pid in parts:
+            part = parts[pid]
+            check = checks.get(pid) or ProblemGraphCheck(
+                "none", "not_found", _all(part.items, "no", _NOT_DRAWN), note="not_drawn",
+            )
+            stored[pid] = check.stored(part)
+    return breakdown, stored
+
+
+def _effective(item: dict[str, Any]) -> str:
+    return str(item.get("teacher") or item["verdict"])
+
+
+def open_items(stored: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """The unclear items still waiting on the teacher: no ✓/✗ from her,
+    and she hasn't re-scored the problem by hand."""
+    if not stored or stored.get("overridden"):
+        return []
+    return [i for i in stored.get("items") or [] if i["verdict"] == "unclear" and not i.get("teacher")]
+
+
+def open_item_count(graph_checks: dict[str, Any] | None) -> int:
+    return sum(len(open_items(s)) for s in (graph_checks or {}).values())
+
+
+class VerdictError(ValueError):
+    pass
+
+
+def set_teacher_verdict(
+    entry: dict[str, Any], stored: dict[str, Any], n: int, verdict: str,
+) -> None:
+    """The teacher's ✓ ("yes") or ✗ ("no") on unclear item `n`, applied
+    in place to the problem's breakdown `entry` and its stored check.
+
+    An unclear item kept its points, so ✓ changes no score and ✗ takes
+    the item's points off as its own deduction, exactly as a "no" from
+    the check would have (`combine`). Changing her mind reverses it. Only
+    items the check left unclear take her call: a "yes" or "no" is the
+    check's, and a re-scored problem is hers already."""
+    if verdict not in ("yes", "no"):
+        raise VerdictError("Verdict must be yes or no")
+    if stored.get("overridden"):
+        raise VerdictError("You've re-scored this problem by hand, so its graph checklist no longer sets its score")
+    item = next((i for i in stored.get("items") or [] if i["n"] == n), None)
+    if item is None:
+        raise VerdictError("No such checklist item")
+    if item["verdict"] != "unclear":
+        raise VerdictError("Only items the check couldn't decide take your call")
+    before, item["teacher"] = _effective(item), verdict
+    if before == verdict or (before == "unclear" and verdict == "yes"):
+        return
+    off = item["points"] * 100 / stored["points"]
+    reason = f"Graph: {item['text']}"
+    deductions = list(entry.get("deductions") or [])
+    if verdict == "no":
+        percent = entry["percent"] - off
+        deductions.append({"points_off": off, "reason": reason, "step_ref": None,
+                           "rule_id": item.get("rule_id"), "source": "graph_checklist"})
+    else:
+        percent = entry["percent"] + off
+        i = next(
+            (k for k, d in enumerate(deductions) if d.get("source") == "graph_checklist" and d.get("reason") == reason),
+            None,
+        )
+        if i is not None:
+            deductions.pop(i)
+    percent = min(max(percent, 0.0), 100.0)
+    entry["percent"] = percent
+    entry["score_status"] = "full" if percent >= 100 - 1e-9 else "zero" if percent <= 1e-9 else "partial"
+    if entry.get("deductions") is not None:
+        entry["deductions"] = deductions
+
+
+def note_hand_edits(
+    graph_checks: dict[str, Any] | None,
+    before: list[dict[str, Any]] | None,
+    after: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Mark each graph problem whose score the teacher changed by hand
+    as `overridden`: her number stands, and its unclear items stop
+    waiting on her. A save that keeps the score (feedback, or
+    confirming the AI's grade) changes nothing. Returns the new value."""
+    if not graph_checks:
+        return graph_checks
+    old = {e["problem_id"]: e.get("percent") for e in before or []}
+    new = {e["problem_id"]: e.get("percent") for e in after}
+    out = dict(graph_checks)
+    for pid, stored in graph_checks.items():
+        a, b = old.get(pid), new.get(pid)
+        if stored.get("overridden") or a is None:
+            continue
+        if b is None or abs(float(a) - float(b)) > 1e-6:
+            out[pid] = {**stored, "overridden": True}
+    return out

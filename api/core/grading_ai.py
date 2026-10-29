@@ -12,6 +12,7 @@ and separable from the extraction step.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 import uuid
@@ -1178,6 +1179,29 @@ def _build_breakdown(
     return breakdown, ai_score
 
 
+async def _graph_parts(
+    db: AsyncSession, problems: list[dict[str, Any]], rules: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """{bank item id: GraphPart} for the problems graded in two parts."""
+    from api.core.graph_grading import graph_part
+    from api.models.question_bank import QuestionBankItem
+
+    ids = [uuid.UUID(p["bank_item_id"]) for p in problems if p.get("requires_drawing")]
+    if not ids:
+        return {}
+    items = {
+        str(i.id): i
+        for i in (await db.execute(select(QuestionBankItem).where(QuestionBankItem.id.in_(ids)))).scalars()
+    }
+    parts = {}
+    for p in problems:
+        item = items.get(p["bank_item_id"])
+        part = graph_part(item, p.get("points") or 0, rules) if item else None
+        if part:
+            parts[p["bank_item_id"]] = part
+    return parts
+
+
 async def run_ai_grading_for_submission(
     submission_id: uuid.UUID,
     extraction: dict[str, Any],
@@ -1254,12 +1278,36 @@ async def run_ai_grading_for_submission(
     )).scalar_one_or_none()
     rubric = effective_rubric(course_rubric, assignment.rubric)
 
+    # A graph problem with a checklist is graded in two parts: its
+    # drawing against the checklist, alongside the grader, which grades
+    # the written work alone (`graph_grading`).
+    parts = await _graph_parts(db, problems, list((rubric or {}).get("rules") or []))
+    for p in problems:
+        if p["bank_item_id"] in parts:
+            p["graph_part"] = parts[p["bank_item_id"]]
+    # A regrade keeps a drawing check made against the same checklist and
+    # points: the drawing hasn't changed, so neither has its check.
+    from api.core.graph_grading import ProblemGraphCheck, apply_graph_parts, check_graphs, split_graph_fields
+
+    stored_checks = (await db.execute(
+        select(SubmissionGrade.graph_checks).where(SubmissionGrade.submission_id == submission_id)
+    )).scalar_one_or_none() or {}
+    checks: dict[str, ProblemGraphCheck | None] = {
+        pid: ProblemGraphCheck.from_stored(stored_checks[pid])
+        for pid, part in parts.items()
+        if (stored_checks.get(pid) or {}).get("checklist_key") == part.key
+    }
+    drawing_checks = asyncio.ensure_future(check_graphs(
+        extraction, sub.files or [], [p for p in problems if p["bank_item_id"] in parts.keys() - checks.keys()],
+        user_id=user_id, submission_id=str(submission_id),
+    ))
     try:
         result = await grade_submission_with_ai(
             extraction, problems, rubric,
             user_id=user_id, submission_id=str(submission_id),
         )
     except OutputTruncatedError:
+        drawing_checks.cancel()
         logger.warning(
             "AI grading truncated for submission %s (%d problems); "
             "leaving it for the teacher to grade by hand",
@@ -1267,6 +1315,11 @@ async def run_ai_grading_for_submission(
         )
         await record_grading_skip(submission_id, db, GRADING_STATUS_SKIPPED_TOO_LONG)
         return GRADING_STATUS_SKIPPED_TOO_LONG
+    except BaseException:
+        drawing_checks.cancel()
+        raise
+    # Never raises: a check that fails is every item unclear.
+    checks.update(await drawing_checks)
     grades = result.get("grades", [])
     if not grades:
         return None
@@ -1292,8 +1345,21 @@ async def run_ai_grading_for_submission(
         grades, pos_to_bid, submission_id=str(submission_id),
         pos_to_step_count=pos_to_step_count,
         rules={r["id"]: r.get("points") for r in (rubric or {}).get("rules", [])},
-        points=points,
+        # A graph problem's grader grade is the work part's.
+        points={bid: parts[bid].work_points if bid in parts else n for bid, n in points.items()},
     )
+    graph_checks: dict[str, Any] | None = None
+    if parts:
+        combined, ai_score = apply_graph_parts(breakdown, parts, checks, points)
+        breakdown, graph_checks = split_graph_fields(combined, parts, checks)
+        # The AI's call on a graph problem is the whole problem's grade,
+        # not the grader's grade of the work alone (kept as work_percent).
+        by_bid = {e["problem_id"]: e for e in breakdown}
+        for g in grades:
+            e = by_bid.get(pos_to_bid.get(g.get("problem_position")) or "")
+            if e and e["problem_id"] in parts:
+                g["work_percent"] = g.get("percent")
+                g["percent"], g["score_status"] = e["percent"], e["score_status"]
     # The per-problem percents ai_score weighs, so a later points change
     # can re-weigh the AI's call without regrading (homework_points).
     result["problem_percents"] = {e["problem_id"]: e["percent"] for e in breakdown}
@@ -1333,6 +1399,7 @@ async def run_ai_grading_for_submission(
     # Her grade wins; the AI read is still kept on `ai_breakdown`.
     if force or (grade.reviewed_by is None and grade.final_score is None):
         grade.breakdown = breakdown
+        grade.graph_checks = graph_checks
         grade.final_score = ai_score
         grade.graded_at = datetime.now(UTC)
         # A real grade now exists — clear any stale skip marker (e.g. a
