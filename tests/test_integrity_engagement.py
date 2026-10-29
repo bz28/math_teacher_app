@@ -233,3 +233,90 @@ async def test_a_wrapping_up_label_lets_the_agent_finish_in_the_same_turn(
     assert r.status_code == 200, r.text
     assert r.json()["overall_status"] == "complete"
     assert await _engagements(submission_id) == ["answering"]
+
+
+async def _problem_id(submission_id: str) -> str:
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        return str((await s.execute(
+            select(IntegrityCheckProblem.id)
+            .where(IntegrityCheckProblem.integrity_check_submission_id == check.id)
+        )).scalars().first())
+
+
+async def test_the_stuck_tap_neither_counts_nor_breaks_a_streak(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """The stuck tap is the honest exit: even if the agent labels it
+    not_trying, it isn't one of the two that nudge, and it doesn't reset
+    the streak around it either."""
+    submission_id = await _start(client, world)
+
+    set_agent_script([_reply("Let's go one step at a time.", "not_trying", "s")])
+    r = await _post_turn(client, world, submission_id, {"stuck": True})
+    assert r.status_code == 200, r.text
+    set_agent_script([_reply("What did you do first?", "not_trying", "a")])
+    r = await _post_turn(client, world, submission_id, {"message": "idk lol"})
+    assert r.json()["nudge_own_words"] is False  # tap + one idk: no nudge
+
+    set_agent_script([_reply("Just the first move?", "not_trying", "b")])
+    r = await _post_turn(client, world, submission_id, {"message": "dunno really"})
+    assert r.json()["nudge_own_words"] is True
+
+    set_agent_script([_reply("Okay.", "not_trying", "c")])
+    r = await _post_turn(client, world, submission_id, {"message": "no idea man"})
+    r = await client.get(
+        f"/v1/teacher/integrity/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    # Three typed non-answers (the tap left out) → the teacher note.
+    assert r.json()["didnt_engage"] is True
+
+
+async def test_two_typed_idk_around_a_stuck_tap_keep_the_teacher_note_off(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    submission_id = await _start(client, world)
+    bodies = ({"message": "idk lol"}, {"stuck": True}, {"message": "dunno really"})
+    for i, body in enumerate(bodies):
+        set_agent_script([_reply("Let's try.", "not_trying", f"x{i}")])
+        r = await _post_turn(client, world, submission_id, body)
+        assert r.status_code == 200, r.text
+    r = await client.get(
+        f"/v1/teacher/integrity/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.json()["didnt_engage"] is False
+
+
+async def test_a_goodbye_without_the_flag_still_finishes_once_verdicts_are_in(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Deterministic done signal: every sampled problem has its verdict, so
+    a label-only goodbye that forgot wrapping_up keeps looping to
+    finish_check instead of leaving the check open."""
+    submission_id = await _start(client, world)
+    problem_id = await _problem_id(submission_id)
+    set_agent_script([
+        [make_tool_use("submit_problem_verdict", {
+            "problem_id": problem_id,
+            "rubric": {"paraphrase_originality": "high", "causal_fluency": "high"},
+            "reasoning": "Explained the inverse operation in own words.",
+        }, use_id="v")],
+        _reply("Thanks — that's all I needed!", "answering", "l"),
+        [make_tool_use("finish_check", {
+            "disposition": "pass",
+            "headline": "Explained the steps clearly",
+            "summary": "Explained why each step works.",
+            "inline_variant_result": "not_applicable",
+        }, use_id="f")],
+    ])
+    r = await _post_turn(
+        client, world, submission_id,
+        {"message": "I subtracted 3 because it undoes the +3"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["overall_status"] == "complete"

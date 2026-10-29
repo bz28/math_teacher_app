@@ -289,6 +289,16 @@ def _is_stuck_turn(turn: IntegrityConversationTurn) -> bool:
     return turn.role == "student" and turn.content in STUCK_PHRASES
 
 
+def _streak_engagements(turns: list[IntegrityConversationTurn]) -> list[str | None]:
+    """Student-reply labels in order, for the not_trying streaks. The stuck
+    tap is the honest exit, so it's left out entirely: it neither counts
+    toward a streak nor breaks one, whatever the agent labelled it."""
+    return [
+        t.engagement for t in turns
+        if t.role == "student" and not _is_stuck_turn(t)
+    ]
+
+
 async def _count_stuck_taps(check_id: uuid.UUID, db: AsyncSession) -> int:
     count = (await db.execute(
         select(func.count(IntegrityConversationTurn.id)).where(
@@ -538,7 +548,7 @@ async def _build_state_response(
         problems=_problem_summaries(chat_probed, questions, hw_positions),
         transcript=_student_facing_transcript(turns),
         nudge_own_words=trailing_not_trying_streak(
-            [t.engagement for t in turns if t.role == "student"]
+            _streak_engagements(turns)
         ) >= NUDGE_NOT_TRYING_STREAK,
         stuck_tap_used=(
             sum(1 for t in turns if _is_stuck_turn(t)) >= MAX_STUCK_TAPS
@@ -949,7 +959,7 @@ async def teacher_get_integrity_detail(
         problems=problem_rows,
         transcript=transcript_rows,
         didnt_engage=longest_not_trying_streak(
-            [t.engagement for t in turns if t.role == "student"]
+            _streak_engagements(turns)
         ) >= DISENGAGED_NOT_TRYING_STREAK,
     )
 

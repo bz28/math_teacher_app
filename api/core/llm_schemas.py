@@ -1417,10 +1417,11 @@ INTEGRITY_LABEL_REPLY_SCHEMA: ToolSchema = {
                 "enum": list(INTEGRITY_ENGAGEMENT_VALUES),
                 "description": (
                     "answering = any real attempt, even a wrong or partial "
-                    "one or a guess. honest_confusion = a real question or "
-                    "a specific 'I don't get X'. not_trying = 'idk', 'I "
-                    "don't know how to explain', filler, or evasion with "
-                    "no attempt at all."
+                    "one or a guess. honest_confusion = a specific question "
+                    "or a named confusion, and the student's 'I'm stuck' "
+                    "button message. not_trying = a bare 'idk' / 'I don't "
+                    "know how to explain', filler, or evasion with no "
+                    "attempt at all."
                 ),
             },
             "wrapping_up": {
