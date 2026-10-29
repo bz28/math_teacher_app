@@ -177,7 +177,7 @@ async def test_inbox_flagged_count_matches_roster_filter(
 MIGRATION = (
     Path(__file__).resolve().parents[1]
     / "api" / "alembic" / "versions"
-    / "cw1000092_add_integrity_incomplete_reason.py"
+    / "cz1000095_add_integrity_incomplete_reason.py"
 )
 
 
