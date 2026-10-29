@@ -22,6 +22,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from api.core.checklist_points import MAX_CHECKLIST_ITEM_CHARS, MAX_CHECKLIST_ITEMS, fit_checklist
 from api.core.image_utils import crop_region_for_vision, preprocess_image_for_vision, to_content_block
 from api.core.llm_client import (
     MODEL_OPUS,
@@ -50,20 +51,27 @@ _WIDE = (0.6, 0.22)
 _CHECKLIST_SYSTEM = """\
 You write the checklist a math teacher uses to grade a student's hand-drawn graph.
 
-You get one graphing question, its answer key, the points the graph is worth, \
+You get one graphing question, its answer key, what the whole problem is worth, \
 and the class's grading rules. List 3 to 6 features a correct graph must show.
 
 Each item:
-- Is one feature that a person looking ONLY at the drawing can mark yes or no: \
-a line or curve at a place, a crossing, a shape, a label, a scale.
+- Is ONE feature that a person looking only at the drawing can mark yes or no: \
+one line or curve at one place, one crossing, one label. Never two in one item: \
+not "Both asymptotes labeled", but one item per asymptote.
+- Says what is drawn, not what it stands for: "Dashed horizontal line at y = 1", \
+not "Line at y = 1 representing the midline".
 - Uses the exact values from the answer key ("Vertical asymptote drawn at x = 2", \
 "Crosses the y-axis at (0, 0.5)").
 - Never says "correct", "accurate" or "properly" without saying what that means.
-- Covers only what the question asks for. Ask for labels only if the question \
-says to label, or a class rule requires them.
 
-Points: whole numbers that add up to the points given, weighted by how much \
-each feature matters to the graph.
+Cover every part the question asks the student to draw, including any guide curve, \
+asymptote or reference line it names (a cosecant graphed from its sine curve needs \
+the sine curve). Ask for nothing more: labels only if the question says to label, \
+or a class rule requires them.
+
+Points: whole numbers, weighted by how much each feature matters. Together they \
+are the graph's share of the problem: leave at least 1 point for the written work \
+and the answer.
 
 Class rules: when an item is exactly what a class rule asks for, set its rule_id \
 to that rule's bracketed id and use the rule's points. Otherwise rule_id is null.
@@ -115,23 +123,42 @@ def _format_rules(class_rules: list[dict[str, Any]] | None) -> str:
     return "\n".join(lines) or "(none)"
 
 
+def _whole_points(value: Any) -> int:
+    """The model's points for an item, defensively: anything that isn't a
+    positive whole number is 1, and `fit_checklist` re-sizes the total."""
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return 1
+    return n if n >= 1 else 1
+
+
 async def write_graph_checklist(
     question: str,
     final_answer: str,
-    graph_points: int,
+    problem_points: int,
     *,
     class_rules: list[dict[str, Any]] | None = None,
     user_id: str | None = None,
 ) -> list[ChecklistItem]:
-    """The features a correct graph for `question` must show, worth
-    `graph_points` in total. Reproducible (temperature 0): the same
-    question and key give the same checklist."""
-    rule_ids = {r["id"] for r in class_rules or []}
+    """The features a correct graph for `question` must show, for a
+    problem worth `problem_points` in all. The model suggests the split:
+    the items add up to the graph's share, and at least 1 point is left
+    for the work and the answer. Reproducible (temperature 0): the same
+    question and key give the same checklist.
+
+    What comes back is held to the rules in code, not just the prompt:
+    at most `MAX_CHECKLIST_ITEMS` items, each with text; a rule-linked
+    item takes its rule's points; and the sum is trimmed below
+    `problem_points` (`fit_checklist`). Empty when the problem has no
+    room for a graph part (under 2 points)."""
+    if problem_points < 2:
+        return []
     out = await call_claude_json(
         _CHECKLIST_SYSTEM,
         (
             f"Question:\n{question}\n\nAnswer key:\n{final_answer}\n\n"
-            f"The graph is worth {graph_points} points.\n\n"
+            f"The whole problem is worth {problem_points} points.\n\n"
             f"Class rules:\n{_format_rules(class_rules)}"
         ),
         LLMMode.GRAPH_CHECKLIST,
@@ -148,11 +175,11 @@ async def write_graph_checklist(
             continue
         rule_id = raw.get("rule_id")
         items.append(ChecklistItem(
-            text=str(raw["text"]).strip(),
-            points=max(1, int(raw.get("points") or 1)),
-            rule_id=rule_id if rule_id in rule_ids else None,
+            text=str(raw["text"]).strip()[:MAX_CHECKLIST_ITEM_CHARS],
+            points=_whole_points(raw.get("points")),
+            rule_id=rule_id if isinstance(rule_id, str) else None,
         ))
-    return items
+    return fit_checklist(items[:MAX_CHECKLIST_ITEMS], problem_points, problem_points, class_rules)
 
 
 def _parse_check(out: dict[str, Any], count: int) -> tuple[str, list[ItemResult]]:
