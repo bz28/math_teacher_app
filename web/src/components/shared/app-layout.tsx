@@ -520,7 +520,8 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <main id="main-content" className="flex-1 px-6 py-8">
+        {/* pb-24 on a phone: room for the fixed bottom nav (h-16), as the student layout leaves. */}
+        <main id="main-content" className="flex-1 px-6 py-8 pb-24 md:pb-8">
           {children}
         </main>
 

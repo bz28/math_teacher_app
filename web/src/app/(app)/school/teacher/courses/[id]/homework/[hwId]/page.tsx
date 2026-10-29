@@ -2269,8 +2269,9 @@ function ActionBar({
 }) {
   return (
     <div
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-border-light bg-surface/95 px-4 py-3 shadow-[0_-2px_8px_rgba(0,0,0,0.04)] backdrop-blur"
-      style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+      // On a phone it sits on the teacher bottom nav (h-16), which would
+      // otherwise cover it; on desktop it's flush and clears the safe area.
+      className="fixed inset-x-0 bottom-16 z-40 border-t border-border-light bg-surface/95 px-4 pt-3 pb-3 shadow-[0_-2px_8px_rgba(0,0,0,0.04)] backdrop-blur md:bottom-0 md:pb-[max(0.75rem,env(safe-area-inset-bottom))]"
     >
       <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-x-3 gap-y-2">
         {confirming ? (
