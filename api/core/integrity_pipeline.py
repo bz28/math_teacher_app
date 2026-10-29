@@ -2021,8 +2021,8 @@ async def _force_finalize_abandoned(
     if answered:
         summary = (
             "The student started the understanding check and left before "
-            "it finished. There's no verdict either way — the partial "
-            "conversation is below."
+            "it finished. There's no verdict either way; the partial "
+            "conversation is on the record."
         )
         reason = INCOMPLETE_LEFT_PARTWAY
     else:

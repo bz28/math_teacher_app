@@ -6323,7 +6323,7 @@ const VERDICT_LEGEND_ITEMS: { key: IntegrityBannerKey; description: string }[] =
   { key: "tutor_pivot", description: "Student got stuck and the AI walked them through it. Their submitted work doesn't reflect what they could do alone." },
   { key: "flag_for_review", description: "Submitted work is correct but the student couldn't explain it. Most likely cheating signal — open the conversation to decide." },
   { key: "needs_review", description: "Check ran but couldn't reach a verdict (e.g. ran out of turns). Manual review recommended." },
-  { key: "unfinished", description: "The student didn't finish the check — never confirmed their reading, never answered, or left partway. Not a flag: there's just no understanding signal, and the grade is based on their written work alone." },
+  { key: "unfinished", description: "The student didn't finish the check — never confirmed their reading, never answered, or left partway. Not a flag — there's just no understanding signal; grade their written work as usual." },
   { key: "skipped_unreadable", description: "Vision couldn't read the student's submission. Grade manually, or have them re-submit." },
   { key: "extracting", description: "Vision is still parsing the student's work. The verdict will arrive shortly." },
   { key: "in_progress", description: "Student is actively chatting with the AI. Verdict pending." },
@@ -6703,7 +6703,7 @@ function IntegrityBanner({
     key === "unfinished" && unfinished
       ? UNFINISHED_CHECK_COPY[unfinished].body +
         (unfinished === "left_partway" && answered > 0
-          ? ` They answered ${answered} ${answered === 1 ? "time" : "times"} — the partial conversation is below.`
+          ? ` They answered ${answered} ${answered === 1 ? "time" : "times"} before leaving — open the conversation to see how far they got.`
           : "")
       : summary;
   // Hide "View conversation" until at least one student turn exists.
@@ -6723,7 +6723,10 @@ function IntegrityBanner({
           aria-live="polite"
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="flex min-w-0 flex-1 items-start gap-3">
+            {/* basis: on a phone the text keeps a readable width and the
+             * "View conversation" button wraps below it instead of
+             * squeezing the copy into a one-word column. */}
+            <div className="flex min-w-0 flex-1 basis-[16rem] items-start gap-3">
               <span
                 className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-sm font-bold ${style.iconBg}`}
                 aria-hidden

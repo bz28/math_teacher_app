@@ -160,8 +160,8 @@ export const UNFINISHED_CHECK_COPY: Record<
 };
 
 export const UNFINISHED_CHECK_FOOTNOTE =
-  "Not a flag — there's just no understanding signal for this one. The " +
-  "grade is based on their written work alone.";
+  "Not a flag — there's just no understanding signal for this one. " +
+  "Grade their written work as usual.";
 
 export const UNFINISHED_CHECK_TITLE = "Didn't finish the understanding check";
 
