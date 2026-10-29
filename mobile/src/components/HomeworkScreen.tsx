@@ -24,6 +24,7 @@ import {
 import { errorMessage } from "../utils/errorMessage";
 import { orientationCheckCopy } from "../utils/orientationCheckCopy";
 import {
+  boundedPageCheck,
   onlySomePagesSideways,
   pdfTooSmallError,
   sidewaysHint,
@@ -132,24 +133,25 @@ export function HomeworkScreen({ assignmentId, onBack, onSubmitted }: Props) {
    *  turn-in would refuse it. Best-effort: if the check fails, nothing is
    *  held, and turn-in still enforces the size floor. */
   const checkPages = async (id: string, base64: string, kind: StagedFile["kind"]) => {
-    let update: Partial<StagedFile> = {};
-    try {
-      const res = await checkPageOrientation(
-        kind === "pdf" ? base64 : await orientationCheckCopy(base64),
-      );
-      if (res.too_small_pages.length > 0) {
-        setFiles((prev) => prev.filter((f) => f.id !== id));
-        setSubmitError(pdfTooSmallError(res.too_small_pages));
-        return;
-      }
-      update = {
-        pageCount: kind === "pdf" ? res.page_count : 1,
-        sidewaysPages: res.sideways_pages,
-        preview: res.preview ?? undefined,
-      };
-    } catch {
-      // Nothing to hold on. The tip and the rotate button still work.
+    // Null on failure, timeout (CHECK_HOLD_MS) or a malformed answer (an
+    // older API mid-deploy): nothing is held. The tip and the rotate
+    // button still work.
+    const res = await boundedPageCheck(async () =>
+      checkPageOrientation(kind === "pdf" ? base64 : await orientationCheckCopy(base64)),
+    );
+    if (res && res.tooSmallPages.length > 0) {
+      setFiles((prev) => prev.filter((f) => f.id !== id));
+      setSubmitError(pdfTooSmallError(res.tooSmallPages));
+      return;
     }
+    // Built whole, then applied in one step — never half an answer.
+    const update: Partial<StagedFile> = res
+      ? {
+          pageCount: kind === "pdf" ? res.pageCount : 1,
+          sidewaysPages: res.sidewaysPages,
+          preview: res.preview ?? undefined,
+        }
+      : {};
     setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, ...update, checking: false } : f)));
   };
 

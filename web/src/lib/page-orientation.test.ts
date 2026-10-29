@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  boundedPageCheck,
+  CHECK_HOLD_MS,
   onlySomePagesSideways,
+  parsePageCheck,
   pdfTooSmallError,
   sidewaysHint,
   sidewaysPrompt,
@@ -59,4 +62,31 @@ test("hints and size errors name the pages", () => {
   assert.equal(sidewaysHint([2]), "Page 2 is sideways. Fix it before you turn it in.");
   assert.equal(sidewaysHint([1, 2, 4]), "Pages 1, 2 and 4 are sideways. Fix them before you turn it in.");
   assert.match(pdfTooSmallError([3]), /^Page 3 of this PDF is too small to read\. Take it again closer up/);
+});
+
+test("an older API's answer (no arrays) holds nothing and never throws", () => {
+  // Partial deploy: new web, old API. It answers photos with only a boolean.
+  assert.deepEqual(parsePageCheck({ sideways: false }), {
+    pageCount: 1, sidewaysPages: [], tooSmallPages: [], preview: null,
+  });
+  assert.deepEqual(parsePageCheck({ sideways: true }).sidewaysPages, [1]);
+  for (const junk of [null, undefined, "x", 3, [], { sideways_pages: "2", too_small_pages: null }]) {
+    const r = parsePageCheck(junk);
+    assert.deepEqual(r.sidewaysPages, []);
+    assert.deepEqual(r.tooSmallPages, []);
+  }
+  assert.deepEqual(parsePageCheck({ sideways_pages: [2, -1, 1.5, "3"] }).sidewaysPages, [2]);
+});
+
+test("a check that runs long, fails, or answers junk holds nothing", async () => {
+  assert.equal(await boundedPageCheck(() => new Promise(() => {}), 10), null);
+  assert.equal(await boundedPageCheck(() => Promise.reject(new Error("offline")), 10), null);
+  assert.deepEqual(
+    await boundedPageCheck(
+      () => Promise.resolve({ page_count: 3, sideways_pages: [2], too_small_pages: [], preview: "P" }),
+      1000,
+    ),
+    { pageCount: 3, sidewaysPages: [2], tooSmallPages: [], preview: "P" },
+  );
+  assert.equal(CHECK_HOLD_MS, 20_000);
 });

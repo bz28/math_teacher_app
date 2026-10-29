@@ -23,6 +23,7 @@ import {
   submitErrorMessage,
 } from "@/lib/submit-errors";
 import {
+  boundedPageCheck,
   onlySomePagesSideways,
   pdfTooSmallError,
   sidewaysHint,
@@ -307,23 +308,21 @@ export function SubmissionPanel({
    *  too small to read. Best-effort: if the check fails, nothing is
    *  held — turn-in still enforces the size floor. */
   async function checkPages(id: string, check: Blob | string) {
-    let update: Partial<StagedFile> = {};
-    try {
-      const pdf = typeof check === "string";
-      const res = await schoolStudent.pageOrientation(
-        pdf ? check : await orientationCheckCopy(check),
-      );
-      update = {
-        pageCount: pdf ? res.page_count : 1,
-        sidewaysPages: res.sideways_pages,
-      };
-      if (res.preview) update.previewUrl = `data:image/jpeg;base64,${res.preview}`;
-      if (res.too_small_pages.length > 0) {
-        update.error = pdfTooSmallError(res.too_small_pages);
-      }
-    } catch {
-      // Nothing to hold on. The tip and the rotate button still work.
-    }
+    const pdf = typeof check === "string";
+    // Null on failure, timeout (CHECK_HOLD_MS) or a malformed answer:
+    // nothing is held. The tip and the rotate button still work.
+    const res = await boundedPageCheck(async () =>
+      schoolStudent.pageOrientation(pdf ? check : await orientationCheckCopy(check)),
+    );
+    // Built whole, then applied in one step — never half an answer.
+    const update: Partial<StagedFile> = res
+      ? {
+          pageCount: pdf ? res.pageCount : 1,
+          sidewaysPages: res.sidewaysPages,
+          ...(res.preview ? { previewUrl: `data:image/jpeg;base64,${res.preview}` } : {}),
+          ...(res.tooSmallPages.length > 0 ? { error: pdfTooSmallError(res.tooSmallPages) } : {}),
+        }
+      : {};
     setStagedFiles((prev) =>
       prev.map((f) => (f.id === id ? { ...f, ...update, checking: false } : f)),
     );

@@ -177,6 +177,22 @@ describe("HomeworkScreen sideways pages", () => {
     expect(screen.getByText("Turn it in")).toBeTruthy();
   });
 
+  it("reads an older API's answer without crashing (partial deploy)", async () => {
+    // The old endpoint answers a photo with only `sideways`.
+    mockedApi.checkPageOrientation.mockResolvedValue({ sideways: true } as never);
+    await addPhoto();
+    expect(await waitForText(/This page is sideways/)).toBeTruthy();
+  });
+
+  it("holds nothing on a malformed answer", async () => {
+    mockedApi.checkPageOrientation.mockResolvedValue({ sideways_pages: "1" } as never);
+    await addPhoto();
+    await waitFor(() => expect(screen.queryByText("Checking your pages…")).toBeNull());
+    expect(screen.queryByText(/is sideways/)).toBeNull();
+    await fireEvent.press(reviewButton());
+    expect(screen.getByText("Turn it in")).toBeTruthy();
+  });
+
   describe("PDFs", () => {
     beforeEach(() => {
       jest.spyOn(Alert, "alert").mockImplementation((_t, _m, buttons) => {
