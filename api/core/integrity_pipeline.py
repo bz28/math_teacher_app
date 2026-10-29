@@ -2121,16 +2121,68 @@ async def finalize_if_abandoned(
 
     If `check` is still in awaiting_student / in_progress and its last
     activity is older than ABANDONED_INTERVIEW_DEADLINE, force-finalize it
-    as abandoned and return True. Otherwise no-op → False. Mutates `check`
-    in place; the caller is responsible for committing.
+    as abandoned and return True. Otherwise no-op → False. Refreshes and
+    mutates `check` in place; the caller is responsible for committing.
+
+    The in-memory row is only a hint: the decision is re-made on the
+    locked, fresh row (see _close_if_abandoned), so a reply that reached
+    a verdict after `check` was read is never overwritten.
 
     Last activity is read off `check.updated_at` (process_student_turn
-    stamps it on every student turn) with a `created_at` fallback for the
-    awaiting_student case where no turn ever landed.
+    stamps it on every student turn, a student viewing the open chat
+    stamps it too — touch_open_check) with a `created_at` fallback for
+    the awaiting_student case where no turn ever landed.
     """
     if not _is_abandoned(check, datetime.now(UTC)):
         return False
+    return await _close_if_abandoned(check.id, db)
+
+
+async def _lock_check(
+    check_id: uuid.UUID, db: AsyncSession,
+) -> IntegrityCheckSubmission | None:
+    """Row-lock a check for this transaction and refresh it from the
+    database, or None when another transaction holds it. SKIP LOCKED: the
+    only long holder is a student's reply in flight, and a check someone
+    is replying to is live, so the caller just leaves it alone."""
+    return (await db.execute(
+        select(IntegrityCheckSubmission)
+        .where(IntegrityCheckSubmission.id == check_id)
+        .with_for_update(skip_locked=True)
+        .execution_options(populate_existing=True)
+    )).scalar_one_or_none()
+
+
+async def _close_if_abandoned(check_id: uuid.UUID, db: AsyncSession) -> bool:
+    """The one abandoned close, shared by the sweep and every on-read
+    path: lock the row, re-check it is still open, verdict-free and past
+    the deadline on the fresh values, then close it. Atomic, so a stale
+    read can't undo a verdict a reply just committed."""
+    check = await _lock_check(check_id, db)
+    if (
+        check is None
+        or check.disposition is not None
+        or not _is_abandoned(check, datetime.now(UTC))
+    ):
+        return False
     await _force_finalize_abandoned(check, db)
+    return True
+
+
+async def touch_open_check(
+    check: IntegrityCheckSubmission, db: AsyncSession,
+) -> bool:
+    """A student viewing their open check counts as activity: restart its
+    abandoned clock, so opening the chat at 11h59m doesn't lose the answer
+    they're about to type. No-op (False) for a closed or already-abandoned
+    check, and when a reply in flight holds the row — that reply stamps
+    the clock itself. The caller commits."""
+    if check.status not in OPEN_STATUSES or _is_abandoned(check, datetime.now(UTC)):
+        return False
+    locked = await _lock_check(check.id, db)
+    if locked is None or locked.status not in OPEN_STATUSES:
+        return False
+    locked.updated_at = datetime.now(UTC)
     return True
 
 
@@ -2140,29 +2192,35 @@ async def finalize_abandoned_checks(
     """Close every check stalled past the deadline. Returns how many.
 
     The scheduled half of abandoned-check finalization (see the comment
-    on ABANDONED_INTERVIEW_DEADLINE). Rows are claimed with
-    `FOR UPDATE SKIP LOCKED`, so a sweep never fights a concurrent sweep
-    or a request that already holds a check, and it commits once at the
-    end — one pass is one transaction.
+    on ABANDONED_INTERVIEW_DEADLINE). Each candidate goes through the
+    same locked close as the on-read paths (_close_if_abandoned, SKIP
+    LOCKED), inside its own savepoint: a row that fails is logged and
+    skipped, so one bad row can't roll back the batch on every pass. One
+    commit at the end.
     """
     cutoff = datetime.now(UTC) - ABANDONED_INTERVIEW_DEADLINE
-    stale = (await db.execute(
-        select(IntegrityCheckSubmission)
+    candidate_ids = (await db.execute(
+        select(IntegrityCheckSubmission.id)
         .where(
             IntegrityCheckSubmission.status.in_(OPEN_STATUSES),
             IntegrityCheckSubmission.updated_at < cutoff,
         )
         .order_by(IntegrityCheckSubmission.updated_at.asc())
         .limit(limit)
-        .with_for_update(skip_locked=True)
     )).scalars().all()
-    for check in stale:
-        await _force_finalize_abandoned(check, db)
+    closed = 0
+    for check_id in candidate_ids:
+        try:
+            async with db.begin_nested():
+                if await _close_if_abandoned(check_id, db):
+                    closed += 1
+        except Exception:
+            logger.exception("abandoned-check sweep skipped check %s", check_id)
     healed = await record_missing_incomplete_reasons(db)
     if healed:
         logger.info("recorded incomplete_reason on %d closed checks", healed)
     await db.commit()
-    return len(stale)
+    return closed
 
 
 # What the release before incomplete_reason wrote when it force-closed a

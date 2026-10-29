@@ -950,10 +950,30 @@ async def test_every_student_turn_restarts_the_abandoned_clock(
     """A student still chatting is never closed as abandoned. The clock
     runs from their latest reply, not their first — turns after the
     first change nothing else on the check row."""
+    from datetime import UTC, datetime, timedelta
+
+    from api.core.integrity_pipeline import ABANDONED_INTERVIEW_DEADLINE
+
     set_agent_script([[make_text("Opener.")]])
     r = await _submit(client, world)
     submission_id = r.json()["submission_id"]
-    for message in ("I factored it into two brackets.", "Then I set each one to zero."):
+    almost = ABANDONED_INTERVIEW_DEADLINE - timedelta(minutes=1)
+    for message in (
+        "I factored it into two brackets.",
+        "Then I set each one to zero.",
+        "Because a product is zero only if a factor is.",
+    ):
+        # A minute from the deadline before each reply; the reply itself
+        # must restart the clock, or the next one would be refused.
+        async with get_session_factory()() as s:
+            await s.execute(
+                text(
+                    "UPDATE integrity_check_submissions "
+                    "SET updated_at = :ts WHERE submission_id = :sid"
+                ),
+                {"ts": datetime.now(UTC) - almost, "sid": submission_id},
+            )
+            await s.commit()
         set_agent_script([[make_text("And why does that work?")]])
         r = await client.post(
             f"/v1/school/student/integrity/submissions/{submission_id}/turn",
@@ -961,15 +981,8 @@ async def test_every_student_turn_restarts_the_abandoned_clock(
             json={"message": message},
         )
         assert r.status_code == 200, r.text
-        # Stale before each reply; the reply itself must make it fresh.
-        await _backdate_check(submission_id)
-    set_agent_script([[make_text("And why does that work?")]])
-    r = await client.post(
-        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
-        headers=_auth(world["student_token"]),
-        json={"message": "Because a product is zero only if a factor is."},
-    )
-    assert r.status_code == 200, r.text
+        check = await _check_row(submission_id)
+        assert datetime.now(UTC) - check.updated_at < timedelta(minutes=1)
 
     r = await client.get(
         f"/v1/teacher/integrity/submissions/{submission_id}",
@@ -1061,6 +1074,132 @@ async def test_drain_cron_sweeps_abandoned_checks(
     assert check.status == "complete"
     assert check.disposition is None
     assert check.incomplete_reason == "not_started"
+
+
+async def test_a_stale_read_never_overwrites_a_verdict(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """A reader saw the check open and past its deadline, but a reply
+    finished it with a verdict before the close ran. The close re-decides
+    on the locked, fresh row and leaves the verdict alone."""
+    from datetime import UTC, datetime
+
+    from api.core.integrity_pipeline import finalize_if_abandoned
+
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+    await _backdate_check(submission_id)
+
+    async with get_session_factory()() as reader:
+        stale = (await reader.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        assert stale.status == "awaiting_student"
+
+        # Meanwhile the reply lands and finish_check commits a verdict.
+        async with get_session_factory()() as reply:
+            await reply.execute(
+                update(IntegrityCheckSubmission)
+                .where(IntegrityCheckSubmission.submission_id == submission_id)
+                .values(
+                    status="complete", disposition="pass", headline="Explained it well",
+                    updated_at=datetime.now(UTC),
+                )
+            )
+            await reply.commit()
+
+        assert await finalize_if_abandoned(stale, reader) is False
+        await reader.commit()
+
+    check = await _check_row(submission_id)
+    assert (check.disposition, check.headline) == ("pass", "Explained it well")
+    assert check.incomplete_reason is None
+
+
+async def test_a_close_skips_a_check_a_reply_holds(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """While a reply is being answered it holds the check's row; a close
+    passes over it (SKIP LOCKED) instead of waiting or racing it."""
+    from api.core.integrity_pipeline import finalize_if_abandoned
+
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+    await _backdate_check(submission_id)
+
+    async with get_session_factory()() as reply:
+        await reply.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+            .with_for_update()
+        )
+        async with get_session_factory()() as reader:
+            check = (await reader.execute(
+                select(IntegrityCheckSubmission)
+                .where(IntegrityCheckSubmission.submission_id == submission_id)
+            )).scalar_one()
+            assert await finalize_if_abandoned(check, reader) is False
+            await reader.rollback()
+        await reply.rollback()
+
+    assert (await _check_row(submission_id)).status == "awaiting_student"
+
+
+async def test_a_reply_never_reopens_a_closed_check(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """A reply to a check past its deadline that nothing has closed yet
+    closes it and is refused — the student's late message doesn't bring
+    it back to life."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+    await _backdate_check(submission_id)
+
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+        headers=_auth(world["student_token"]),
+        json={"message": "I factored it into two brackets."},
+    )
+    assert r.status_code == 409
+    assert r.json()["detail"] == "This check has closed."
+    check = await _check_row(submission_id)
+    assert (check.status, check.incomplete_reason) == ("complete", "not_started")
+
+
+async def test_viewing_the_open_chat_restarts_the_clock(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Opening the chat a minute before the deadline counts as activity,
+    so the answer the student is about to type isn't lost."""
+    from datetime import UTC, datetime, timedelta
+
+    from api.core.integrity_pipeline import ABANDONED_INTERVIEW_DEADLINE
+
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+    almost = datetime.now(UTC) - ABANDONED_INTERVIEW_DEADLINE + timedelta(minutes=1)
+    async with get_session_factory()() as s:
+        await s.execute(
+            text(
+                "UPDATE integrity_check_submissions "
+                "SET updated_at = :ts WHERE submission_id = :sid"
+            ),
+            {"ts": almost, "sid": submission_id},
+        )
+        await s.commit()
+
+    r = await client.get(
+        f"/v1/school/student/integrity/submissions/{submission_id}",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.json()["overall_status"] == "awaiting_student"
+    check = await _check_row(submission_id)
+    assert datetime.now(UTC) - check.updated_at < timedelta(minutes=1)
 
 
 async def test_turn_409_when_complete(

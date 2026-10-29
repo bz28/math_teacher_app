@@ -31,6 +31,7 @@ from api.core.integrity_pipeline import (
     count_student_turns,
     finalize_if_abandoned,
     process_student_turn,
+    touch_open_check,
 )
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user_full, require_teacher
@@ -492,8 +493,12 @@ async def get_my_integrity_state(
 
     # A student coming back after the deadline finds the check closed,
     # not a chat that will close under them mid-reply — and their own
-    # visit is enough to give the teacher an accurate marker.
-    if await finalize_if_abandoned(check, db):
+    # visit is enough to give the teacher an accurate marker. Inside the
+    # deadline, looking at the open chat counts as activity.
+    if (
+        await finalize_if_abandoned(check, db)
+        or await touch_open_check(check, db)
+    ):
         await db.commit()
 
     problems = await _load_problems(db, check.id)
@@ -501,6 +506,9 @@ async def get_my_integrity_state(
     return await _build_state_response(
         submission_id, check, problems, turns, db, fallback_status="no_check",
     )
+
+
+CHECK_CLOSED = "This check has closed."
 
 
 @router.post("/school/student/integrity/submissions/{submission_id}/turn")
@@ -512,16 +520,26 @@ async def post_student_turn(
 ) -> IntegrityStateResponse:
     """Append a student turn, run the agent loop, return fresh state."""
     await _load_my_submission(db, submission_id, user.id)
-    check = await _load_check_for_submission(db, submission_id)
+    # Locked for the whole turn, and read fresh under the lock: a close
+    # that committed a moment ago is seen here, and nothing can close
+    # the check while this reply is being answered.
+    check = (await db.execute(
+        select(IntegrityCheckSubmission)
+        .where(IntegrityCheckSubmission.submission_id == submission_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )).scalar_one_or_none()
     if check is None:
         raise HTTPException(
             status_code=404, detail="No integrity check for this submission",
         )
 
+    # A reply never reopens a closed check — including one past its
+    # deadline that no sweep or read has closed yet (close it now).
+    if await finalize_if_abandoned(check, db):
+        await db.commit()
     if check.status in (STATUS_COMPLETE, STATUS_SKIPPED_UNREADABLE):
-        raise HTTPException(
-            status_code=409, detail="Integrity check already complete",
-        )
+        raise HTTPException(status_code=409, detail=CHECK_CLOSED)
     if check.status == "extracting":
         raise HTTPException(
             status_code=409, detail="Integrity check is still preparing",
@@ -538,9 +556,7 @@ async def post_student_turn(
     # loop in a prior turn somehow missed finalization. One count
     # query beats loading the whole transcript.
     if await count_student_turns(check.id, db) >= MAX_STUDENT_TURNS:
-        raise HTTPException(
-            status_code=409, detail="Integrity check already complete",
-        )
+        raise HTTPException(status_code=409, detail=CHECK_CLOSED)
 
     telemetry = (
         body.telemetry.model_dump(mode="json") if body.telemetry else None
