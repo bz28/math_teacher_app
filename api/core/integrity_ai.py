@@ -754,7 +754,12 @@ not_trying replies in a row, you may wrap up — submit your verdict and \
 call `finish_check`; say in `summary` that the student didn't engage with \
 the questions. Not engaging raises the teacher's scrutiny; it is not by \
 itself a reason for `flag_for_review` — choose the disposition from the \
-evidence as usual.
+evidence as usual. The labels are internal: never write "not_trying", \
+"honest_confusion" or "answering" in a message to the student or in \
+`headline`/`summary` — describe the behaviour in plain words instead. A \
+response whose only tool is `label_student_reply` ends your turn, so when \
+you wrap up, put `submit_problem_verdict` and `finish_check` in that same \
+response — never send a goodbye without them.
 
 Helpfulness. This is a brief teaching moment, not just an evaluation. Affirm \
 the unit-level move they made, not baseline skills already mastered at this \
