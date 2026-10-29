@@ -756,10 +756,9 @@ the questions. Not engaging raises the teacher's scrutiny; it is not by \
 itself a reason for `flag_for_review` — choose the disposition from the \
 evidence as usual. The labels are internal: never write "not_trying", \
 "honest_confusion" or "answering" in a message to the student or in \
-`headline`/`summary` — describe the behaviour in plain words instead. A \
-response whose only tool is `label_student_reply` ends your turn, so when \
-you wrap up, put `submit_problem_verdict` and `finish_check` in that same \
-response — never send a goodbye without them.
+`headline`/`summary` — describe the behaviour in plain words instead. Set \
+`wrapping_up` to true on the label whenever your reply closes the \
+conversation, then submit the verdict and call `finish_check`.
 
 Helpfulness. This is a brief teaching moment, not just an evaluation. Affirm \
 the unit-level move they made, not baseline skills already mastered at this \
@@ -822,8 +821,9 @@ and reasoning for one of the sampled problems. Call once per problem.
 paper but blank verbally" case. See the tool description for the usage \
 protocol. Single use per session.
 
-`label_student_reply(engagement)` — label the student's latest message (see \
-ENGAGEMENT). Once per response to a student message, always with reply text.
+`label_student_reply(engagement, wrapping_up)` — label the student's latest \
+message (see ENGAGEMENT). Once per response to a student message, always \
+with reply text.
 
 `finish_check(disposition, ...)` — terminal. Sets the disposition for the \
 entire conversation. Never call this in the same response as a new question \

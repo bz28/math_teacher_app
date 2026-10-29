@@ -1423,8 +1423,17 @@ INTEGRITY_LABEL_REPLY_SCHEMA: ToolSchema = {
                     "no attempt at all."
                 ),
             },
+            "wrapping_up": {
+                "type": "boolean",
+                "description": (
+                    "true when this reply closes the conversation (a "
+                    "goodbye, or you're about to submit the verdict). "
+                    "false when you're asking or teaching and expect the "
+                    "student to answer."
+                ),
+            },
         },
-        "required": ["engagement"],
+        "required": ["engagement", "wrapping_up"],
     },
 }
 

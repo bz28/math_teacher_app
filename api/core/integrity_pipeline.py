@@ -1442,11 +1442,16 @@ async def process_student_turn(
             )
 
         # The engagement label rides alongside the reply text. When it's
-        # the only tool in a response that already has text, the reply is
-        # complete — don't spend another model call just to acknowledge
-        # the label's tool_result (it's in the transcript for next turn).
+        # the only tool in a response that already has text and the agent
+        # expects the student to answer, the reply is complete — don't
+        # spend another model call just to acknowledge the label (its
+        # tool_result is in the transcript for next turn). A reply flagged
+        # wrapping_up keeps looping so the agent can submit its verdict and
+        # finish instead of leaving the check open after a goodbye.
         if text_reply and all(
-            getattr(b, "name", "") == TOOL_LABEL_REPLY for b in tool_uses
+            getattr(b, "name", "") == TOOL_LABEL_REPLY
+            and (getattr(b, "input", {}) or {}).get("wrapping_up") is not True
+            for b in tool_uses
         ):
             break
 

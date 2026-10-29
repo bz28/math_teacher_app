@@ -19,6 +19,7 @@ from api.core.integrity_pipeline import (
 )
 from api.database import get_session_factory
 from api.models.integrity_check import (
+    IntegrityCheckProblem,
     IntegrityCheckSubmission,
     IntegrityConversationTurn,
 )
@@ -34,10 +35,16 @@ from tests.conftest import (
 from tests.test_integrity_check import _post_turn, _submit
 
 
-def _reply(text: str, engagement: Any, use_id: str = "lbl") -> list[Any]:
+def _reply(
+    text: str, engagement: Any, use_id: str = "lbl", *, wrapping_up: bool = False,
+) -> list[Any]:
     return [
         make_text(text),
-        make_tool_use("label_student_reply", {"engagement": engagement}, use_id=use_id),
+        make_tool_use(
+            "label_student_reply",
+            {"engagement": engagement, "wrapping_up": wrapping_up},
+            use_id=use_id,
+        ),
     ]
 
 
@@ -184,4 +191,45 @@ async def test_only_the_first_label_per_reply_counts(
     ])
     r = await _post_turn(client, world, submission_id, {"message": "I divided by 2"})
     assert r.status_code == 200, r.text
+    assert await _engagements(submission_id) == ["answering"]
+
+
+async def test_a_wrapping_up_label_lets_the_agent_finish_in_the_same_turn(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """A goodbye flagged wrapping_up must not end the turn on the label:
+    the loop calls the agent again so it can submit + finish, rather than
+    leaving the check open after telling the student they're done."""
+    submission_id = await _start(client, world)
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        problem_id = (await s.execute(
+            select(IntegrityCheckProblem.id)
+            .where(IntegrityCheckProblem.integrity_check_submission_id == check.id)
+        )).scalars().first()
+    set_agent_script([
+        _reply("Thanks — that's all I needed!", "answering", wrapping_up=True),
+        [
+            make_tool_use("submit_problem_verdict", {
+                "problem_id": str(problem_id),
+                "rubric": {"paraphrase_originality": "high", "causal_fluency": "high"},
+                "reasoning": "Explained the inverse operation in own words.",
+            }, use_id="v"),
+            make_tool_use("finish_check", {
+                "disposition": "pass",
+                "headline": "Explained the steps clearly",
+                "summary": "Explained why each step works.",
+                "inline_variant_result": "not_applicable",
+            }, use_id="f"),
+        ],
+    ])
+    r = await _post_turn(
+        client, world, submission_id,
+        {"message": "I subtracted 3 because it undoes the +3"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["overall_status"] == "complete"
     assert await _engagements(submission_id) == ["answering"]
