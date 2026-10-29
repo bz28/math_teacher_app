@@ -12,6 +12,7 @@ import {
   type TeacherUnit,
 } from "@/lib/api";
 import { hasRubricText, normalizeRubric } from "@/lib/rubric";
+import { MAX_TOTAL_POINTS } from "@/lib/points";
 import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { useDialogDismiss } from "@/hooks/use-dialog-dismiss";
 import { topUnits } from "@/lib/units";
@@ -149,6 +150,12 @@ export function NewHomeworkModal({
 
   // ── Step 3 — Grading ──
   const [rubric, setRubric] = useState<TeacherRubric | null>(null);
+  // What the homework is worth, split evenly once its problems exist.
+  // Kept as typed so a half-typed number isn't snapped back mid-edit.
+  const [totalPointsText, setTotalPointsText] = useState("100");
+  const totalPoints = Number(totalPointsText.trim());
+  const pointsValid =
+    Number.isInteger(totalPoints) && totalPoints >= 1 && totalPoints <= MAX_TOTAL_POINTS;
 
   // Units, loaded for the Review-step summary (names) + the unit guard.
   // The Details step's UnitMultiSelect loads its own copy; this is a
@@ -221,7 +228,8 @@ export function NewHomeworkModal({
     topicHint.trim().length > 0 ||
     scopeHint.trim().length > 0 ||
     hasRubricText(rubric) ||
-    Boolean(rubric?.skipped_rule_ids?.length);
+    Boolean(rubric?.skipped_rule_ids?.length) ||
+    totalPointsText.trim() !== "100";
 
   // ── Rubric accumulation (mirrors the detail page, but buffered in
   //    memory until the draft exists rather than auto-saved). ──
@@ -270,6 +278,7 @@ export function NewHomeworkModal({
       type: "homework",
       unit_ids: unitIds,
       late_policy: latePolicy,
+      total_points: totalPoints,
       ...(dueAt ? { due_at: new Date(dueAt).toISOString() } : {}),
     });
     if (sectionIds.length > 0) {
@@ -502,6 +511,8 @@ export function NewHomeworkModal({
         : !title.trim()
           ? "Add a title to continue"
           : "Pick a unit to continue"
+      : step === 3 && !pointsValid
+        ? `Points must be a whole number from 1 to ${MAX_TOTAL_POINTS}`
       : step === 4 && mode === "upload" && validStagedCount === 0
         ? "Add at least one worksheet page to extract"
         : null;
@@ -631,10 +642,31 @@ export function NewHomeworkModal({
 
                 {step === 3 && (
                   <div className="space-y-2">
-                    <p className="text-xs text-text-muted">
-                      How the AI grades student work on this homework. We&apos;ve
-                      filled in sensible defaults — edit to match how you grade.
-                    </p>
+                    <div className="rounded-[--radius-md] border border-border-light bg-bg-subtle/40 px-4 py-3">
+                      <label
+                        htmlFor="hw-total-points"
+                        className="flex flex-wrap items-center gap-2 text-sm font-semibold text-text-primary"
+                      >
+                        This homework is worth
+                        <input
+                          id="hw-total-points"
+                          type="text"
+                          inputMode="numeric"
+                          value={totalPointsText}
+                          onChange={(e) => setTotalPointsText(e.target.value)}
+                          onFocus={(e) => e.target.select()}
+                          aria-invalid={!pointsValid || undefined}
+                          className={`w-16 rounded-[--radius-sm] border bg-bg-base px-2 py-1 text-right font-mono text-sm font-semibold tabular-nums text-text-primary focus:border-primary focus:outline-none ${
+                            pointsValid ? "border-border-light" : "border-[color:var(--color-error)]"
+                          }`}
+                        />
+                        points
+                      </label>
+                      <p className="mt-1 text-xs text-text-muted">
+                        Split evenly across its problems. You can change any
+                        problem&apos;s points once they&apos;re made.
+                      </p>
+                    </div>
                     {/* GradingSetupCard owns its own card chrome; -mt
                         pulls it tight under the helper line. */}
                     <div className="-mt-2">
@@ -664,6 +696,7 @@ export function NewHomeworkModal({
                     count={count}
                     fileCount={validStagedCount}
                     hasRubric={hasRubricText(rubric)}
+                    totalPoints={totalPoints}
                   />
                 )}
               </motion.div>
@@ -711,11 +744,13 @@ export function NewHomeworkModal({
               <button
                 type="button"
                 onClick={onSaveDraft}
-                disabled={busy || !detailsValid}
+                disabled={busy || !detailsValid || !pointsValid}
                 title={
-                  detailsValid
-                    ? "Create the draft and finish setup later"
-                    : "Add a title and a unit first"
+                  !detailsValid
+                    ? "Add a title and a unit first"
+                    : !pointsValid
+                      ? `Set the points to a whole number from 1 to ${MAX_TOTAL_POINTS} first`
+                      : "Create the draft and finish setup later"
                 }
                 className="-mx-1 inline-flex min-h-[44px] items-center px-2 text-xs font-semibold text-text-muted hover:text-text-primary disabled:opacity-50"
               >
@@ -729,7 +764,7 @@ export function NewHomeworkModal({
                 onClick={() =>
                   step === 1 ? onContinueFromDetails() : goTo((step + 1) as Step)
                 }
-                disabled={busy || (step === 1 && !detailsValid)}
+                disabled={busy || (step === 1 && !detailsValid) || (step === 3 && !pointsValid)}
                 aria-describedby={blockReason ? "hw-wizard-msg" : undefined}
                 className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-[color:var(--color-surface-alt-2)] disabled:text-text-muted disabled:opacity-100"
               >
@@ -997,6 +1032,7 @@ function ReviewStep({
   count,
   fileCount,
   hasRubric,
+  totalPoints,
 }: {
   title: string;
   unitNames: string[];
@@ -1008,6 +1044,7 @@ function ReviewStep({
   count: number;
   fileCount: number;
   hasRubric: boolean;
+  totalPoints: number;
 }) {
   const lateLabel =
     LATE_POLICY_OPTIONS.find((o) => o.value === latePolicy)?.label ?? latePolicy;
@@ -1049,9 +1086,10 @@ function ReviewStep({
           muted={sectionCount === 0}
         />
         <SummaryRow label="Problems" value={problemsText} muted={mode === "upload" && fileCount === 0} />
+        <SummaryRow label="Points" value={`${totalPoints}, split evenly`} />
         <SummaryRow
           label="Grading"
-          value={hasRubric ? "Custom rubric" : "Default rubric"}
+          value={hasRubric ? "Class rules + rules for this homework" : "Class rules"}
           muted={!hasRubric}
           last
         />

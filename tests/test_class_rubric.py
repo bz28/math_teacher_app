@@ -170,7 +170,9 @@ async def test_class_rubric_round_trips_and_keeps_ids(client: AsyncClient) -> No
     url = f"/v1/teacher/courses/{course_id}/rubric"
     headers = _auth(world["teacher_token"])
 
-    assert (await client.get(url, headers=headers)).json() == {"rules": [], "rev": 0}
+    assert (await client.get(url, headers=headers)).json() == {
+        "rules": [], "rev": 0, "full_credit": None, "partial_credit": None,
+    }
 
     res = await client.put(url, json={"rules": [{"text": "Answers need units.", "points": 5}], "rev": 0},
                            headers=headers)
@@ -189,7 +191,7 @@ async def test_class_rubric_round_trips_and_keeps_ids(client: AsyncClient) -> No
     stale = await client.put(url, json={"rules": [], "rev": 1}, headers=headers)
     assert stale.status_code == 409
     assert (await client.put(url, json={"rules": [], "rev": 2}, headers=headers)).json() == {
-        "rules": [], "rev": 3,
+        "rules": [], "rev": 3, "full_credit": None, "partial_credit": None,
     }
 
 
@@ -366,3 +368,34 @@ async def test_a_skips_only_rubric_is_not_offered_as_a_copy_source(client: Async
     res = await client.get("/v1/teacher/rubric-sources", headers=_auth(world["teacher_token"]))
     assert res.status_code == 200
     assert [x["id"] for x in res.json()["sources"]] == []
+
+
+# ── credit guidance ──────────────────────────────────────────────────
+
+
+def test_credit_guidance_comes_from_the_class() -> None:
+    course = {"rules": [], "rev": 1, "full_credit": "Right answer, work shown."}
+    assert effective_rubric(course, {"notes": "n"}) == {"full_credit": "Right answer, work shown.", "notes": "n"}
+    assert effective_rubric({"rules": [], "rev": 1}, None) is None
+
+
+def test_rewriting_the_rules_keeps_the_credit_guidance() -> None:
+    previous = {"rules": [], "rev": 3, "partial_credit": "Slip: lose a little."}
+    stored = ClassRubric.model_validate({"rules": [{"text": "Units"}]}).to_stored(previous)
+    assert stored["partial_credit"] == "Slip: lose a little." and stored["rev"] == 4
+
+
+async def test_credit_guidance_saves_without_touching_the_rules(client: AsyncClient) -> None:
+    world = await _seed_hw()
+    course_id = await _course_of(world["assignment_id"])
+    await _link(world["teacher_id"], course_id)
+    headers = _auth(world["teacher_token"])
+    await client.put(f"/v1/teacher/courses/{course_id}/rubric", json={"rules": [{"text": "Units"}]}, headers=headers)
+    res = await client.put(
+        f"/v1/teacher/courses/{course_id}/rubric/credit",
+        json={"full_credit": "  Right answer.  ", "partial_credit": ""}, headers=headers,
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert (body["full_credit"], body["partial_credit"], body["rev"]) == ("Right answer.", None, 1)
+    assert [r["text"] for r in body["rules"]] == ["Units"]

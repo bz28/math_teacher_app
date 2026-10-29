@@ -31,6 +31,7 @@ import {
   type SortDir,
   type SortKey,
 } from "@/lib/gradebook";
+import { earnedPoints, formatPoints } from "@/lib/points";
 
 /**
  * The section gradebook: students down the side, homework across the
@@ -436,6 +437,9 @@ function cellLines(
   const lines = [
     head,
     `Published ${shortDate(cell.published_at)} · ${cell.is_late ? "turned in late" : "turned in on time"}`,
+    ...(assignment.total_points > 0
+      ? [`${formatPoints(earnedPoints(cell.score, assignment.total_points))}/${assignment.total_points} points`]
+      : []),
     cell.ai_score === null
       ? `Graded by hand: ${shown(cell.score)}%`
       : `AI suggested ${shown(cell.ai_score)}% · you gave ${shown(cell.score)}%`,

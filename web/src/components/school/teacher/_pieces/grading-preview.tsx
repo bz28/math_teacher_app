@@ -49,12 +49,14 @@ export function GradingPreview({
           iconClassName="text-[color:var(--color-success)]"
           heading="Full credit when"
           body={fullCredit}
+          clamp
         />
         <PreviewLine
           icon="◐"
           iconClassName="text-[color:var(--color-warning-dark)] "
           heading="Partial credit when"
           body={partialCredit}
+          clamp
         />
         {cm && (
           <PreviewLine
@@ -85,12 +87,16 @@ function PreviewLine({
   heading,
   body,
   muted = false,
+  clamp = false,
 }: {
   icon: string;
   iconClassName: string;
   heading: string;
   body: string;
   muted?: boolean;
+  /** Show the first lines only (the full text is in class settings and
+   *  on hover). */
+  clamp?: boolean;
 }) {
   return (
     <div className="flex gap-2">
@@ -98,7 +104,8 @@ function PreviewLine({
         {icon}
       </span>
       <p
-        className={`min-w-0 break-words${muted ? " text-text-secondary" : ""}`}
+        className={`min-w-0 break-words${muted ? " text-text-secondary" : ""}${clamp ? " line-clamp-3" : ""}`}
+        title={clamp ? body : undefined}
       >
         <span className="font-semibold">{heading}:</span> {body}
       </p>

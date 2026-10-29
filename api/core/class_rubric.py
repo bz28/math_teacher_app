@@ -8,6 +8,10 @@ homework in the course inherits them. A homework's own rubric
 mistakes, and `skipped_rule_ids` to opt out of a class rule. Where the two
 disagree, the homework wins — the grading prompt says so.
 
+The class also holds its credit guidance (`full_credit`, `partial_credit`):
+what the AI uses for any mistake no rule covers. Unset = the defaults in
+`grading_ai`.
+
 `effective_rubric` merges the two into the one dict the grader reads and
 `SubmissionGrade.rubric_snapshot` freezes, so a grade always records
 exactly which rules it was graded under.
@@ -21,9 +25,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from api.core.constants import MAX_RUBRIC_FIELD_CHARS
+
 MAX_CLASS_RULES = 30
 MAX_RULE_CHARS = 300
 RULE_SOURCES = ("settings", "suggestion")
+CREDIT_FIELDS = ("full_credit", "partial_credit")
 
 
 def new_rule_id() -> str:
@@ -94,7 +101,33 @@ class ClassRubric(BaseModel):
                 ),
                 "added_at": prior.get("added_at") if prior else now,
             })
-        return {"rules": rules, "rev": rubric_revision(previous) + 1}
+        return {**credit_guidance(previous), "rules": rules, "rev": rubric_revision(previous) + 1}
+
+
+class CreditGuidance(BaseModel):
+    """The class's full- and partial-credit guidance. Empty or None goes
+    back to the default."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    full_credit: str | None = Field(default=None, max_length=MAX_RUBRIC_FIELD_CHARS)
+    partial_credit: str | None = Field(default=None, max_length=MAX_RUBRIC_FIELD_CHARS)
+
+    def apply(self, course_rubric: dict[str, Any] | None) -> dict[str, Any]:
+        stored = {k: v for k, v in (course_rubric or {}).items() if k not in CREDIT_FIELDS}
+        for k in CREDIT_FIELDS:
+            v = (getattr(self, k) or "").strip()
+            if v:
+                stored[k] = v
+        return stored
+
+
+def credit_guidance(course_rubric: dict[str, Any] | None) -> dict[str, str]:
+    """The class's own credit guidance; a field it never set is absent."""
+    return {
+        k: v for k in CREDIT_FIELDS
+        if isinstance(v := (course_rubric or {}).get(k), str) and v
+    }
 
 
 def rubric_revision(course_rubric: dict[str, Any] | None) -> int:
@@ -115,14 +148,14 @@ def effective_rubric(
     course_rubric: dict[str, Any] | None,
     assignment_rubric: dict[str, Any] | None,
 ) -> dict[str, Any] | None:
-    """What the grader applies to one homework: the homework's own fields
-    plus the class rules it hasn't skipped.
+    """What the grader applies to one homework: the homework's own fields,
+    the class's credit guidance, and the class rules it hasn't skipped.
 
     `rules` carries only what the grader and the drift check need (id,
     text, points). Returns None when there is nothing at all, matching the
     "no rubric" meaning of None everywhere else.
     """
-    hw = dict(assignment_rubric or {})
+    hw = {**credit_guidance(course_rubric), **(assignment_rubric or {})}
     skipped = set(hw.pop("skipped_rule_ids", None) or [])
     rules = [
         {"id": r["id"], "text": r["text"], "points": r.get("points")}

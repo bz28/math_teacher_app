@@ -16,8 +16,10 @@ import {
   type TeacherAssignment,
   type TeacherSection,
   type TeacherRubric,
+  type HomeworkPoints,
 } from "@/lib/api";
 import { normalizeRubric } from "@/lib/rubric";
+import { evenSplit, MAX_TOTAL_POINTS, pointsRange } from "@/lib/points";
 import { useAuthStore } from "@/stores/auth";
 import {
   BANK_JOB_POLL_INTERVAL_MS,
@@ -32,6 +34,11 @@ import {
 } from "@/components/school/teacher/_pieces/inline-saved-hint";
 import { GenerateQuestionsModal } from "@/components/school/teacher/question-bank/generate-questions-modal";
 import { GradingSetupCard } from "@/components/school/teacher/_pieces/grading-setup-card";
+import {
+  PointsInput,
+  PointsTotalBar,
+  type PointsChange,
+} from "@/components/school/teacher/_pieces/problem-points";
 import { WorkshopModal } from "@/components/school/teacher/workshop-modal";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -62,7 +69,8 @@ type ConfigField =
   | "latePolicy"
   | "sections"
   | "rubric"
-  | "description";
+  | "description"
+  | "points";
 
 /**
  * Full-page detail for a single homework. Handles all lifecycle
@@ -86,7 +94,12 @@ export default function HomeworkDetailPage({
   const { loadUser } = useAuthStore();
 
   const [hw, setHw] = useState<
-    (TeacherAssignment & { content: unknown; rubric: TeacherRubric | null }) | null
+    | (TeacherAssignment & {
+        content: unknown;
+        rubric: TeacherRubric | null;
+        points: HomeworkPoints;
+      })
+    | null
   >(null);
   const [loading, setLoading] = useState(true);
   // Back link points at whichever tab the assignment came from — HW
@@ -161,6 +174,7 @@ export default function HomeworkDetailPage({
     sections: "idle",
     rubric: "idle",
     description: "idle",
+    points: "idle",
   });
   const [saveErrors, setSaveErrors] = useState<Record<ConfigField, string | null>>({
     units: null,
@@ -169,6 +183,7 @@ export default function HomeworkDetailPage({
     sections: null,
     rubric: null,
     description: null,
+    points: null,
   });
 
   const reload = async () => {
@@ -355,6 +370,8 @@ export default function HomeworkDetailPage({
       : [];
 
   const isPublished = hw?.status === "published";
+  // Homework is graded; practice isn't, so it has no points or rubric.
+  const graded = hw !== null && hw.type !== "practice";
 
   const saveTitle = () =>
     run(async () => {
@@ -492,7 +509,7 @@ export default function HomeworkDetailPage({
   // Per-field lastCallRef gives last-write-wins for rapid-fire edits
   // to the same field (the date picker can fire many onChanges).
   const lastCallRef = useRef<Record<ConfigField, number>>({
-    units: 0, dueAt: 0, latePolicy: 0, sections: 0, rubric: 0, description: 0,
+    units: 0, dueAt: 0, latePolicy: 0, sections: 0, rubric: 0, description: 0, points: 0,
   });
   const patchField = async <K extends ConfigField>(
     field: K,
@@ -637,6 +654,41 @@ export default function HomeworkDetailPage({
           )
           .then(() => undefined),
     );
+  };
+
+  // Points save like the other inline fields: shown at once, reverted if
+  // the server says no. The server also re-adds any saved grades.
+  const onChangePoints = (change: PointsChange) => {
+    if (!hw) return;
+    const prev = hw.points;
+    const next: HomeworkPoints =
+      "total_points" in change
+        ? {
+            total: Math.max(change.total_points, problems.length),
+            custom: false,
+            by_problem: Object.fromEntries(
+              evenSplit(change.total_points, problems.length).map((n, i) => [
+                problems[i].bank_item_id,
+                n,
+              ]),
+            ),
+          }
+        : {
+            total: Object.values(change.problem_points).reduce((a, b) => a + b, 0),
+            custom: true,
+            by_problem: change.problem_points,
+          };
+    void patchField(
+      "points",
+      () => setHw((h) => (h ? { ...h, points: next } : h)),
+      () => setHw((h) => (h ? { ...h, points: prev } : h)),
+      () => teacher.updateAssignment(assignmentId, change).then(() => undefined),
+    );
+  };
+
+  const onChangeProblemPoints = (problemId: string, n: number) => {
+    if (!hw) return;
+    onChangePoints({ problem_points: { ...hw.points.by_problem, [problemId]: n } });
   };
 
   // Publish gating — list of missing requirements with concrete fixes.
@@ -885,8 +937,8 @@ export default function HomeworkDetailPage({
         <>
           {isPublished && (
             <div className="mt-4 rounded-[--radius-md] border border-primary/20 bg-primary-bg/30 p-3 text-xs text-text-secondary">
-              Published — students can see this. Rubric and
-              instructions stay editable; unpublish to change the
+              Published — students can see this. Points, grading rules
+              and instructions stay editable; unpublish to change the
               problem list, title, due date, or sections.
             </div>
           )}
@@ -942,11 +994,14 @@ export default function HomeworkDetailPage({
             </Link>
           )}
 
-          {/* Problems — the hero of the page */}
+          {/* Problems & grading — the hero of the page. Holds every
+              grading decision for a homework: what each problem is
+              worth, its answer key, and the rules for every problem.
+              Practice is ungraded, so it keeps a plain problem list. */}
           <section className="mt-6 rounded-[--radius-xl] border border-border-light bg-surface p-6 shadow-sm">
-            <div className="flex items-center justify-between border-b border-border-light pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-light pb-3">
               <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
-                Problems · {problems.length}
+                {graded ? "Problems & grading" : "Problems"} · {problems.length}
               </h2>
               <div className="flex items-center gap-2">
                 <button
@@ -1019,39 +1074,55 @@ export default function HomeworkDetailPage({
                     </span>
                   </div>
                 )}
-                <div className="mt-4 space-y-2">
+                {graded && (
+                  <PointsTotalBar
+                    points={hw.points}
+                    problemCount={problems.length}
+                    isPublished={isPublished}
+                    saveState={saveStates.points}
+                    saveError={saveErrors.points}
+                    onChange={onChangePoints}
+                  />
+                )}
+                <ul className="mt-3 space-y-2">
                   {problems.map((p) => (
                     <ProblemRow
                       key={`${p.bank_item_id}-${p.position}`}
                       problem={p}
-                      onClick={
+                      points={graded ? (hw.points.by_problem[p.bank_item_id] ?? null) : null}
+                      onPointsChange={(n) => onChangeProblemPoints(p.bank_item_id, n)}
+                      validatePoints={(n) => {
+                        if (n < 1) return "At least 1 point.";
+                        const others = hw.points.total - (hw.points.by_problem[p.bank_item_id] ?? 0);
+                        return others + n > MAX_TOTAL_POINTS
+                          ? `The homework would be worth more than ${MAX_TOTAL_POINTS}.`
+                          : null;
+                      }}
+                      onEdit={
                         isPublished
                           ? undefined
                           : () => void openWorkshopForProblem(p.bank_item_id)
                       }
                     />
                   ))}
-                </div>
+                </ul>
               </>
             )}
-          </section>
 
-          {/* Grading setup — prominent card right below Problems so
-              teachers see and use it. Placing it here (above
-              Configuration) makes the rubric a first-class step in
-              homework authoring rather than an optional footnote.
-              Hidden for practice: practice is ungraded, no rubric
-              feeds the (non-running) grader. */}
-          {hw.type !== "practice" && (
-            <GradingSetupCard
-              rubric={hw.rubric}
-              saveState={saveStates.rubric}
-              saveError={saveErrors.rubric}
-              onChange={onChangeRubric}
-              copyFromAssignmentId={assignmentId}
-              courseId={courseId}
-            />
-          )}
+            {/* The rules for every problem. Hidden for practice:
+                practice is ungraded, no rubric feeds the grader. */}
+            {graded && (
+              <GradingSetupCard
+                embedded
+                rubric={hw.rubric}
+                saveState={saveStates.rubric}
+                saveError={saveErrors.rubric}
+                onChange={onChangeRubric}
+                copyFromAssignmentId={assignmentId}
+                courseId={courseId}
+              />
+            )}
+          </section>
 
           {/* Configuration — collapsed accordion. Auto-expands on a
               fresh HW with no problems OR when a required field is
@@ -1135,6 +1206,11 @@ export default function HomeworkDetailPage({
         isPublished={isPublished}
         canPublish={canPublish}
         missingForPublish={missingForPublish}
+        pointsSummary={
+          graded && problems.length > 0
+            ? `${hw.points.total} points · ${problems.length} problem${problems.length === 1 ? "" : "s"}, ${pointsRange(Object.values(hw.points.by_problem))}`
+            : null
+        }
         busy={busy}
         previewLoading={previewLoading}
         onPublish={handlePublishClick}
@@ -1598,42 +1674,112 @@ function toLocalDatetimeInputValue(iso: string): string {
 // problems button at the top of this modal.
 function ProblemRow({
   problem,
-  onClick,
+  points,
+  onPointsChange,
+  validatePoints,
+  onEdit,
 }: {
   problem: AssignmentProblem;
-  onClick?: () => void;
+  /** What it's worth; null for practice (ungraded: no points, no
+   *  grading details). */
+  points: number | null;
+  onPointsChange: (n: number) => void;
+  validatePoints: (n: number) => string | null;
+  /** Opens the question in the Workshop editor; absent once published. */
+  onEdit?: () => void;
 }) {
-  const content = (
-    <div className="flex items-start gap-3">
-      <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-dark text-xs font-bold text-white">
-        {problem.position}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="line-clamp-2 text-[15px] leading-snug text-text-primary">
-          <MathText text={problem.question} />
-        </div>
-        <div className="mt-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
-          {problem.difficulty}
-        </div>
-      </div>
-    </div>
-  );
-  if (!onClick) {
-    return (
-      <div className="rounded-[--radius-md] border border-border-light bg-surface px-4 py-3">
-        {content}
-      </div>
+  const [open, setOpen] = useState(false);
+  const panelId = `grading-${problem.position}-${problem.bank_item_id}`;
+  // One box, placed beside the question on wide screens and under it on
+  // a phone, where the question needs the width.
+  const pointsBox = (where: string) =>
+    points !== null && (
+      <label className={`shrink-0 items-center gap-1.5 text-xs text-text-muted ${where}`}>
+        <PointsInput
+          value={points}
+          label={`Points for problem ${problem.position}`}
+          onCommit={onPointsChange}
+          validate={validatePoints}
+        />
+        pts
+      </label>
     );
-  }
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="group w-full rounded-[--radius-md] border border-border-light bg-surface px-4 py-3 text-left transition-all hover:-translate-y-px hover:border-primary/40 hover:shadow-sm"
-      title="Click to edit"
-    >
-      {content}
-    </button>
+    <li className="rounded-[--radius-md] border border-border-light bg-surface px-4 py-3">
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary-dark text-xs font-bold text-white">
+          {problem.position}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="line-clamp-2 text-[15px] leading-snug text-text-primary">
+            <MathText text={problem.question} />
+          </div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+            {pointsBox("order-last ml-auto flex sm:hidden")}
+            <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+              {problem.difficulty}
+            </span>
+            {points !== null ? (
+              <button
+                type="button"
+                onClick={() => setOpen((o) => !o)}
+                aria-expanded={open}
+                aria-controls={open ? panelId : undefined}
+                className="inline-flex min-h-8 items-center gap-1 text-xs font-semibold text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                Grading <span aria-hidden>{open ? "▴" : "▾"}</span>
+              </button>
+            ) : (
+              onEdit && (
+                <button
+                  type="button"
+                  onClick={onEdit}
+                  className="inline-flex min-h-8 items-center text-xs font-semibold text-primary hover:underline"
+                >
+                  Edit question
+                </button>
+              )
+            )}
+          </div>
+        </div>
+        {pointsBox("hidden sm:flex")}
+      </div>
+      {open && points !== null && (
+        <div
+          id={panelId}
+          className="mt-3 ml-9 space-y-2 rounded-[--radius-md] border border-border-light bg-bg-subtle/40 px-3 py-2.5 text-sm"
+        >
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <p className="min-w-0">
+              <span className="mr-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+                Answer key
+              </span>
+              {problem.final_answer ? (
+                <span className="text-text-primary">
+                  <MathText text={problem.final_answer} />
+                </span>
+              ) : (
+                <span className="text-text-muted">No final answer set.</span>
+              )}
+            </p>
+            {onEdit ? (
+              <button
+                type="button"
+                onClick={onEdit}
+                className="shrink-0 text-xs font-semibold text-primary hover:underline"
+              >
+                Edit question ↗
+              </button>
+            ) : (
+              <span className="shrink-0 text-xs text-text-muted">Locked while published</span>
+            )}
+          </div>
+          <p className="text-xs text-text-secondary">
+            Graded by AI using the rules below.
+          </p>
+        </div>
+      )}
+    </li>
   );
 }
 
@@ -1949,6 +2095,7 @@ function ActionBar({
   isPublished,
   canPublish,
   missingForPublish,
+  pointsSummary,
   busy,
   previewLoading,
   onPublish,
@@ -1961,6 +2108,8 @@ function ActionBar({
   isPublished: boolean;
   canPublish: boolean;
   missingForPublish: string[];
+  /** "100 points · 7 problems, 14–15 each", for a homework; null else. */
+  pointsSummary: string | null;
   busy: boolean;
   previewLoading: boolean;
   onPublish: () => void;
@@ -2004,8 +2153,18 @@ function ActionBar({
         ) : (
           <>
             <div className="min-w-0 flex-1 text-[11px] text-text-muted">
-              {!isPublished && missingForPublish.length > 0 && (
+              {!isPublished && missingForPublish.length > 0 ? (
                 <span>Missing: {missingForPublish.join(", ")}</span>
+              ) : (
+                pointsSummary && (
+                  <span className="text-text-secondary">
+                    {pointsSummary}
+                    {" · "}
+                    <a href="#homework-points" className="font-semibold text-primary hover:underline">
+                      Edit points
+                    </a>
+                  </span>
+                )
               )}
             </div>
             {/* Same reason as the section-review action strip: allow a

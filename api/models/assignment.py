@@ -66,19 +66,10 @@ class Assignment(Base):
     ai_grading_enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default="true",
     )
-    # Teacher-authored grading rubric. Structured JSON so the AI grader
-    # has typed signals and the review UI can render a clean sidebar.
-    # Shape (all optional; UI decides which fields to collect):
-    #   {
-    #     grading_mode: "answer_only" | "answer_and_work"
-    #                 | "method_focused" | "custom",
-    #     full_credit: str,      # what earns 100%
-    #     partial_credit: str,   # when students get partial
-    #     common_mistakes: str,  # optional — help AI catch known errors
-    #     notes: str,            # optional — free text fallback
-    #   }
-    # v1: reference panel for the teacher during manual grading.
-    # Future AI PR: fed directly to the grader as typed fields.
+    # This homework's own grading additions (AssignmentRubric in
+    # api/routes/teacher_assignments.py): common_mistakes, notes (extra
+    # rules), skipped_rule_ids. The class's rules and credit guidance live
+    # on Course.rubric; class_rubric.effective_rubric merges the two.
     rubric: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     # What the homework is worth, and each problem's share of it — see
     # api/core/homework_points.py. `problem_points` is {problem_id: points}

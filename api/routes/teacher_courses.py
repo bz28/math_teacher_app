@@ -10,7 +10,13 @@ from sqlalchemy import Integer, and_, case, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.class_rubric import ClassRubric, class_rules, rubric_revision
+from api.core.class_rubric import (
+    ClassRubric,
+    CreditGuidance,
+    class_rules,
+    credit_guidance,
+    rubric_revision,
+)
 from api.core.integrity_pipeline import ABANDONED_INTERVIEW_DEADLINE
 from api.core.subjects import VALID_SUBJECTS
 from api.database import get_db
@@ -659,9 +665,35 @@ async def get_course_rubric(
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """The class's grading rules — every homework in it inherits them."""
+    """The class's grading rules and credit guidance — every homework in it
+    inherits them. A credit field the class never set is null (the default)."""
     course = await get_teacher_course(db, course_id, current_user.user_id)
-    return {"rules": class_rules(course.rubric), "rev": rubric_revision(course.rubric)}
+    return _rubric_out(course.rubric)
+
+
+def _rubric_out(course_rubric: dict[str, Any] | None) -> dict[str, Any]:
+    credit = credit_guidance(course_rubric)
+    return {
+        "rules": class_rules(course_rubric),
+        "rev": rubric_revision(course_rubric),
+        "full_credit": credit.get("full_credit"),
+        "partial_credit": credit.get("partial_credit"),
+    }
+
+
+@router.put("/courses/{course_id}/rubric/credit")
+async def update_course_credit_guidance(
+    course_id: uuid.UUID, body: CreditGuidance,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Set what the AI uses for mistakes no rule covers. Leaves the rules
+    and their revision alone, so it never collides with the rules editor."""
+    course = await get_teacher_course(db, course_id, current_user.user_id)
+    await db.refresh(course, with_for_update=True)
+    course.rubric = body.apply(course.rubric)
+    await db.commit()
+    return _rubric_out(course.rubric)
 
 
 @router.put("/courses/{course_id}/rubric")
@@ -683,7 +715,7 @@ async def update_course_rubric(
         )
     course.rubric = body.to_stored(course.rubric)
     await db.commit()
-    return {"rules": class_rules(course.rubric), "rev": rubric_revision(course.rubric)}
+    return _rubric_out(course.rubric)
 
 
 @router.delete("/courses/{course_id}")

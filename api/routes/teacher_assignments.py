@@ -67,7 +67,7 @@ router = APIRouter()
 # ── Request schemas ──
 
 
-_RUBRIC_TEXT_FIELDS = ("full_credit", "partial_credit", "common_mistakes", "notes")
+_RUBRIC_TEXT_FIELDS = ("common_mistakes", "notes")
 
 
 class AssignmentRubric(BaseModel):
@@ -85,20 +85,19 @@ class AssignmentRubric(BaseModel):
       crash or a garbled prompt, not a graceful degrade — and a crash here
       takes the whole grading page down behind an error boundary, with no
       way out of it from the UI.
-    * These four fields are rendered verbatim into an LLM prompt, so an
+    * These fields are rendered verbatim into an LLM prompt, so an
       unbounded string is an unbounded prompt.
 
     `extra="forbid"` rather than ignore: the only writer is the rubric
-    editor, which emits exactly these four keys, so an unexpected key
+    editor, which emits exactly these keys, so an unexpected key
     means a client bug and a 422 says so instead of silently dropping the
     teacher's work. (`grading_mode` appears in a stale comment on
-    `Assignment.rubric` but has never been written.)
+    `Assignment.rubric` but has never been written.) Full and partial
+    credit guidance live on the class (`class_rubric.CreditGuidance`).
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    full_credit: str | None = None
-    partial_credit: str | None = None
     common_mistakes: str | None = None
     notes: str | None = None
     # Class rules (`Course.rubric`) this homework opts out of, by id.
@@ -106,7 +105,7 @@ class AssignmentRubric(BaseModel):
         default=None, max_length=MAX_CLASS_RULES,
     )
 
-    @field_validator("full_credit", "partial_credit", "common_mistakes", "notes")
+    @field_validator("common_mistakes", "notes")
     @classmethod
     def _bounded_text(cls, v: str | None) -> str | None:
         if v is None:
@@ -2617,6 +2616,8 @@ class TeacherSubmissionDetailProblem(BaseModel):
     # question ("15.76" read as "15.76 ft"). A pointer to check the
     # photo, not a verdict; see api/core/answer_units.py.
     units_not_in_work: list[str] = []
+    # What this problem is worth on this homework (homework_points).
+    points: int = 0
 
 
 class TeacherSubmissionDetail(BaseModel):
@@ -3068,6 +3069,7 @@ async def get_submission_detail(
             other_work.append(row)
 
     problems: list[TeacherSubmissionDetailProblem] = []
+    points = assignment_points(assignment)
     for pos, pid in enumerate(primary_ids, start=1):
         item = items_by_id.get(str(pid))
         if not item:
@@ -3113,6 +3115,7 @@ async def get_submission_detail(
             student_answer=student_answer,
             student_steps=steps_by_position.get(pos, []),
             requires_drawing=bool(item.requires_drawing),
+            points=points.get(str(pid), 0),
             drawings=drawings_by_position.get(pos, []),
             pages=sorted(pages_by_position.get(pos, [])),
             # Checked against the answer the teacher is shown, so the note

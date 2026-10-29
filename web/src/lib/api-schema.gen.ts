@@ -3154,7 +3154,8 @@ export interface paths {
         };
         /**
          * Get Course Rubric
-         * @description The class's grading rules — every homework in it inherits them.
+         * @description The class's grading rules and credit guidance — every homework in it
+         *     inherits them. A credit field the class never set is null (the default).
          */
         get: operations["get_course_rubric_v1_teacher_courses__course_id__rubric_get"];
         /**
@@ -3185,6 +3186,27 @@ export interface paths {
          */
         get: operations["list_rubric_suggestions_v1_teacher_courses__course_id__rubric_suggestions_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/teacher/courses/{course_id}/rubric/credit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Course Credit Guidance
+         * @description Set what the AI uses for mistakes no rule covers. Leaves the rules
+         *     and their revision alone, so it never collides with the rules editor.
+         */
+        put: operations["update_course_credit_guidance_v1_teacher_courses__course_id__rubric_credit_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -4366,24 +4388,21 @@ export interface components {
          *       crash or a garbled prompt, not a graceful degrade — and a crash here
          *       takes the whole grading page down behind an error boundary, with no
          *       way out of it from the UI.
-         *     * These four fields are rendered verbatim into an LLM prompt, so an
+         *     * These fields are rendered verbatim into an LLM prompt, so an
          *       unbounded string is an unbounded prompt.
          *
          *     `extra="forbid"` rather than ignore: the only writer is the rubric
-         *     editor, which emits exactly these four keys, so an unexpected key
+         *     editor, which emits exactly these keys, so an unexpected key
          *     means a client bug and a 422 says so instead of silently dropping the
          *     teacher's work. (`grading_mode` appears in a stale comment on
-         *     `Assignment.rubric` but has never been written.)
+         *     `Assignment.rubric` but has never been written.) Full and partial
+         *     credit guidance live on the class (`class_rubric.CreditGuidance`).
          */
         AssignmentRubric: {
             /** Common Mistakes */
             common_mistakes?: string | null;
-            /** Full Credit */
-            full_credit?: string | null;
             /** Notes */
             notes?: string | null;
-            /** Partial Credit */
-            partial_credit?: string | null;
             /** Skipped Rule Ids */
             skipped_rule_ids?: string[] | null;
         };
@@ -4702,6 +4721,17 @@ export interface components {
             name: string;
             /** Parent Id */
             parent_id?: string | null;
+        };
+        /**
+         * CreditGuidance
+         * @description The class's full- and partial-credit guidance. Empty or None goes
+         *     back to the default.
+         */
+        CreditGuidance: {
+            /** Full Credit */
+            full_credit?: string | null;
+            /** Partial Credit */
+            partial_credit?: string | null;
         };
         /** DashboardAssignment */
         DashboardAssignment: {
@@ -6334,6 +6364,11 @@ export interface components {
              * @default []
              */
             pages: number[];
+            /**
+             * Points
+             * @default 0
+             */
+            points: number;
             /** Position */
             position: number;
             /** Question */
@@ -12255,6 +12290,43 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_course_credit_guidance_v1_teacher_courses__course_id__rubric_credit_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreditGuidance"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

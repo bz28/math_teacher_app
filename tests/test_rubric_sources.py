@@ -34,7 +34,7 @@ async def test_rubric_sources_lists_assignment_with_rubric(
 ) -> None:
     await _set_rubric(
         world["assignment_id"],
-        {"full_credit": "Correct final answer with work shown."},
+        {"notes": "Correct final answer with work shown."},
     )
 
     res = await client.get(
@@ -49,7 +49,7 @@ async def test_rubric_sources_lists_assignment_with_rubric(
     assert row["title"] == "HW 1"
     assert row["type"] == "homework"
     assert row["course_name"]  # joined from Course
-    assert row["rubric"] == {"full_credit": "Correct final answer with work shown."}
+    assert row["rubric"] == {"notes": "Correct final answer with work shown."}
 
 
 async def test_rubric_sources_excludes_assignment_without_rubric(
@@ -87,7 +87,7 @@ async def test_rubric_sources_is_teacher_gated(
     it never leaks another teacher's rubric data to non-teachers."""
     await _set_rubric(
         world["assignment_id"],
-        {"full_credit": "Correct final answer."},
+        {"notes": "Correct final answer."},
     )
 
     res = await client.get(

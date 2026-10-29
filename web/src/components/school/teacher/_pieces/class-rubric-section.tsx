@@ -3,10 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import {
   teacher,
+  type ClassRubric,
   type ClassRubricRule,
   type ClassRubricRuleInput,
   type RubricSuggestion,
 } from "@/lib/api";
+import { CREDIT_DEFAULTS } from "@/lib/rubric";
 import {
   InlineSavedHint,
   type SaveState,
@@ -61,6 +63,8 @@ export function ClassRubricSection({
   // The revision these rules were loaded at — sent with every save so a
   // save can't overwrite rules added elsewhere (a review page, a tab).
   const [rev, setRev] = useState(0);
+  // The class's full/partial credit guidance; null until loaded.
+  const [credit, setCredit] = useState<Pick<ClassRubric, "full_credit" | "partial_credit"> | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -79,6 +83,7 @@ export function ClassRubricSection({
         if (cancelled) return;
         setRules(res.rules);
         setRev(res.rev);
+        setCredit({ full_credit: res.full_credit, partial_credit: res.partial_credit });
       })
       .catch(() => !cancelled && setLoadError(true));
     return () => {
@@ -216,7 +221,7 @@ export function ClassRubricSection({
                     }`}
                     title={r.points === null ? "The AI decides how much to take off" : undefined}
                   >
-                    {r.points === null ? "AI sizes" : `−${r.points}`}
+                    {r.points === null ? "AI sizes" : `−${r.points} pt${r.points === 1 ? "" : "s"}`}
                   </span>
                   <button
                     type="button"
@@ -277,7 +282,8 @@ export function ClassRubricSection({
               </div>
             </div>
             <p className="mt-1.5 text-xs text-text-muted">
-              Points come off a problem when the rule is broken. Leave blank and the AI decides.
+              Points come off a problem when the rule is broken, never more than the problem is
+              worth. Leave blank and the AI decides.
             </p>
             {newError && (
               <p className="mt-1 text-xs text-[color:var(--color-error)]">{newError}</p>
@@ -304,6 +310,13 @@ export function ClassRubricSection({
           </div>
         )}
       </div>
+      {credit && (
+        <CreditGuidance
+          courseId={courseId}
+          credit={credit}
+          onSaved={setCredit}
+        />
+      )}
       <p className="mt-2 text-xs text-text-muted">
         Changes apply to homework graded from now on. Grades already given don&apos;t change.
       </p>
@@ -314,6 +327,153 @@ export function ClassRubricSection({
           setRev(nextRev);
         }}
       />
+    </section>
+  );
+}
+
+type CreditField = "full_credit" | "partial_credit";
+
+const CREDIT_FIELDS: { field: CreditField; label: string }[] = [
+  { field: "full_credit", label: "Full credit when" },
+  { field: "partial_credit", label: "Partial credit" },
+];
+
+/**
+ * "When no rule covers a mistake": the class's full and partial credit
+ * guidance, which the AI uses for anything no rule names. Pre-filled with
+ * the standard text; saving it unchanged (or cleared) stores nothing, so
+ * the class keeps following the standard text if it's ever improved.
+ */
+function CreditGuidance({
+  courseId,
+  credit,
+  onSaved,
+}: {
+  courseId: string;
+  credit: Pick<ClassRubric, CreditField>;
+  onSaved: (credit: Pick<ClassRubric, CreditField>) => void;
+}) {
+  // null = show the saved value; a string = the teacher is typing.
+  const [drafts, setDrafts] = useState<Record<CreditField, string | null>>({
+    full_credit: null,
+    partial_credit: null,
+  });
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const shown = (f: CreditField) => drafts[f] ?? credit[f] ?? CREDIT_DEFAULTS[f];
+  const stored = (text: string, f: CreditField): string | null => {
+    const t = text.trim();
+    return !t || t === CREDIT_DEFAULTS[f] ? null : t;
+  };
+
+  // Saves run one at a time and each sends what the teacher wants for
+  // BOTH fields as of when it goes out, so a second edit made while the
+  // first is in flight can't be overwritten by it. A draft stays on
+  // screen until the server has its text; a failed save keeps it there.
+  const confirmed = useRef(credit);
+  const wanted = useRef(credit);
+  const queue = useRef<Promise<void>>(Promise.resolve());
+
+  const enqueue = () => {
+    queue.current = queue.current.then(async () => {
+      const body = { ...wanted.current };
+      setSaveState("saving");
+      setSaveError(null);
+      try {
+        const res = await teacher.updateCourseCredit(courseId, body);
+        const next = { full_credit: res.full_credit, partial_credit: res.partial_credit };
+        confirmed.current = next;
+        onSaved(next);
+        setDrafts((d) => {
+          const out = { ...d };
+          for (const { field } of CREDIT_FIELDS) {
+            const draft = out[field];
+            if (draft !== null && stored(draft, field) === next[field]) out[field] = null;
+          }
+          return out;
+        });
+        setSaveState("saved");
+      } catch (e: unknown) {
+        wanted.current = { ...confirmed.current };
+        setSaveState("error");
+        setSaveError(e instanceof Error ? e.message : "Couldn't save");
+      }
+    });
+  };
+
+  const commit = (f: CreditField) => {
+    const draft = drafts[f];
+    if (draft === null) return;
+    const value = stored(draft, f);
+    if (value === wanted.current[f]) {
+      if (value === confirmed.current[f]) setDrafts((d) => ({ ...d, [f]: null }));
+      return;
+    }
+    wanted.current = { ...wanted.current, [f]: value };
+    enqueue();
+  };
+
+  const resetToStandard = (f: CreditField) => {
+    // Shown as a draft until the save lands, so the old text doesn't
+    // linger on screen meanwhile.
+    setDrafts((d) => ({ ...d, [f]: CREDIT_DEFAULTS[f] }));
+    wanted.current = { ...wanted.current, [f]: null };
+    enqueue();
+  };
+
+  return (
+    <section aria-labelledby="credit-guidance-heading" className="mt-4 rounded-[--radius-md] border border-border-light bg-surface p-5">
+      <div className="flex items-baseline justify-between gap-3">
+        <h3
+          id="credit-guidance-heading"
+          className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]"
+        >
+          When no rule covers a mistake
+        </h3>
+        <InlineSavedHint state={saveState} errorMessage={saveError} />
+      </div>
+      <p className="mt-1 text-sm leading-relaxed text-text-secondary">
+        The AI sizes those mistakes itself, using this guidance. Its deductions are marked
+        &ldquo;AI judgment&rdquo; on the review page, so you know which to check.
+      </p>
+      <div className="mt-4 space-y-4">
+        {CREDIT_FIELDS.map(({ field, label }) => {
+          const id = `class-${field}`;
+          const usingStandard = drafts[field] === null && credit[field] === null;
+          return (
+            <div key={field}>
+              <div className="flex items-baseline justify-between gap-2">
+                <label htmlFor={id} className="text-sm font-semibold text-text-primary">
+                  {label}
+                  {usingStandard && (
+                    <span className="ml-1.5 text-xs font-normal text-text-muted">· standard guidance</span>
+                  )}
+                </label>
+                {credit[field] !== null && drafts[field] === null && (
+                  <button
+                    type="button"
+                    onClick={() => resetToStandard(field)}
+                    disabled={saveState === "saving"}
+                    className="min-h-8 rounded-[--radius-sm] px-2 text-xs font-semibold text-primary hover:bg-primary-bg disabled:opacity-50"
+                  >
+                    Use the standard guidance
+                  </button>
+                )}
+              </div>
+              <textarea
+                id={id}
+                value={shown(field)}
+                onChange={(e) => setDrafts((d) => ({ ...d, [field]: e.target.value }))}
+                onBlur={() => commit(field)}
+                maxLength={2000}
+                rows={6}
+                className="mt-1.5 w-full resize-y rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm leading-relaxed text-text-primary focus:border-primary focus:outline-none"
+              />
+            </div>
+          );
+        })}
+      </div>
     </section>
   );
 }
