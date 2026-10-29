@@ -2784,6 +2784,14 @@ class TeacherSubmissionDetail(BaseModel):
     extraction_confidence: float | None = None
     extraction_confirmed_at: datetime | None = None
     extraction_flagged_at: datetime | None = None
+    # What the student said was wrong when they flagged the reading
+    # (optional, short). Null when they left it blank or flagged before
+    # notes existed.
+    extraction_flag_note: str | None = None
+    # How many lines the student corrected on the confirm screen — the
+    # rows marked `edited` below. Lets the flagged callout say "they
+    # fixed 2 lines first" without the client re-counting every bucket.
+    extraction_edit_count: int = 0
     # Current grading state. None when the teacher hasn't touched this
     # submission yet. `breakdown` + `final_score` are teacher-draft
     # until `grade_published_at` is set, at which point the student
@@ -3277,6 +3285,8 @@ async def get_submission_detail(
         ),
         extraction_confirmed_at=sub.extraction_confirmed_at,
         extraction_flagged_at=sub.extraction_flagged_at,
+        extraction_flag_note=sub.extraction_flag_note,
+        extraction_edit_count=len(sub.extraction_edits or {}),
         submission_id=str(sub.id),
         assignment_id=str(assignment.id),
         assignment_title=assignment.title,

@@ -134,7 +134,9 @@ class Submission(Base):
     # or failed.
     extraction: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     # Sparse overlay of student-supplied corrections to the Vision
-    # extraction, captured at confirm time. Map keyed by
+    # extraction, captured at confirm time — or at flag time, when the
+    # student fixed some lines and then sent it to the teacher anyway
+    # (never graded by the AI then; shown to the teacher). Map keyed by
     # "{problem_position}:{step_num}" for steps and
     # "{problem_position}:final" for final answers; value is the
     # student's plain-English replacement text. Empty string = student
@@ -143,8 +145,8 @@ class Submission(Base):
     # render time so the original Vision read stays preserved for audit.
     # Null when the student didn't edit anything.
     extraction_edits: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    # Stamped at confirm time when any edits were saved alongside the
-    # confirmation. Null when the student confirmed without editing.
+    # Stamped at confirm (or flag) time when any edits were saved with
+    # it. Null when the student didn't edit anything.
     extraction_edited_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True,
     )
@@ -165,6 +167,11 @@ class Submission(Base):
     extraction_flagged_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True,
     )
+    # The student's optional "What did it get wrong?" note, sent with the
+    # flag. Shown to the teacher on the flagged-reading callout. Null when
+    # they left it blank, and on every flag from before notes existed. Any
+    # lines they fixed before flagging land on `extraction_edits` as usual.
+    extraction_flag_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     is_late: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 

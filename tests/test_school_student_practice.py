@@ -1874,11 +1874,9 @@ async def test_unreadable_extraction_skips_auto_grade(
 async def test_flag_does_not_disturb_extraction_edits(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
-    """The flag-extraction endpoint accepts no body and shouldn't touch
-    extraction_edits in any direction. A submission flagged before
-    confirm should keep extraction_edits null. Pins the contract so a
-    future flag-with-edits feature doesn't accidentally land via this
-    path (which would skip grading and silently lose edits)."""
+    """A flag with no body (older clients, or a student who fixed
+    nothing) leaves extraction_edits and the note null — edits are only
+    ever written from what the student actually sent."""
     submission_id = await _submit_and_extract(client, world)
     r = await client.post(
         f"/v1/school/student/submissions/{submission_id}/flag-extraction",
@@ -1892,6 +1890,185 @@ async def test_flag_does_not_disturb_extraction_edits(
         assert sub.extraction_flagged_at is not None
         assert sub.extraction_edits is None
         assert sub.extraction_edited_at is None
+        assert sub.extraction_flag_note is None
+
+
+_EDITABLE_EXTRACTION = (
+    '{"steps": [{"step_num": 1, "problem_position": 1, '
+    '"latex": "x=5", "plain_english": "x equals five"}], '
+    '"final_answers": [{"problem_position": 1, '
+    '"answer_latex": "5", "answer_plain": "five"}], '
+    '"confidence": 0.9}'
+)
+
+
+async def _set_editable_extraction(submission_id: str) -> None:
+    async with get_session_factory()() as s:
+        await s.execute(
+            text("UPDATE submissions SET extraction = :ext WHERE id = :id"),
+            {"id": submission_id, "ext": _EDITABLE_EXTRACTION},
+        )
+        await s.commit()
+
+
+async def test_flag_with_note_and_edits_persists_both_and_never_grades(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """"Most of it is wrong" sends the student's note and any lines they
+    fixed first. Both are stored for the teacher; stale keys are dropped
+    exactly as on confirm; the note is trimmed; and nothing is graded —
+    flagged work is never AI-graded, with or without edits."""
+    from unittest.mock import AsyncMock, patch
+
+    submission_id = await _submit_and_extract(client, world)
+    await _set_editable_extraction(submission_id)
+
+    with patch(
+        "api.routes.school_student_practice._run_integrity_and_grading_background",
+        new=AsyncMock(),
+    ) as mock_pipeline:
+        r = await client.post(
+            f"/v1/school/student/submissions/{submission_id}/flag-extraction",
+            headers=_auth(world["student_token"]),
+            json={
+                "note": "  It read my 7s as 1s  ",
+                "edits": {"1:1": "x = 7", "99:99": "stale key"},
+            },
+        )
+        await drain_integrity_background_tasks()
+    assert r.status_code == 200, r.text
+    mock_pipeline.assert_not_called()
+
+    async with get_session_factory()() as s:
+        sub = (await s.execute(
+            select(Submission).where(Submission.id == uuid.UUID(submission_id))
+        )).scalar_one()
+        assert sub.extraction_flagged_at is not None
+        assert sub.extraction_confirmed_at is None
+        assert sub.extraction_flag_note == "It read my 7s as 1s"
+        assert sub.extraction_edits == {"1:1": "x = 7"}
+        assert sub.extraction_edited_at is not None
+        # Original read preserved
+        assert sub.extraction is not None
+        assert sub.extraction["steps"][0]["plain_english"] == "x equals five"
+
+    # The teacher sees the note, the edit count, and the edited line
+    # with the original read beside it; Grade with AI stays blocked.
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200, r.text
+    detail = r.json()
+    assert detail["extraction_flag_note"] == "It read my 7s as 1s"
+    assert detail["extraction_edit_count"] == 1
+    steps = detail["problems"][0]["student_steps"]
+    assert steps[0]["edited"] is True
+    assert steps[0]["latex"] == "x = 7"
+    assert steps[0]["original_latex"] == "x=5"
+
+
+async def test_flag_blank_note_is_stored_as_null(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    submission_id = await _submit_and_extract(client, world)
+    r = await client.post(
+        f"/v1/school/student/submissions/{submission_id}/flag-extraction",
+        headers=_auth(world["student_token"]),
+        json={"note": "   ", "edits": {}},
+    )
+    assert r.status_code == 200, r.text
+    async with get_session_factory()() as s:
+        sub = (await s.execute(
+            select(Submission).where(Submission.id == uuid.UUID(submission_id))
+        )).scalar_one()
+        assert sub.extraction_flag_note is None
+        assert sub.extraction_edits is None
+    r = await client.get(
+        f"/v1/teacher/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.json()["extraction_flag_note"] is None
+    assert r.json()["extraction_edit_count"] == 0
+
+
+async def test_flag_rejects_oversized_note_and_edit(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """A note over its 500-char cap is a 422 (schema); an edit value over
+    the confirm-time 2,000-char cap is the same 400 confirm returns.
+    Neither leaves the submission flagged."""
+    submission_id = await _submit_and_extract(client, world)
+    url = f"/v1/school/student/submissions/{submission_id}/flag-extraction"
+    r = await client.post(
+        url, headers=_auth(world["student_token"]), json={"note": "x" * 501},
+    )
+    assert r.status_code == 422
+    r = await client.post(
+        url,
+        headers=_auth(world["student_token"]),
+        json={"edits": {"1:1": "x" * 2_001}},
+    )
+    assert r.status_code == 400
+    async with get_session_factory()() as s:
+        sub = (await s.execute(
+            select(Submission).where(Submission.id == uuid.UUID(submission_id))
+        )).scalar_one()
+        assert sub.extraction_flagged_at is None
+
+
+async def test_reflag_keeps_the_first_note(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """A double-tap re-flag is the same 200 no-op as before; it doesn't
+    overwrite what the first call stored."""
+    submission_id = await _submit_and_extract(client, world)
+    url = f"/v1/school/student/submissions/{submission_id}/flag-extraction"
+    r1 = await client.post(
+        url, headers=_auth(world["student_token"]), json={"note": "first"},
+    )
+    r2 = await client.post(
+        url, headers=_auth(world["student_token"]), json={"note": "second"},
+    )
+    assert r1.status_code == 200
+    assert r2.json().get("already_flagged") is True
+    async with get_session_factory()() as s:
+        sub = (await s.execute(
+            select(Submission).where(Submission.id == uuid.UUID(submission_id))
+        )).scalar_one()
+        assert sub.extraction_flag_note == "first"
+
+
+async def test_flag_lost_race_is_409_and_stores_nothing(
+    client: AsyncClient, world: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The conditional UPDATE still guards the flag: when a concurrent
+    confirm wins between the read and the write (simulated by making the
+    guarded UPDATE match no row), the flag is a 409 and neither the note
+    nor the edits land."""
+    import sqlalchemy as sa
+
+    import api.routes.school_student_practice as route
+
+    submission_id = await _submit_and_extract(client, world)
+    await _set_editable_extraction(submission_id)
+    real_update = route.update
+    monkeypatch.setattr(
+        route, "update", lambda model: real_update(model).where(sa.false()),
+    )
+    r = await client.post(
+        f"/v1/school/student/submissions/{submission_id}/flag-extraction",
+        headers=_auth(world["student_token"]),
+        json={"note": "it read my 7s as 1s", "edits": {"1:1": "x = 7"}},
+    )
+    assert r.status_code == 409
+    async with get_session_factory()() as s:
+        sub = (await s.execute(
+            select(Submission).where(Submission.id == uuid.UUID(submission_id))
+        )).scalar_one()
+        assert sub.extraction_flagged_at is None
+        assert sub.extraction_flag_note is None
+        assert sub.extraction_edits is None
 
 
 async def test_teacher_detail_surfaces_whether_the_reading_was_vouched_for(

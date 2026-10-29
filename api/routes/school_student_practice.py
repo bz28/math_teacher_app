@@ -2156,6 +2156,47 @@ class ConfirmExtractionBody(BaseModel):
 _MAX_EDIT_VALUE_LEN = 2_000
 
 
+def _sanitize_edits(
+    extraction: dict[str, Any] | None, raw: dict[str, str] | None,
+) -> dict[str, str]:
+    """Size-check then key-check a confirm/flag edits map. 400 on an
+    oversized value; keys that match no row on the stored extraction are
+    dropped. Shared so a flag's edits are held to exactly the confirm
+    rules — the teacher view overlays both the same way."""
+    from api.core.extraction_edits import validate_edits_against_extraction
+
+    raw_edits = raw or {}
+    for value in raw_edits.values():
+        if isinstance(value, str) and len(value) > _MAX_EDIT_VALUE_LEN:
+            raise HTTPException(
+                status_code=400,
+                detail="Edit value exceeds size limit",
+            )
+    return validate_edits_against_extraction(extraction, raw_edits)
+
+
+# The flag note is a pointer for the teacher ("it read my 7s as 1s"),
+# not an essay — the photo is still what she grades from.
+_MAX_FLAG_NOTE_LEN = 500
+
+
+class FlagExtractionBody(BaseModel):
+    """Optional body for flag-extraction. Both fields are optional and an
+    absent body is still a valid flag (older clients send none).
+
+    note: the student's short answer to "What did it get wrong?". Blank
+      or whitespace-only is stored as null.
+    edits: lines the student fixed before deciding to send it to the
+      teacher anyway. Same key format and validation as confirm-time
+      edits; stored on `extraction_edits` so the teacher review page
+      shows them as "edited by student" with the original read beside.
+      They are never graded by the AI — flagged work never is.
+    """
+
+    note: str | None = Field(default=None, max_length=_MAX_FLAG_NOTE_LEN)
+    edits: dict[str, str] | None = Field(default=None, max_length=200)
+
+
 @router.post("/submissions/{submission_id}/confirm-extraction")
 async def confirm_extraction(
     submission_id: uuid.UUID,
@@ -2187,8 +2228,6 @@ async def confirm_extraction(
     instead, which stamps extraction_flagged_at and deliberately does
     NOT spawn grading.
     """
-    from api.core.extraction_edits import validate_edits_against_extraction
-
     sub = (await db.execute(
         select(Submission).where(Submission.id == submission_id)
     )).scalar_one_or_none()
@@ -2213,16 +2252,7 @@ async def confirm_extraction(
 
     # Validate + sanitize edits BEFORE the conditional update, so an
     # oversized payload doesn't waste the atomic-update slot.
-    raw_edits = (body.edits if body else None) or {}
-    for value in raw_edits.values():
-        if isinstance(value, str) and len(value) > _MAX_EDIT_VALUE_LEN:
-            raise HTTPException(
-                status_code=400,
-                detail="Edit value exceeds size limit",
-            )
-    sanitized_edits = validate_edits_against_extraction(
-        sub.extraction, raw_edits,
-    )
+    sanitized_edits = _sanitize_edits(sub.extraction, body.edits if body else None)
 
     # Atomic conditional update: only stamp confirm if flag hasn't been
     # set and confirm hasn't been set. Guards against a concurrent flag
@@ -2271,6 +2301,7 @@ async def confirm_extraction(
 @router.post("/submissions/{submission_id}/flag-extraction")
 async def flag_extraction_submission(
     submission_id: uuid.UUID,
+    body: FlagExtractionBody | None = None,
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -2282,14 +2313,21 @@ async def flag_extraction_submission(
     transcription is the one the student says is wrong. The teacher
     grades it from the photo.
 
+    Optional body (see FlagExtractionBody): the student's note on what
+    the reader got wrong, plus any lines they fixed first. Both are for
+    the teacher only — stored, shown on the review page, never graded.
+
     Rejects:
       • 404 if the submission doesn't exist.
       • 403 if it belongs to another student.
       • 409 if extraction hasn't finished (nothing to flag yet).
       • 409 if the student already confirmed (can't flag after
         confirm — integrity + grading may have already fired).
+      • 400 if an edit value exceeds the per-row size cap; 422 if the
+        note is over its length cap.
 
-    Idempotent on re-flag: duplicate call returns 200 no-op.
+    Idempotent on re-flag: duplicate call returns 200 no-op (the first
+    call's note and edits stand).
     """
     sub = (await db.execute(
         select(Submission).where(Submission.id == submission_id)
@@ -2311,9 +2349,20 @@ async def flag_extraction_submission(
     if sub.extraction_flagged_at is not None:
         return {"status": "ok", "already_flagged": True}
 
+    sanitized_edits = _sanitize_edits(sub.extraction, body.edits if body else None)
+    note = ((body.note if body else None) or "").strip() or None
+
     # Atomic conditional update — see notes on confirm_extraction for
     # the race this closes. Intentionally NO _spawn_background_task —
     # flagging is the "skip AI, teacher handles it" path.
+    now = datetime.now(UTC)
+    update_values: dict[str, Any] = {
+        "extraction_flagged_at": now,
+        "extraction_flag_note": note,
+    }
+    if sanitized_edits:
+        update_values["extraction_edits"] = sanitized_edits
+        update_values["extraction_edited_at"] = now
     result = await db.execute(
         update(Submission)
         .where(
@@ -2321,7 +2370,7 @@ async def flag_extraction_submission(
             Submission.extraction_confirmed_at.is_(None),
             Submission.extraction_flagged_at.is_(None),
         )
-        .values(extraction_flagged_at=datetime.now(UTC))
+        .values(**update_values)
     )
     if result.rowcount == 0:  # type: ignore[attr-defined]
         await db.rollback()
@@ -2329,13 +2378,14 @@ async def flag_extraction_submission(
             status_code=409,
             detail="Submission state changed — reload and try again",
         )
-    # No reason_code: the endpoint takes no body, so the flag itself is
-    # the whole signal. Paired with submission.confirm_extraction this
-    # gives the confirm-vs-flag rate — how often the Vision read was
-    # wrong enough that a student pushed back.
+    # Paired with submission.confirm_extraction this gives the
+    # confirm-vs-flag rate — how often the Vision read was wrong enough
+    # that a student pushed back. Only whether a note was left and the
+    # COUNT of corrections are recorded: the note and edit values are
+    # student-authored text and must never enter this table.
     await record_student_activity(
         db, user, "submission.flag_extraction", "submission", submission_id,
-        None,
+        {"has_note": note is not None, "corrections_count": len(sanitized_edits)},
         school_id=await _school_id_for(db, assignment_id=sub.assignment_id),
     )
     await db.commit()
