@@ -817,12 +817,11 @@ async def test_turn_hard_cap_force_finalizes(
 async def test_abandoned_interview_finalizes_on_teacher_read(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
-    """A student who opens the check and walks away leaves it stuck in
-    awaiting_student forever — the turn cap only fires on a NEW student
-    turn, and this deployment has no scheduler. The teacher reading the
-    submission detail is the lazy trigger that finalizes a check stalled
-    past the wall-clock deadline into a terminal, no-verdict state so it
-    surfaces ("Interview incomplete") instead of hiding in purgatory."""
+    """A student who opens the check and walks away leaves it open — the
+    turn cap only fires on a NEW student turn. A teacher reading the
+    submission detail finalizes a check stalled past the wall-clock
+    deadline into a terminal, no-verdict "didn't finish" state (the cron
+    sweep usually gets there first; see the sweep test below)."""
     from datetime import UTC, datetime, timedelta
 
     from api.core.integrity_pipeline import ABANDONED_INTERVIEW_DEADLINE
@@ -863,7 +862,9 @@ async def test_abandoned_interview_finalizes_on_teacher_read(
     assert body["overall_status"] == "complete"
     # No intent-carrying disposition — we never judged the student.
     assert body["disposition"] is None
-    assert body["headline"] == "Interview incomplete"
+    assert body["headline"] == "Didn't finish the check"
+    # Never answered the opener -> not_started, not turn_cap/inconclusive.
+    assert body["incomplete_reason"] == "not_started"
 
     # The flip is persisted (not just computed on the way out) and the
     # pending problem went terminal-but-null-rubric, never a phantom
@@ -886,6 +887,124 @@ async def test_abandoned_interview_finalizes_on_teacher_read(
         assert capped, "expected the pending problem to go cap_reached"
         for p in capped:
             assert p.rubric is None
+
+
+async def _backdate_check(submission_id: str) -> None:
+    """Push the check's last activity past the abandoned deadline. Raw
+    UPDATE so updated_at isn't re-stamped by the column's onupdate."""
+    from datetime import UTC, datetime, timedelta
+
+    from api.core.integrity_pipeline import ABANDONED_INTERVIEW_DEADLINE
+
+    stale = datetime.now(UTC) - ABANDONED_INTERVIEW_DEADLINE - timedelta(hours=1)
+    async with get_session_factory()() as s:
+        await s.execute(
+            text(
+                "UPDATE integrity_check_submissions "
+                "SET updated_at = :ts WHERE submission_id = :sid"
+            ),
+            {"ts": stale, "sid": submission_id},
+        )
+        await s.commit()
+
+
+async def _check_row(submission_id: str) -> IntegrityCheckSubmission:
+    async with get_session_factory()() as s:
+        return (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+
+
+async def test_abandoned_after_answering_is_left_partway(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """A student who answered at least once and then walked away is
+    `left_partway` — a different follow-up for the teacher than a student
+    who never replied at all."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+    set_agent_script([[make_text("Thanks — and why did you subtract 3?")]])
+    r = await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+        headers=_auth(world["student_token"]),
+        json={"message": "I factored it into two brackets."},
+    )
+    assert r.status_code == 200, r.text
+    await _backdate_check(submission_id)
+
+    r = await client.get(
+        f"/v1/teacher/integrity/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    body = r.json()
+    assert body["overall_status"] == "complete"
+    assert body["disposition"] is None
+    assert body["incomplete_reason"] == "left_partway"
+
+
+async def test_student_read_finalizes_abandoned_check(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """A student who comes back after the deadline finds the check closed
+    — and their visit alone makes the teacher's marker accurate."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    # Inside the deadline the student's read leaves the check open.
+    r = await client.get(
+        f"/v1/school/student/integrity/submissions/{submission_id}",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.json()["overall_status"] == "awaiting_student"
+
+    await _backdate_check(submission_id)
+    r = await client.get(
+        f"/v1/school/student/integrity/submissions/{submission_id}",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.status_code == 200
+    assert r.json()["overall_status"] == "complete"
+    # Student-facing: no disposition, ever, for a closed-unfinished check.
+    assert r.json()["disposition"] is None
+    check = await _check_row(submission_id)
+    assert check.status == "complete"
+    assert check.incomplete_reason == "not_started"
+
+
+async def test_drain_cron_sweeps_abandoned_checks(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """The grading-drain clock also closes stalled checks, so the teacher
+    marker never waits on anyone opening a page. A fresh check is left
+    alone."""
+    from api.config import settings
+
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    with patch.object(settings, "grading_drain_token", "tok"):
+        r = await client.post(
+            "/v1/internal/grading/drain", headers={"X-Grading-Token": "tok"},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["abandoned_checks"] == 0
+        assert (await _check_row(submission_id)).status == "awaiting_student"
+
+        await _backdate_check(submission_id)
+        r = await client.post(
+            "/v1/internal/grading/drain", headers={"X-Grading-Token": "tok"},
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["abandoned_checks"] == 1
+
+    check = await _check_row(submission_id)
+    assert check.status == "complete"
+    assert check.disposition is None
+    assert check.incomplete_reason == "not_started"
 
 
 async def test_turn_409_when_complete(

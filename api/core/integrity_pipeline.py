@@ -88,6 +88,17 @@ STATUS_AWAITING_STUDENT = "awaiting_student"
 STATUS_IN_PROGRESS = "in_progress"
 STATUS_COMPLETE = "complete"
 STATUS_SKIPPED_UNREADABLE = "skipped_unreadable"
+OPEN_STATUSES = (STATUS_AWAITING_STUDENT, STATUS_IN_PROGRESS)
+
+# Why a complete check has no disposition (IntegrityCheckSubmission.
+# incomplete_reason). Only the server-side force-finalizes write these.
+INCOMPLETE_NOT_STARTED = "not_started"
+INCOMPLETE_LEFT_PARTWAY = "left_partway"
+INCOMPLETE_TURN_CAP = "turn_cap"
+# The student walked away — the teacher sees "Didn't finish the check".
+# Turn cap is different: they stayed to the end, the agent just never
+# reached a verdict, so it reads as "Inconclusive".
+UNFINISHED_REASONS = (INCOMPLETE_NOT_STARTED, INCOMPLETE_LEFT_PARTWAY)
 
 # Problem-level status.
 PROBLEM_STATUS_PENDING = "pending"
@@ -1904,14 +1915,15 @@ async def _finalize_inconclusive(
     problem_reason: str,
     overall_summary: str,
     closing_text: str | None,
+    incomplete_reason: str,
     headline: str | None = None,
 ) -> None:
     """Shared force-finalize: flip the check to a terminal, no-verdict
     state so it leaves purgatory and surfaces to the teacher.
 
-    Emits no disposition (left null) so the teacher dashboard surfaces
-    this as inconclusive rather than any of the four intent-carrying
-    dispositions. Pending per-problem rows go terminal-but-null-rubric
+    Emits no disposition (left null); `incomplete_reason` says why, so
+    the teacher sees "didn't finish" vs "inconclusive" rather than any
+    of the four intent-carrying dispositions. Pending per-problem rows go terminal-but-null-rubric
     (`cap_reached`) so a rubric-aware query never sees a phantom verdict;
     the teacher reads the partial transcript and decides. `closing_text`
     is appended as an agent turn when a student is plausibly still on the
@@ -1931,6 +1943,7 @@ async def _finalize_inconclusive(
             p.status = PROBLEM_STATUS_CAP_REACHED
             p.ai_reasoning = problem_reason
     check.status = STATUS_COMPLETE
+    check.incomplete_reason = incomplete_reason
     check.overall_summary = overall_summary
     if headline is not None:
         check.headline = headline
@@ -1963,22 +1976,28 @@ async def _force_finalize_turn_cap(
             "Thanks for sticking with this. That's all the time we have — "
             "your work is with your teacher."
         ),
+        incomplete_reason=INCOMPLETE_TURN_CAP,
     )
 
 
 # Wall-clock deadline after which a check still sitting in
 # awaiting_student / in_progress is treated as abandoned. The turn-cap
 # finalize only fires on a NEW student turn (inside process_student_turn),
-# so a student who simply closes the tab leaves the row stuck forever.
-# This deployment runs a single uvicorn process with no scheduler/cron
-# (see api/main.py lifespan — the only periodic-looking task,
-# _cleanup_expired_tokens, fires once at startup), so there is nothing to
-# sweep these rows server-side. We finalize them lazily whenever a teacher
-# reads the roster or a submission (see finalize_if_abandoned call sites).
+# so a student who simply closes the tab would leave the row open forever.
+# Three triggers close it, so the teacher's "Didn't finish the check"
+# marker never depends on the teacher happening to look:
+#   - the grading-drain cron sweeps every stale check
+#     (finalize_abandoned_checks, called from api/routes/grading_drain.py);
+#   - the student's own integrity-state read (they come back too late);
+#   - a teacher reading the roster or the submission detail.
 # 12h is generous enough that a student who steps away mid-check and
 # returns the same evening is unaffected, while a truly-abandoned check
 # surfaces to the teacher by the next day.
 ABANDONED_INTERVIEW_DEADLINE = timedelta(hours=12)
+
+# Upper bound on checks one sweep closes, so a cron pass stays well inside
+# a request timeout. Anything left over is picked up next pass.
+ABANDONED_SWEEP_LIMIT = 200
 
 
 async def _force_finalize_abandoned(
@@ -1986,53 +2005,151 @@ async def _force_finalize_abandoned(
 ) -> None:
     """Finalize an interview the student walked away from.
 
-    Distinct teacher-facing copy from the turn-cap case (a different
-    headline + summary) so an abandoned check reads as "the student left"
-    rather than "the agent ran out of time" — and never as a pass. No
-    closing agent turn: there's nobody on the other end to read it.
+    Distinct from the turn cap so an abandoned check reads as "the
+    student didn't finish" rather than "the agent ran out of time" — and
+    never as a pass or a flag. Splits on whether the student ever
+    answered: confirming and never replying is a different thing for a
+    teacher to follow up on than leaving halfway. No closing agent turn:
+    there's nobody on the other end to read it.
     """
+    answered = (await db.execute(
+        select(func.count(IntegrityConversationTurn.id)).where(
+            IntegrityConversationTurn.integrity_check_submission_id == check.id,
+            IntegrityConversationTurn.role == ROLE_STUDENT,
+        )
+    )).scalar_one() > 0
+    if answered:
+        summary = (
+            "The student started the understanding check and left before "
+            "it finished. There's no verdict either way — the partial "
+            "conversation is below."
+        )
+        reason = INCOMPLETE_LEFT_PARTWAY
+    else:
+        summary = (
+            "The student confirmed their reading but never answered the "
+            "understanding check. There's no verdict either way."
+        )
+        reason = INCOMPLETE_NOT_STARTED
     await _finalize_inconclusive(
         check, db,
         problem_reason=(
             "The student left the understanding check before this problem "
             "was verdicted."
         ),
-        overall_summary=(
-            "Interview incomplete — the student left before finishing. "
-            "There's no verdict to pass or fail here; review the partial "
-            "transcript and follow up."
-        ),
+        overall_summary=summary,
         closing_text=None,
-        headline="Interview incomplete",
+        incomplete_reason=reason,
+        headline="Didn't finish the check",
     )
 
 
-async def finalize_if_abandoned(
-    check: IntegrityCheckSubmission, db: AsyncSession,
-) -> bool:
-    """Lazy on-read finalization for stalled interviews.
+UNFINISHED_NEVER_CONFIRMED = "never_confirmed"
 
-    If `check` is still in awaiting_student / in_progress and its last
-    activity is older than ABANDONED_INTERVIEW_DEADLINE, force-finalize it
-    as inconclusive (abandoned) and return True. Otherwise no-op → False.
-    Mutates `check` in place; the caller is responsible for committing.
 
-    Last activity is read off `check.updated_at` (bumped on every student
-    turn, since process_student_turn mutates the row each turn) with a
-    `created_at` fallback for the awaiting_student case where no turn ever
-    landed.
+def unfinished_check_state(
+    sub: Submission,
+    check: IntegrityCheckSubmission | None,
+    *,
+    integrity_enabled: bool,
+    now: datetime,
+) -> str | None:
+    """The teacher's "Didn't finish the check" state for one submission.
+
+    - `not_started` / `left_partway`: the check ran and was closed as
+      abandoned (see _force_finalize_abandoned).
+    - `never_confirmed`: the check never ran because the student never
+      confirmed the AI's reading — the confirm is what starts it. Held to
+      the same deadline as an abandoned check, so a student who turned
+      work in ten minutes ago and is about to confirm isn't labelled.
+
+    None otherwise — including a turn-cap check (that's "inconclusive":
+    the student stayed to the end), a reading the student disputed (it
+    has its own louder state, and no check is meant to run), and an
+    extraction that never arrived (not the student's doing).
     """
-    if check.status not in (STATUS_AWAITING_STUDENT, STATUS_IN_PROGRESS):
+    if check is not None:
+        if (
+            check.status == STATUS_COMPLETE
+            and check.incomplete_reason in UNFINISHED_REASONS
+        ):
+            return check.incomplete_reason
+        return None
+    if not integrity_enabled:
+        return None
+    if (
+        sub.extraction is None
+        or sub.extraction_confirmed_at is not None
+        or sub.extraction_flagged_at is not None
+        or sub.submitted_at is None
+    ):
+        return None
+    submitted_at = sub.submitted_at
+    if submitted_at.tzinfo is None:
+        submitted_at = submitted_at.replace(tzinfo=UTC)
+    if now - submitted_at < ABANDONED_INTERVIEW_DEADLINE:
+        return None
+    return UNFINISHED_NEVER_CONFIRMED
+
+
+def _is_abandoned(check: IntegrityCheckSubmission, now: datetime) -> bool:
+    if check.status not in OPEN_STATUSES:
         return False
     last_activity = check.updated_at or check.created_at
     if last_activity is None:
         return False
     if last_activity.tzinfo is None:
         last_activity = last_activity.replace(tzinfo=UTC)
-    if datetime.now(UTC) - last_activity < ABANDONED_INTERVIEW_DEADLINE:
+    return now - last_activity >= ABANDONED_INTERVIEW_DEADLINE
+
+
+async def finalize_if_abandoned(
+    check: IntegrityCheckSubmission, db: AsyncSession,
+) -> bool:
+    """On-read finalization for stalled interviews.
+
+    If `check` is still in awaiting_student / in_progress and its last
+    activity is older than ABANDONED_INTERVIEW_DEADLINE, force-finalize it
+    as abandoned and return True. Otherwise no-op → False. Mutates `check`
+    in place; the caller is responsible for committing.
+
+    Last activity is read off `check.updated_at` (bumped on every student
+    turn, since process_student_turn mutates the row each turn) with a
+    `created_at` fallback for the awaiting_student case where no turn ever
+    landed.
+    """
+    if not _is_abandoned(check, datetime.now(UTC)):
         return False
     await _force_finalize_abandoned(check, db)
     return True
+
+
+async def finalize_abandoned_checks(
+    db: AsyncSession, *, limit: int = ABANDONED_SWEEP_LIMIT,
+) -> int:
+    """Close every check stalled past the deadline. Returns how many.
+
+    The scheduled half of abandoned-check finalization (see the comment
+    on ABANDONED_INTERVIEW_DEADLINE). Rows are claimed with
+    `FOR UPDATE SKIP LOCKED`, so a sweep never fights a concurrent sweep
+    or a request that already holds a check, and it commits once at the
+    end — one pass is one transaction.
+    """
+    cutoff = datetime.now(UTC) - ABANDONED_INTERVIEW_DEADLINE
+    stale = (await db.execute(
+        select(IntegrityCheckSubmission)
+        .where(
+            IntegrityCheckSubmission.status.in_(OPEN_STATUSES),
+            IntegrityCheckSubmission.updated_at < cutoff,
+        )
+        .order_by(IntegrityCheckSubmission.updated_at.asc())
+        .limit(limit)
+        .with_for_update(skip_locked=True)
+    )).scalars().all()
+    for check in stale:
+        await _force_finalize_abandoned(check, db)
+    await db.commit()
+    return len(stale)
 
 
 _SOFT_NUDGE_MARKER = "(Wrap up:"

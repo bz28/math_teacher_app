@@ -490,6 +490,12 @@ async def get_my_integrity_state(
             fallback_status="extracting" if enabled else "no_check",
         )
 
+    # A student coming back after the deadline finds the check closed,
+    # not a chat that will close under them mid-reply — and their own
+    # visit is enough to give the teacher an accurate marker.
+    if await finalize_if_abandoned(check, db):
+        await db.commit()
+
     problems = await _load_problems(db, check.id)
     turns = await _load_transcript(db, check.id)
     return await _build_state_response(
@@ -645,6 +651,10 @@ class TeacherIntegrityDetail(BaseModel):
     # when no AI verdict ran (skipped_unreadable / force_finalize_turn_cap)
     # — frontend falls back to a hardcoded disposition label.
     headline: str | None
+    # Why a complete check has no disposition: not_started / left_partway
+    # (the student didn't finish) or turn_cap (inconclusive). Null when
+    # the agent reached a verdict, and on every non-complete status.
+    incomplete_reason: Literal["not_started", "left_partway", "turn_cap"] | None
     probe_selection_reason: str | None
     inline_variant_used: bool
     inline_variant_result: str | None
@@ -694,11 +704,10 @@ async def teacher_get_integrity_detail(
     )
 
     check = await _load_check_for_submission(db, submission_id)
-    # Lazy on-read finalization: if the student abandoned the interview
-    # and it's been stuck past the wall-clock deadline, flip it to a
-    # terminal inconclusive state here so the teacher sees "interview
-    # incomplete" instead of a frozen in-progress check. No scheduler in
-    # this deployment, so the teacher's read is the trigger.
+    # On-read finalization: the cron sweep normally closes an abandoned
+    # interview first, but if this read beats it, close it here so the
+    # teacher sees "Didn't finish the check" instead of a frozen
+    # in-progress one.
     if check is not None and await finalize_if_abandoned(check, db):
         await db.commit()
     if check is None:
@@ -708,6 +717,7 @@ async def teacher_get_integrity_detail(
             disposition=None,
             overall_summary=None,
             headline=None,
+            incomplete_reason=None,
             probe_selection_reason=None,
             inline_variant_used=False,
             inline_variant_result=None,
@@ -789,6 +799,7 @@ async def teacher_get_integrity_detail(
         disposition=check.disposition,
         overall_summary=check.overall_summary,
         headline=check.headline,
+        incomplete_reason=check.incomplete_reason,
         probe_selection_reason=check.probe_selection_reason,
         inline_variant_used=check.inline_variant_used,
         inline_variant_result=check.inline_variant_result,

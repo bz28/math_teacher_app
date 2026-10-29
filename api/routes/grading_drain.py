@@ -21,12 +21,17 @@ LOCKED`, so two overlapping calls take disjoint work rather than grading
 (and billing for) the same submission twice.
 """
 
+import logging
 import secrets
 
 from fastapi import APIRouter, Header, HTTPException, status
 
 from api.config import settings
 from api.core.grading_queue import DEFAULT_DRAIN_LIMIT, drain
+from api.core.integrity_pipeline import finalize_abandoned_checks
+from api.database import get_session_factory
+
+logger = logging.getLogger(__name__)
 
 # include_in_schema=False: this is service-to-service, and publishing
 # it put the path and its auth header name into the public OpenAPI
@@ -54,6 +59,14 @@ async def drain_grading_queue(
     closed door with no grade coming and nothing to do about it, while a
     failure is live work still counting down its retry budget. Alerting
     should key on `failed`.
+
+    The same clock also closes understanding checks the student walked
+    away from (`abandoned_checks`). That's the one other piece of work
+    only time can trigger, and the teacher's "Didn't finish the check"
+    marker is wrong until it runs, so it rides here rather than waiting
+    for someone to open a page. It runs first — one indexed query, where
+    the drain can spend minutes on LLM calls — and a failure in it never
+    blocks grading.
     """
     token = settings.grading_drain_token
     if not token:
@@ -70,6 +83,13 @@ async def drain_grading_queue(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid grading token",
         )
+    abandoned = 0
+    try:
+        async with get_session_factory()() as db:
+            abandoned = await finalize_abandoned_checks(db)
+    except Exception:
+        logger.exception("abandoned-check sweep failed; grading drain continues")
     # Bounded so one pass can't run past a platform request timeout and
     # get killed halfway. Anything unclaimed stays queued for next time.
-    return await drain(limit=max(1, min(limit, DEFAULT_DRAIN_LIMIT)))
+    result = await drain(limit=max(1, min(limit, DEFAULT_DRAIN_LIMIT)))
+    return {**result, "abandoned_checks": abandoned}
