@@ -6,8 +6,9 @@ NOT an auto-fix proposal, because journeys often live on auth/billing/grading
 surfaces the agent must never edit (see flow_alert_md).
 
 Two layers, picked per journey by which can be made NON-FLAKY:
-  • Browser layer (login, logout, student insights) — the journey IS the UI: a form render +
-    submit + redirect that no API call captures. Asserts on a definitive
+  • Browser layer (login, logout, student insights, confirm reading) — the
+    journey IS the UI: a form render + submit + redirect that no API call
+    captures. Asserts on a definitive
     Playwright signal (a required element/navigation that surfaces as a
     timeout when broken).
   • API layer (join-class, submit-homework, grade+publish) — the journey is a
@@ -46,6 +47,7 @@ from tests.harness.browser import HarnessBrowser
 from tests.harness.seed import (
     WORKSHOP_FLOW_FIGURE,
     Seed,
+    seed_confirmable_submission,
     seed_insights_homework,
     seed_joinable_section,
     seed_submitted_submission,
@@ -175,6 +177,41 @@ async def _student_insights_flow(
         href = await link.get_attribute("href") if await link.count() else None
         if not href or "student=" not in href or "problem=1" not in href:
             issues.append(f"'View work' does not deep-link to the student's problem (href={href!r})")
+    return FlowResult(name, title, not issues, issues)
+
+
+async def _confirm_reading_flow(
+    browser: HarnessBrowser, web_base: str, api_base: str, seed: Seed,
+) -> FlowResult:
+    """Student confirms the AI's reading of their work on an AI-graded homework
+    with the understanding check OFF → lands on "Turned in". Confirming is the
+    last step there, so the page must leave the confirm screen on its own; it
+    used to sit on "Saving…" until a reload. A real browser flow because the
+    bug was the page's routing, not the endpoint (which succeeded). The
+    confirm spawns grading, which fails harmlessly on the harness's dummy key."""
+    name, title = "confirm_reading", "Student confirms the reading of their work"
+    issues: list[str] = []
+    assignment_id, token, refresh = await seed_confirmable_submission(
+        seed, page_b64=_PAGE_PNG_B64, integrity_check_enabled=False,
+    )
+    async with browser.authed_page(token, refresh) as page:
+        await page.goto(
+            f"{web_base.rstrip('/')}/school/student/courses/{seed.course_id}"
+            f"/homework/{assignment_id}",
+            wait_until="domcontentloaded", timeout=_TIMEOUT_MS,
+        )
+        try:
+            await page.get_by_role("button", name="Confirm — this is my work").click(timeout=_TIMEOUT_MS)
+        except PlaywrightTimeoutError:
+            issues.append("the confirm screen never offered 'Confirm — this is my work' for a ready reading")
+            return FlowResult(name, title, False, issues)
+        try:
+            await page.get_by_text("Turned in", exact=True).wait_for(timeout=_TIMEOUT_MS)
+        except PlaywrightTimeoutError:
+            issues.append(
+                "after confirming the reading (check off, AI grading on) the page never "
+                "reached 'Turned in' — the student is left on the confirm screen",
+            )
     return FlowResult(name, title, not issues, issues)
 
 
@@ -380,7 +417,7 @@ async def _workshop_steps_flow(
 # (Deferred: the practice/learn journeys need LLM generation + a queue-based
 # multi-page entry — a real build + a per-scan cost decision, not a quick add.)
 _FLOWS = (
-    _login_flow, _logout_flow, _student_insights_flow,
+    _login_flow, _logout_flow, _student_insights_flow, _confirm_reading_flow,
     _join_class_flow, _submit_homework_flow, _grade_publish_flow,
     _workshop_steps_flow,
 )
