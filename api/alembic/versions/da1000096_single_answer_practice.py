@@ -1,7 +1,7 @@
 """single-answer practice: no wrong options on multi-part practice items
 
 Revision ID: da1000096
-Revises: cz1000095
+Revises: cw1000092
 Create Date: 2026-10-29 00:00:00.000000
 
 A multi-part practice problem ("(a) find x, (b) name the postulate")
@@ -31,7 +31,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "da1000096"
-down_revision: str | None = "cz1000095"
+down_revision: str | None = "cw1000092"
 branch_labels = None
 depends_on = None
 
