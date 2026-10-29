@@ -46,8 +46,9 @@ class ClassRubricRule(BaseModel):
     # Omitted on a new rule — the server assigns one.
     id: str | None = Field(default=None, max_length=40)
     text: str = Field(min_length=1, max_length=MAX_RULE_CHARS)
-    # Points off a problem (0-100 scale) when the rule is broken. None =
-    # the teacher didn't say; the grader sizes it like a small slip.
+    # Points off a problem when the rule is broken, in the problem's own
+    # points (api/core/homework_points.py), not percent. None = the
+    # teacher didn't say; the grader sizes it like a small slip.
     points: int | None = Field(default=None, ge=0, le=100)
     source: Literal["settings", "suggestion"] = "settings"
     # Where a suggested rule came from ("HW 5"), for the settings list.

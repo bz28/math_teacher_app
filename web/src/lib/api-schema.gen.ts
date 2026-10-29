@@ -3905,6 +3905,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/teacher/question-bank/{item_id}/graph-checklist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Graph Checklist
+         * @description Replace the checklist with the teacher's. From now on it is hers:
+         *     question and answer-key changes no longer rewrite it.
+         */
+        put: operations["update_graph_checklist_v1_teacher_question_bank__item_id__graph_checklist_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/teacher/question-bank/{item_id}/graph-checklist/rewrite": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rewrite Graph Checklist
+         * @description Write the checklist again from the question and answer key,
+         *     replacing the teacher's edits. Awaited, like regenerate: the teacher
+         *     asked for it and is waiting for it. On failure her checklist stays.
+         */
+        post: operations["rewrite_graph_checklist_v1_teacher_question_bank__item_id__graph_checklist_rewrite_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teacher/question-bank/{item_id}/regenerate": {
         parameters: {
             query?: never;
@@ -5117,6 +5160,15 @@ export interface components {
             breakdown?: components["schemas"]["BreakdownEntry"][] | null;
             /** Teacher Notes */
             teacher_notes?: string | null;
+        };
+        /** GraphChecklistItemIn */
+        GraphChecklistItemIn: {
+            /** Points */
+            points: number;
+            /** Rule Id */
+            rule_id?: string | null;
+            /** Text */
+            text: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -6661,6 +6713,14 @@ export interface components {
              * Format: uuid
              */
             unit_id: string;
+        };
+        /**
+         * UpdateGraphChecklistRequest
+         * @description The teacher's checklist, replacing the whole list.
+         */
+        UpdateGraphChecklistRequest: {
+            /** Items */
+            items: components["schemas"]["GraphChecklistItemIn"][];
         };
         /**
          * UpdateLeadRequest
@@ -13641,6 +13701,76 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_graph_checklist_v1_teacher_question_bank__item_id__graph_checklist_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateGraphChecklistRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rewrite_graph_checklist_v1_teacher_question_bank__item_id__graph_checklist_rewrite_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };

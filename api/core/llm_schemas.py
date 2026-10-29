@@ -1638,13 +1638,19 @@ RUBRIC_RULE_SUGGESTION_SCHEMA: ToolSchema = {
 # settle on its own.
 GRAPH_CHECKLIST_SCHEMA: ToolSchema = {
     "name": "return_graph_checklist",
-    "description": "List what a correct graph for this question must visibly show.",
+    "description": "List what a correct drawing for this question must visibly show.",
     "input_schema": {
         "type": "object",
         "properties": {
+            "asks_for_drawing": {
+                "type": "boolean",
+                "description": (
+                    "False when the question doesn't ask the student to draw anything "
+                    "(a calculation, or only reading a printed figure); then list no items."
+                ),
+            },
             "items": {
                 "type": "array",
-                "minItems": 1,
                 "maxItems": 6,
                 "items": {
                     "type": "object",
@@ -1677,7 +1683,7 @@ GRAPH_CHECKLIST_SCHEMA: ToolSchema = {
                 },
             },
         },
-        "required": ["items"],
+        "required": ["asks_for_drawing", "items"],
         "additionalProperties": False,
     },
 }

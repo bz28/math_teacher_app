@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useRef, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FigureDisplay } from "@/components/shared/figure-display";
@@ -17,6 +17,7 @@ import {
   type TeacherSection,
   type TeacherRubric,
   type HomeworkPoints,
+  type HomeworkGraphChecklist,
 } from "@/lib/api";
 import { normalizeRubric } from "@/lib/rubric";
 import { evenSplit, MAX_TOTAL_POINTS, pointsRange } from "@/lib/points";
@@ -40,6 +41,7 @@ import {
   type PointsChange,
 } from "@/components/school/teacher/_pieces/problem-points";
 import { WorkshopModal } from "@/components/school/teacher/workshop-modal";
+import { GraphChecklistPanel } from "@/components/school/teacher/_pieces/graph-checklist";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface AssignmentProblem {
@@ -98,6 +100,7 @@ export default function HomeworkDetailPage({
         content: unknown;
         rubric: TeacherRubric | null;
         points: HomeworkPoints;
+        graph_checklists: Record<string, HomeworkGraphChecklist>;
       })
     | null
   >(null);
@@ -203,6 +206,31 @@ export default function HomeworkDetailPage({
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId]);
+
+  // A checklist changed (saved, rewritten, written in the background
+  // since approving, or resized by a points or rules change): re-read
+  // only the checklists, so a refetch can't undo another field's
+  // optimistic edit that is still saving. Throws when the read fails.
+  const refreshChecklists = useCallback(async () => {
+    const fresh = await teacher.assignment(assignmentId);
+    setHw((h) => (h ? { ...h, graph_checklists: fresh.graph_checklists } : h));
+  }, [assignmentId]);
+
+  // Just approved: a checklist is written in the background in a few
+  // seconds. Look once more for the whole page (not once per problem)
+  // before the panels offer to write one by hand.
+  const [checklistsLookedAgain, setChecklistsLookedAgain] = useState(false);
+  const checklistPending = Object.values(hw?.graph_checklists ?? {}).some(
+    (e) => !e.checklist && e.can_write,
+  );
+  useEffect(() => {
+    if (!checklistPending || checklistsLookedAgain) return;
+    const t = setTimeout(() => {
+      setChecklistsLookedAgain(true);
+      refreshChecklists().catch(() => undefined);
+    }, 8000);
+    return () => clearTimeout(t);
+  }, [checklistPending, checklistsLookedAgain, refreshChecklists]);
 
   // Pick up any gen job(s) the wizard kicked off for this HW. The
   // wizard stashes a JSON array of job ids in sessionStorage on
@@ -652,7 +680,8 @@ export default function HomeworkDetailPage({
             assignmentId,
             empty ? { clear_rubric: true } : { rubric: merged },
           )
-          .then(() => undefined),
+          // Skipped or restored class rules change the checklists' links.
+          .then(() => refreshChecklists().catch(() => undefined)),
     );
   };
 
@@ -682,7 +711,11 @@ export default function HomeworkDetailPage({
       "points",
       () => setHw((h) => (h ? { ...h, points: next } : h)),
       () => setHw((h) => (h ? { ...h, points: prev } : h)),
-      () => teacher.updateAssignment(assignmentId, change).then(() => undefined),
+      // New points resize the graph checklists.
+      () =>
+        teacher
+          .updateAssignment(assignmentId, change)
+          .then(() => refreshChecklists().catch(() => undefined)),
     );
   };
 
@@ -1103,6 +1136,9 @@ export default function HomeworkDetailPage({
                           ? undefined
                           : () => void openWorkshopForProblem(p.bank_item_id)
                       }
+                      checklist={hw.graph_checklists?.[p.bank_item_id]}
+                      checklistLookedAgain={checklistsLookedAgain}
+                      onChecklistChanged={refreshChecklists}
                     />
                   ))}
                 </ul>
@@ -1678,8 +1714,15 @@ function ProblemRow({
   onPointsChange,
   validatePoints,
   onEdit,
+  checklist,
+  checklistLookedAgain,
+  onChecklistChanged,
 }: {
   problem: AssignmentProblem;
+  /** Present for a problem that requires a drawing. */
+  checklist?: HomeworkGraphChecklist;
+  checklistLookedAgain: boolean;
+  onChecklistChanged: () => Promise<void>;
   /** What it's worth; null for practice (ungraded: no points, no
    *  grading details). */
   points: number | null;
@@ -1774,9 +1817,20 @@ function ProblemRow({
               <span className="shrink-0 text-xs text-text-muted">Locked while published</span>
             )}
           </div>
-          <p className="text-xs text-text-secondary">
-            Graded by AI using the rules below.
-          </p>
+          {checklist ? (
+            <GraphChecklistPanel
+              entry={checklist}
+              bankItemId={problem.bank_item_id}
+              problemPoints={points}
+              lookedAgain={checklistLookedAgain}
+              onChanged={onChecklistChanged}
+              onEditQuestion={onEdit}
+            />
+          ) : (
+            <p className="text-xs text-text-secondary">
+              Graded by AI using the rules below.
+            </p>
+          )}
         </div>
       )}
     </li>

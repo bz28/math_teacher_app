@@ -121,6 +121,12 @@ class QuestionBankItem(Base):
     )
     # One-level undo for the flag, alongside previous_question.
     previous_requires_drawing: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # What a correct graph for this question must show, for grading the
+    # graph part (api/core/graph_checklist.py). NULL = not written yet.
+    # {"items": [{text, points, rule_id}], "points": the problem's points
+    # the item points were set for, "teacher_edited": bool}. Item points
+    # are resolved on read (rule points, scaling: checklist_points.py).
+    graph_checklist: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     # Provenance: generated (AI), imported (PDF), manual (typed by teacher).
     source: Mapped[str] = mapped_column(String(20), nullable=False, default="generated")
     # Variation tree — set by "generate similar" later.

@@ -14,7 +14,7 @@ export type PointsChange =
   | { total_points: number }
   | { problem_points: Record<string, number> };
 
-const numberInputClass =
+export const numberInputClass =
   "w-14 rounded-[--radius-sm] border border-border-light bg-bg-base px-2 py-1 text-right font-mono text-sm font-semibold tabular-nums text-text-primary focus:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:opacity-60";
 
 /**

@@ -19,9 +19,11 @@ Not wired into grading yet: this is the piece the Step 2 eval measures.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from api.core.checklist_points import MAX_CHECKLIST_ITEM_CHARS, MAX_CHECKLIST_ITEMS, fit_checklist
 from api.core.image_utils import crop_region_for_vision, preprocess_image_for_vision, to_content_block
 from api.core.llm_client import (
     MODEL_OPUS,
@@ -48,22 +50,58 @@ _WIDE = (0.6, 0.22)
 
 
 _CHECKLIST_SYSTEM = """\
-You write the checklist a math teacher uses to grade a student's hand-drawn graph.
+You write the checklist a math teacher uses to grade a student's hand drawing: \
+a graph, a number line, a chart, a diagram or a construction.
 
-You get one graphing question, its answer key, the points the graph is worth, \
-and the class's grading rules. List 3 to 6 features a correct graph must show.
+You get one question that asks for a drawing, its answer key, what the whole \
+problem is worth, and the class's grading rules. List 3 to 6 features a correct \
+drawing must show.
+
+Check what a teacher checks: the features that show whether the drawing is right. \
+On a graph that is where a line or curve is, which way it goes, how steep it is, \
+where it crosses an axis or another line, an asymptote, or its shape. On a number \
+line it is the endpoint, open or closed, and which way it is shaded. On a chart it \
+is each bar's or point's value. On a construction it is each arc or line it needs.
+
+Never check how neatly it is drawn: dots, arrowheads, ruler-straight lines, the \
+scale chosen. A dot, a label or a dashed line is an item only when the question \
+says to mark or label it, a class rule asks for it, or it changes the meaning \
+(dashed or solid on an inequality, open or closed on a number line). Two lines \
+that cross show where they intersect without a dot.
+
+Write every item so a correct drawing sketched by hand on graph paper passes it.
 
 Each item:
-- Is one feature that a person looking ONLY at the drawing can mark yes or no: \
-a line or curve at a place, a crossing, a shape, a label, a scale.
+- Is ONE feature that a person looking only at the drawing can mark yes or no: \
+one line or curve at one place, one crossing, one label. Never two in one item: \
+not "Both asymptotes labeled", but one item per asymptote.
+- Says what is drawn, not what it stands for: "Dashed horizontal line at y = 1", \
+not "Line at y = 1 representing the midline".
 - Uses the exact values from the answer key ("Vertical asymptote drawn at x = 2", \
 "Crosses the y-axis at (0, 0.5)").
 - Never says "correct", "accurate" or "properly" without saying what that means.
-- Covers only what the question asks for. Ask for labels only if the question \
-says to label, or a class rule requires them.
 
-Points: whole numbers that add up to the points given, weighted by how much \
-each feature matters to the graph.
+Cover every part the question asks the student to draw, including any guide curve, \
+asymptote or reference line it names (a cosecant graphed from its sine curve needs \
+the sine curve). Ask for nothing more: labels only if the question says to label, \
+or a class rule requires them.
+
+Only the drawing. The student's written work and final answer are graded \
+separately, so no item is about something written beside the drawing ("The solution \
+(3, 0) is written", "States the system is inconsistent"). A feature drawn ON the \
+drawing is part of it ("The two lines cross at (3, 0)").
+
+Only the values the question and answer key give. Reading one off is fine (the line \
+y = -2x + 6 crosses the y-axis at (0, 6)); working out a new one is not (asymptotes \
+from a period). When the key doesn't give a feature's values, describe it without \
+them ("A vertical asymptote between each pair of branches").
+
+If the question doesn't ask the student to draw anything (it is a calculation, or \
+only reads a printed figure), set asks_for_drawing to false and list no items.
+
+Points: whole numbers, weighted by how much each feature matters. Together they \
+are the drawing's share of the problem: leave at least 1 point for the written work \
+and the answer.
 
 Class rules: when an item is exactly what a class rule asks for, set its rule_id \
 to that rule's bracketed id and use the rule's points. Otherwise rule_id is null.
@@ -91,6 +129,53 @@ class ChecklistItem:
     text: str
     points: int
     rule_id: str | None = None
+    # Numbers in the item that the question and answer key never give:
+    # the writer worked them out, so the teacher checks them.
+    values_to_check: list[str] = field(default_factory=list)
+
+
+@dataclass
+class WrittenChecklist:
+    items: list[ChecklistItem]
+    # False when the writer read the question as asking for no drawing
+    # (a calculation, or a printed figure): the flag is likely wrong.
+    asks_for_drawing: bool = True
+
+
+# A number, with its sign. A minus counts when it sits right before the
+# digits ("(0, -3)", "x - 3" both give -3), so x = 3 doesn't vouch for
+# x = -3. "1,000" is one number; ".5" is 0.5. Exponents ("x^2") aren't
+# values a graph shows, so they're skipped.
+_NUMBER = re.compile(r"(?<![\w.^])(-\s?)?(\d{1,3}(?:,\d{3})+(?!\d)|\d+(?:\.\d+)?|\.\d+)")
+_LATEX_FRACTION = re.compile(r"\\[dt]?frac(?:\{(\d+)\}\{(\d+)\}|(\d)(\d))")
+_UNICODE_FRACTIONS = {"½": "1/2", "⅓": "1/3", "⅔": "2/3", "¼": "1/4", "¾": "3/4"}
+
+
+def _numbers(text: str) -> list[str]:
+    """The numbers in `text`, in order, normalized ("2.50" is "2.5",
+    "−½" is -1 over 2). Mirrored by `splitValues` in graph-checklist.tsx."""
+    text = text.replace("−", "-")
+    text = _LATEX_FRACTION.sub(lambda m: f"{m[1] or m[3]}/{m[2] or m[4]}", text)
+    for k, v in _UNICODE_FRACTIONS.items():
+        text = text.replace(k, v)
+    out = []
+    for m in _NUMBER.finditer(text):
+        if text[: m.start()].endswith("^{"):
+            continue
+        n = m[2].replace(",", "")
+        if n.startswith("."):
+            n = "0" + n
+        if "." in n:
+            n = n.rstrip("0").rstrip(".")
+        out.append("0" if n == "0" else f"-{n}" if m[1] else n)
+    return out
+
+
+def values_not_given(text: str, *sources: str) -> list[str]:
+    """The numbers in `text` that none of `sources` contains, in the
+    order they appear. 0 always counts as given (the axes)."""
+    given = {n for s in sources for n in _numbers(s)} | {"0"}
+    return list(dict.fromkeys(n for n in _numbers(text) if n not in given))
 
 
 @dataclass
@@ -115,23 +200,42 @@ def _format_rules(class_rules: list[dict[str, Any]] | None) -> str:
     return "\n".join(lines) or "(none)"
 
 
+def _whole_points(value: Any) -> int:
+    """The model's points for an item, defensively: anything that isn't a
+    positive whole number is 1, and `fit_checklist` re-sizes the total."""
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return 1
+    return n if n >= 1 else 1
+
+
 async def write_graph_checklist(
     question: str,
     final_answer: str,
-    graph_points: int,
+    problem_points: int,
     *,
     class_rules: list[dict[str, Any]] | None = None,
     user_id: str | None = None,
-) -> list[ChecklistItem]:
-    """The features a correct graph for `question` must show, worth
-    `graph_points` in total. Reproducible (temperature 0): the same
-    question and key give the same checklist."""
-    rule_ids = {r["id"] for r in class_rules or []}
+) -> WrittenChecklist:
+    """The features a correct graph for `question` must show, for a
+    problem worth `problem_points` in all. The model suggests the split:
+    the items add up to the graph's share, and at least 1 point is left
+    for the work and the answer. Temperature 0, but not reproducible:
+    runs on the same question and key can differ, so the teacher sees it.
+
+    What comes back is held to the rules in code, not just the prompt:
+    at most `MAX_CHECKLIST_ITEMS` items, each with text; a rule-linked
+    item takes its rule's points; and the sum is trimmed below
+    `problem_points` (`fit_checklist`). Empty when the problem has no
+    room for a graph part (under 2 points)."""
+    if problem_points < 2:
+        return WrittenChecklist([])
     out = await call_claude_json(
         _CHECKLIST_SYSTEM,
         (
             f"Question:\n{question}\n\nAnswer key:\n{final_answer}\n\n"
-            f"The graph is worth {graph_points} points.\n\n"
+            f"The whole problem is worth {problem_points} points.\n\n"
             f"Class rules:\n{_format_rules(class_rules)}"
         ),
         LLMMode.GRAPH_CHECKLIST,
@@ -141,18 +245,25 @@ async def write_graph_checklist(
         temperature=0.0,
         user_id=user_id,
     )
+    if out.get("asks_for_drawing") is False:
+        return WrittenChecklist([], asks_for_drawing=False)
+    rule_text = " ".join(str(r.get("text") or "") for r in class_rules or [])
     items = []
     raw_items = out.get("items")
     for raw in raw_items if isinstance(raw_items, list) else []:
         if not isinstance(raw, dict) or not str(raw.get("text") or "").strip():
             continue
         rule_id = raw.get("rule_id")
+        text = str(raw["text"]).strip()[:MAX_CHECKLIST_ITEM_CHARS]
         items.append(ChecklistItem(
-            text=str(raw["text"]).strip(),
-            points=max(1, int(raw.get("points") or 1)),
-            rule_id=rule_id if rule_id in rule_ids else None,
+            text=text,
+            points=_whole_points(raw.get("points")),
+            rule_id=rule_id if isinstance(rule_id, str) else None,
+            values_to_check=values_not_given(text, question, final_answer, rule_text),
         ))
-    return items
+    return WrittenChecklist(
+        fit_checklist(items[:MAX_CHECKLIST_ITEMS], problem_points, problem_points, class_rules),
+    )
 
 
 def _parse_check(out: dict[str, Any], count: int) -> tuple[str, list[ItemResult]]:

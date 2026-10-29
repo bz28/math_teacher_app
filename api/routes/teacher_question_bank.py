@@ -10,14 +10,29 @@ import uuid
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.audit_log import record_activity, record_question_edit
+from api.core.checklist_points import MAX_CHECKLIST_ITEM_CHARS, MAX_CHECKLIST_ITEMS
 from api.core.constants import SOLUTION_FAILED_SENTINEL_PREFIX
+from api.core.drawing_check import ChecklistItem
 from api.core.drawing_requirement import classify_requires_drawing
 from api.core.entitlements import Entitlement, check_entitlement
+from api.core.graph_checklist import (
+    checklist_views,
+    current_checklist,
+    due,
+    homework_context,
+    needs_checklist,
+    schedule_write,
+    source_of,
+    stored_items,
+    to_stored,
+    write_checklist,
+)
+from api.core.homework_points import MAX_TOTAL_POINTS
 from api.core.image_utils import validate_and_decode_upload
 from api.core.question_bank_chat import CHAT_SOFT_CAP, chat_with_bank_item
 from api.core.question_bank_generation import (
@@ -225,6 +240,30 @@ class ChatMessageIndexRequest(BaseModel):
     message_index: int
 
 
+class GraphChecklistItemIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1, max_length=MAX_CHECKLIST_ITEM_CHARS)
+    points: int = Field(ge=1, le=MAX_TOTAL_POINTS)
+    # A current class rule's id. A linked item is worth the rule's points
+    # whenever the rule names some.
+    rule_id: str | None = Field(default=None, max_length=40)
+
+    @field_validator("text")
+    @classmethod
+    def _strip(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("A checklist item needs some text")
+        return v
+
+
+class UpdateGraphChecklistRequest(BaseModel):
+    """The teacher's checklist, replacing the whole list."""
+
+    items: list[GraphChecklistItemIn] = Field(min_length=1, max_length=MAX_CHECKLIST_ITEMS)
+
+
 # ── helpers ──
 
 
@@ -252,6 +291,7 @@ async def get_bank_item(
 def _serialize_item(
     item: QuestionBankItem,
     used_in: list[dict[str, str]] | None = None,
+    graph_checklist: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "id": str(item.id),
@@ -268,6 +308,9 @@ def _serialize_item(
         "locked": bool(item.locked),
         "requires_drawing": bool(item.requires_drawing),
         "requires_drawing_teacher_set": bool(item.requires_drawing_teacher_set),
+        # Resolved for the class's rules and the problem's points
+        # (graph_checklist.checklist_view); null until written.
+        "graph_checklist": graph_checklist,
         "source": item.source,
         "parent_question_id": str(item.parent_question_id) if item.parent_question_id else None,
         "used_in": used_in or [],
@@ -284,6 +327,12 @@ def _serialize_item(
         "created_at": item.created_at.isoformat(),
         "updated_at": item.updated_at.isoformat(),
     }
+
+
+async def _item_response(db: AsyncSession, item: QuestionBankItem) -> dict[str, Any]:
+    """One item as every per-item endpoint returns it."""
+    views = await checklist_views(db, [item])
+    return _serialize_item(item, await used_in_for_item(db, item), views.get(item.id))
 
 
 def _serialize_job(job: QuestionBankGenerationJob) -> dict[str, Any]:
@@ -362,8 +411,11 @@ async def list_bank_items(
             counts[s] = c
 
     used_map = await used_in_assignments_map(db, course_id)
+    checklists = await checklist_views(db, list(items))
     return {
-        "items": [_serialize_item(i, used_map.get(str(i.id))) for i in items],
+        "items": [
+            _serialize_item(i, used_map.get(str(i.id)), checklists.get(i.id)) for i in items
+        ],
         "counts": counts,
     }
 
@@ -705,8 +757,11 @@ async def update_bank_item(
                 db, current_user, "bank_item.retag", "bank_item", item.id, retag,
             )
 
+    checklist_due = due(item)
     await db.commit()
-    return _serialize_item(item, await used_in_for_item(db, item))
+    if checklist_due:
+        schedule_write(item, user_id=str(current_user.user_id))
+    return await _item_response(db, item)
 
 
 @router.post("/question-bank/{item_id}/revert")
@@ -756,8 +811,11 @@ async def revert_bank_item(
         db, current_user, "bank_item.revert", "bank_item", item.id,
         {"title": item.title, "restored_status": restored_status},
     )
+    checklist_due = due(item)
     await db.commit()
-    return _serialize_item(item, await used_in_for_item(db, item))
+    if checklist_due:
+        schedule_write(item, user_id=str(current_user.user_id))
+    return await _item_response(db, item)
 
 
 @router.post("/question-bank/{item_id}/approve")
@@ -832,7 +890,12 @@ async def approve_bank_item(
         db, current_user, "bank_item.approve", "bank_item", item.id,
         {"title": item.title},
     )
+    checklist_due = due(item)
     await db.commit()
+    # After the commit, so the background write sees the approved item —
+    # and a failed write can't touch the approval.
+    if checklist_due:
+        schedule_write(item, user_id=str(current_user.user_id))
     return {"status": "ok"}
 
 
@@ -905,9 +968,12 @@ async def regenerate_bank_item(
         db, current_user, "bank_item.regenerate", "bank_item", item.id,
         {"title": item.title, "mode": "guided" if kind == REGEN_GUIDED else "fresh"},
     )
+    checklist_due = due(item)
     await db.commit()
+    if checklist_due:
+        schedule_write(item, user_id=str(current_user.user_id))
 
-    return _serialize_item(item, await used_in_for_item(db, item))
+    return await _item_response(db, item)
 
 
 @router.post("/question-bank/{item_id}/generate-similar", status_code=status.HTTP_202_ACCEPTED)
@@ -1041,7 +1107,7 @@ async def post_chat_message(
     )
     await db.commit()
 
-    return _serialize_item(item, await used_in_for_item(db, item))
+    return await _item_response(db, item)
 
 
 @router.post("/question-bank/{item_id}/chat/accept")
@@ -1159,8 +1225,11 @@ async def accept_chat_proposal(
             ],
         },
     )
+    checklist_due = due(item)
     await db.commit()
-    return _serialize_item(item, await used_in_for_item(db, item))
+    if checklist_due:
+        schedule_write(item, user_id=str(current_user.user_id))
+    return await _item_response(db, item)
 
 
 @router.post("/question-bank/{item_id}/chat/discard")
@@ -1192,7 +1261,7 @@ async def discard_chat_proposal(
         {"title": item.title},
     )
     await db.commit()
-    return _serialize_item(item, await used_in_for_item(db, item))
+    return await _item_response(db, item)
 
 
 def _shed_resolved_figure_svg(msg: dict[str, Any]) -> dict[str, Any]:
@@ -1235,4 +1304,122 @@ async def clear_chat(
     """Wipe the chat history for this item. Question/solution unchanged."""
     item.chat_messages = []
     await db.commit()
-    return _serialize_item(item, await used_in_for_item(db, item))
+    return await _item_response(db, item)
+
+
+# ── graph checklist ──
+#
+# Like the requires-drawing toggle, the checklist says what the answer
+# requires, not what students see, so it is editable on a locked item. It
+# only affects grading that runs after it.
+
+
+@router.put("/question-bank/{item_id}/graph-checklist")
+async def update_graph_checklist(
+    body: UpdateGraphChecklistRequest,
+    item: QuestionBankItem = Depends(get_bank_item),
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Replace the checklist with the teacher's. From now on it is hers:
+    question and answer-key changes no longer rewrite it."""
+    points, grading = await homework_context(db, item)
+    if not points:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Add this question to its homework before setting its graph checklist",
+        )
+    # The rules the grader applies to this homework: a class rule it skips
+    # can't be linked here.
+    rules = {r["id"]: r.get("points") for r in grading}
+    graph_points = 0
+    for i in body.items:
+        if i.rule_id is not None and i.rule_id not in rules:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="That class rule no longer applies to this homework — reload and try again",
+            )
+        rule_points = rules.get(i.rule_id) if i.rule_id else None
+        graph_points += rule_points if isinstance(rule_points, int) and rule_points > 0 else i.points
+    if graph_points >= points:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"The graph can be worth at most {points - 1} of this problem's {points} "
+                "points — leave at least 1 for the work and answer"
+            ),
+        )
+    # An item she left as it was keeps its "check these values" note; an
+    # item she wrote or reworded is hers to vouch for.
+    unchecked = {i.text: i.values_to_check for i in stored_items(current_checklist(item))}
+    item.graph_checklist = to_stored(
+        [
+            ChecklistItem(
+                text=i.text, points=i.points, rule_id=i.rule_id,
+                values_to_check=list(unchecked.get(i.text, [])),
+            )
+            for i in body.items
+        ],
+        points, source=source_of(item), teacher_edited=True,
+    )
+    await record_activity(
+        db, current_user, "bank_item.edit", "bank_item", item.id,
+        {"title": item.title, "fields": ["graph_checklist"]},
+    )
+    await db.commit()
+    return await _item_response(db, item)
+
+
+@router.post("/question-bank/{item_id}/graph-checklist/rewrite")
+@limiter.limit("6/minute")
+async def rewrite_graph_checklist(
+    request: Request,
+    item: QuestionBankItem = Depends(get_bank_item),
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Write the checklist again from the question and answer key,
+    replacing the teacher's edits. Awaited, like regenerate: the teacher
+    asked for it and is waiting for it. On failure her checklist stays."""
+    if not needs_checklist(item):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "Only an approved question that requires a drawing, with an "
+                "answer key, gets a graph checklist"
+            ),
+        )
+    points, _ = await homework_context(db, item)
+    if not points:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Add this question to its homework before writing its graph checklist",
+        )
+    if points < 2:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"This problem is worth {points} point — give it at least 2 so the "
+                "graph can be worth some and the work and answer the rest"
+            ),
+        )
+    try:
+        written = await write_checklist(
+            db, item.id, user_id=str(current_user.user_id), replace_teacher_edit=True,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Couldn't write the checklist. Try again.",
+        ) from e
+    if not written:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Couldn't write the checklist. Try again.",
+        )
+    await record_activity(
+        db, current_user, "bank_item.edit", "bank_item", item.id,
+        {"title": item.title, "fields": ["graph_checklist"]},
+    )
+    await db.commit()
+    return await _item_response(db, item)

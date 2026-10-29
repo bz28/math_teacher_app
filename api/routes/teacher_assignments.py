@@ -18,6 +18,7 @@ from api.core.class_rubric import MAX_CLASS_RULES
 from api.core.constants import DEFAULT_HOMEWORK_INSTRUCTIONS, MAX_RUBRIC_FIELD_CHARS
 from api.core.entitlements import Entitlement, check_entitlement
 from api.core.extraction_edits import apply_extraction_edits
+from api.core.graph_checklist import homework_checklists
 from api.core.homework_points import (
     DEFAULT_TOTAL_POINTS,
     MAX_TOTAL_POINTS,
@@ -992,6 +993,9 @@ async def get_assignment(
         "by_problem": by_problem,
         "custom": a.problem_points is not None,
     }
+    # {problem_id: {checklist, can_write}} for problems that require a
+    # drawing (api/core/graph_checklist.py).
+    result["graph_checklists"] = await homework_checklists(db, a)
     return result
 
 
