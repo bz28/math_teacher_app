@@ -51,7 +51,7 @@ interface AssignmentProblem {
   question: string;
   /** Pre-rendered geometry SVG; null when the problem has no figure. */
   figure_svg: string | null;
-  solution_steps: { title: string; description: string }[] | null;
+  solution_steps: { title: string; description: string; figure_svg?: string | null }[] | null;
   final_answer: string | null;
   /** Practice only: the wrong options the student runner mixes with
    *  final_answer to make each problem multiple choice. */
@@ -1814,7 +1814,11 @@ function ProblemRow({
             <MathText text={problem.question} />
           </div>
           {open && problem.figure_svg && (
-            <FigureDisplay svg={problem.figure_svg} className="mt-2 max-h-56" />
+            // FigureDisplay owns its vertical rhythm (my-3), so no margin here.
+            <FigureDisplay
+              svg={problem.figure_svg}
+              ariaLabel={`Figure for problem ${problem.position}`}
+            />
           )}
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
             {pointsBox("order-last ml-auto flex sm:hidden")}
@@ -1938,6 +1942,15 @@ function PracticeProblemDetail({ id, problem }: { id: string; problem: Assignmen
       {choices.length >= 2 ? (
         <section>
           <h4 className={label}>Answer choices students see</h4>
+          {!correct && (
+            <p
+              role="alert"
+              className="mt-2 rounded-[--radius-sm] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] px-2.5 py-1.5 text-xs font-semibold text-[color:var(--color-warning-dark)]"
+            >
+              No correct answer stored, so students can&apos;t get this right.
+              Edit or regenerate it.
+            </p>
+          )}
           <ol className="mt-2 space-y-1.5">
             {choices.map((c, i) => {
               const isCorrect = c === correct;
@@ -1996,6 +2009,15 @@ function PracticeProblemDetail({ id, problem }: { id: string; problem: Assignmen
                       <MathText text={s.title} />
                     </div>
                   )}
+                  {/* Same per-step figure the student's Learn view shows
+                      (step-timeline.tsx). */}
+                  <FigureDisplay
+                    svg={s.figure_svg}
+                    className="max-h-44"
+                    ariaLabel={
+                      s.title ? `Figure for step ${i + 1}: ${s.title}` : `Figure for step ${i + 1}`
+                    }
+                  />
                   <div className="mt-0.5 text-[13px] leading-relaxed text-text-secondary">
                     <MathText text={s.description} />
                   </div>
