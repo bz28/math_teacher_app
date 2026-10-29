@@ -1163,6 +1163,21 @@
             "title": "Is Late",
             "type": "boolean"
           },
+          "next_step": {
+            "anyOf": [
+              {
+                "enum": [
+                  "confirm_reading",
+                  "finish_check"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Step"
+          },
           "section_name": {
             "title": "Section Name",
             "type": "string"
@@ -4096,6 +4111,21 @@
             ],
             "title": "Grade Published At"
           },
+          "next_step": {
+            "anyOf": [
+              {
+                "enum": [
+                  "confirm_reading",
+                  "finish_check"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Step"
+          },
           "problems": {
             "items": {
               "$ref": "#/components/schemas/StudentHomeworkProblem"
@@ -4234,6 +4264,21 @@
               }
             ],
             "title": "Due At"
+          },
+          "next_step": {
+            "anyOf": [
+              {
+                "enum": [
+                  "confirm_reading",
+                  "finish_check"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Step"
           },
           "problem_count": {
             "title": "Problem Count",

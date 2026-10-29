@@ -2103,6 +2103,46 @@ def unfinished_check_state(
     return UNFINISHED_NEVER_CONFIRMED
 
 
+NextStep = Literal["confirm_reading", "finish_check"]
+NEXT_STEP_CONFIRM_READING: Literal["confirm_reading"] = "confirm_reading"
+NEXT_STEP_FINISH_CHECK: Literal["finish_check"] = "finish_check"
+
+
+def student_next_step(
+    sub: Submission,
+    check: IntegrityCheckSubmission | None,
+    *,
+    grade_published: bool,
+    now: datetime,
+) -> NextStep | None:
+    """What a student still has to do on homework they turned in: the
+    calm "one more step" nudge on their lists and homework page.
+
+    - `confirm_reading`: the AI read the work and the student hasn't said
+      it's right. Asked whether or not the check is on — AI grading waits
+      on this confirm too.
+    - `finish_check`: the understanding check is open and still inside
+      its deadline. Past the deadline it's being closed as unfinished,
+      so there's nothing to come back to.
+
+    None once a grade is published (the loop has moved on, and a nudge
+    next to a grade reads as a demand), after a disputed reading (nothing
+    else for the student to do), and while the reading is still coming.
+    Nudge only: nothing here gates grading.
+    """
+    if grade_published or sub.extraction_flagged_at is not None:
+        return None
+    if sub.extraction is not None and sub.extraction_confirmed_at is None:
+        return NEXT_STEP_CONFIRM_READING
+    if (
+        check is not None
+        and check.status in OPEN_STATUSES
+        and not _is_abandoned(check, now)
+    ):
+        return NEXT_STEP_FINISH_CHECK
+    return None
+
+
 def _is_abandoned(check: IntegrityCheckSubmission, now: datetime) -> bool:
     if check.status not in OPEN_STATUSES:
         return False

@@ -4835,6 +4835,8 @@ export interface components {
             due_at: string | null;
             /** Is Late */
             is_late: boolean;
+            /** Next Step */
+            next_step?: ("confirm_reading" | "finish_check") | null;
             /** Section Name */
             section_name: string;
             /**
@@ -6057,6 +6059,8 @@ export interface components {
             final_score?: number | null;
             /** Grade Published At */
             grade_published_at?: string | null;
+            /** Next Step */
+            next_step?: ("confirm_reading" | "finish_check") | null;
             /** Problems */
             problems: components["schemas"]["StudentHomeworkProblem"][];
             /** Published */
@@ -6103,6 +6107,8 @@ export interface components {
             assignment_id: string;
             /** Due At */
             due_at: string | null;
+            /** Next Step */
+            next_step?: ("confirm_reading" | "finish_check") | null;
             /** Problem Count */
             problem_count: number;
             /** Status */
