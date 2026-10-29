@@ -2344,14 +2344,25 @@ function PublishConfirmDialog({
           {flaggedToPublish === 1 ? " it" : " them"} first?
         </p>
       )}
+      {/* Graph items the check couldn't decide. Its own quiet look,
+       *  with the "?" the checklist uses for those items, so it doesn't
+       *  read as a second unapproved warning. */}
       {graphToPublish > 0 && (
-        <p className="mt-3 rounded-[--radius-md] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] px-3 py-2 text-xs text-[color:var(--color-warning-dark)]  dark:bg-[color:var(--color-warning)]/10 ">
-          <span className="font-semibold">{graphToPublish}</span>{" "}
-          {graphToPublish === 1
-            ? "student still has graph items to check"
-            : "students still have graph items to check"}
-          . Those items count as correct until you mark them, so{" "}
-          {graphToPublish === 1 ? "that score" : "those scores"} could still go down.
+        <p className="mt-3 flex gap-2 rounded-[--radius-md] border border-border-light bg-[color:var(--color-surface-alt-2)] px-3 py-2 text-xs text-text-secondary">
+          <span
+            aria-hidden
+            className="mt-px inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-[color:var(--color-warning-dark)]/30 bg-[color:var(--color-warning-bg)] text-[10px] font-bold text-[color:var(--color-warning-dark)]"
+          >
+            ?
+          </span>
+          <span>
+            <span className="font-semibold text-text-primary">{graphToPublish}</span>{" "}
+            {graphToPublish === 1
+              ? "grade still has graph items to check"
+              : "grades still have graph items to check"}
+            . Those items count as correct until you mark them; a ✗ lowers
+            the score the next time you publish.
+          </span>
         </p>
       )}
       {otherSections > 0 && (
