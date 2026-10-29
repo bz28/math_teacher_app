@@ -36,6 +36,11 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # ADD COLUMN takes an exclusive lock, and the old container's student
+    # turns hold a row lock on this table across their LLM calls. Give up
+    # after 5s rather than queue every query on the table behind us; the
+    # boot fails and the platform's restart retries the migration.
+    op.execute("SET LOCAL lock_timeout = '5s'")
     op.add_column(
         "integrity_check_submissions",
         sa.Column("incomplete_reason", sa.String(length=32), nullable=True),
