@@ -50,10 +50,26 @@ _WIDE = (0.6, 0.22)
 
 
 _CHECKLIST_SYSTEM = """\
-You write the checklist a math teacher uses to grade a student's hand-drawn graph.
+You write the checklist a math teacher uses to grade a student's hand drawing: \
+a graph, a number line, a chart, a diagram or a construction.
 
-You get one graphing question, its answer key, what the whole problem is worth, \
-and the class's grading rules. List 3 to 6 features a correct graph must show.
+You get one question that asks for a drawing, its answer key, what the whole \
+problem is worth, and the class's grading rules. List 3 to 6 features a correct \
+drawing must show.
+
+Check what a teacher checks: the features that show whether the drawing is right. \
+On a graph that is where a line or curve is, which way it goes, how steep it is, \
+where it crosses an axis or another line, an asymptote, or its shape. On a number \
+line it is the endpoint, open or closed, and which way it is shaded. On a chart it \
+is each bar's or point's value. On a construction it is each arc or line it needs.
+
+Never check how neatly it is drawn: dots, arrowheads, ruler-straight lines, the \
+scale chosen. A dot, a label or a dashed line is an item only when the question \
+says to mark or label it, a class rule asks for it, or it changes the meaning \
+(dashed or solid on an inequality, open or closed on a number line). Two lines \
+that cross show where they intersect without a dot.
+
+Write every item so a correct drawing sketched by hand on graph paper passes it.
 
 Each item:
 - Is ONE feature that a person looking only at the drawing can mark yes or no: \
@@ -71,9 +87,9 @@ the sine curve). Ask for nothing more: labels only if the question says to label
 or a class rule requires them.
 
 Only the drawing. The student's written work and final answer are graded \
-separately, so no item is about something written beside the graph ("The solution \
-(3, 0) is written", "States the system is inconsistent"). A label or a marked point \
-ON the graph is part of the drawing ("Intersection point marked at (3, 0)").
+separately, so no item is about something written beside the drawing ("The solution \
+(3, 0) is written", "States the system is inconsistent"). A feature drawn ON the \
+drawing is part of it ("The two lines cross at (3, 0)").
 
 Only the values the question and answer key give. Reading one off is fine (the line \
 y = -2x + 6 crosses the y-axis at (0, 6)); working out a new one is not (asymptotes \
@@ -84,7 +100,7 @@ If the question doesn't ask the student to draw anything (it is a calculation, o
 only reads a printed figure), set asks_for_drawing to false and list no items.
 
 Points: whole numbers, weighted by how much each feature matters. Together they \
-are the graph's share of the problem: leave at least 1 point for the written work \
+are the drawing's share of the problem: leave at least 1 point for the written work \
 and the answer.
 
 Class rules: when an item is exactly what a class rule asks for, set its rule_id \
@@ -205,8 +221,8 @@ async def write_graph_checklist(
     """The features a correct graph for `question` must show, for a
     problem worth `problem_points` in all. The model suggests the split:
     the items add up to the graph's share, and at least 1 point is left
-    for the work and the answer. Reproducible (temperature 0): the same
-    question and key give the same checklist.
+    for the work and the answer. Temperature 0, but not reproducible:
+    runs on the same question and key can differ, so the teacher sees it.
 
     What comes back is held to the rules in code, not just the prompt:
     at most `MAX_CHECKLIST_ITEMS` items, each with text; a rule-linked

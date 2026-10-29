@@ -1638,7 +1638,7 @@ RUBRIC_RULE_SUGGESTION_SCHEMA: ToolSchema = {
 # settle on its own.
 GRAPH_CHECKLIST_SCHEMA: ToolSchema = {
     "name": "return_graph_checklist",
-    "description": "List what a correct graph for this question must visibly show.",
+    "description": "List what a correct drawing for this question must visibly show.",
     "input_schema": {
         "type": "object",
         "properties": {
