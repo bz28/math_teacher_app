@@ -1328,7 +1328,10 @@ class IntegrityProbe(Probe):
                     raw=raw,
                 )
             )
-        scorecard = summarize_corpus(raws)
+        # The disposition scorecard + non-nuisance mean are over the golden
+        # corpus only: the engagement cases run long by design (repeated
+        # "idk") and assert their own labels instead.
+        scorecard = summarize_corpus(raws[: len(GOLDEN_CASES)])
         print(_format_scorecard(scorecard))  # noqa: T201
         # Stamp the corpus-wide mean onto every item so the per-item
         # deterministic check can gate it (the harness has no corpus-level
