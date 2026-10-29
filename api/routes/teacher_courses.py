@@ -1,7 +1,6 @@
 """Teacher course management — CRUD."""
 
 import uuid
-from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -17,7 +16,7 @@ from api.core.class_rubric import (
     credit_guidance,
     rubric_revision,
 )
-from api.core.integrity_pipeline import ABANDONED_INTERVIEW_DEADLINE
+from api.core.integrity_pipeline import INCOMPLETE_TURN_CAP
 from api.core.subjects import VALID_SUBJECTS
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
@@ -170,12 +169,22 @@ def _dirty_case() -> Any:
     )
 
 
-def _flagged_case() -> Any:
+def flagged_case() -> Any:
     """Counts submissions needing teacher attention from the integrity
-    pipeline — flagged disposition, unreadable extraction, inconclusive
-    complete (turn cap / no sampled problems), an abandoned interview
-    stalled past the wall-clock deadline, or student-raised 'reader got
-    something wrong' before confirm.
+    pipeline — flagged disposition, unreadable extraction, a turn-cap
+    inconclusive check, an AI-grading skip with no grade, or student-raised
+    'reader got something wrong' before confirm.
+
+    The one definition of "flagged": the courses dashboard, the needs-
+    attention queue and the per-homework inbox all sum this, and the
+    review page's Flagged filter (`isFlagged` in the roster) mirrors it
+    row for row, so the count a teacher clicks and the list she lands on
+    agree.
+
+    A student who didn't finish the understanding check is deliberately
+    NOT here. Walking away from a check raises scrutiny — the roster says
+    "Didn't finish the check" on that row — but it isn't evidence of
+    anything, and integrity never auto-flags.
 
     Each integrity-check-based branch also requires the check to be
     unresolved: once a teacher marks it reviewed, it's handled and no
@@ -184,7 +193,6 @@ def _flagged_case() -> Any:
     integrity_unresolved = (
         IntegrityCheckSubmission.resolution == "unresolved"
     )
-    abandoned_cutoff = datetime.now(UTC) - ABANDONED_INTERVIEW_DEADLINE
     return case(
         (
             and_(
@@ -204,20 +212,7 @@ def _flagged_case() -> Any:
             and_(
                 IntegrityCheckSubmission.status == "complete",
                 IntegrityCheckSubmission.disposition.is_(None),
-                integrity_unresolved,
-            ),
-            1,
-        ),
-        # Abandoned interview: still in awaiting_student / in_progress past
-        # the deadline. Not yet finalized (a teacher opening the roster
-        # does that lazily), but counted here so the needs-attention badge
-        # nudges them to look in the first place.
-        (
-            and_(
-                IntegrityCheckSubmission.status.in_(
-                    ("awaiting_student", "in_progress"),
-                ),
-                IntegrityCheckSubmission.updated_at < abandoned_cutoff,
+                IntegrityCheckSubmission.incomplete_reason == INCOMPLETE_TURN_CAP,
                 integrity_unresolved,
             ),
             1,
@@ -252,7 +247,7 @@ async def _course_attention(
     counts_row = (await db.execute(
         select(
             func.coalesce(func.sum(_to_review_case()).cast(Integer), 0).label("to_review"),
-            func.coalesce(func.sum(_flagged_case()).cast(Integer), 0).label("flagged"),
+            func.coalesce(func.sum(flagged_case()).cast(Integer), 0).label("flagged"),
         )
         .select_from(Submission)
         .join(Assignment, Assignment.id == Submission.assignment_id)
@@ -343,7 +338,7 @@ async def list_courses(
         select(
             Assignment.course_id.label("course_id"),
             func.coalesce(func.sum(_to_review_case()).cast(Integer), 0).label("to_review"),
-            func.coalesce(func.sum(_flagged_case()).cast(Integer), 0).label("flagged"),
+            func.coalesce(func.sum(flagged_case()).cast(Integer), 0).label("flagged"),
         )
         .select_from(Submission)
         .join(Assignment, Assignment.id == Submission.assignment_id)
@@ -440,7 +435,7 @@ async def needs_attention(
     teacher right now, one row per submission, prioritized.
 
     Reuses the exact predicates the courses dashboard and Submissions
-    inbox use (_to_review_case / _flagged_case), so the queue can never
+    inbox use (_to_review_case / flagged_case), so the queue can never
     disagree with the per-course pills. Owner-gated: only submissions on
     published homework the teacher owns, non-preview students, dropped
     after un-enrollment via the SectionEnrollment guard.
@@ -451,7 +446,7 @@ async def needs_attention(
     the review surface for that exact (HW × section), focusing the
     student via a query param.
     """
-    flagged_case = _flagged_case()
+    flagged_expr = flagged_case()
     dirty_case = _dirty_case()
     # Overdue is decided in SQL so timezone handling stays in the DB.
     overdue_case = case(
@@ -473,7 +468,7 @@ async def needs_attention(
             Assignment.due_at.label("due_at"),
             Section.id.label("section_id"),
             Section.name.label("section_name"),
-            flagged_case.label("flagged"),
+            flagged_expr.label("flagged"),
             dirty_case.label("dirty"),
             SubmissionGrade.grade_published_at.label("grade_published_at"),
             overdue_case.label("is_overdue"),
@@ -500,7 +495,7 @@ async def needs_attention(
             Assignment.type == "homework",
             Assignment.status == "published",
             User.is_preview.is_(False),
-            or_(flagged_case == 1, _to_review_case() == 1),
+            or_(flagged_expr == 1, _to_review_case() == 1),
         )
     )).all()
 
