@@ -1,7 +1,7 @@
 """add submissions.extraction_flag_note
 
 Revision ID: cy1000094
-Revises: da1000096
+Revises: cx1000093
 Create Date: 2026-10-29 00:00:00.000000
 
 The student's optional short note ("What did it get wrong?") sent with
@@ -15,10 +15,11 @@ student made before flagging reuse the existing `extraction_edits` /
 Adding a nullable column is safe while the old container still serves:
 it never reads or writes the column.
 
-Numbered cy1000094 because cw1000092 (#954, #958) and cx1000093 (#960)
-are taken by other open PRs that also revise cv1000091. Whichever of
-these merges after the first must re-point its down_revision onto the
-then-current head, or alembic sees two heads.
+Numbered cy1000094 because cw1000092 (#954), cz1000095 / da1000096
+(#958) and cx1000093 (#960) were taken by PRs that merged first; this
+chains onto cx1000093, main's head when this was last merged with main.
+If another migration lands on main first, re-point down_revision at the
+new head, or alembic sees two heads.
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "cy1000094"
-down_revision: str | None = "da1000096"
+down_revision: str | None = "cx1000093"
 branch_labels = None
 depends_on = None
 
