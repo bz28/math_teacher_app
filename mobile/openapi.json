@@ -2611,6 +2611,10 @@
             "title": "Problems",
             "type": "array"
           },
+          "stuck_tap_used": {
+            "title": "Stuck Tap Used",
+            "type": "boolean"
+          },
           "submission_id": {
             "title": "Submission Id",
             "type": "string"
@@ -2629,7 +2633,8 @@
           "disposition",
           "extraction",
           "problems",
-          "transcript"
+          "transcript",
+          "stuck_tap_used"
         ],
         "title": "IntegrityStateResponse",
         "type": "object"
@@ -5906,8 +5911,8 @@
       "TurnRequest": {
         "properties": {
           "message": {
+            "default": "",
             "maxLength": 4000,
-            "minLength": 1,
             "title": "Message",
             "type": "string"
           },
@@ -5924,6 +5929,11 @@
             ],
             "title": "Seconds On Turn"
           },
+          "stuck": {
+            "default": false,
+            "title": "Stuck",
+            "type": "boolean"
+          },
           "telemetry": {
             "anyOf": [
               {
@@ -5935,9 +5945,6 @@
             ]
           }
         },
-        "required": [
-          "message"
-        ],
         "title": "TurnRequest",
         "type": "object"
       },

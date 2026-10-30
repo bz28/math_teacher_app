@@ -17,6 +17,7 @@ from unittest.mock import patch
 
 from httpx import AsyncClient
 from sqlalchemy import select, text, update
+from sqlalchemy.exc import IntegrityError
 
 from api.database import get_session_factory
 from api.models.integrity_check import (
@@ -25,6 +26,10 @@ from api.models.integrity_check import (
     IntegrityConversationTurn,
 )
 from api.models.question_bank import QuestionBankItem
+from api.routes.integrity_check import (
+    STUCK_MESSAGE,
+    STUCK_PHRASES,
+)
 from api.routes.school_student_practice import drain_integrity_background_tasks
 from tests.conftest import (
     PAGE_PNG,
@@ -482,6 +487,141 @@ async def test_turn_rejects_short_messages(
         json={"message": "x"},
     )
     assert r.status_code == 400
+
+
+async def _post_turn(
+    client: AsyncClient, world: dict[str, Any], submission_id: str,
+    body: dict[str, Any],
+) -> Any:
+    return await client.post(
+        f"/v1/school/student/integrity/submissions/{submission_id}/turn",
+        headers=_auth(world["student_token"]),
+        json=body,
+    )
+
+
+async def _student_turn_contents(submission_id: str) -> list[str]:
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        rows = (await s.execute(
+            select(IntegrityConversationTurn.content)
+            .where(
+                IntegrityConversationTurn.integrity_check_submission_id == check.id,
+                IntegrityConversationTurn.role == "student",
+            )
+            .order_by(IntegrityConversationTurn.ordinal)
+        )).scalars().all()
+    return list(rows)
+
+
+async def test_stuck_tap_allowed_once_per_problem(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """The first stuck tap skips the typed minimum and lands the
+    server's canonical text; a second tap is rejected without writing a
+    turn or calling the agent."""
+    set_agent_script([[make_text("Opener")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    r = await client.get(
+        f"/v1/school/student/integrity/submissions/{submission_id}",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.json()["stuck_tap_used"] is False
+
+    set_agent_script([[make_text("That's okay — what did you do first?")]])
+    # Whatever text the client sends alongside the flag is ignored.
+    r = await _post_turn(client, world, submission_id, {"message": "", "stuck": True})
+    assert r.status_code == 200, r.text
+    assert r.json()["stuck_tap_used"] is True
+    assert await _student_turn_contents(submission_id) == [STUCK_MESSAGE]
+
+    r = await _post_turn(client, world, submission_id, {"stuck": True})
+    assert r.status_code == 400
+    assert "already used" in r.json()["detail"]
+    assert await _student_turn_contents(submission_id) == [STUCK_MESSAGE]
+
+    # Resume state still reports it spent.
+    r = await client.get(
+        f"/v1/school/student/integrity/submissions/{submission_id}",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.json()["stuck_tap_used"] is True
+
+
+async def test_legacy_stuck_text_counts_as_the_tap(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Installed mobile builds send the stuck phrase as a plain message
+    with no flag. It must spend the tap, and a repeat of it — flagged or
+    not — is rejected, so old clients can't sidestep the cap."""
+    legacy = "I'm stuck — not sure how to explain this."
+    assert legacy in STUCK_PHRASES
+    set_agent_script([[make_text("Opener")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    set_agent_script([[make_text("No problem — start with step one.")]])
+    r = await _post_turn(client, world, submission_id, {"message": legacy})
+    assert r.status_code == 200, r.text
+    assert r.json()["stuck_tap_used"] is True
+
+    r = await _post_turn(client, world, submission_id, {"message": legacy})
+    assert r.status_code == 400
+    r = await _post_turn(client, world, submission_id, {"message": STUCK_MESSAGE})
+    assert r.status_code == 400
+    r = await _post_turn(client, world, submission_id, {"stuck": True})
+    assert r.status_code == 400
+    assert await _student_turn_contents(submission_id) == [STUCK_MESSAGE]
+
+
+async def test_smart_punctuation_stuck_text_counts_as_the_tap(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """iOS smart punctuation / case variants of the stuck text still
+    spend the tap and are stored as the canonical text."""
+    set_agent_script([[make_text("Opener")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    set_agent_script([[make_text("That's okay.")]])
+    r = await _post_turn(client, world, submission_id, {
+        "message": "i’m stuck – not sure how to explain this",
+    })
+    assert r.status_code == 200, r.text
+    assert r.json()["stuck_tap_used"] is True
+    r = await _post_turn(client, world, submission_id, {
+        "message": "I’M STUCK — I’M NOT SURE HOW TO EXPLAIN THIS!",
+    })
+    assert r.status_code == 400
+    assert await _student_turn_contents(submission_id) == [STUCK_MESSAGE]
+
+
+async def test_racing_send_returns_clean_error_not_500(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Two sends at once collide on the transcript ordinal; the loser
+    gets the same answer as a repeat (400 for a stuck tap, 409 for a
+    typed reply) instead of a 500, and nothing is written."""
+    set_agent_script([[make_text("Opener")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    collision = IntegrityError("INSERT", {}, Exception("uq_ict_submission_ordinal"))
+    with patch(
+        "api.routes.integrity_check.process_student_turn",
+        side_effect=collision,
+    ):
+        r = await _post_turn(client, world, submission_id, {"stuck": True})
+        assert r.status_code == 400
+        assert "already used" in r.json()["detail"]
+        r = await _post_turn(client, world, submission_id, {"message": "I added 3"})
+        assert r.status_code == 409
+    assert await _student_turn_contents(submission_id) == []
 
 
 async def test_turn_happy_path_verdict_then_finish(

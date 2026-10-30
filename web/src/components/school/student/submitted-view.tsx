@@ -101,8 +101,8 @@ export function SubmittedView({ submission, graded, animateEntrance }: Props) {
           That&apos;s in your teacher&apos;s hands now.
         </h2>
         <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-text-secondary">
-          Nice work — {pageCount === 1 ? "your page" : `all ${pageCount} pages`} went
-          through. Your teacher will grade it soon, and you&apos;ll find your
+          Nice work — {pageCount === 1 ? "your page" : `all ${pageCount} pages`}{" "}
+          went through. Your teacher will grade it soon, and you&apos;ll find your
           result waiting in{" "}
           <span className="font-semibold text-text-primary">Grades</span>.
         </p>
