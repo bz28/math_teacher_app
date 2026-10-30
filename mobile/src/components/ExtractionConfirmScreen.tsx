@@ -421,21 +421,28 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
                 <Text style={styles.optionBody}>I'll fix them myself, then confirm.</Text>
               </View>
             </AnimatedPressable>
+            {/* Fixing it yourself is the steered path (the card above);
+                sending it to the teacher stays a real, always-visible
+                button for a student whose work truly was misread — just
+                quieter. */}
             <AnimatedPressable
-              style={styles.option}
+              style={styles.textAction}
               onPress={() => setFlagStep("note")}
               accessibilityRole="button"
-              accessibilityLabel="Most of it is wrong. Send it to my teacher to grade from my photos."
+              accessibilityLabel="Most of it is wrong? Send it to my teacher to grade from my photos."
             >
-              <View style={[styles.optionIcon, { backgroundColor: colors.surfaceAlt }]}>
-                <Ionicons name="alert-circle-outline" size={18} color={colors.textSecondary} />
-              </View>
-              <View style={styles.flex}>
-                <Text style={styles.optionTitle}>Most of it is wrong</Text>
-                <Text style={styles.optionBody}>Send it to my teacher to grade from my photos.</Text>
-              </View>
+              <Text style={styles.secondaryActionText}>
+                Most of it is wrong? <Text style={styles.secondaryActionLink}>Send it to my teacher</Text>
+              </Text>
             </AnimatedPressable>
-            <Button label="Never mind" variant="ghost" onPress={() => setFlagStep(null)} />
+            <AnimatedPressable
+              style={styles.textAction}
+              onPress={() => setFlagStep(null)}
+              accessibilityRole="button"
+              accessibilityLabel="Never mind"
+            >
+              <Text style={styles.dismissText}>Never mind</Text>
+            </AnimatedPressable>
           </View>
         ) : flagStep === "note" ? (
           <View style={styles.stepCard}>
@@ -601,6 +608,11 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     padding: spacing.md,
   },
   optionPrimary: { borderWidth: 2, borderColor: colors.primary, backgroundColor: colors.primaryBg },
+  // Compact text-style actions under the primary card — still ≥44pt tall.
+  textAction: { minHeight: 44, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.md },
+  secondaryActionText: { ...typography.body, fontSize: 14, color: colors.textSecondary, textAlign: "center" },
+  secondaryActionLink: { ...typography.bodyBold, color: colors.primary, textDecorationLine: "underline" },
+  dismissText: { ...typography.caption, fontSize: 13, color: colors.textMuted },
   optionIcon: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
   optionTitle: { ...typography.bodyBold, fontSize: 15, color: colors.text },
   optionBody: { ...typography.body, fontSize: 13, lineHeight: 18, color: colors.textSecondary, marginTop: 2 },

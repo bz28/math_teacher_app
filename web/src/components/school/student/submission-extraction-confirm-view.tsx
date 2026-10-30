@@ -710,53 +710,46 @@ export function SubmissionExtractionConfirmView({
             <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">
               If it&rsquo;s only a few lines, fixing them yourself is quickest.
             </p>
-            <div className="mt-5 space-y-2.5">
-              <button
-                type="button"
-                onClick={startFixing}
-                className="flex w-full items-start gap-3 rounded-[--radius-md] border-2 border-primary/40 bg-primary-bg/50 p-3.5 text-left transition-colors hover:border-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            {/* Fixing it yourself is the path we steer toward: one
+                prominent card. Sending it to the teacher stays a real,
+                always-visible button — a student whose work truly was
+                misread must be able to find it — just quieter. */}
+            <button
+              type="button"
+              onClick={startFixing}
+              className="mt-5 flex w-full items-center gap-3.5 rounded-[--radius-md] border-2 border-primary bg-primary-bg p-4 text-left transition-colors hover:bg-primary-bg/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+            >
+              <span
+                aria-hidden
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-white"
               >
-                <span
-                  aria-hidden
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-white"
-                >
-                  <PencilIcon className="h-4 w-4" />
+                <PencilIcon className="h-[18px] w-[18px]" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-base font-bold text-text-primary">
+                  Just a few lines
                 </span>
-                <span className="min-w-0">
-                  <span className="block text-sm font-bold text-text-primary">
-                    Just a few lines
-                  </span>
-                  <span className="mt-0.5 block text-sm text-text-secondary">
-                    I&rsquo;ll fix them myself, then confirm.
-                  </span>
+                <span className="mt-0.5 block text-sm text-text-secondary">
+                  I&rsquo;ll fix them myself, then confirm.
                 </span>
-              </button>
+              </span>
+            </button>
+            <div className="mt-3 flex flex-col items-center">
               <button
                 type="button"
                 onClick={() => setFlagStep("note")}
-                className="flex w-full items-start gap-3 rounded-[--radius-md] border border-border bg-surface p-3.5 text-left transition-colors hover:border-text-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                aria-label="Most of it is wrong? Send it to my teacher to grade from my photos."
+                className="inline-flex min-h-[44px] items-center rounded-[--radius-sm] px-3 text-sm text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
-                <span
-                  aria-hidden
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-bg-subtle text-text-secondary"
-                >
-                  <AlertTriangleIcon className="h-4 w-4" />
-                </span>
-                <span className="min-w-0">
-                  <span className="block text-sm font-bold text-text-primary">
-                    Most of it is wrong
-                  </span>
-                  <span className="mt-0.5 block text-sm text-text-secondary">
-                    Send it to my teacher to grade from my photos.
-                  </span>
+                Most of it is wrong?&nbsp;
+                <span className="font-semibold text-primary underline underline-offset-2">
+                  Send it to my teacher
                 </span>
               </button>
-            </div>
-            <div className="mt-4 text-center">
               <button
                 type="button"
                 onClick={() => setFlagStep(null)}
-                className="min-h-[44px] px-3 text-sm font-medium text-text-muted underline-offset-2 hover:text-text-secondary hover:underline"
+                className="min-h-[44px] rounded-[--radius-sm] px-3 text-xs font-medium text-text-muted transition-colors hover:text-text-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
                 Never mind
               </button>

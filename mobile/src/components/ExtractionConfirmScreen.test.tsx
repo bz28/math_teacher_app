@@ -107,6 +107,10 @@ describe("ExtractionConfirmScreen", () => {
 
     fireEvent.press(await waitForText("Something looks wrong"));
     expect(await waitForText("How much did we get wrong?")).toBeTruthy();
+    // Sending it to the teacher is quieter but always there, as a real button.
+    expect(
+      screen.getByLabelText("Most of it is wrong? Send it to my teacher to grade from my photos."),
+    ).toBeTruthy();
     fireEvent.press(screen.getByText("Just a few lines"));
 
     expect(await waitForText("Tap a line to fix it, then confirm.")).toBeTruthy();
@@ -130,7 +134,7 @@ describe("ExtractionConfirmScreen", () => {
     fireEvent.changeText(screen.getByDisplayValue("x equals 2"), "x equals 3");
     await flush();
     fireEvent.press(screen.getByText("Something looks wrong"));
-    fireEvent.press(await waitForText("Most of it is wrong"));
+    fireEvent.press(await waitForText(/^Most of it is wrong\?/));
     expect(await waitForText("The line you fixed will go too.")).toBeTruthy();
     fireEvent.changeText(screen.getByLabelText("What did it get wrong? (optional)"), "it read my 7s as 1s");
     await flush();
@@ -168,7 +172,7 @@ describe("ExtractionConfirmScreen", () => {
     render(<ExtractionConfirmScreen assignmentId="a" onDone={onDone} onIntegrityCheck={jest.fn()} />);
 
     fireEvent.press(await waitForText("Something looks wrong"));
-    fireEvent.press(await waitForText("Most of it is wrong"));
+    fireEvent.press(await waitForText(/^Most of it is wrong\?/));
     fireEvent.press(await waitForText("Send to my teacher"));
 
     expect(await waitForText("Couldn't send it to your teacher. Try again.")).toBeTruthy();
