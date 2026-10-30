@@ -46,6 +46,28 @@ describe("SchoolHomeScreen", () => {
     expect(onOpenAssignment).toHaveBeenCalledWith("hw1");
   });
 
+  it("leads with turned-in work that has one step left", async () => {
+    const row = DASHBOARD.due_this_week[0];
+    mockedApi.getSchoolDashboard.mockResolvedValue({
+      ...DASHBOARD,
+      due_this_week: [],
+      in_review: [
+        { ...row, assignment_id: "hw2", title: "Needs a confirm", status: "submitted", next_step: "confirm_reading" },
+        { ...row, assignment_id: "hw3", title: "Just waiting", status: "submitted", next_step: null },
+      ],
+    } as never);
+    const onOpenAssignment = jest.fn();
+    render(<SchoolHomeScreen onJoinClass={jest.fn()} onOpenAssignment={onOpenAssignment} />);
+
+    expect(await waitForText("One more step")).toBeTruthy();
+    expect(screen.getByText("Confirm your reading")).toBeTruthy();
+    // The rest stay under In review, not duplicated into the step list.
+    expect(screen.getByText("In review")).toBeTruthy();
+    expect(screen.getAllByText("Needs a confirm")).toHaveLength(1);
+    fireEvent.press(screen.getByLabelText("Needs a confirm"));
+    expect(onOpenAssignment).toHaveBeenCalledWith("hw2");
+  });
+
   it("shows the all-caught-up empty state when there's nothing due", async () => {
     mockedApi.getSchoolDashboard.mockResolvedValue({
       ...DASHBOARD,

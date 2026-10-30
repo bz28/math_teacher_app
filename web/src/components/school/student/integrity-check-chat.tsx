@@ -293,7 +293,6 @@ export function IntegrityCheckChat({
       lastActivityRef.current = Date.now();
     } catch (err) {
       const status = err instanceof ApiError ? err.status : null;
-      const rejected = status === 400 || status === 409;
       // A 400 carries the server's own student-facing reason (e.g. the
       // stuck tap was already spent in another tab) — show it verbatim.
       setError(
@@ -304,16 +303,13 @@ export function IntegrityCheckChat({
       setPendingStudentMessage(null);
       // Hand a typed draft back; a stuck tap has no draft to restore.
       if (!stuck) setMessage(trimmed);
-      // The server said no on the merits — our view may be stale (tap
-      // spent in another tab, check finished). Refetch so the chip and
-      // composer reflect it, as mobile does.
-      if (rejected) {
-        schoolStudent
-          .getIntegrityState(submissionId)
-          .then(setState)
-          .catch(() => {
-            /* keep current state; the error line already says it failed */
-          });
+      // The server said no (tap spent in another tab, the check closed:
+      // finished, the turn cap, or past its deadline in a tab left open).
+      // Refetch so the chip and composer reflect it, as mobile does.
+      try {
+        setState(await schoolStudent.getIntegrityState(submissionId));
+      } catch {
+        /* keep current state; the error above already says it failed */
       }
     } finally {
       setSending(false);
@@ -521,16 +517,15 @@ export function IntegrityCheckChat({
                   page helps us see it&rsquo;s really you.
                 </p>
                 {/* Why it's worth finishing. Honest on purpose: the chat
-                    doesn't move a score by itself — the teacher reads it
-                    and decides — so "improves your grade" is the wrong
-                    promise. "Best way to get credit for what you
-                    understand" is the true one, and it's the reason a
+                    doesn't affect the grade, so nothing here may promise
+                    credit or points. "Best way to show your teacher what
+                    you understand" is the true reason, and it's why a
                     student shouldn't tap Leave. */}
                 <p className="mt-2.5 rounded-[--radius-sm] border border-primary/25 bg-primary-bg px-3 py-2 text-sm leading-relaxed text-primary-dark">
                   <span className="font-semibold">
-                    Your teacher reads this conversation when they grade your work.
+                    Your teacher reads this conversation alongside your work.
                   </span>{" "}
-                  Explaining your thinking here is the best way to get credit for
+                  Explaining your thinking here is the best way to show them
                   what you understand.
                 </p>
               </div>
@@ -567,13 +562,29 @@ export function IntegrityCheckChat({
 
           {isComplete ? (
             <div className="border-t border-border-light px-2 py-4 text-center">
-              <p className="font-serif text-base text-text-primary">
-                Thanks for walking me through that!
-              </p>
-              <p className="mt-1 text-sm text-text-secondary">
-                Your teacher has everything they need — you&rsquo;ll see
-                your grade once they publish it.
-              </p>
+              {/* A check closed unfinished (a tab reopened after the
+                  deadline) gets the honest version, not a thank-you for
+                  a conversation that didn't happen. */}
+              {state?.closed_unfinished ? (
+                <>
+                  <p className="font-serif text-base text-text-primary">
+                    This check closed because it wasn&rsquo;t finished.
+                  </p>
+                  <p className="mt-1 text-sm text-text-secondary">
+                    Your work is still turned in.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="font-serif text-base text-text-primary">
+                    Thanks for walking me through that!
+                  </p>
+                  <p className="mt-1 text-sm text-text-secondary">
+                    Your teacher has everything they need — you&rsquo;ll see
+                    your grade once they publish it.
+                  </p>
+                </>
+              )}
               {/* Practice nudge — only renders when the agent's disposition
                   suggests more study would help AND a practice set is
                   actually linked to this HW. Any other combination stays

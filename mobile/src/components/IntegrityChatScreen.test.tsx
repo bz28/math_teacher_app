@@ -28,6 +28,23 @@ const STATE = {
 describe("IntegrityChatScreen", () => {
   beforeEach(() => jest.clearAllMocks());
 
+  it("a check closed unfinished says so instead of thanking the student", async () => {
+    mockedApi.getIntegrityState.mockResolvedValue({
+      ...STATE, overall_status: "complete", closed_unfinished: true,
+    } as never);
+    render(<IntegrityChatScreen submissionId="sub-1" onExit={jest.fn()} />);
+    expect(await waitForText(/closed because it wasn't finished/)).toBeTruthy();
+    expect(screen.queryByText(/Thanks for explaining your work/)).toBeNull();
+  });
+
+  it("a finished check keeps the thank-you", async () => {
+    mockedApi.getIntegrityState.mockResolvedValue({
+      ...STATE, overall_status: "complete", disposition: "pass", closed_unfinished: false,
+    } as never);
+    render(<IntegrityChatScreen submissionId="sub-1" onExit={jest.fn()} />);
+    expect(await waitForText(/Thanks for explaining your work/)).toBeTruthy();
+  });
+
   it("renders the sampled problem and the agent's opening turn", async () => {
     mockedApi.getIntegrityState.mockResolvedValue(STATE as never);
     render(<IntegrityChatScreen submissionId="sub-1" onExit={jest.fn()} />);

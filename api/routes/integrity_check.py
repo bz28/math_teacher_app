@@ -30,9 +30,11 @@ from api.core.integrity_pipeline import (
     STATUS_COMPLETE,
     STATUS_SKIPPED_UNREADABLE,
     TOOL_GENERATE_VARIANT,
+    UNFINISHED_REASONS,
     count_student_turns,
     finalize_if_abandoned,
     process_student_turn,
+    touch_open_check,
 )
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user_full, require_teacher
@@ -175,6 +177,11 @@ class IntegrityStateResponse(BaseModel):
     # problem. The client disables the button; the turn endpoint refuses
     # a second tap regardless.
     stuck_tap_used: bool
+    # True when the check closed because the student didn't finish it
+    # (never answered / left partway — incomplete_reason). The chat shows
+    # that honestly instead of the "thanks, your teacher has everything"
+    # closing. False for a finished check and for the turn cap.
+    closed_unfinished: bool = False
 
 
 # Per-event and array-length caps. A tampered client can't land
@@ -524,6 +531,11 @@ async def _build_state_response(
         stuck_tap_used=(
             sum(1 for t in turns if _is_stuck_turn(t)) >= MAX_STUCK_TAPS
         ),
+        closed_unfinished=(
+            check.status == STATUS_COMPLETE
+            and check.disposition is None
+            and check.incomplete_reason in UNFINISHED_REASONS
+        ),
     )
 
 
@@ -561,11 +573,24 @@ async def get_my_integrity_state(
             fallback_status="extracting" if enabled else "no_check",
         )
 
+    # A student coming back after the deadline finds the check closed,
+    # not a chat that will close under them mid-reply — and their own
+    # visit is enough to give the teacher an accurate marker. Inside the
+    # deadline, looking at the open chat counts as activity.
+    if (
+        await finalize_if_abandoned(check, db)
+        or await touch_open_check(check, db)
+    ):
+        await db.commit()
+
     problems = await _load_problems(db, check.id)
     turns = await _load_transcript(db, check.id)
     return await _build_state_response(
         submission_id, check, problems, turns, db, fallback_status="no_check",
     )
+
+
+CHECK_CLOSED = "This check has closed."
 
 
 @router.post("/school/student/integrity/submissions/{submission_id}/turn")
@@ -577,16 +602,26 @@ async def post_student_turn(
 ) -> IntegrityStateResponse:
     """Append a student turn, run the agent loop, return fresh state."""
     await _load_my_submission(db, submission_id, user.id)
-    check = await _load_check_for_submission(db, submission_id)
+    # Locked for the whole turn, and read fresh under the lock: a close
+    # that committed a moment ago is seen here, and nothing can close
+    # the check while this reply is being answered.
+    check = (await db.execute(
+        select(IntegrityCheckSubmission)
+        .where(IntegrityCheckSubmission.submission_id == submission_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )).scalar_one_or_none()
     if check is None:
         raise HTTPException(
             status_code=404, detail="No integrity check for this submission",
         )
 
+    # A reply never reopens a closed check — including one past its
+    # deadline that no sweep or read has closed yet (close it now).
+    if await finalize_if_abandoned(check, db):
+        await db.commit()
     if check.status in (STATUS_COMPLETE, STATUS_SKIPPED_UNREADABLE):
-        raise HTTPException(
-            status_code=409, detail="Integrity check already complete",
-        )
+        raise HTTPException(status_code=409, detail=CHECK_CLOSED)
     if check.status == "extracting":
         raise HTTPException(
             status_code=409, detail="Integrity check is still preparing",
@@ -611,9 +646,7 @@ async def post_student_turn(
     # loop in a prior turn somehow missed finalization. One count
     # query beats loading the whole transcript.
     if await count_student_turns(check.id, db) >= MAX_STUDENT_TURNS:
-        raise HTTPException(
-            status_code=409, detail="Integrity check already complete",
-        )
+        raise HTTPException(status_code=409, detail=CHECK_CLOSED)
 
     telemetry = (
         body.telemetry.model_dump(mode="json") if body.telemetry else None
@@ -730,14 +763,19 @@ class TeacherIntegrityDetail(BaseModel):
     submission_id: str
     overall_status: str
     # One of pass / needs_practice / tutor_pivot / flag_for_review.
-    # Null when status is skipped_unreadable or when the agent couldn't
-    # conclude (turn cap or no sampled problems).
+    # Null when status is skipped_unreadable or when no verdict ran: the
+    # turn cap, no sampled problems, or the student didn't finish (see
+    # incomplete_reason).
     disposition: str | None
     overall_summary: str | None
     # 4-8 word verdict title the agent emitted in finish_check. Null
     # when no AI verdict ran (skipped_unreadable / force_finalize_turn_cap)
     # — frontend falls back to a hardcoded disposition label.
     headline: str | None
+    # Why a complete check has no disposition: not_started / left_partway
+    # (the student didn't finish) or turn_cap (inconclusive). Null when
+    # the agent reached a verdict, and on every non-complete status.
+    incomplete_reason: Literal["not_started", "left_partway", "turn_cap"] | None
     probe_selection_reason: str | None
     inline_variant_used: bool
     inline_variant_result: str | None
@@ -787,11 +825,10 @@ async def teacher_get_integrity_detail(
     )
 
     check = await _load_check_for_submission(db, submission_id)
-    # Lazy on-read finalization: if the student abandoned the interview
-    # and it's been stuck past the wall-clock deadline, flip it to a
-    # terminal inconclusive state here so the teacher sees "interview
-    # incomplete" instead of a frozen in-progress check. No scheduler in
-    # this deployment, so the teacher's read is the trigger.
+    # On-read finalization: the cron sweep normally closes an abandoned
+    # interview first, but if this read beats it, close it here so the
+    # teacher sees "Didn't finish the check" instead of a frozen
+    # in-progress one.
     if check is not None and await finalize_if_abandoned(check, db):
         await db.commit()
     if check is None:
@@ -801,6 +838,7 @@ async def teacher_get_integrity_detail(
             disposition=None,
             overall_summary=None,
             headline=None,
+            incomplete_reason=None,
             probe_selection_reason=None,
             inline_variant_used=False,
             inline_variant_result=None,
@@ -882,6 +920,7 @@ async def teacher_get_integrity_detail(
         disposition=check.disposition,
         overall_summary=check.overall_summary,
         headline=check.headline,
+        incomplete_reason=check.incomplete_reason,
         probe_selection_reason=check.probe_selection_reason,
         inline_variant_used=check.inline_variant_used,
         inline_variant_result=check.inline_variant_result,

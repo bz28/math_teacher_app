@@ -35,6 +35,7 @@ type Mode =
       kind: "integrity_confirm";
       extraction: IntegrityExtraction;
       files: SubmissionFile[];
+      integrityCheckEnabled: boolean;
     }
   | { kind: "integrity_chat" }
   /** Student flagged "reader got something wrong" on the confirm
@@ -136,6 +137,7 @@ export default function HomeworkPage() {
             kind: "integrity_confirm",
             extraction: sub.extraction,
             files: sub.files,
+            integrityCheckEnabled: sub.integrity_check_enabled,
           });
           return;
         }
@@ -257,6 +259,7 @@ export default function HomeworkPage() {
         submissionId={submissionId}
         submittedFiles={mode.files}
         extraction={mode.extraction}
+        integrityCheckEnabled={mode.integrityCheckEnabled}
         onContinue={async () => {
           setConfirmedThisSession(true);
           // Re-fetch + reroute from server truth. Handles the 409
