@@ -495,11 +495,22 @@ export const confirmExtraction = (submissionId: string, edits?: Record<string, s
     { edits: edits && Object.keys(edits).length > 0 ? edits : null },
   );
 
-/** "The reader got it wrong" — routes the submission to manual teacher grading. */
-export const flagExtraction = (submissionId: string) =>
+/** Max length of the flag note — the server's `_MAX_FLAG_NOTE_LEN`. */
+export const FLAG_NOTE_MAX = 500;
+
+/** "Most of it is wrong" — routes the submission to manual teacher grading.
+ *  The optional note ("what did it get wrong?") and any lines the student
+ *  fixed first go to the teacher; neither is ever graded. */
+export const flagExtraction = (
+  submissionId: string,
+  body?: { note?: string; edits?: Record<string, string> },
+) =>
   apiPost<{ status: string; already_flagged: boolean }>(
     `/school/student/submissions/${submissionId}/flag-extraction`,
-    {},
+    {
+      note: body?.note?.trim() || null,
+      edits: body?.edits && Object.keys(body.edits).length > 0 ? body.edits : null,
+    },
   );
 
 export const MIN_INTEGRITY_MESSAGE_CHARS = 5;

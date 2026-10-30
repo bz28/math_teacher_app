@@ -7,6 +7,7 @@ jest.mock("../services/api", () => ({
   getSubmission: jest.fn(),
   confirmExtraction: jest.fn(),
   flagExtraction: jest.fn(),
+  FLAG_NOTE_MAX: 500,
 }));
 
 const mockedApi = api as jest.Mocked<typeof api>;
@@ -97,6 +98,97 @@ describe("ExtractionConfirmScreen", () => {
     await flush();
 
     expect(mockedApi.confirmExtraction).toHaveBeenCalledWith("sub-1", { "1:final": "5" });
+  });
+
+  it("'Just a few lines' opens fix mode instead of flagging, then confirms as usual", async () => {
+    mockedApi.getSubmission.mockResolvedValue(SUBMISSION as never);
+    mockedApi.confirmExtraction.mockResolvedValue({ status: "ok", already_confirmed: false } as never);
+    render(<ExtractionConfirmScreen assignmentId="a" onDone={jest.fn()} onIntegrityCheck={jest.fn()} />);
+
+    fireEvent.press(await waitForText("Something looks wrong"));
+    expect(await waitForText("How much did we get wrong?")).toBeTruthy();
+    // Sending it to the teacher is quieter but always there, as a real button.
+    expect(
+      screen.getByLabelText("Most of it is wrong? Send it to my teacher to grade from my photos."),
+    ).toBeTruthy();
+    fireEvent.press(screen.getByText("Just a few lines"));
+
+    expect(await waitForText("Tap a line to fix it, then confirm.")).toBeTruthy();
+    expect(screen.queryByText("How much did we get wrong?")).toBeNull();
+    expect(mockedApi.flagExtraction).not.toHaveBeenCalled();
+
+    fireEvent.changeText(screen.getByDisplayValue("x equals 2"), "x equals 3");
+    await flush();
+    fireEvent.press(screen.getByText("Looks right"));
+    await flush();
+    expect(mockedApi.confirmExtraction).toHaveBeenCalledWith("sub-1", { "1:1": "x equals 3" });
+  });
+
+  it("'Most of it is wrong' sends the note and any edits with the flag", async () => {
+    mockedApi.getSubmission.mockResolvedValue(SUBMISSION as never);
+    mockedApi.flagExtraction.mockResolvedValue({ status: "ok", already_flagged: false } as never);
+    const onDone = jest.fn();
+    render(<ExtractionConfirmScreen assignmentId="a" onDone={onDone} onIntegrityCheck={jest.fn()} />);
+
+    await waitForText("Did we read this right?");
+    fireEvent.changeText(screen.getByDisplayValue("x equals 2"), "x equals 3");
+    await flush();
+    fireEvent.press(screen.getByText("Something looks wrong"));
+    fireEvent.press(await waitForText(/^Most of it is wrong\?/));
+    expect(await waitForText("The line you fixed will go too.")).toBeTruthy();
+    fireEvent.changeText(screen.getByLabelText("What did it get wrong? (optional)"), "it read my 7s as 1s");
+    await flush();
+    fireEvent.press(screen.getByText("Send to my teacher"));
+    await flush();
+
+    expect(mockedApi.flagExtraction).toHaveBeenCalledWith("sub-1", {
+      note: "it read my 7s as 1s",
+      edits: { "1:1": "x equals 3" },
+    });
+    expect(mockedApi.confirmExtraction).not.toHaveBeenCalled();
+    expect(onDone).toHaveBeenCalled();
+  });
+
+  it("a line typed back to what was read isn't sent as an edit", async () => {
+    mockedApi.getSubmission.mockResolvedValue(SUBMISSION as never);
+    mockedApi.confirmExtraction.mockResolvedValue({ status: "ok", already_confirmed: false } as never);
+    render(<ExtractionConfirmScreen assignmentId="a" onDone={jest.fn()} onIntegrityCheck={jest.fn()} />);
+
+    await waitForText("Did we read this right?");
+    fireEvent.changeText(screen.getByDisplayValue("x equals 2"), "x equals 3");
+    await flush();
+    fireEvent.changeText(screen.getByDisplayValue("x equals 3"), "x equals 2 ");
+    await flush();
+    fireEvent.press(screen.getByText("Looks right"));
+    await flush();
+
+    expect(mockedApi.confirmExtraction).toHaveBeenCalledWith("sub-1", {});
+  });
+
+  it("a failed flag says so instead of failing silently", async () => {
+    mockedApi.getSubmission.mockResolvedValue(SUBMISSION as never);
+    mockedApi.flagExtraction.mockRejectedValue(new Error("Request failed (500)") as never);
+    const onDone = jest.fn();
+    render(<ExtractionConfirmScreen assignmentId="a" onDone={onDone} onIntegrityCheck={jest.fn()} />);
+
+    fireEvent.press(await waitForText("Something looks wrong"));
+    fireEvent.press(await waitForText(/^Most of it is wrong\?/));
+    fireEvent.press(await waitForText("Send to my teacher"));
+
+    expect(await waitForText("Couldn't send it to your teacher. Try again.")).toBeTruthy();
+    expect(onDone).not.toHaveBeenCalled();
+  });
+
+  it("skips straight to the note when there's no line to fix", async () => {
+    mockedApi.getSubmission.mockResolvedValue({
+      ...SUBMISSION,
+      extraction: { steps: [], final_answers: [], confidence: 0.3 },
+    } as never);
+    render(<ExtractionConfirmScreen assignmentId="a" onDone={jest.fn()} onIntegrityCheck={jest.fn()} />);
+
+    fireEvent.press(await waitForText("Something looks wrong"));
+    expect(await waitForText("Send it to your teacher")).toBeTruthy();
+    expect(screen.queryByText("Just a few lines")).toBeNull();
   });
 
   it("shows a source-photo strip of the submitted pages to compare against", async () => {

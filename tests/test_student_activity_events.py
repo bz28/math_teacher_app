@@ -45,7 +45,7 @@ _SCHOOL_NAME = "Activity Test School"
 _ALLOWED_META_KEYS = {
     "is_preview", "assignment_id", "section_id", "file_count", "is_late",
     "corrections_count", "bank_item_id", "mode", "context", "flagged",
-    "anchor_bank_item_id", "step_index", "turn_index",
+    "anchor_bank_item_id", "step_index", "turn_index", "has_note",
 }
 
 
@@ -246,12 +246,16 @@ async def test_flag_extraction_is_logged(
     r = await client.post(
         f"/v1/school/student/submissions/{submission_id}/flag-extraction",
         headers=_auth(world["student_token"]),
+        json={"note": "it read my sevens as ones, every one of them"},
     )
     assert r.status_code == 200, r.text
 
     rows = await _rows("submission.flag_extraction")
     assert len(rows) == 1
     assert rows[0]["school_id"] == school_id
+    # The note is student prose: only the fact one was left is logged.
+    assert rows[0]["action_metadata"]["has_note"] is True
+    assert "sevens" not in str(rows[0]["action_metadata"])
     _assert_meta_contract(rows[0]["action_metadata"])
 
 

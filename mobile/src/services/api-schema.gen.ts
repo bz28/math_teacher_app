@@ -2435,7 +2435,7 @@ export interface paths {
          *
          *     This is the single choke-point that gates grading on student
          *     confirmation. Called from "Confirm — this is my work" on the
-         *     confirm screen; "Reader got something wrong" calls /flag-extraction
+         *     confirm screen; "Something looks wrong" → "Most of it is wrong" calls /flag-extraction
          *     instead, which stamps extraction_flagged_at and deliberately does
          *     NOT spawn grading.
          */
@@ -2457,7 +2457,8 @@ export interface paths {
         put?: never;
         /**
          * Flag Extraction Submission
-         * @description Student said "Reader got something wrong" on the confirm screen.
+         * @description Student said most of the reading is wrong ("Something looks wrong"
+         *     → "Most of it is wrong") on the confirm screen.
          *
          *     Stamps `extraction_flagged_at` and sends the submission straight
          *     to the teacher — does NOT spawn integrity or AI grading, and the
@@ -2465,14 +2466,21 @@ export interface paths {
          *     transcription is the one the student says is wrong. The teacher
          *     grades it from the photo.
          *
+         *     Optional body (see FlagExtractionBody): the student's note on what
+         *     the reader got wrong, plus any lines they fixed first. Both are for
+         *     the teacher only — stored, shown on the review page, never graded.
+         *
          *     Rejects:
          *       • 404 if the submission doesn't exist.
          *       • 403 if it belongs to another student.
          *       • 409 if extraction hasn't finished (nothing to flag yet).
          *       • 409 if the student already confirmed (can't flag after
          *         confirm — integrity + grading may have already fired).
+         *       • 400 if an edit value exceeds the per-row size cap; 422 if the
+         *         note is over its length cap.
          *
-         *     Idempotent on re-flag: duplicate call returns 200 no-op.
+         *     Idempotent on re-flag: duplicate call returns 200 no-op (the first
+         *     call's note and edits stand).
          */
         post: operations["flag_extraction_submission_v1_school_student_submissions__submission_id__flag_extraction_post"];
         delete?: never;
@@ -5008,6 +5016,27 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /**
+         * FlagExtractionBody
+         * @description Optional body for flag-extraction. Both fields are optional and an
+         *     absent body is still a valid flag (older clients send none).
+         *
+         *     note: the student's short answer to "What did it get wrong?". Blank
+         *       or whitespace-only is stored as null.
+         *     edits: lines the student fixed before deciding to send it to the
+         *       teacher anyway. Same key format and validation as confirm-time
+         *       edits; stored on `extraction_edits` so the teacher review page
+         *       shows them as "edited by student" with the original read beside.
+         *       They are never graded by the AI — flagged work never is.
+         */
+        FlagExtractionBody: {
+            /** Edits */
+            edits?: {
+                [key: string]: string;
+            } | null;
+            /** Note */
+            note?: string | null;
+        };
         /** FlagRequest */
         FlagRequest: {
             /** Flagged */
@@ -6407,6 +6436,13 @@ export interface components {
             extraction_confidence?: number | null;
             /** Extraction Confirmed At */
             extraction_confirmed_at?: string | null;
+            /**
+             * Extraction Edit Count
+             * @default 0
+             */
+            extraction_edit_count: number;
+            /** Extraction Flag Note */
+            extraction_flag_note?: string | null;
             /** Extraction Flagged At */
             extraction_flagged_at?: string | null;
             /** Files */
@@ -10925,7 +10961,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["FlagExtractionBody"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

@@ -1755,6 +1755,40 @@
         "title": "ExtractionVisualWorkOut",
         "type": "object"
       },
+      "FlagExtractionBody": {
+        "description": "Optional body for flag-extraction. Both fields are optional and an\nabsent body is still a valid flag (older clients send none).\n\nnote: the student's short answer to \"What did it get wrong?\". Blank\n  or whitespace-only is stored as null.\nedits: lines the student fixed before deciding to send it to the\n  teacher anyway. Same key format and validation as confirm-time\n  edits; stored on `extraction_edits` so the teacher review page\n  shows them as \"edited by student\" with the original read beside.\n  They are never graded by the AI \u2014 flagged work never is.",
+        "properties": {
+          "edits": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "maxProperties": 200,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Edits"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "title": "FlagExtractionBody",
+        "type": "object"
+      },
       "FlagRequest": {
         "properties": {
           "flagged": {
@@ -5347,6 +5381,22 @@
               }
             ],
             "title": "Extraction Confirmed At"
+          },
+          "extraction_edit_count": {
+            "default": 0,
+            "title": "Extraction Edit Count",
+            "type": "integer"
+          },
+          "extraction_flag_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extraction Flag Note"
           },
           "extraction_flagged_at": {
             "anyOf": [
@@ -14147,7 +14197,7 @@
     },
     "/v1/school/student/submissions/{submission_id}/confirm-extraction": {
       "post": {
-        "description": "Student signs off on Vision's reading. Stamps\n`extraction_confirmed_at` and spawns the integrity + grading\nbackground pipeline. Idempotent: a repeated call on an already-\nconfirmed submission is a no-op (returns 200).\n\nOptional body.edits: sparse map of student corrections to the\nVision extraction (OCR misreads). Stored on Submission.extraction_edits\nand overlaid before grading + teacher review render. Original Vision\nread stays preserved on Submission.extraction for audit.\n\nRejects:\n  \u2022 404 if the submission doesn't exist.\n  \u2022 403 if it belongs to another student.\n  \u2022 409 if extraction hasn't finished (nothing to confirm yet).\n  \u2022 409 if the submission was already flagged via\n    /flag-extraction \u2014 mutually exclusive terminal states.\n  \u2022 400 if any edit value exceeds the per-row size cap.\n\nThis is the single choke-point that gates grading on student\nconfirmation. Called from \"Confirm \u2014 this is my work\" on the\nconfirm screen; \"Reader got something wrong\" calls /flag-extraction\ninstead, which stamps extraction_flagged_at and deliberately does\nNOT spawn grading.",
+        "description": "Student signs off on Vision's reading. Stamps\n`extraction_confirmed_at` and spawns the integrity + grading\nbackground pipeline. Idempotent: a repeated call on an already-\nconfirmed submission is a no-op (returns 200).\n\nOptional body.edits: sparse map of student corrections to the\nVision extraction (OCR misreads). Stored on Submission.extraction_edits\nand overlaid before grading + teacher review render. Original Vision\nread stays preserved on Submission.extraction for audit.\n\nRejects:\n  \u2022 404 if the submission doesn't exist.\n  \u2022 403 if it belongs to another student.\n  \u2022 409 if extraction hasn't finished (nothing to confirm yet).\n  \u2022 409 if the submission was already flagged via\n    /flag-extraction \u2014 mutually exclusive terminal states.\n  \u2022 400 if any edit value exceeds the per-row size cap.\n\nThis is the single choke-point that gates grading on student\nconfirmation. Called from \"Confirm \u2014 this is my work\" on the\nconfirm screen; \"Something looks wrong\" \u2192 \"Most of it is wrong\" calls /flag-extraction\ninstead, which stamps extraction_flagged_at and deliberately does\nNOT spawn grading.",
         "operationId": "confirm_extraction_v1_school_student_submissions__submission_id__confirm_extraction_post",
         "parameters": [
           {
@@ -14215,7 +14265,7 @@
     },
     "/v1/school/student/submissions/{submission_id}/flag-extraction": {
       "post": {
-        "description": "Student said \"Reader got something wrong\" on the confirm screen.\n\nStamps `extraction_flagged_at` and sends the submission straight\nto the teacher \u2014 does NOT spawn integrity or AI grading, and the\nteacher can't AI-grade it later either (`ai_grade_block`): the only\ntranscription is the one the student says is wrong. The teacher\ngrades it from the photo.\n\nRejects:\n  \u2022 404 if the submission doesn't exist.\n  \u2022 403 if it belongs to another student.\n  \u2022 409 if extraction hasn't finished (nothing to flag yet).\n  \u2022 409 if the student already confirmed (can't flag after\n    confirm \u2014 integrity + grading may have already fired).\n\nIdempotent on re-flag: duplicate call returns 200 no-op.",
+        "description": "Student said most of the reading is wrong (\"Something looks wrong\"\n\u2192 \"Most of it is wrong\") on the confirm screen.\n\nStamps `extraction_flagged_at` and sends the submission straight\nto the teacher \u2014 does NOT spawn integrity or AI grading, and the\nteacher can't AI-grade it later either (`ai_grade_block`): the only\ntranscription is the one the student says is wrong. The teacher\ngrades it from the photo.\n\nOptional body (see FlagExtractionBody): the student's note on what\nthe reader got wrong, plus any lines they fixed first. Both are for\nthe teacher only \u2014 stored, shown on the review page, never graded.\n\nRejects:\n  \u2022 404 if the submission doesn't exist.\n  \u2022 403 if it belongs to another student.\n  \u2022 409 if extraction hasn't finished (nothing to flag yet).\n  \u2022 409 if the student already confirmed (can't flag after\n    confirm \u2014 integrity + grading may have already fired).\n  \u2022 400 if an edit value exceeds the per-row size cap; 422 if the\n    note is over its length cap.\n\nIdempotent on re-flag: duplicate call returns 200 no-op (the first\ncall's note and edits stand).",
         "operationId": "flag_extraction_submission_v1_school_student_submissions__submission_id__flag_extraction_post",
         "parameters": [
           {
@@ -14229,6 +14279,23 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/FlagExtractionBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "content": {

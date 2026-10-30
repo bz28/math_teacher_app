@@ -20,6 +20,7 @@ import { ImageZoomModal } from "./ImageZoomModal";
 import { MathText } from "./MathText";
 import {
   confirmExtraction,
+  FLAG_NOTE_MAX,
   flagExtraction,
   getSubmission,
   type SubmissionFile,
@@ -59,6 +60,14 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
   // Only touched fields land here; sent to confirm-extraction.
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [zoomFile, setZoomFile] = useState<SubmissionFile | null>(null);
+  // "Something looks wrong" first asks how much: a few lines → fix mode
+  // (fields highlighted + a hint, then the usual confirm); most of it →
+  // an optional note, then the flag, with any edits kept for the teacher.
+  const [flagStep, setFlagStep] = useState<"choose" | "note" | null>(null);
+  const [fixMode, setFixMode] = useState(false);
+  const [note, setNote] = useState("");
+  const [flagError, setFlagError] = useState<string | null>(null);
+  const scrollRef = useRef<ScrollView>(null);
   // Elapsed sense + give-up fallback for the "Reading your work…" wait.
   const [prepElapsedMs, setPrepElapsedMs] = useState(0);
   const [prepTimedOut, setPrepTimedOut] = useState(false);
@@ -133,15 +142,42 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
   const doFlag = useCallback(async () => {
     if (!state || acting) return;
     setActing(true);
+    setFlagError(null);
     try {
-      await flagExtraction(state.submission_id);
+      await flagExtraction(state.submission_id, { note, edits });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onDone();
-    } catch {
+    } catch (e) {
       setActing(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      // The server's own detail when it sent one (e.g. "already confirmed");
+      // a plain retry line for network / 5xx failures.
+      const msg = e instanceof Error ? e.message : "";
+      setFlagError(
+        msg && !msg.startsWith("Request failed") ? msg : "Couldn't send it to your teacher. Try again.",
+      );
+      // If the submission moved on (confirmed or flagged elsewhere), re-read
+      // it so the screen settles on the right state instead of looping.
+      getSubmission(assignmentId).then(setState).catch(() => {});
     }
-  }, [state, acting, onDone]);
+  }, [state, acting, note, edits, onDone, assignmentId]);
+
+  const startFixing = useCallback(() => {
+    setFlagStep(null);
+    setFixMode(true);
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  }, []);
+
+  // Record a line's text, dropping it when it's back to what was read —
+  // touching a field isn't a correction (matches web's commit()).
+  const setLine = useCallback((key: string, text: string, original: string) => {
+    setEdits((e) => {
+      const next = { ...e };
+      if (text.trim() === original.trim()) delete next[key];
+      else next[key] = text;
+      return next;
+    });
+  }, []);
 
   // ── States ────────────────────────────────────────────
   if (error && !state) {
@@ -217,6 +253,11 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
   const band = confidenceBand(state.extraction.confidence);
   const groups = groupExtraction(state.extraction);
   const sourceFiles = state.files ?? [];
+  // Only positioned groups render editable fields; with none, "Just a few
+  // lines" would lead nowhere, so the step opens straight on the note.
+  const canFixLines = groups.some((g) => g.position != null && (g.steps.length > 0 || g.finalAnswer));
+  const editCount = Object.keys(edits).length;
+  const fieldStyle = [styles.editField, fixMode && styles.editFieldFix];
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
@@ -224,6 +265,7 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
       <ScrollView
+        ref={scrollRef}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
@@ -233,6 +275,13 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
         <Text style={styles.subtitle}>
           Here's what we pulled from your photos. Fix anything we misread, then confirm so we grade it accurately.
         </Text>
+
+        {fixMode && (
+          <View style={styles.fixHint} accessibilityRole="text" accessibilityLiveRegion="polite">
+            <Ionicons name="pencil" size={16} color={colors.primary} />
+            <Text style={styles.fixHintText}>Tap a line to fix it, then confirm.</Text>
+          </View>
+        )}
 
         {sourceFiles.length > 0 && (
           <View style={styles.sourceBlock}>
@@ -288,6 +337,9 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
             // The backend keys edits by problem_position, so only positioned
             // groups are editable; unattributed "Other work" stays read-only.
             const editable = g.position != null;
+            const finalOriginal = g.finalAnswer
+              ? g.finalAnswer.answer_plain || g.finalAnswer.answer_latex
+              : "";
             return (
               <View key={g.position ?? "other"} style={styles.problem}>
                 <Text style={styles.problemNum}>
@@ -308,9 +360,9 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
                   return (
                     <TextInput
                       key={`${s.step_num}-${i}`}
-                      style={styles.editField}
+                      style={fieldStyle}
                       value={edits[key] ?? original}
-                      onChangeText={(t) => setEdits((e) => ({ ...e, [key]: t }))}
+                      onChangeText={(t) => setLine(key, t, original)}
                       multiline
                       placeholder="(blank to remove this line)"
                       placeholderTextColor={colors.textMuted}
@@ -321,9 +373,9 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
                   <View style={styles.answerRow}>
                     <Text style={styles.answerLabel}>Answer</Text>
                     <TextInput
-                      style={[styles.editField, styles.answerField]}
-                      value={edits[`${g.position}:final`] ?? (g.finalAnswer.answer_plain || g.finalAnswer.answer_latex)}
-                      onChangeText={(t) => setEdits((e) => ({ ...e, [`${g.position}:final`]: t }))}
+                      style={[...fieldStyle, styles.answerField]}
+                      value={edits[`${g.position}:final`] ?? finalOriginal}
+                      onChangeText={(t) => setLine(`${g.position}:final`, t, finalOriginal)}
                       placeholder="(blank to remove)"
                       placeholderTextColor={colors.textMuted}
                     />
@@ -351,18 +403,100 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
           </View>
         )}
 
-        <View style={styles.actions}>
-          <Button label="Looks right" onPress={doConfirm} loading={acting} />
-          <Button
-            label="The reader got it wrong"
-            variant="secondary"
-            onPress={doFlag}
-            disabled={acting}
-          />
-        </View>
-        <Text style={styles.flagHint}>
-          If it's wrong, your teacher will grade your original photos by hand instead.
-        </Text>
+        {flagStep === "choose" ? (
+          <View style={styles.stepCard}>
+            <Text style={styles.stepTitle}>How much did we get wrong?</Text>
+            <Text style={styles.stepBody}>If it's only a few lines, fixing them yourself is quickest.</Text>
+            <AnimatedPressable
+              style={[styles.option, styles.optionPrimary]}
+              onPress={startFixing}
+              accessibilityRole="button"
+              accessibilityLabel="Just a few lines. I'll fix them myself, then confirm."
+            >
+              <View style={[styles.optionIcon, { backgroundColor: colors.primary }]}>
+                <Ionicons name="pencil" size={16} color={colors.textOnPrimary} />
+              </View>
+              <View style={styles.flex}>
+                <Text style={styles.optionTitle}>Just a few lines</Text>
+                <Text style={styles.optionBody}>I'll fix them myself, then confirm.</Text>
+              </View>
+            </AnimatedPressable>
+            {/* Fixing it yourself is the steered path (the card above);
+                sending it to the teacher stays a real, always-visible
+                button for a student whose work truly was misread — just
+                quieter. */}
+            <AnimatedPressable
+              style={styles.textAction}
+              onPress={() => setFlagStep("note")}
+              accessibilityRole="button"
+              accessibilityLabel="Most of it is wrong? Send it to my teacher to grade from my photos."
+            >
+              <Text style={styles.secondaryActionText}>
+                Most of it is wrong? <Text style={styles.secondaryActionLink}>Send it to my teacher</Text>
+              </Text>
+            </AnimatedPressable>
+            <AnimatedPressable
+              style={styles.textAction}
+              onPress={() => setFlagStep(null)}
+              accessibilityRole="button"
+              accessibilityLabel="Never mind"
+            >
+              <Text style={styles.dismissText}>Never mind</Text>
+            </AnimatedPressable>
+          </View>
+        ) : flagStep === "note" ? (
+          <View style={styles.stepCard}>
+            <Text style={styles.stepTitle}>Send it to your teacher</Text>
+            <Text style={styles.stepBody}>Your teacher will grade this homework from your photos instead.</Text>
+            <Text style={styles.noteLabel}>
+              What did it get wrong? <Text style={styles.noteOptional}>(optional)</Text>
+            </Text>
+            <TextInput
+              style={[styles.editField, styles.noteField]}
+              value={note}
+              onChangeText={setNote}
+              maxLength={FLAG_NOTE_MAX}
+              multiline
+              placeholder="For example: it read my 7s as 1s on problem 3"
+              placeholderTextColor={colors.textMuted}
+              accessibilityLabel="What did it get wrong? (optional)"
+              // The card sits at the bottom of the scroll; once the keyboard
+              // is up (KeyboardAvoidingView shrinks the view), bring it back
+              // into sight so the student can see what they type.
+              onFocus={() => setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 250)}
+            />
+            <Text style={styles.noteMeta}>
+              {editCount > 0
+                ? `The ${editCount === 1 ? "line" : `${editCount} lines`} you fixed will go too.`
+                : "Your teacher sees this with your photos."}
+            </Text>
+            {flagError && <Text style={styles.flagError}>{flagError}</Text>}
+            <Button label="Send to my teacher" onPress={doFlag} loading={acting} />
+            <Button
+              label="Back"
+              variant="ghost"
+              onPress={() => setFlagStep(canFixLines ? "choose" : null)}
+              disabled={acting}
+            />
+          </View>
+        ) : (
+          <>
+            <View style={styles.actions}>
+              <Button label="Looks right" onPress={doConfirm} loading={acting} />
+              <Button
+                label="Something looks wrong"
+                variant="secondary"
+                onPress={() => setFlagStep(canFixLines ? "choose" : "note")}
+                disabled={acting}
+              />
+            </View>
+            {canFixLines && (
+              <Text style={styles.flagHint}>
+                Fix a few lines yourself, or send it to your teacher to grade from your photos.
+              </Text>
+            )}
+          </>
+        )}
       </ScrollView>
       </KeyboardAvoidingView>
       <ImageZoomModal file={zoomFile} onClose={() => setZoomFile(null)} />
@@ -439,6 +573,53 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
   },
+  // Fix mode: a subtle primary tint so every editable line reads as tappable.
+  editFieldFix: { borderColor: colors.primary, backgroundColor: colors.primaryBg },
+  fixHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.primaryBg,
+    borderWidth: 1,
+    borderColor: colors.primaryLight,
+    borderRadius: radii.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  fixHintText: { ...typography.bodyBold, fontSize: 14, color: colors.primaryDark, flex: 1 },
+  stepCard: {
+    marginTop: spacing.lg,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  stepTitle: { ...typography.displaySerifItalic, fontSize: 22, lineHeight: 26, color: colors.text },
+  stepBody: { ...typography.body, fontSize: 14, lineHeight: 20, color: colors.textSecondary, marginTop: -spacing.xs },
+  option: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    padding: spacing.md,
+  },
+  optionPrimary: { borderWidth: 2, borderColor: colors.primary, backgroundColor: colors.primaryBg },
+  // Compact text-style actions under the primary card — still ≥44pt tall.
+  textAction: { minHeight: 44, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.md },
+  secondaryActionText: { ...typography.body, fontSize: 14, color: colors.textSecondary, textAlign: "center" },
+  secondaryActionLink: { ...typography.bodyBold, color: colors.primary, textDecorationLine: "underline" },
+  dismissText: { ...typography.caption, fontSize: 13, color: colors.textMuted },
+  optionIcon: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
+  optionTitle: { ...typography.bodyBold, fontSize: 15, color: colors.text },
+  optionBody: { ...typography.body, fontSize: 13, lineHeight: 18, color: colors.textSecondary, marginTop: 2 },
+  noteLabel: { ...typography.bodyBold, fontSize: 14, color: colors.text },
+  noteOptional: { ...typography.body, color: colors.textMuted },
+  noteField: { minHeight: 84, textAlignVertical: "top" },
+  noteMeta: { ...typography.caption, fontSize: 12, color: colors.textMuted, marginTop: -spacing.xs },
   answerRow: { gap: spacing.xs, marginTop: spacing.xs },
   answerLabel: { ...typography.eyebrow, fontSize: 10, color: colors.textMuted },
   answerField: { ...typography.bodyBold },
@@ -455,6 +636,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   nextTitle: { ...typography.body, fontSize: 14, fontWeight: "600", color: colors.primaryDark },
   nextBody: { ...typography.body, fontSize: 13, lineHeight: 19, color: colors.primaryDark },
   actions: { gap: spacing.md, marginTop: spacing.lg },
+  flagError: { ...typography.body, fontSize: 13, color: colors.error },
   flagHint: { ...typography.caption, color: colors.textMuted, fontSize: 12, textAlign: "center" },
 
   centered: {
