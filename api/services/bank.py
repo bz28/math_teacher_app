@@ -20,6 +20,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.part_labels import is_multi_part
 from api.models.assignment import Assignment
 from api.models.question_bank import QuestionBankItem
 
@@ -120,8 +121,11 @@ async def hydrate_assignment_content(
                     # The student practice runner turns every problem
                     # into multiple choice from final_answer +
                     # distractors, so the teacher's view needs them to
-                    # show what students actually pick from.
-                    "distractors": it.distractors,
+                    # show what students actually pick from — so the
+                    # same multi-part guard as the student payload.
+                    "distractors": (
+                        None if is_multi_part(it.question, it.final_answer) else it.distractors
+                    ),
                     "difficulty": it.difficulty,
                 }
                 for pos, it in enumerate(items, start=1)
@@ -218,25 +222,34 @@ async def load_problems_for_assignment(
 async def approved_practice_items(
     db: AsyncSession, practice: Assignment,
 ) -> list[QuestionBankItem]:
-    """A practice set's approved items, in its homework's problem order.
+    """A practice set's approved items, in a stable order.
 
-    Versions of one problem stay together, oldest first. Generation jobs
-    run concurrently, so creation order alone scrambles the homework's
-    order. Items whose parent left the homework go last."""
+    Made from a homework: the homework's problem order, versions of one
+    problem together, oldest first. Generation jobs run concurrently, so
+    creation order alone scrambles the homework's order. Items whose
+    parent left the homework go last.
+
+    Written directly: the set's own problem list (`content.problem_ids`,
+    kept by the approve path). A batch's items share one created_at, so
+    creation order alone swaps them between loads. Items not on the list
+    go last. The id breaks every remaining tie."""
     items = (await db.execute(
         select(QuestionBankItem)
         .where(
             QuestionBankItem.originating_assignment_id == practice.id,
             QuestionBankItem.status == "approved",
         )
-        .order_by(QuestionBankItem.created_at.asc())
+        .order_by(QuestionBankItem.created_at.asc(), QuestionBankItem.id.asc())
     )).scalars().all()
-    source_content = (await db.execute(
-        select(Assignment.content).where(Assignment.id == practice.source_homework_id)
-    )).scalar_one_or_none() if practice.source_homework_id else None
-    order = {pid: i for i, pid in enumerate(problem_ids_in_content(source_content))}
-    # sorted() is stable, so ties keep the created_at order.
-    return sorted(items, key=lambda it: order.get(str(it.parent_question_id), len(order)))
+    if practice.source_homework_id:
+        source_content = (await db.execute(
+            select(Assignment.content).where(Assignment.id == practice.source_homework_id)
+        )).scalar_one_or_none()
+        order = {pid: i for i, pid in enumerate(problem_ids_in_content(source_content))}
+        # sorted() is stable, so ties keep the (created_at, id) order.
+        return sorted(items, key=lambda it: order.get(str(it.parent_question_id), len(order)))
+    order = {pid: i for i, pid in enumerate(problem_ids_in_content(practice.content))}
+    return sorted(items, key=lambda it: order.get(str(it.id), len(order)))
 
 
 def problem_ids_in_content(content: Any) -> list[str]:

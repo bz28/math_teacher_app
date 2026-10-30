@@ -162,6 +162,29 @@ async def test_practice_detail_ships_full_problem_payload(
     assert prob["distractors"] == ["x=1", "x=-2", "x=5"]
 
 
+async def test_practice_detail_serves_a_multi_part_problem_without_options(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """A teacher edited the answer into parts after its options were
+    written: the student gets it free response, never a give-away MCQ
+    (api/core/part_labels.py). Nothing stored is changed."""
+    p = await _publish_linked_practice(world)
+    async with get_session_factory()() as s:
+        item = await s.get(QuestionBankItem, p["variation_id"])
+        assert item is not None
+        item.final_answer = "**(a)** $x = 2$\n\n**(b)** $x = 3$"
+        await s.commit()
+    r = await client.get(
+        f"/v1/school/student/practice/{p['practice_id']}",
+        headers=_auth(world["student_token"]),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["problems"][0]["distractors"] is None
+    async with get_session_factory()() as s:
+        item = await s.get(QuestionBankItem, p["variation_id"])
+        assert item is not None and item.distractors == ["x=1", "x=-2", "x=5"]
+
+
 async def test_teacher_practice_detail_ships_what_students_see(
     client: AsyncClient, world: dict[str, Any],
 ) -> None:
@@ -180,6 +203,25 @@ async def test_teacher_practice_detail_ships_what_students_see(
     assert prob["final_answer"] == "x = 2 or x = 3"
     assert prob["solution_steps"][0]["title"] == "Factor"
     assert prob["distractors"] == ["x=1", "x=-2", "x=5"]
+
+
+async def test_teacher_practice_detail_hides_options_on_a_multi_part_problem(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """The teacher sees what students see: a multi-part problem is free
+    response for students, so its stored options aren't shown as choices."""
+    p = await _publish_linked_practice(world)
+    async with get_session_factory()() as s:
+        item = await s.get(QuestionBankItem, p["variation_id"])
+        assert item is not None
+        item.final_answer = "**(a)** $x = 2$\n\n**(b)** $x = 3$"
+        await s.commit()
+    r = await client.get(
+        f"/v1/teacher/assignments/{p['practice_id']}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["content"]["problems"][0]["distractors"] is None
 
 
 async def test_practice_detail_rejects_non_practice_assignment(

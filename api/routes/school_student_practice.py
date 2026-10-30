@@ -58,6 +58,7 @@ from api.core.integrity_pipeline import (
     start_integrity_check,
     student_next_step,
 )
+from api.core.part_labels import is_multi_part
 from api.core.tutor import completed_chat, step_chat
 from api.database import get_db, get_session_factory
 from api.middleware.auth import get_current_user_full
@@ -708,7 +709,8 @@ def _serialize(item: QuestionBankItem) -> VariationPayload:
         bank_item_id=str(item.id),
         question=item.question,
         final_answer=item.final_answer,
-        distractors=list(item.distractors or []),
+        # Multi-part look-alikes are free response, as on the practice page.
+        distractors=[] if is_multi_part(item.question, item.final_answer) else list(item.distractors or []),
         solution_steps=_student_solution_steps(item.solution_steps),
         difficulty=item.difficulty,
         figure_svg=item.figure_svg,
@@ -1943,7 +1945,9 @@ async def practice_detail(
             figure_svg=it.figure_svg,
             solution_steps=_student_solution_steps(it.solution_steps),
             final_answer=it.final_answer,
-            distractors=it.distractors,
+            # Multi-part problems are free response (part_labels.py),
+            # including ones a teacher edited into parts after generation.
+            distractors=None if is_multi_part(it.question, it.final_answer) else it.distractors,
             difficulty=it.difficulty,
         )
         for pos, it in enumerate(items, start=1)
