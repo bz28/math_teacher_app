@@ -1,7 +1,7 @@
 """drop rubric_suggestions (phase 2 — the contract half)
 
 Revision ID: cx1000093
-Revises: cv1000091
+Revises: da1000096
 Create Date: 2026-10-29 00:00:00.000000
 
 The rubric rule suggestion feature ("Want the AI to grade this way next
@@ -40,7 +40,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "cx1000093"
-down_revision: str | None = "cv1000091"
+down_revision: str | None = "da1000096"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
