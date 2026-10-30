@@ -5375,6 +5375,8 @@ export interface components {
             overall_status: string;
             /** Problems */
             problems: components["schemas"]["ProblemSummary"][];
+            /** Stuck Tap Used */
+            stuck_tap_used: boolean;
             /** Submission Id */
             submission_id: string;
             /** Transcript */
@@ -6635,10 +6637,18 @@ export interface components {
         };
         /** TurnRequest */
         TurnRequest: {
-            /** Message */
+            /**
+             * Message
+             * @default
+             */
             message: string;
             /** Seconds On Turn */
             seconds_on_turn?: number | null;
+            /**
+             * Stuck
+             * @default false
+             */
+            stuck: boolean;
             telemetry?: components["schemas"]["TurnTelemetry"] | null;
         };
         /**

@@ -10,13 +10,15 @@ transcript + per-problem + overall state.
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import UTC, datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.audit_log import log_student_record_access
@@ -53,6 +55,48 @@ router = APIRouter(tags=["integrity"])
 # Min chars in a student message. Same 5-char floor we enforced on
 # answers in the quiz-style flow — prevents empty/"x"-spam.
 MIN_MESSAGE_CHARS = 5
+
+# ── The "I'm stuck" tap ─────────────────────────────────────────────
+# The honest exit: one tap sends a fixed "I can't explain this" turn that
+# skips the typed minimum. In prod it was most of the "don't know" turns,
+# often tapped repeatedly to coast through the check, so it's limited to
+# ONE use per problem. Per problem == per check today: the chat probes a
+# single problem (integrity_pipeline.MAX_SAMPLE = 1), and the inline
+# variant is a probe *of that same problem*, not a new one. Revisit if
+# MAX_SAMPLE grows (student turns carry no problem id).
+#
+# The server owns the wording: a tap arrives as `stuck: true` and the
+# canonical text below is what lands in the transcript the agent reads.
+STUCK_MESSAGE = "I'm stuck — I'm not sure how to explain this."
+# Every text that counts as a stuck tap: the canonical one plus the exact
+# string the mobile client sent as a plain message before the `stuck`
+# flag existed (builds already on phones still do). Matching them means
+# an old client — or a student who types the phrase verbatim — can't
+# sidestep the one-use cap, and taps already in the DB count with no
+# backfill. Incoming text is compared after _normalize_stuck_text (case, smart
+# punctuation), but every tap is *stored* as STUCK_MESSAGE, so the DB
+# count can match these exact strings.
+STUCK_PHRASES = (
+    STUCK_MESSAGE,
+    "I'm stuck — not sure how to explain this.",
+)
+MAX_STUCK_TAPS = 1
+_STUCK_ALREADY_USED = (
+    "You've already used \"I'm stuck\" on this problem. "
+    "Give it a try in your own words — even a guess helps."
+)
+
+
+def _normalize_stuck_text(text: str) -> str:
+    """Lowercase, unify curly apostrophes, drop every other non-word
+    character (dashes, punctuation, emoji) and collapse whitespace — so
+    iOS smart punctuation and case variants of the stuck text still
+    count as the tap."""
+    t = re.sub(r"[\u2018\u2019\u02bc`\u00b4]", "'", text.lower())
+    return " ".join(re.sub(r"[^\w\s']|_", " ", t).split())
+
+
+_STUCK_NORMALIZED = frozenset(_normalize_stuck_text(p) for p in STUCK_PHRASES)
 
 # Teacher resolution states for an integrity check (see
 # IntegrityCheckSubmission.resolution). "unresolved" is the default the
@@ -129,6 +173,10 @@ class IntegrityStateResponse(BaseModel):
     extraction: ExtractionOut | None
     problems: list[ProblemSummary]
     transcript: list[TurnOut]
+    # True once the student has used their one "I'm stuck" tap on the
+    # problem. The client disables the button; the turn endpoint refuses
+    # a second tap regardless.
+    stuck_tap_used: bool
     # True when the check closed because the student didn't finish it
     # (never answered / left partway — incomplete_reason). The chat shows
     # that honestly instead of the "thanks, your teacher has everything"
@@ -199,7 +247,11 @@ class TurnTelemetry(BaseModel):
 
 
 class TurnRequest(BaseModel):
-    message: str = Field(min_length=1, max_length=4000)
+    # Ignored when `stuck` is true (the server writes STUCK_MESSAGE).
+    message: str = Field(default="", max_length=4000)
+    # True when the student tapped "I'm stuck" instead of typing. Allowed
+    # MAX_STUCK_TAPS times per problem; skips the typed minimum.
+    stuck: bool = False
     # Clamped so a tampered client can't land negative/absurd values in
     # the teacher transcript. Upper bound = 24h; students can legitimately
     # leave the chat open, walk away, and come back much later than an
@@ -224,6 +276,21 @@ class ResolveRequest(BaseModel):
 
 
 # ── Helpers ─────────────────────────────────────────────────────────
+
+def _is_stuck_turn(turn: IntegrityConversationTurn) -> bool:
+    return turn.role == "student" and turn.content in STUCK_PHRASES
+
+
+async def _count_stuck_taps(check_id: uuid.UUID, db: AsyncSession) -> int:
+    count = (await db.execute(
+        select(func.count(IntegrityConversationTurn.id)).where(
+            IntegrityConversationTurn.integrity_check_submission_id == check_id,
+            IntegrityConversationTurn.role == "student",
+            IntegrityConversationTurn.content.in_(STUCK_PHRASES),
+        )
+    )).scalar_one()
+    return int(count)
+
 
 async def _load_my_submission(
     db: AsyncSession, submission_id: uuid.UUID, student_id: uuid.UUID,
@@ -443,6 +510,7 @@ async def _build_state_response(
             extraction=None,
             problems=[],
             transcript=[],
+            stuck_tap_used=False,
         )
     # Diagnosis-only rows are teacher-facing — the student isn't being
     # probed on them, so they have nothing to see (no chat reference,
@@ -460,6 +528,9 @@ async def _build_state_response(
         extraction=_first_extraction(chat_probed),
         problems=_problem_summaries(chat_probed, questions, hw_positions),
         transcript=_student_facing_transcript(turns),
+        stuck_tap_used=(
+            sum(1 for t in turns if _is_stuck_turn(t)) >= MAX_STUCK_TAPS
+        ),
         closed_unfinished=(
             check.status == STATUS_COMPLETE
             and check.disposition is None
@@ -557,7 +628,15 @@ async def post_student_turn(
         )
 
     message = body.message.strip()
-    if len(message) < MIN_MESSAGE_CHARS:
+    is_stuck_tap = (
+        body.stuck or _normalize_stuck_text(message) in _STUCK_NORMALIZED
+    )
+    stuck_used = await _count_stuck_taps(check.id, db) >= MAX_STUCK_TAPS
+    if is_stuck_tap:
+        if stuck_used:
+            raise HTTPException(status_code=400, detail=_STUCK_ALREADY_USED)
+        message = STUCK_MESSAGE
+    elif len(message) < MIN_MESSAGE_CHARS:
         raise HTTPException(
             status_code=400,
             detail=f"Message must be at least {MIN_MESSAGE_CHARS} characters",
@@ -572,12 +651,26 @@ async def post_student_turn(
     telemetry = (
         body.telemetry.model_dump(mode="json") if body.telemetry else None
     )
-    await process_student_turn(
-        check, message, body.seconds_on_turn, db,
-        user_id=str(user.id),
-        telemetry=telemetry,
-    )
-    await db.commit()
+    try:
+        await process_student_turn(
+            check, message, body.seconds_on_turn, db,
+            user_id=str(user.id),
+            telemetry=telemetry,
+        )
+        await db.commit()
+    except IntegrityError:
+        # Two sends raced for the same transcript ordinal (a double tap,
+        # two tabs): the other one landed first. Answer like a repeat
+        # instead of a 500 — for a stuck tap that's "already used".
+        await db.rollback()
+        if is_stuck_tap:
+            raise HTTPException(
+                status_code=400, detail=_STUCK_ALREADY_USED,
+            ) from None
+        raise HTTPException(
+            status_code=409,
+            detail="Your last message is still sending — give it a moment.",
+        ) from None
 
     # `check` was mutated in-memory and the session uses
     # expire_on_commit=False, so attrs are already current. Problems +
