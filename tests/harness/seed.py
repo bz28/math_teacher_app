@@ -359,14 +359,18 @@ async def seed_workshop_item(seed: Seed) -> str:
         return str(item.id)
 
 
-async def seed_submitted_submission(seed: Seed) -> str:
-    """A fresh student enrolled in the seeded section with one SUBMITTED
-    submission on the seeded homework — the precondition for the
-    grade-and-publish flow. A distinct student (not the seeded one) so it
+async def seed_submitted_submission(seed: Seed) -> tuple[str, str, str]:
+    """A published one-problem homework in the seeded section, with one
+    SUBMITTED submission from a fresh student — the precondition for the
+    grade-and-publish flow. Its own homework, not the seeded one: a score
+    is points earned over the homework's points, so it needs a real
+    problem to grade (the seeded homework has none), and a fresh student
     never collides with the submit-homework flow on the
-    UNIQUE(assignment_id, student_id) constraint. Returns the submission id.
+    UNIQUE(assignment_id, student_id) constraint. Returns the assignment,
+    submission and problem (bank item) ids.
     """
     course_id = uuid.UUID(seed.course_id)
+    now = datetime.now(UTC)
     async with get_session_factory()() as s:
         section_id = (await s.execute(
             select(SectionEnrollment.section_id).where(
@@ -374,6 +378,24 @@ async def seed_submitted_submission(seed: Seed) -> str:
                 SectionEnrollment.course_id == course_id,
             ).limit(1)
         )).scalar_one()
+        hw = Assignment(
+            course_id=course_id, unit_ids=[uuid.UUID(seed.unit_id)],
+            teacher_id=uuid.UUID(seed.teacher_id), title="Grade HW",
+            type="homework", status="published", content={"problem_ids": []},
+            integrity_check_enabled=False, ai_grading_enabled=False,
+        )
+        s.add(hw)
+        await s.flush()
+        item = QuestionBankItem(
+            course_id=course_id, unit_id=uuid.UUID(seed.unit_id),
+            originating_assignment_id=hw.id, title="Solve",
+            question="Solve 3x = 9.", final_answer="x = 3",
+            status="approved", source="generated",
+        )
+        s.add(item)
+        await s.flush()
+        hw.content = {"problem_ids": [str(item.id)]}
+        s.add(AssignmentSection(assignment_id=hw.id, section_id=section_id, published_at=now))
         student = User(
             email=f"harness_submitter_{uuid.uuid4().hex[:6]}@t.com",
             password_hash=hash_password("x"), grade_level=8, role="student",
@@ -385,12 +407,12 @@ async def seed_submitted_submission(seed: Seed) -> str:
             section_id=section_id, course_id=course_id, student_id=student.id,
         ))
         submission = Submission(
-            assignment_id=uuid.UUID(seed.assignment_id), student_id=student.id,
+            assignment_id=hw.id, student_id=student.id,
             section_id=section_id, status="submitted", files=[], is_late=False,
         )
         s.add(submission)
         await s.commit()
-        return str(submission.id)
+        return str(hw.id), str(submission.id), str(item.id)
 
 
 async def seed_insights_homework(seed: Seed) -> int:

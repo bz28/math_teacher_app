@@ -315,18 +315,19 @@ async def _grade_publish_flow(
 ) -> FlowResult:
     """Teacher grades a submitted homework and publishes it → the grade
     persists and is released to the student. Seeds one submitted submission,
-    then exercises `PATCH /teacher/submissions/{id}/grade` (manual full credit,
-    no AI) and `POST /teacher/assignments/{id}/publish-grades`. Asserts the
-    score is set and the publish counts the grade."""
+    then exercises `PATCH /teacher/submissions/{id}/grade` (manual full credit
+    on the homework's one problem, no AI) and
+    `POST /teacher/assignments/{id}/publish-grades`. Asserts the score is set
+    and the publish counts the grade."""
     name, title = "grade_publish", "Teacher grades and publishes"
     issues: list[str] = []
-    submission_id = await seed_submitted_submission(seed)
+    assignment_id, submission_id, problem_id = await seed_submitted_submission(seed)
     base = api_base.rstrip("/")
     async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_S) as client:
         graded = await client.patch(
             f"{base}/teacher/submissions/{submission_id}/grade",
             json={"breakdown": [
-                {"problem_id": "p1", "score_status": "full", "percent": 100},
+                {"problem_id": problem_id, "score_status": "full", "percent": 100},
             ]},
             headers=_auth(seed.teacher_token),
         )
@@ -342,7 +343,7 @@ async def _grade_publish_flow(
             )
 
         published = await client.post(
-            f"{base}/teacher/assignments/{seed.assignment_id}/publish-grades",
+            f"{base}/teacher/assignments/{assignment_id}/publish-grades",
             json={"reviewed_only": False}, headers=_auth(seed.teacher_token),
         )
         if published.status_code != 200:
