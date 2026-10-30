@@ -5400,6 +5400,8 @@ export interface components {
             /** Disposition */
             disposition: string | null;
             extraction: components["schemas"]["ExtractionOut"] | null;
+            /** Nudge Own Words */
+            nudge_own_words: boolean;
             /** Overall Status */
             overall_status: string;
             /** Problems */
@@ -6343,6 +6345,8 @@ export interface components {
         /** TeacherIntegrityDetail */
         TeacherIntegrityDetail: {
             activity_summary: components["schemas"]["IntegrityActivitySummary"] | null;
+            /** Didnt Engage */
+            didnt_engage: boolean;
             /** Disposition */
             disposition: string | null;
             /** Headline */

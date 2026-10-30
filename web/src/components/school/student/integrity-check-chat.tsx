@@ -12,6 +12,8 @@ import {
 } from "@/lib/api";
 import { ExtractionView } from "@/components/school/shared/extraction-view";
 import { MathText } from "@/components/shared/math-text";
+import { Modal } from "@/components/ui/modal";
+import { shouldOpenOwnWordsNudge } from "./own-words-nudge";
 import { cn } from "@/lib/utils";
 import { useDeviceType } from "./use-device-type";
 import { useTurnTelemetry } from "./use-turn-telemetry";
@@ -124,6 +126,11 @@ export function IntegrityCheckChat({
   // publish by the teacher while the student is mid-chat picks up
   // the link without requiring a manual refresh.
   const [linkedPracticeId, setLinkedPracticeId] = useState<string | null>(null);
+  // "Answer in your own words" popup. Opens when a reply flips the
+  // server's nudge_own_words on (not on resume, and not again while the
+  // same streak continues) and never blocks sending.
+  const [ownWordsOpen, setOwnWordsOpen] = useState(false);
+  const composerRef = useRef<HTMLTextAreaElement | null>(null);
 
   // Hydrate the transcript on mount.
   useEffect(() => {
@@ -284,6 +291,7 @@ export function IntegrityCheckChat({
       // Only reset telemetry after the turn is persisted on the
       // server; a failed POST keeps the signals intact for retry.
       telemetry.reset();
+      if (shouldOpenOwnWordsNudge(state, next)) setOwnWordsOpen(true);
       setState(next);
       setPendingStudentMessage(null);
       setTurnStartedAt(Date.now());
@@ -649,6 +657,7 @@ export function IntegrityCheckChat({
               </div>
               <div className="flex items-end gap-2">
                 <textarea
+                  ref={composerRef}
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   onKeyDown={(e) => {
@@ -730,7 +739,60 @@ export function IntegrityCheckChat({
           )}
         </div>
       </div>
+      <OwnWordsNudge
+        open={ownWordsOpen}
+        onClose={() => {
+          setOwnWordsOpen(false);
+          // Straight back to typing. Runs after the Modal's own focus
+          // restore (which would land on the Send button, disabled mid-send).
+          window.setTimeout(() => composerRef.current?.focus(), 0);
+        }}
+      />
     </div>
+  );
+}
+
+// Calm, one-button aside after two non-answers in a row. No icon or
+// warning colour: it's encouragement, not a reprimand. Closing puts the
+// caret back in the composer.
+function OwnWordsNudge({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      className="max-w-sm"
+      labelledById="integrity-own-words-title"
+      describedById="integrity-own-words-body"
+    >
+      <h2
+        id="integrity-own-words-title"
+        className="text-lg font-bold tracking-tight text-text-primary"
+      >
+        Answer in your own words
+      </h2>
+      <p
+        id="integrity-own-words-body"
+        className="mt-2 text-sm leading-relaxed text-text-secondary"
+      >
+        Even a guess helps. If something&rsquo;s confusing, ask about it
+        &mdash; that&rsquo;s a good answer too.
+      </p>
+      <div className="mt-6 flex justify-end">
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white shadow-sm transition-all duration-150 ease-out hover:bg-primary/90 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+        >
+          Got it
+        </button>
+      </div>
+    </Modal>
   );
 }
 

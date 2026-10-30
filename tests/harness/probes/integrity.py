@@ -53,20 +53,25 @@ from typing import Any
 from sqlalchemy import delete, select, update
 
 from api.core.integrity_pipeline import (
+    DISENGAGED_NOT_TRYING_STREAK,
     DISPOSITION_FLAG_FOR_REVIEW,
     DISPOSITION_NEEDS_PRACTICE,
     DISPOSITION_PASS,
     DISPOSITION_TUTOR_PIVOT,
+    NUDGE_NOT_TRYING_STREAK,
     STATUS_COMPLETE,
     STATUS_SKIPPED_UNREADABLE,
+    longest_not_trying_streak,
     process_student_turn,
     start_integrity_check,
+    trailing_not_trying_streak,
 )
 from api.database import get_session_factory
 from api.models.assignment import Assignment, Submission
 from api.models.integrity_check import (
     IntegrityCheckProblem,
     IntegrityCheckSubmission,
+    IntegrityConversationTurn,
 )
 from api.models.question_bank import QuestionBankItem
 from api.models.section import Section
@@ -134,6 +139,10 @@ class IntegrityCase:
     harm: str | None = None
     turn_budget: int = DEFAULT_TURN_BUDGET
     rationale: str = ""
+    # Engagement cases only: the acceptable `label_student_reply` labels for
+    # each scripted student line, in order (lines past the end, e.g. the
+    # fallback, are unconstrained). None = engagement isn't asserted.
+    expected_engagement: list[set[str]] | None = None
 
 
 def _ext(steps: list[tuple[int, str, str]], final: str) -> dict[str, Any]:
@@ -851,6 +860,134 @@ GOLDEN_CASES: list[IntegrityCase] = [
     ),
 ]
 
+_A, _C, _N = "answering", "honest_confusion", "not_trying"
+_LINEAR: dict[str, Any] = dict(
+    question="Solve 3x + 7 = 22 for x.",
+    correct_answer="x = 5",
+    difficulty="easy",
+    extraction=_ext(
+        [
+            (1, "3x + 7 = 22", "the equation"),
+            (2, "3x = 15", "subtract 7 from both sides"),
+            (3, "x = 5", "divide both sides by 3"),
+        ],
+        "x = 5",
+    ),
+)
+
+# Engagement corpus: does the agent label each reply right, so the student
+# nudge (NUDGE_NOT_TRYING_STREAK in a row) and the teacher's "didn't engage"
+# note (DISENGAGED_NOT_TRYING_STREAK in a row) fire on real non-answers and
+# never on honest confusion or a real attempt.
+ENGAGEMENT_CASES: list[IntegrityCase] = [
+    IntegrityCase(
+        name="engagement-idk-repeat",
+        persona="not-trying",
+        **_LINEAR,
+        student_script=["idk", "idk", "idk", "idk"],
+        gold=DISPOSITION_FLAG_FOR_REVIEW,
+        accepts={DISPOSITION_FLAG_FOR_REVIEW, DISPOSITION_NEEDS_PRACTICE},
+        expected_engagement=[{_N}, {_N}, {_N}],
+        rationale="Pure non-answers: nudge after two, teacher note after three.",
+    ),
+    IntegrityCase(
+        name="engagement-cant-explain-then-answers",
+        persona="not-trying",
+        **_LINEAR,
+        student_script=[
+            "I don't know how to explain this",
+            "I don't know how to explain it",
+            "ok um I took away the 7 from both sides so the 3x is alone, "
+            "then 15 split three ways is 5",
+        ],
+        gold=DISPOSITION_NEEDS_PRACTICE,
+        accepts={DISPOSITION_NEEDS_PRACTICE, DISPOSITION_FLAG_FOR_REVIEW},
+        expected_engagement=[{_N}, {_N}, {_A}],
+        rationale=(
+            "Two can't-explain replies nudge; the real answer after clears "
+            "it. One mechanical answer after two non-answers is thin, so "
+            "flag (correct on paper, little explanation) is in band."
+        ),
+    ),
+    IntegrityCase(
+        name="engagement-honest-confusion",
+        persona="honest-confusion",
+        question="Find the slope of the line through (1, 2) and (3, 6).",
+        correct_answer="2",
+        difficulty="easy",
+        extraction=_ext(
+            [
+                (1, "m = \\frac{6-2}{3-1}", "slope formula"),
+                (2, "m = \\frac{4}{2} = 2", "simplify"),
+            ],
+            "2",
+        ),
+        student_script=[
+            "what does slope mean here? like what is it actually measuring",
+            "oh so it's how much y goes up each time x goes up one? then 2 "
+            "means it goes up 2 for every 1 over, which matches 4 up over 2 "
+            "across",
+            "if the points were farther apart on the same line it'd still be "
+            "2 because the steepness doesn't change",
+        ],
+        gold=DISPOSITION_PASS,
+        accepts={DISPOSITION_PASS, DISPOSITION_NEEDS_PRACTICE},
+        expected_engagement=[{_C}, {_A}, {_A}],
+        rationale="A real question is welcome: never nudged, never noted.",
+    ),
+    IntegrityCase(
+        name="engagement-real-answers",
+        persona="honest-fluent",
+        **_LINEAR,
+        student_script=[
+            "I subtracted 7 from both sides to get 3x alone, so 3x = 15, then "
+            "divided by 3 because x is being multiplied by 3, so x = 5.",
+            "Depends what changes. A bigger 22 makes x bigger, since there's "
+            "more left after taking away 7. A bigger 7 makes x smaller. And a "
+            "bigger 3 makes x smaller too, because the same 15 gets split "
+            "into more pieces.",
+            "Subtracting undoes the +7, it's the inverse, so it cancels out.",
+        ],
+        gold=DISPOSITION_PASS,
+        accepts={DISPOSITION_PASS},
+        expected_engagement=[{_A}, {_A}, {_A}],
+        rationale="Real answers are always answering.",
+    ),
+    IntegrityCase(
+        name="engagement-evasive-filler",
+        persona="not-trying",
+        **_LINEAR,
+        student_script=[
+            "whatever it's just math",
+            "does it matter, I got the answer",
+            "ok",
+            "sure",
+        ],
+        gold=DISPOSITION_FLAG_FOR_REVIEW,
+        accepts={DISPOSITION_FLAG_FOR_REVIEW, DISPOSITION_NEEDS_PRACTICE},
+        expected_engagement=[{_N}, {_N}, {_N}],
+        rationale="Evasion with no attempt reads as not_trying, not confusion.",
+    ),
+    IntegrityCase(
+        name="engagement-mixed",
+        persona="struggling",
+        **_LINEAR,
+        student_script=[
+            "idk",
+            "wait is it because you divide by 3 at the end?",
+            "idk",
+            "I guess x would get bigger",
+        ],
+        gold=DISPOSITION_NEEDS_PRACTICE,
+        accepts={
+            DISPOSITION_NEEDS_PRACTICE, DISPOSITION_FLAG_FOR_REVIEW,
+            DISPOSITION_PASS,
+        },
+        expected_engagement=[{_N}, {_A, _C}, {_N}, {_A}],
+        rationale="Never two in a row: a stray idk between tries never nudges.",
+    ),
+]
+
 
 @dataclass
 class CaseResult:
@@ -862,6 +999,8 @@ class CaseResult:
     rubric: dict[str, Any] | None
     headline: str | None
     summary: str | None
+    # The agent's engagement label on each student reply, in order.
+    engagements: list[str | None]
 
 
 async def _seed_case_rows(
@@ -946,7 +1085,7 @@ async def drive_case(case: IntegrityCase, ctx: HarnessContext) -> CaseResult:
             )
         )).scalar_one_or_none()
         if check is None:
-            return CaseResult(None, "no_check", 0, None, None, None)
+            return CaseResult(None, "no_check", 0, None, None, None, [])
 
         # Pin the probed problem's id to a deterministic per-case value so the
         # id the agent echoes back in submit_problem_verdict is identical
@@ -993,6 +1132,14 @@ async def drive_case(case: IntegrityCase, ctx: HarnessContext) -> CaseResult:
                 IntegrityCheckProblem.sample_position == 0,
             )
         )).scalar_one_or_none()
+        engagements = list((await db.execute(
+            select(IntegrityConversationTurn.engagement)
+            .where(
+                IntegrityConversationTurn.integrity_check_submission_id == check.id,
+                IntegrityConversationTurn.role == "student",
+            )
+            .order_by(IntegrityConversationTurn.ordinal)
+        )).scalars().all())
         return CaseResult(
             disposition=check.disposition,
             status=check.status,
@@ -1000,6 +1147,7 @@ async def drive_case(case: IntegrityCase, ctx: HarnessContext) -> CaseResult:
             rubric=problem.rubric if problem else None,
             headline=check.headline,
             summary=check.overall_summary,
+            engagements=engagements,
         )
 
 
@@ -1145,7 +1293,7 @@ class IntegrityProbe(Probe):
         (confusion matrix + harm metrics) to stdout for the run log."""
         out: list[GeneratedItem] = []
         raws: list[dict[str, Any]] = []
-        for case in GOLDEN_CASES:
+        for case in GOLDEN_CASES + ENGAGEMENT_CASES:
             result = await drive_case(case, ctx)
             in_accepts = result.disposition in case.accepts
             raw: dict[str, Any] = {
@@ -1162,6 +1310,12 @@ class IntegrityProbe(Probe):
                 "headline": result.headline,
                 "summary": result.summary,
                 "rationale": case.rationale,
+                "engagements": result.engagements,
+                "expected_engagement": (
+                    [sorted(e) for e in case.expected_engagement]
+                    if case.expected_engagement is not None
+                    else None
+                ),
             }
             raws.append(raw)
             out.append(
@@ -1174,7 +1328,10 @@ class IntegrityProbe(Probe):
                     raw=raw,
                 )
             )
-        scorecard = summarize_corpus(raws)
+        # The disposition scorecard + non-nuisance mean are over the golden
+        # corpus only: the engagement cases run long by design (repeated
+        # "idk") and assert their own labels instead.
+        scorecard = summarize_corpus(raws[: len(GOLDEN_CASES)])
         print(_format_scorecard(scorecard))  # noqa: T201
         # Stamp the corpus-wide mean onto every item so the per-item
         # deterministic check can gate it (the harness has no corpus-level
@@ -1252,5 +1409,51 @@ class IntegrityProbe(Probe):
                 "" if mean_ok
                 else f"mean {mean_turns} > {NONNUISANCE_MEAN_TURN_CAP} — "
                 "understanding check ballooned the interview",
+            ))
+
+        expected = raw.get("expected_engagement")
+        if expected is not None:
+            # Only the scripted lines count: the harness fallback that keeps a
+            # still-probing agent talking is not part of the case.
+            got = list(raw.get("engagements") or [])[: len(expected)]
+            misses = [
+                f"reply {i + 1}: got {got[i]!r}, accept {want}"
+                for i, want in enumerate(expected)
+                if i < len(got) and got[i] not in want
+            ]
+            checks.append(CheckResult(
+                "each reply labelled with the expected engagement",
+                not misses,
+                "; ".join(misses),
+            ))
+            # The student nudge + teacher note follow the EXPECTED labels: a
+            # case that should nudge must, and one that shouldn't never does.
+            want_nt = [
+                "not_trying" if want == ["not_trying"] else "other"
+                for want in expected
+            ][: len(got)]
+            nudged = any(
+                trailing_not_trying_streak(got[: i + 1]) >= NUDGE_NOT_TRYING_STREAK
+                for i in range(len(got))
+            )
+            should_nudge = any(
+                trailing_not_trying_streak(list(want_nt[: i + 1]))
+                >= NUDGE_NOT_TRYING_STREAK
+                for i in range(len(want_nt))
+            )
+            checks.append(CheckResult(
+                f"own-words nudge {'fires' if should_nudge else 'never fires'}",
+                nudged == should_nudge,
+                "" if nudged == should_nudge else f"nudged={nudged}",
+            ))
+            noted = longest_not_trying_streak(got) >= DISENGAGED_NOT_TRYING_STREAK
+            should_note = (
+                longest_not_trying_streak(list(want_nt))
+                >= DISENGAGED_NOT_TRYING_STREAK
+            )
+            checks.append(CheckResult(
+                f"teacher 'didn't engage' note {'set' if should_note else 'not set'}",
+                noted == should_note,
+                "" if noted == should_note else f"didnt_engage={noted}",
             ))
         return checks

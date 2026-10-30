@@ -1397,6 +1397,46 @@ INTEGRITY_GENERATE_VARIANT_SCHEMA: ToolSchema = {
 # Agent tool: finish the whole check. Call only after every sampled
 # problem has a rubric. The server validates coverage and otherwise
 # rejects the call.
+# Per-reply engagement label for the integrity chat. Called alongside the
+# agent's reply to every student message; the server stores it on that
+# student turn and drives the "answer in your own words" nudge + the
+# teacher's "didn't engage" note from it (api/core/integrity_pipeline.py).
+INTEGRITY_ENGAGEMENT_VALUES = ("answering", "honest_confusion", "not_trying")
+INTEGRITY_LABEL_REPLY_SCHEMA: ToolSchema = {
+    "name": "label_student_reply",
+    "description": (
+        "Label the student's LATEST message. Call exactly once in every "
+        "response that follows a student message, alongside your reply "
+        "text. Never affects the verdict on its own."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "engagement": {
+                "type": "string",
+                "enum": list(INTEGRITY_ENGAGEMENT_VALUES),
+                "description": (
+                    "answering = any real attempt, even a wrong or partial "
+                    "one or a guess. honest_confusion = a specific question "
+                    "or a named confusion. not_trying = a bare 'idk' / 'I don't "
+                    "know how to explain', filler, or evasion with no "
+                    "attempt at all."
+                ),
+            },
+            "wrapping_up": {
+                "type": "boolean",
+                "description": (
+                    "true when this reply closes the conversation (a "
+                    "goodbye, or you're about to submit the verdict). "
+                    "false when you're asking or teaching and expect the "
+                    "student to answer."
+                ),
+            },
+        },
+        "required": ["engagement", "wrapping_up"],
+    },
+}
+
 INTEGRITY_FINISH_CHECK_SCHEMA: ToolSchema = {
     "name": "finish_check",
     "description": (

@@ -23,7 +23,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.audit_log import log_student_record_access
 from api.core.integrity_pipeline import (
+    DISENGAGED_NOT_TRYING_STREAK,
     MAX_STUDENT_TURNS,
+    NUDGE_NOT_TRYING_STREAK,
     PROBLEM_STATUS_DIAGNOSIS_ONLY,
     PROBLEM_STATUS_DISMISSED,
     PROBLEM_STATUS_SKIPPED_UNREADABLE,
@@ -33,8 +35,10 @@ from api.core.integrity_pipeline import (
     UNFINISHED_REASONS,
     count_student_turns,
     finalize_if_abandoned,
+    longest_not_trying_streak,
     process_student_turn,
     touch_open_check,
+    trailing_not_trying_streak,
 )
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user_full, require_teacher
@@ -182,6 +186,10 @@ class IntegrityStateResponse(BaseModel):
     # that honestly instead of the "thanks, your teacher has everything"
     # closing. False for a finished check and for the turn cap.
     closed_unfinished: bool = False
+    # True when the student's last NUDGE_NOT_TRYING_STREAK replies were
+    # all labelled not_trying by the agent. The client shows a one-time,
+    # non-blocking "answer in your own words" popup; nothing is refused.
+    nudge_own_words: bool
 
 
 # Per-event and array-length caps. A tampered client can't land
@@ -279,6 +287,16 @@ class ResolveRequest(BaseModel):
 
 def _is_stuck_turn(turn: IntegrityConversationTurn) -> bool:
     return turn.role == "student" and turn.content in STUCK_PHRASES
+
+
+def _streak_engagements(turns: list[IntegrityConversationTurn]) -> list[str | None]:
+    """Student-reply labels in order, for the not_trying streaks. The stuck
+    tap is the honest exit, so it's left out entirely: it neither counts
+    toward a streak nor breaks one, whatever the agent labelled it."""
+    return [
+        t.engagement for t in turns
+        if t.role == "student" and not _is_stuck_turn(t)
+    ]
 
 
 async def _count_stuck_taps(check_id: uuid.UUID, db: AsyncSession) -> int:
@@ -511,6 +529,7 @@ async def _build_state_response(
             problems=[],
             transcript=[],
             stuck_tap_used=False,
+            nudge_own_words=False,
         )
     # Diagnosis-only rows are teacher-facing — the student isn't being
     # probed on them, so they have nothing to see (no chat reference,
@@ -528,6 +547,9 @@ async def _build_state_response(
         extraction=_first_extraction(chat_probed),
         problems=_problem_summaries(chat_probed, questions, hw_positions),
         transcript=_student_facing_transcript(turns),
+        nudge_own_words=trailing_not_trying_streak(
+            _streak_engagements(turns)
+        ) >= NUDGE_NOT_TRYING_STREAK,
         stuck_tap_used=(
             sum(1 for t in turns if _is_stuck_turn(t)) >= MAX_STUCK_TAPS
         ),
@@ -793,6 +815,11 @@ class TeacherIntegrityDetail(BaseModel):
     resolved_at: datetime | None
     problems: list[TeacherIntegrityProblemRow]
     transcript: list[TeacherTranscriptTurn]
+    # True when the agent labelled DISENGAGED_NOT_TRYING_STREAK or more
+    # student replies in a row as not_trying: "didn't engage with the
+    # questions". Raises the teacher's scrutiny; never an auto-flag and
+    # never part of the disposition.
+    didnt_engage: bool
 
 
 @router.get("/teacher/integrity/submissions/{submission_id}")
@@ -848,6 +875,7 @@ async def teacher_get_integrity_detail(
             resolved_at=None,
             problems=[],
             transcript=[],
+            didnt_engage=False,
         )
 
     # Resolver name for the "Reviewed by …" chip. One small lookup,
@@ -930,6 +958,9 @@ async def teacher_get_integrity_detail(
         resolved_at=check.resolved_at,
         problems=problem_rows,
         transcript=transcript_rows,
+        didnt_engage=longest_not_trying_streak(
+            _streak_engagements(turns)
+        ) >= DISENGAGED_NOT_TRYING_STREAK,
     )
 
 
