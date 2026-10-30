@@ -124,8 +124,19 @@ async def _logout_flow(
 ) -> FlowResult:
     """Authenticated → click Sign Out → land back on /login. Tests session
     teardown end-to-end (auth-class, like login: a break here pages you, it is
-    never auto-fixed)."""
+    never auto-fixed).
+
+    The seeded student is a first-run personal learner, so /home opens the
+    onboarding tour's welcome overlay over the whole page, which takes
+    every click. Mark that tour seen first through the endpoint the
+    tour's Skip calls, as a returning learner would have it."""
     issues: list[str] = []
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_S) as client:
+        seen = await client.post(
+            f"{api_base.rstrip('/')}/auth/me/tour-seen", json={"persona": "personal"},
+            headers=_auth(seed.student_token),
+        )
+        seen.raise_for_status()  # not the journey under test: drop, never false-flag
     async with browser.authed_page(seed.student_token, seed.student_refresh) as page:
         await page.goto(
             # domcontentloaded, not networkidle (which _login_flow already uses):
@@ -152,14 +163,13 @@ async def _logout_flow(
 async def _student_insights_flow(
     browser: HarnessBrowser, web_base: str, api_base: str, seed: Seed,
 ) -> FlowResult:
-    """Teacher opens Student Insights → sees the homework's problems and who
-    missed one, with a link to that student's work. Seeds one approved,
-    zero-credit grade so the tab has a missed problem to show. The most-
-    missed problem opens expanded by default; asserts the student is listed
-    and the link deep-links to their work on that problem."""
+    """Teacher opens Student Insights → the problem most of the class got
+    wrong leads, with its whole-class count, already in the practice basket.
+    Seeds just enough approved zero grades on a one-problem homework for the
+    tab to flag it. Insights is whole-class only (no per-student lists)."""
     name, title = "student_insights", "Teacher reads Student Insights"
     issues: list[str] = []
-    student = await seed_insights_homework(seed)
+    graded = await seed_insights_homework(seed)
     async with browser.authed_page(seed.teacher_token, seed.teacher_refresh) as page:
         await page.goto(
             f"{web_base.rstrip('/')}/school/teacher/courses/{seed.course_id}",
@@ -167,16 +177,17 @@ async def _student_insights_flow(
         )
         try:
             await page.get_by_role("button", name="Student Insights").first.click(timeout=_TIMEOUT_MS)
-            await page.get_by_text("Missed it").first.wait_for(timeout=_TIMEOUT_MS)
+            await page.get_by_text("got 1 problem wrong on Insights HW").wait_for(timeout=_TIMEOUT_MS)
         except PlaywrightTimeoutError:
-            issues.append("Student Insights never showed who missed a problem for an approved zero grade")
+            issues.append(
+                f"Student Insights never flagged the problem {graded} of {graded} "
+                "students got wrong (approved zero grades)",
+            )
             return FlowResult(name, title, False, issues)
-        if not await page.get_by_text(student).count():
-            issues.append(f"the student who missed the problem ({student}) is not listed")
-        link = page.get_by_role("link", name="View work").first
-        href = await link.get_attribute("href") if await link.count() else None
-        if not href or "student=" not in href or "problem=1" not in href:
-            issues.append(f"'View work' does not deep-link to the student's problem (href={href!r})")
+        if not await page.get_by_text(f"{graded} of {graded} got it wrong").count():
+            issues.append(f"the flagged problem does not show '{graded} of {graded} got it wrong'")
+        if not await page.get_by_role("button", name="Added to practice").count():
+            issues.append("the flagged problem did not start in the practice basket")
     return FlowResult(name, title, not issues, issues)
 
 
@@ -304,18 +315,19 @@ async def _grade_publish_flow(
 ) -> FlowResult:
     """Teacher grades a submitted homework and publishes it → the grade
     persists and is released to the student. Seeds one submitted submission,
-    then exercises `PATCH /teacher/submissions/{id}/grade` (manual full credit,
-    no AI) and `POST /teacher/assignments/{id}/publish-grades`. Asserts the
-    score is set and the publish counts the grade."""
+    then exercises `PATCH /teacher/submissions/{id}/grade` (manual full credit
+    on the homework's one problem, no AI) and
+    `POST /teacher/assignments/{id}/publish-grades`. Asserts the score is set
+    and the publish counts the grade."""
     name, title = "grade_publish", "Teacher grades and publishes"
     issues: list[str] = []
-    submission_id = await seed_submitted_submission(seed)
+    assignment_id, submission_id, problem_id = await seed_submitted_submission(seed)
     base = api_base.rstrip("/")
     async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_S) as client:
         graded = await client.patch(
             f"{base}/teacher/submissions/{submission_id}/grade",
             json={"breakdown": [
-                {"problem_id": "p1", "score_status": "full", "percent": 100},
+                {"problem_id": problem_id, "score_status": "full", "percent": 100},
             ]},
             headers=_auth(seed.teacher_token),
         )
@@ -331,7 +343,7 @@ async def _grade_publish_flow(
             )
 
         published = await client.post(
-            f"{base}/teacher/assignments/{seed.assignment_id}/publish-grades",
+            f"{base}/teacher/assignments/{assignment_id}/publish-grades",
             json={"reviewed_only": False}, headers=_auth(seed.teacher_token),
         )
         if published.status_code != 200:
