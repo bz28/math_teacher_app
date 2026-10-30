@@ -124,8 +124,19 @@ async def _logout_flow(
 ) -> FlowResult:
     """Authenticated → click Sign Out → land back on /login. Tests session
     teardown end-to-end (auth-class, like login: a break here pages you, it is
-    never auto-fixed)."""
+    never auto-fixed).
+
+    The seeded student is a first-run personal learner, so /home opens the
+    onboarding tour's welcome overlay over the whole page, which takes
+    every click. Mark that tour seen first through the endpoint the
+    tour's Skip calls, as a returning learner would have it."""
     issues: list[str] = []
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_S) as client:
+        seen = await client.post(
+            f"{api_base.rstrip('/')}/auth/me/tour-seen", json={"persona": "personal"},
+            headers=_auth(seed.student_token),
+        )
+        seen.raise_for_status()  # not the journey under test: drop, never false-flag
     async with browser.authed_page(seed.student_token, seed.student_refresh) as page:
         await page.goto(
             # domcontentloaded, not networkidle (which _login_flow already uses):
