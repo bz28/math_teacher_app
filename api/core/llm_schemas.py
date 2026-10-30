@@ -1418,8 +1418,7 @@ INTEGRITY_LABEL_REPLY_SCHEMA: ToolSchema = {
                 "description": (
                     "answering = any real attempt, even a wrong or partial "
                     "one or a guess. honest_confusion = a specific question "
-                    "or a named confusion, and the student's 'I'm stuck' "
-                    "button message. not_trying = a bare 'idk' / 'I don't "
+                    "or a named confusion. not_trying = a bare 'idk' / 'I don't "
                     "know how to explain', filler, or evasion with no "
                     "attempt at all."
                 ),

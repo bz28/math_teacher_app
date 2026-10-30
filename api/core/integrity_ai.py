@@ -749,9 +749,7 @@ slope mean here?", "I don't get why you divide").
   - not_trying: a bare "idk" / "I don't know how to explain", filler, or \
 evasion with no attempt ("whatever it's just math").
 The label is bookkeeping, not a reaction: a bare "I don't know" is \
-not_trying AND still the teaching moment above — respond the same way. The \
-student's "I'm stuck" button sends "I'm stuck — I'm not sure how to explain \
-this."; that's the honest exit, so label it honest_confusion and teach. \
+not_trying AND still the teaching moment above — respond the same way. \
 After three not_trying replies in a row you may wrap up, but the \
 disposition must still be the honest one for the evidence you have — judge \
 the work and whatever they did say by the usual rules. Not engaging is \
