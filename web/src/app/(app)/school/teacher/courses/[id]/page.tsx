@@ -22,6 +22,7 @@ import { GradesTab } from "@/components/school/teacher/grades-tab";
 import { StudentInsightsTab } from "@/components/school/teacher/student-insights-tab";
 import { SettingsTab } from "@/components/school/teacher/settings-tab";
 import { ErrorBoundary } from "@/components/ui";
+import { PencilIcon } from "@/components/ui/icons";
 import { Skeleton } from "@/components/ui/skeleton";
 
 type TabKey =
@@ -278,9 +279,7 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
           ← My Courses
         </Link>
         <div className="mt-3 flex items-baseline justify-between gap-4">
-          <h1 className="font-serif text-[40px] leading-[1.05] tracking-[-0.02em] text-text-primary">
-            {course.name}
-          </h1>
+          <CourseTitle course={course} onRenamed={reloadCourse} />
           <button
             type="button"
             onClick={() => setTab("settings")}
@@ -404,10 +403,138 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
         {tab === "insights" && <StudentInsightsTab courseId={course.id} />}
         {tab === "submissions" && <SubmissionsTab courseId={course.id} />}
         {tab === "grades" && <GradesTab courseId={course.id} />}
-        {tab === "settings" && <SettingsTab course={course} onChanged={reloadCourse} />}
+        {tab === "settings" && <SettingsTab course={course} />}
         </ErrorBoundary>
       </div>
     </div>
+  );
+}
+
+// The course name is the page title; the pencil beside it renames the
+// course. Subject and grade level are set once, in New course.
+function CourseTitle({ course, onRenamed }: { course: TeacherCourse; onRenamed: () => Promise<void> }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(course.name);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const wasEditingRef = useRef(false);
+
+  useEffect(() => {
+    if (wasEditingRef.current && !editing) triggerRef.current?.focus();
+    wasEditingRef.current = editing;
+  }, [editing]);
+
+  // A refused or failed save hands focus back to the name, where the fix is.
+  useEffect(() => {
+    if (error) inputRef.current?.focus();
+  }, [error]);
+
+  const cancel = () => {
+    setEditing(false);
+    setError(null);
+  };
+
+  const save = async () => {
+    const name = draft.trim();
+    if (!name) {
+      setError("Course name can't be empty");
+      return;
+    }
+    if (name === course.name) {
+      cancel();
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      await teacher.updateCourse(course.id, { name });
+      await onRenamed();
+      setEditing(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't rename the course");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const titleType = "font-serif text-[40px] leading-[1.05] tracking-[-0.02em] text-text-primary";
+
+  if (!editing) {
+    return (
+      <div className="flex min-w-0 items-baseline gap-2">
+        <h1 className={titleType}>{course.name}</h1>
+        <button
+          ref={triggerRef}
+          type="button"
+          onClick={() => {
+            setDraft(course.name);
+            setEditing(true);
+          }}
+          aria-label="Rename course"
+          title="Rename course"
+          className="shrink-0 rounded-[--radius-sm] p-1.5 text-text-muted transition-colors hover:bg-[color:var(--color-surface-alt-2)] hover:text-text-primary"
+        >
+          <PencilIcon className="h-[18px] w-[18px]" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      className="min-w-0 flex-1"
+      onSubmit={(e) => {
+        e.preventDefault();
+        save();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && !saving) {
+          e.preventDefault();
+          cancel();
+        }
+      }}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="text"
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setError(null);
+          }}
+          ref={inputRef}
+          autoFocus
+          readOnly={saving}
+          maxLength={200}
+          aria-label="Course name"
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? "course-rename-error" : undefined}
+          className={`${titleType} min-w-0 basis-full rounded-[--radius-md] border border-primary bg-surface px-2 py-1 focus:outline-none read-only:opacity-50 sm:basis-auto sm:flex-1`}
+        />
+        <button
+          type="submit"
+          disabled={saving}
+          className="rounded-[--radius-md] bg-primary px-3 py-1.5 text-xs font-bold text-white hover:bg-primary-dark disabled:opacity-50"
+        >
+          {saving ? "Saving…" : "Save"}
+        </button>
+        <button
+          type="button"
+          onClick={cancel}
+          disabled={saving}
+          className="rounded-[--radius-md] border border-border-light px-3 py-1.5 text-xs font-semibold text-text-secondary hover:bg-[color:var(--color-surface-alt-2)] disabled:opacity-50"
+        >
+          Cancel
+        </button>
+      </div>
+      {error && (
+        <p id="course-rename-error" role="alert" className="mt-1 text-xs text-[color:var(--color-error)]">
+          {error}
+        </p>
+      )}
+    </form>
   );
 }
 

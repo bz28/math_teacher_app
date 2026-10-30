@@ -401,14 +401,14 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
                 Your teacher uses a quick chat to hear how you worked through a problem, in your own
                 words. No trick questions, nothing to look up — just explain your thinking.
               </Text>
-              {/* Why it's worth finishing — honest framing: the teacher reads
-                  it and decides, the chat doesn't move a score on its own. */}
+              {/* Why it's worth finishing — honest framing: the chat doesn't
+                  affect the grade, so nothing here may promise credit. */}
               <View style={styles.introNudge}>
                 <Text style={styles.introNudgeText}>
                   <Text style={styles.introNudgeStrong}>
-                    Your teacher reads this conversation when they grade your work.
+                    Your teacher reads this conversation alongside your work.
                   </Text>{" "}
-                  Explaining your thinking here is the best way to get credit for what you
+                  Explaining your thinking here is the best way to show them what you
                   understand.
                 </Text>
               </View>
@@ -451,12 +451,25 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
             </View>
           )}
 
+          {/* A check closed unfinished (reopened after the deadline) gets
+              the honest version, not a thank-you. */}
           {complete && (
             <View style={styles.completeBanner}>
-              <Ionicons name="checkmark-circle" size={20} color={colors.success} />
-              <Text style={styles.completeText}>
-                Thanks for explaining your work! You're all done here.
-              </Text>
+              {state?.closed_unfinished ? (
+                <>
+                  <Ionicons name="information-circle" size={20} color={colors.textMuted} />
+                  <Text style={styles.completeText}>
+                    This check closed because it wasn't finished. Your work is still turned in.
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+                  <Text style={styles.completeText}>
+                    Thanks for explaining your work! You're all done here.
+                  </Text>
+                </>
+              )}
             </View>
           )}
         </ScrollView>

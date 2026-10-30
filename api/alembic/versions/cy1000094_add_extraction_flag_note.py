@@ -1,7 +1,7 @@
 """add submissions.extraction_flag_note
 
 Revision ID: cy1000094
-Revises: cv1000091
+Revises: da1000096
 Create Date: 2026-10-29 00:00:00.000000
 
 The student's optional short note ("What did it get wrong?") sent with
@@ -27,7 +27,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "cy1000094"
-down_revision: str | None = "cv1000091"
+down_revision: str | None = "da1000096"
 branch_labels = None
 depends_on = None
 

@@ -30,9 +30,9 @@ from api.core.homework_points import (
 )
 from api.core.integrity_ai import UNREADABLE_THRESHOLD
 from api.core.integrity_pipeline import (
-    ABANDONED_INTERVIEW_DEADLINE,
     PROBLEM_STATUS_DIAGNOSIS_ONLY,
     finalize_if_abandoned,
+    unfinished_check_state,
 )
 from api.core.integrity_pipeline import (
     STATUS_COMPLETE as INTEGRITY_COMPLETE,
@@ -56,7 +56,7 @@ from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.unit import Unit
 from api.models.user import User
-from api.routes.teacher_courses import get_teacher_course
+from api.routes.teacher_courses import flagged_case, get_teacher_course
 from api.services.bank import (
     hydrate_assignment_content,
     problem_ids_in_content,
@@ -1477,83 +1477,10 @@ async def submissions_inbox(
             else_=0,
         ),
     ).cast(Integer).label("published")
-    # "Flagged" here = submissions that need teacher attention:
-    #   • agent emitted flag_for_review
-    #   • extraction was unreadable (teacher decides what to do)
-    #   • the check finalized without a disposition (turn cap / no
-    #     sampled problems — teacher reviews inconclusive)
-    #   • student raised "Reader got something wrong" before confirm,
-    #     routing the submission straight to manual grading with no
-    #     AI calls downstream
-    # pass / needs_practice / tutor_pivot are teacher-facing notes
-    # but not "flagged" for attention.
-    #
-    # Each integrity-check-based branch additionally requires the check
-    # to be unresolved: once a teacher marks it reviewed (cleared /
-    # confirmed_concern / contacted), it's handled and drops out of the
-    # needs-attention count. The extraction_flagged branch has no
-    # integrity-check row to resolve (no AI ran), so it stays as-is —
-    # the teacher clears it by grading the submission manually.
-    integrity_unresolved = (
-        IntegrityCheckSubmission.resolution == "unresolved"
-    )
-    flagged_expr = func.sum(
-        case(
-            (
-                and_(
-                    IntegrityCheckSubmission.disposition == "flag_for_review",
-                    integrity_unresolved,
-                ),
-                1,
-            ),
-            (
-                and_(
-                    IntegrityCheckSubmission.status == "skipped_unreadable",
-                    integrity_unresolved,
-                ),
-                1,
-            ),
-            (
-                and_(
-                    IntegrityCheckSubmission.status == "complete",
-                    IntegrityCheckSubmission.disposition.is_(None),
-                    integrity_unresolved,
-                ),
-                1,
-            ),
-            # Abandoned interview stalled past the deadline — not yet
-            # finalized (a teacher opening the roster does that lazily),
-            # but counted so the needs-attention badge nudges them to look.
-            (
-                and_(
-                    IntegrityCheckSubmission.status.in_(
-                        ("awaiting_student", "in_progress"),
-                    ),
-                    IntegrityCheckSubmission.updated_at
-                    < (datetime.now(UTC) - ABANDONED_INTERVIEW_DEADLINE),
-                    integrity_unresolved,
-                ),
-                1,
-            ),
-            # AI grading was on but skipped it (unreadable photo, or too
-            # long to grade in one pass): a grade row exists with that
-            # ai_grading_status and no final_score, and (integrity off ⇒)
-            # no integrity row to catch it above. Without this branch it
-            # sits ungraded indefinitely, invisible to the needs-attention
-            # count. LEFT JOIN already supplies SubmissionGrade.
-            (
-                and_(
-                    SubmissionGrade.ai_grading_status.in_(
-                        ("skipped_unreadable", "skipped_too_long"),
-                    ),
-                    SubmissionGrade.final_score.is_(None),
-                ),
-                1,
-            ),
-            (Submission.extraction_flagged_at.is_not(None), 1),
-            else_=0,
-        ),
-    ).cast(Integer).label("flagged")
+    # "Flagged" = the one shared definition (teacher_courses.flagged_case),
+    # so this inbox, the courses dashboard, the needs-attention queue and
+    # the review page's Flagged filter all count the same rows.
+    flagged_expr = func.sum(flagged_case()).cast(Integer).label("flagged")
 
     # SectionEnrollment guard mirrors the assignment-level stats: a
     # student who submitted then got unenrolled from the section
@@ -1665,12 +1592,10 @@ async def list_submissions(
         .where(IntegrityCheckSubmission.submission_id.in_(sub_ids))
     )).scalars().all() if sub_ids else []
 
-    # Lazy on-read finalization: a student who abandoned the interview
-    # leaves the check stuck in awaiting_student / in_progress forever
-    # (the turn cap only fires on a new student turn, and this deployment
-    # has no scheduler — see finalize_if_abandoned). The teacher loading
-    # the roster is the trigger that flips any check past the wall-clock
-    # deadline to a terminal inconclusive state so it stops hiding.
+    # On-read finalization: the cron sweep normally closes an abandoned
+    # interview first (see ABANDONED_INTERVIEW_DEADLINE), but if this read
+    # beats it, close any check past the deadline here so the roster
+    # says "Didn't finish the check" rather than showing it still open.
     finalized_any = False
     for c in check_rows:
         if await finalize_if_abandoned(c, db):
@@ -1712,6 +1637,7 @@ async def list_submissions(
         for cid, total, done in counts:
             problem_count_by_check[cid] = (int(total), int(done or 0))
 
+    now = datetime.now(UTC)
     submissions = []
     for sub, grade, student_name, student_email, is_preview, job_status in rows:
         check = check_by_sub.get(sub.id)
@@ -1741,6 +1667,14 @@ async def list_submissions(
                 "problem_count": total,
                 "complete_count": done,
                 "notable_count": notable_count if terminal else None,
+                # Why a complete check has no disposition (not_started /
+                # left_partway / turn_cap), plus "unreadable" for a
+                # skipped check — the roster's Flagged filter needs to
+                # tell those apart, and they all read complete + null.
+                "incomplete_reason": (
+                    "unreadable" if check.status == INTEGRITY_SKIPPED
+                    else check.incomplete_reason
+                ),
                 # Teacher-action layer: lets the roster's client-side
                 # flagged filter drop a check the teacher has reviewed.
                 # unresolved / cleared / confirmed_concern / contacted.
@@ -1778,6 +1712,12 @@ async def list_submissions(
             "grade_dirty": _is_grade_dirty(grade),
             "reviewed_at": grade.reviewed_at.isoformat() if grade and grade.reviewed_at else None,
             "integrity_overview": integrity_overview,
+            # "Didn't finish the check": never_confirmed / not_started /
+            # left_partway, or null. Its own roster pill and review
+            # banner — never counted as flagged.
+            "unfinished_check": unfinished_check_state(
+                sub, check, integrity_enabled=a.integrity_check_enabled, now=now,
+            ),
             # Student flagged "reader got something wrong" on the
             # post-submit confirm screen. When set, no AI grading or
             # integrity has run — teacher grades manually.

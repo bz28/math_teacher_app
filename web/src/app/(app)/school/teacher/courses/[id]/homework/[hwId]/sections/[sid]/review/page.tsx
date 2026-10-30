@@ -22,9 +22,12 @@ import {
   integrityNeedsResolution,
   ResolveIntegrityControl,
   RowDispositionPill,
+  UNFINISHED_CHECK_COPY,
+  UNFINISHED_CHECK_TITLE,
   type IntegrityActivityNotableTurnLite,
 } from "@/components/school/teacher/_pieces/integrity-pieces";
 import { Skeleton } from "@/components/ui";
+import { isFlaggedSubmission } from "@/components/school/teacher/roster-flagged";
 import { PdfView } from "@/components/ui/pdf-view";
 import { WorkGalleryModal } from "@/components/school/teacher/_pieces/work-gallery";
 import {
@@ -38,6 +41,7 @@ import {
   type SubmissionFile,
   type TeacherIntegrityDetail,
   type TeacherIntegrityTranscriptTurn,
+  type UnfinishedCheck,
   type TeacherRubric,
   type ClassRubricRule,
   type TeacherGraphCheck,
@@ -47,7 +51,6 @@ import {
   type TeacherSubmissionRow,
   type TeacherSubmissionStep,
 } from "@/lib/api";
-import { RuleSuggestion } from "@/components/school/teacher/_pieces/rule-suggestion";
 import { GraphCheckReview, openGraphItems } from "@/components/school/teacher/_pieces/graph-check-review";
 import { effectiveRubric, rubricChanged, rubricFields } from "@/lib/rubric";
 import { deductionPoints, earnedPoints, formatPoints } from "@/lib/points";
@@ -2579,38 +2582,8 @@ function RegradeConfirmDialog({
 // a verdict requiring teacher attention.
 // ────────────────────────────────────────────────────────────────────
 
-// Dispositions the "flagged" filter and resolve control treat as
-// needing teacher attention. Only `flag_for_review` — the integrity-
-// concern verdict. `tutor_pivot` is deliberately NOT here: it means the
-// student got the problem WRONG on paper and the AI tutored them through
-// it (integrity_ai.py — "wrong work is a learning signal, not a cheating
-// signal"). It surfaces as an informational disposition pill + via
-// practice insights, not as a teacher-review flag. This mirrors the
-// backend needs-attention aggregate, which also excludes tutor_pivot
-// (teacher_courses.py / teacher_assignments.py).
-const FLAGGED_DISPOSITIONS = new Set(["flag_for_review"]);
-
 function isFlagged(entry: RosterEntry): boolean {
-  const sub = entry.submission;
-  if (!sub) return false;
-  // A student-flagged reading ("most of it is wrong") routes straight to
-  // manual grading and is the strongest "needs your eyes" signal.
-  if (sub.extraction_flagged_at) return true;
-  const overview = sub.integrity_overview;
-  if (!overview) return false;
-  // A teacher who marked the check reviewed has handled it — drop it
-  // from the flagged filter (matches the backend flagged aggregate).
-  if (overview.resolution !== "unresolved") return false;
-  // `IntegrityOverview` exposes only `complete | in_progress`, so the
-  // `skipped_unreadable` granular state isn't directly visible from
-  // the row. The full `TeacherIntegrityDetail` (loaded only for the
-  // selected student) carries that signal — for the roster filter,
-  // we approximate via disposition + the extraction-flagged check
-  // above. The Submissions inbox flagged count counts skipped at the
-  // backend, so a `skipped_unreadable` student is still surfaced via
-  // the per-row CTA there.
-  if (!overview.disposition) return false;
-  return FLAGGED_DISPOSITIONS.has(overview.disposition);
+  return !!entry.submission && isFlaggedSubmission(entry.submission);
 }
 
 function needsTeacher(entry: RosterEntry): boolean {
@@ -3152,10 +3125,11 @@ function StudentRow({
   const mutedName = sub === null;
   const overview = sub?.integrity_overview ?? null;
   const showsDispositionPill =
-    overview?.overall_status === "complete" &&
-    (overview.disposition === "flag_for_review" ||
-      overview.disposition === "tutor_pivot" ||
-      !overview.disposition);
+    !!sub?.unfinished_check ||
+    (overview?.overall_status === "complete" &&
+      (overview.disposition === "flag_for_review" ||
+        overview.disposition === "tutor_pivot" ||
+        !overview.disposition));
   const showsActivityPill = (overview?.notable_count ?? 0) > 0;
   const hasScore = sub?.final_score != null;
   const hasAnyPill = showsDispositionPill || showsActivityPill;
@@ -3239,7 +3213,10 @@ function StudentRow({
        * row at all so loud rows actually pop. */}
       {hasAnyPill && (
         <div className="flex flex-wrap items-center justify-end gap-1.5">
-          <RowDispositionPill overview={overview} />
+          <RowDispositionPill
+            overview={overview}
+            unfinished={sub?.unfinished_check ?? null}
+          />
           <ActivityPill count={overview?.notable_count ?? null} />
         </div>
       )}
@@ -4385,6 +4362,7 @@ function SubmissionDetailPanel({
       <IntegrityBanner
         integrity={integrity}
         overviewFallback={row?.integrity_overview ?? null}
+        unfinished={row?.unfinished_check ?? null}
         onResolved={onIntegrityResolved}
       />
 
@@ -4557,7 +4535,6 @@ function SubmissionDetailPanel({
                 drawingsInventoried={detail.drawings_inventoried}
                 reportBase={reportBase}
                 ruleText={ruleText}
-                submissionId={detail.submission_id}
                 rowRef={(el) => {
                   rowRefs.current[i] = el;
                 }}
@@ -5101,7 +5078,6 @@ function ProblemGradeRow({
   onOpenPage,
   reportBase,
   ruleText,
-  submissionId,
 }: {
   problem: TeacherSubmissionDetailProblem;
   entry: GradeBreakdownEntry | null;
@@ -5110,7 +5086,6 @@ function ProblemGradeRow({
   /** Class rule id → its wording, from the grade's rubric snapshot, so a
    *  deduction that applied a rule can name it. */
   ruleText: Record<string, string>;
-  submissionId: string;
   /** This row is the keyboard-focused problem — draws the left accent
    *  bar + ring and receives real DOM focus via `rowRef`. */
   focused: boolean;
@@ -5922,17 +5897,6 @@ function ProblemGradeRow({
           className="mt-1 w-full resize-y rounded-[--radius-sm] border border-border-light bg-surface px-2.5 py-1.5 text-xs leading-relaxed text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none disabled:cursor-not-allowed disabled:bg-[color:var(--color-surface-alt-2)] disabled:text-text-muted"
         />
       </div>
-
-      {/* Lowered the AI's grade and said why → offer to make the reason
-          a class rule (server decides; never blocks grading). */}
-      <RuleSuggestion
-        submissionId={submissionId}
-        problemId={problem.bank_item_id}
-        aiPercent={aiGrade?.percent ?? null}
-        teacherPercent={entry?.percent ?? null}
-        comment={entry?.feedback ?? ""}
-        aiFeedback={aiGrade?.student_feedback ?? null}
-      />
     </div>
   );
 }
@@ -6269,6 +6233,7 @@ function GradeBtn({
 // bg reads as washed-out regardless of contrast math.
 type IntegrityBannerKey =
   | IntegrityDisposition
+  | "unfinished"
   | "extracting"
   | "awaiting_student"
   | "in_progress"
@@ -6318,6 +6283,15 @@ const INTEGRITY_STYLE: Record<
     icon: "◌",
     label: "Inconclusive — teacher review",
   },
+  // Dashed border + outlined ◐: the same "something is missing" mark as
+  // the roster pill, and deliberately no verdict color.
+  unfinished: {
+    bg: "bg-[color:var(--color-surface-alt-2)]",
+    border: "border-dashed border-text-muted/60",
+    iconBg: "border border-text-muted/70 bg-surface text-text-secondary",
+    icon: "◐",
+    label: UNFINISHED_CHECK_TITLE,
+  },
   extracting: {
     ...NEUTRAL_STYLE,
     icon: "…",
@@ -6358,6 +6332,7 @@ const VERDICT_LEGEND_ITEMS: { key: IntegrityBannerKey; description: string }[] =
   { key: "tutor_pivot", description: "Student got stuck and the AI walked them through it. Their submitted work doesn't reflect what they could do alone." },
   { key: "flag_for_review", description: "Submitted work is correct but the student couldn't explain it. Most likely cheating signal — open the conversation to decide." },
   { key: "needs_review", description: "Check ran but couldn't reach a verdict (e.g. ran out of turns). Manual review recommended." },
+  { key: "unfinished", description: "The student didn't finish the check — never confirmed their reading, never answered, or left partway. Not a flag — there's just no understanding signal. Grade their written work; if they never confirmed the reading, it hasn't been AI-graded, so grade it by hand." },
   { key: "skipped_unreadable", description: "Vision couldn't read the student's submission. Grade manually, or have them re-submit." },
   { key: "extracting", description: "Vision is still parsing the student's work. The verdict will arrive shortly." },
   { key: "in_progress", description: "Student is actively chatting with the AI. Verdict pending." },
@@ -6664,10 +6639,15 @@ function KeyboardShortcutsModal({ onClose }: { onClose: () => void }) {
 function IntegrityBanner({
   integrity,
   overviewFallback,
+  unfinished,
   onResolved,
 }: {
   integrity: TeacherIntegrityDetail | null;
   overviewFallback: TeacherSubmissionRow["integrity_overview"] | null;
+  /** The row's "didn't finish" state. Wins over the status switch below,
+   *  and is the only signal for a never-confirmed reading (no check row
+   *  exists, so `integrity` comes back "no_check"). */
+  unfinished: UnfinishedCheck | null;
   onResolved: (
     submissionId: string,
     resolution: IntegrityResolutionOutcome,
@@ -6692,6 +6672,7 @@ function IntegrityBanner({
   // not a generic "couldn't determine."
   const key = ((): IntegrityBannerKey | null => {
     if (disposition) return disposition;
+    if (unfinished) return "unfinished";
     switch (status) {
       case "extracting":
       case "awaiting_student":
@@ -6719,7 +6700,21 @@ function IntegrityBanner({
   // when the agent ran a finish_check; non-AI states (extracting,
   // awaiting_student, in_progress, skipped_unreadable) and force-finalize
   // turn-cap rows have a null headline and fall through to style.label.
-  const title = integrity?.headline ?? style.label;
+  // The unfinished state's title is ours, not the stored headline: rows
+  // closed before the marker existed still carry "Interview incomplete".
+  const title =
+    key === "unfinished" ? style.label : (integrity?.headline ?? style.label);
+  // Same reason for the summary: the copy below says what happened AND
+  // what the grade rests on, which the stored summary never did.
+  const answered =
+    integrity?.transcript.filter((t) => t.role === "student").length ?? 0;
+  const shownSummary =
+    key === "unfinished" && unfinished
+      ? UNFINISHED_CHECK_COPY[unfinished].body +
+        (unfinished === "left_partway" && answered > 0
+          ? ` They answered ${answered} ${answered === 1 ? "time" : "times"} before leaving — open the conversation to see how far they got.`
+          : "")
+      : summary;
   // Hide "View conversation" until at least one student turn exists.
   // For awaiting_student the transcript may carry the AI opener alone;
   // there's nothing meaningful for the teacher to read yet.
@@ -6737,7 +6732,10 @@ function IntegrityBanner({
           aria-live="polite"
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="flex min-w-0 flex-1 items-start gap-3">
+            {/* basis: on a phone the text keeps a readable width and the
+             * "View conversation" button wraps below it instead of
+             * squeezing the copy into a one-word column. */}
+            <div className="flex min-w-0 flex-1 basis-[16rem] items-start gap-3">
               <span
                 className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-sm font-bold ${style.iconBg}`}
                 aria-hidden
@@ -6754,9 +6752,14 @@ function IntegrityBanner({
                 <p className="text-sm font-semibold text-text-primary">
                   {title}
                 </p>
-                {summary && (
+                {shownSummary && (
                   <p className="mt-1.5 text-xs leading-relaxed text-text-secondary">
-                    {summary}
+                    {shownSummary}
+                  </p>
+                )}
+                {key === "unfinished" && unfinished && (
+                  <p className="mt-1 text-xs leading-relaxed text-text-muted">
+                    {UNFINISHED_CHECK_COPY[unfinished].footnote}
                   </p>
                 )}
                 {key === "in_progress" && overviewFallback && (

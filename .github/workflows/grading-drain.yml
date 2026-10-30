@@ -14,6 +14,10 @@ name: Grading queue drain
 # run fails or the API is mid-deploy, nothing is lost: the rows are still in
 # the database and the next run picks them up.
 #
+# The same call also closes understanding checks a student walked away from
+# (12h with no activity), so the teacher's "Didn't finish the check" marker
+# doesn't wait for someone to open a page. See api/routes/grading_drain.py.
+#
 # Config (Settings → Secrets and variables → Actions):
 #   GRADING_DRAIN_TOKEN (secret) — must match the backend's
 #                                  `grading_drain_token` setting.
