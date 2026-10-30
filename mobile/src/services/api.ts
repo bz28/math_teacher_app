@@ -456,10 +456,15 @@ export const submitHomework = (
     uploadTimeoutFor(files.reduce((n, f) => n + f.length, 0)),
   );
 
-/** Free pixel check behind the "looks sideways" nudge. `image` is a
- *  small copy of one page. */
+/** Free pixel check behind the upload screen's sideways block (and, for
+ *  a PDF, its too-small pages). `image` is a small copy of one photo, or
+ *  a whole PDF. */
 export const checkPageOrientation = (image: string) =>
-  apiPost<{ sideways: boolean }>(`/school/student/homework/page-orientation`, { image });
+  apiPost<Schemas["PageOrientationResponse"]>(
+    `/school/student/homework/page-orientation`,
+    { image },
+    uploadTimeoutFor(image.length),
+  );
 
 // The Vision extraction wire shape — a flat list of steps and final
 // answers, each tagged with the 1-based HW problem_position it belongs to
@@ -509,16 +514,26 @@ export type IntegrityState = Schemas["IntegrityStateResponse"];
 export const getIntegrityState = (submissionId: string) =>
   apiGet<IntegrityState>(`/school/student/integrity/submissions/${submissionId}`);
 
-/** Send a student turn and get the agent's reply (runs the agent loop, so slow). */
+/**
+ * Send a student turn and get the agent's reply (runs the agent loop, so slow).
+ * `stuck` = an "I'm stuck" tap: the server ignores `message`, writes its own
+ * canonical text, and allows it once per problem.
+ */
 export const postIntegrityTurn = (
   submissionId: string,
   message: string,
   secondsOnTurn: number,
   telemetry?: Schemas["TurnTelemetry"],
+  stuck = false,
 ) =>
   apiPost<IntegrityState>(
     `/school/student/integrity/submissions/${submissionId}/turn`,
-    { message, seconds_on_turn: secondsOnTurn, telemetry: telemetry ?? { device_type: "mobile" } },
+    {
+      message,
+      stuck,
+      seconds_on_turn: secondsOnTurn,
+      telemetry: telemetry ?? { device_type: "mobile" },
+    },
     LLM_TIMEOUT_MS,
   );
 

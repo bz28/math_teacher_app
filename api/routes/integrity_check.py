@@ -10,13 +10,15 @@ transcript + per-problem + overall state.
 
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import UTC, datetime
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.audit_log import log_student_record_access
@@ -28,9 +30,11 @@ from api.core.integrity_pipeline import (
     STATUS_COMPLETE,
     STATUS_SKIPPED_UNREADABLE,
     TOOL_GENERATE_VARIANT,
+    UNFINISHED_REASONS,
     count_student_turns,
     finalize_if_abandoned,
     process_student_turn,
+    touch_open_check,
 )
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user_full, require_teacher
@@ -51,6 +55,48 @@ router = APIRouter(tags=["integrity"])
 # Min chars in a student message. Same 5-char floor we enforced on
 # answers in the quiz-style flow — prevents empty/"x"-spam.
 MIN_MESSAGE_CHARS = 5
+
+# ── The "I'm stuck" tap ─────────────────────────────────────────────
+# The honest exit: one tap sends a fixed "I can't explain this" turn that
+# skips the typed minimum. In prod it was most of the "don't know" turns,
+# often tapped repeatedly to coast through the check, so it's limited to
+# ONE use per problem. Per problem == per check today: the chat probes a
+# single problem (integrity_pipeline.MAX_SAMPLE = 1), and the inline
+# variant is a probe *of that same problem*, not a new one. Revisit if
+# MAX_SAMPLE grows (student turns carry no problem id).
+#
+# The server owns the wording: a tap arrives as `stuck: true` and the
+# canonical text below is what lands in the transcript the agent reads.
+STUCK_MESSAGE = "I'm stuck — I'm not sure how to explain this."
+# Every text that counts as a stuck tap: the canonical one plus the exact
+# string the mobile client sent as a plain message before the `stuck`
+# flag existed (builds already on phones still do). Matching them means
+# an old client — or a student who types the phrase verbatim — can't
+# sidestep the one-use cap, and taps already in the DB count with no
+# backfill. Incoming text is compared after _normalize_stuck_text (case, smart
+# punctuation), but every tap is *stored* as STUCK_MESSAGE, so the DB
+# count can match these exact strings.
+STUCK_PHRASES = (
+    STUCK_MESSAGE,
+    "I'm stuck — not sure how to explain this.",
+)
+MAX_STUCK_TAPS = 1
+_STUCK_ALREADY_USED = (
+    "You've already used \"I'm stuck\" on this problem. "
+    "Give it a try in your own words — even a guess helps."
+)
+
+
+def _normalize_stuck_text(text: str) -> str:
+    """Lowercase, unify curly apostrophes, drop every other non-word
+    character (dashes, punctuation, emoji) and collapse whitespace — so
+    iOS smart punctuation and case variants of the stuck text still
+    count as the tap."""
+    t = re.sub(r"[\u2018\u2019\u02bc`\u00b4]", "'", text.lower())
+    return " ".join(re.sub(r"[^\w\s']|_", " ", t).split())
+
+
+_STUCK_NORMALIZED = frozenset(_normalize_stuck_text(p) for p in STUCK_PHRASES)
 
 # Teacher resolution states for an integrity check (see
 # IntegrityCheckSubmission.resolution). "unresolved" is the default the
@@ -127,6 +173,15 @@ class IntegrityStateResponse(BaseModel):
     extraction: ExtractionOut | None
     problems: list[ProblemSummary]
     transcript: list[TurnOut]
+    # True once the student has used their one "I'm stuck" tap on the
+    # problem. The client disables the button; the turn endpoint refuses
+    # a second tap regardless.
+    stuck_tap_used: bool
+    # True when the check closed because the student didn't finish it
+    # (never answered / left partway — incomplete_reason). The chat shows
+    # that honestly instead of the "thanks, your teacher has everything"
+    # closing. False for a finished check and for the turn cap.
+    closed_unfinished: bool = False
 
 
 # Per-event and array-length caps. A tampered client can't land
@@ -192,7 +247,11 @@ class TurnTelemetry(BaseModel):
 
 
 class TurnRequest(BaseModel):
-    message: str = Field(min_length=1, max_length=4000)
+    # Ignored when `stuck` is true (the server writes STUCK_MESSAGE).
+    message: str = Field(default="", max_length=4000)
+    # True when the student tapped "I'm stuck" instead of typing. Allowed
+    # MAX_STUCK_TAPS times per problem; skips the typed minimum.
+    stuck: bool = False
     # Clamped so a tampered client can't land negative/absurd values in
     # the teacher transcript. Upper bound = 24h; students can legitimately
     # leave the chat open, walk away, and come back much later than an
@@ -217,6 +276,21 @@ class ResolveRequest(BaseModel):
 
 
 # ── Helpers ─────────────────────────────────────────────────────────
+
+def _is_stuck_turn(turn: IntegrityConversationTurn) -> bool:
+    return turn.role == "student" and turn.content in STUCK_PHRASES
+
+
+async def _count_stuck_taps(check_id: uuid.UUID, db: AsyncSession) -> int:
+    count = (await db.execute(
+        select(func.count(IntegrityConversationTurn.id)).where(
+            IntegrityConversationTurn.integrity_check_submission_id == check_id,
+            IntegrityConversationTurn.role == "student",
+            IntegrityConversationTurn.content.in_(STUCK_PHRASES),
+        )
+    )).scalar_one()
+    return int(count)
+
 
 async def _load_my_submission(
     db: AsyncSession, submission_id: uuid.UUID, student_id: uuid.UUID,
@@ -436,6 +510,7 @@ async def _build_state_response(
             extraction=None,
             problems=[],
             transcript=[],
+            stuck_tap_used=False,
         )
     # Diagnosis-only rows are teacher-facing — the student isn't being
     # probed on them, so they have nothing to see (no chat reference,
@@ -453,6 +528,14 @@ async def _build_state_response(
         extraction=_first_extraction(chat_probed),
         problems=_problem_summaries(chat_probed, questions, hw_positions),
         transcript=_student_facing_transcript(turns),
+        stuck_tap_used=(
+            sum(1 for t in turns if _is_stuck_turn(t)) >= MAX_STUCK_TAPS
+        ),
+        closed_unfinished=(
+            check.status == STATUS_COMPLETE
+            and check.disposition is None
+            and check.incomplete_reason in UNFINISHED_REASONS
+        ),
     )
 
 
@@ -490,11 +573,24 @@ async def get_my_integrity_state(
             fallback_status="extracting" if enabled else "no_check",
         )
 
+    # A student coming back after the deadline finds the check closed,
+    # not a chat that will close under them mid-reply — and their own
+    # visit is enough to give the teacher an accurate marker. Inside the
+    # deadline, looking at the open chat counts as activity.
+    if (
+        await finalize_if_abandoned(check, db)
+        or await touch_open_check(check, db)
+    ):
+        await db.commit()
+
     problems = await _load_problems(db, check.id)
     turns = await _load_transcript(db, check.id)
     return await _build_state_response(
         submission_id, check, problems, turns, db, fallback_status="no_check",
     )
+
+
+CHECK_CLOSED = "This check has closed."
 
 
 @router.post("/school/student/integrity/submissions/{submission_id}/turn")
@@ -506,23 +602,41 @@ async def post_student_turn(
 ) -> IntegrityStateResponse:
     """Append a student turn, run the agent loop, return fresh state."""
     await _load_my_submission(db, submission_id, user.id)
-    check = await _load_check_for_submission(db, submission_id)
+    # Locked for the whole turn, and read fresh under the lock: a close
+    # that committed a moment ago is seen here, and nothing can close
+    # the check while this reply is being answered.
+    check = (await db.execute(
+        select(IntegrityCheckSubmission)
+        .where(IntegrityCheckSubmission.submission_id == submission_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )).scalar_one_or_none()
     if check is None:
         raise HTTPException(
             status_code=404, detail="No integrity check for this submission",
         )
 
+    # A reply never reopens a closed check — including one past its
+    # deadline that no sweep or read has closed yet (close it now).
+    if await finalize_if_abandoned(check, db):
+        await db.commit()
     if check.status in (STATUS_COMPLETE, STATUS_SKIPPED_UNREADABLE):
-        raise HTTPException(
-            status_code=409, detail="Integrity check already complete",
-        )
+        raise HTTPException(status_code=409, detail=CHECK_CLOSED)
     if check.status == "extracting":
         raise HTTPException(
             status_code=409, detail="Integrity check is still preparing",
         )
 
     message = body.message.strip()
-    if len(message) < MIN_MESSAGE_CHARS:
+    is_stuck_tap = (
+        body.stuck or _normalize_stuck_text(message) in _STUCK_NORMALIZED
+    )
+    stuck_used = await _count_stuck_taps(check.id, db) >= MAX_STUCK_TAPS
+    if is_stuck_tap:
+        if stuck_used:
+            raise HTTPException(status_code=400, detail=_STUCK_ALREADY_USED)
+        message = STUCK_MESSAGE
+    elif len(message) < MIN_MESSAGE_CHARS:
         raise HTTPException(
             status_code=400,
             detail=f"Message must be at least {MIN_MESSAGE_CHARS} characters",
@@ -532,19 +646,31 @@ async def post_student_turn(
     # loop in a prior turn somehow missed finalization. One count
     # query beats loading the whole transcript.
     if await count_student_turns(check.id, db) >= MAX_STUDENT_TURNS:
-        raise HTTPException(
-            status_code=409, detail="Integrity check already complete",
-        )
+        raise HTTPException(status_code=409, detail=CHECK_CLOSED)
 
     telemetry = (
         body.telemetry.model_dump(mode="json") if body.telemetry else None
     )
-    await process_student_turn(
-        check, message, body.seconds_on_turn, db,
-        user_id=str(user.id),
-        telemetry=telemetry,
-    )
-    await db.commit()
+    try:
+        await process_student_turn(
+            check, message, body.seconds_on_turn, db,
+            user_id=str(user.id),
+            telemetry=telemetry,
+        )
+        await db.commit()
+    except IntegrityError:
+        # Two sends raced for the same transcript ordinal (a double tap,
+        # two tabs): the other one landed first. Answer like a repeat
+        # instead of a 500 — for a stuck tap that's "already used".
+        await db.rollback()
+        if is_stuck_tap:
+            raise HTTPException(
+                status_code=400, detail=_STUCK_ALREADY_USED,
+            ) from None
+        raise HTTPException(
+            status_code=409,
+            detail="Your last message is still sending — give it a moment.",
+        ) from None
 
     # `check` was mutated in-memory and the session uses
     # expire_on_commit=False, so attrs are already current. Problems +
@@ -637,14 +763,19 @@ class TeacherIntegrityDetail(BaseModel):
     submission_id: str
     overall_status: str
     # One of pass / needs_practice / tutor_pivot / flag_for_review.
-    # Null when status is skipped_unreadable or when the agent couldn't
-    # conclude (turn cap or no sampled problems).
+    # Null when status is skipped_unreadable or when no verdict ran: the
+    # turn cap, no sampled problems, or the student didn't finish (see
+    # incomplete_reason).
     disposition: str | None
     overall_summary: str | None
     # 4-8 word verdict title the agent emitted in finish_check. Null
     # when no AI verdict ran (skipped_unreadable / force_finalize_turn_cap)
     # — frontend falls back to a hardcoded disposition label.
     headline: str | None
+    # Why a complete check has no disposition: not_started / left_partway
+    # (the student didn't finish) or turn_cap (inconclusive). Null when
+    # the agent reached a verdict, and on every non-complete status.
+    incomplete_reason: Literal["not_started", "left_partway", "turn_cap"] | None
     probe_selection_reason: str | None
     inline_variant_used: bool
     inline_variant_result: str | None
@@ -694,11 +825,10 @@ async def teacher_get_integrity_detail(
     )
 
     check = await _load_check_for_submission(db, submission_id)
-    # Lazy on-read finalization: if the student abandoned the interview
-    # and it's been stuck past the wall-clock deadline, flip it to a
-    # terminal inconclusive state here so the teacher sees "interview
-    # incomplete" instead of a frozen in-progress check. No scheduler in
-    # this deployment, so the teacher's read is the trigger.
+    # On-read finalization: the cron sweep normally closes an abandoned
+    # interview first, but if this read beats it, close it here so the
+    # teacher sees "Didn't finish the check" instead of a frozen
+    # in-progress one.
     if check is not None and await finalize_if_abandoned(check, db):
         await db.commit()
     if check is None:
@@ -708,6 +838,7 @@ async def teacher_get_integrity_detail(
             disposition=None,
             overall_summary=None,
             headline=None,
+            incomplete_reason=None,
             probe_selection_reason=None,
             inline_variant_used=False,
             inline_variant_result=None,
@@ -789,6 +920,7 @@ async def teacher_get_integrity_detail(
         disposition=check.disposition,
         overall_summary=check.overall_summary,
         headline=check.headline,
+        incomplete_reason=check.incomplete_reason,
         probe_selection_reason=check.probe_selection_reason,
         inline_variant_used=check.inline_variant_used,
         inline_variant_result=check.inline_variant_result,

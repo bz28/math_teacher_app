@@ -38,6 +38,7 @@ from sqlalchemy import delete as sql_delete
 from sqlalchemy import distinct, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from api.core.audit_log import record_student_activity
 from api.core.constants import MAX_SUBMISSION_FILES, MAX_SUBMISSION_TOTAL_BYTES
@@ -46,20 +47,25 @@ from api.core.image_utils import (
     PAGE_ROTATIONS,
     image_long_edge,
     page_looks_sideways,
+    pdf_page_checks,
+    pdf_scan_long_edges,
     rotate_upload,
-    validate_and_decode_image,
     validate_and_decode_upload,
 )
 from api.core.integrity_pipeline import (
+    NextStep,
     spawn_diagnosis_seeding,
     start_integrity_check,
+    student_next_step,
 )
+from api.core.part_labels import is_multi_part
 from api.core.tutor import completed_chat, step_chat
 from api.database import get_db, get_session_factory
 from api.middleware.auth import get_current_user_full
 from api.middleware.rate_limit import limiter
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
 from api.models.course import Course, CourseTeacher
+from api.models.integrity_check import IntegrityCheckSubmission
 from api.models.practice_activity import (
     MODE_LEARN,
     MODE_PRACTICE,
@@ -372,6 +378,11 @@ class StudentHomeworkSummary(BaseModel):
     problem_count: int
     # "not_started" or "submitted". Drives the badge on the HW list.
     status: str
+    # What's left for the student on turned-in work: "confirm_reading"
+    # (the AI's reading is waiting for their OK) or "finish_check" (the
+    # understanding check is open). Null when there's nothing to do. A
+    # nudge only — nothing waits on it. See student_next_step.
+    next_step: NextStep | None = None
 
 
 class StudentPracticeSummary(BaseModel):
@@ -497,6 +508,11 @@ class StudentHomeworkDetail(BaseModel):
     final_score: float | None = None
     grade_published_at: datetime | None = None
     breakdown: list[StudentProblemFeedback] | None = None
+    # What's left for the student on turned-in work: "confirm_reading"
+    # (the AI's reading is waiting for their OK) or "finish_check" (the
+    # understanding check is open). Null when there's nothing to do. A
+    # nudge only — nothing waits on it. See student_next_step.
+    next_step: NextStep | None = None
 
 
 class SubmitHomeworkRequest(BaseModel):
@@ -537,13 +553,25 @@ class SubmitHomeworkRequest(BaseModel):
 
 
 class PageOrientationRequest(BaseModel):
-    # A downsized copy (~1024px long edge) of one page the student just
-    # added — enough to see which way the writing runs.
+    # A downsized copy (~1024px long edge) of one photo the student just
+    # added — enough to see which way the writing runs — or a PDF, whole.
     image: str
 
 
 class PageOrientationResponse(BaseModel):
+    # Any page reads as sideways. The one field older app builds read.
     sideways: bool
+    # Pages in the file: 1 for a photo, one per page for a PDF (0 when
+    # the PDF can't be read, which the checks then say nothing about).
+    page_count: int
+    # 1-based pages within this file that read as sideways.
+    sideways_pages: list[int]
+    # PDF pages under the size floor, which turn-in will refuse. Photos
+    # are measured on the device (this copy is downsized).
+    too_small_pages: list[int]
+    # PDFs only: a small JPEG of the first sideways page (else page 1),
+    # for the upload screen to show and turn in place of a photo.
+    preview: str | None
 
 
 class SubmitHomeworkResponse(BaseModel):
@@ -599,6 +627,11 @@ class DashboardAssignment(BaseModel):
     # "not_started" (in Due/Overdue) or "submitted" (in In review).
     status: Literal["not_started", "submitted"]
     is_late: bool
+    # What's left for the student on turned-in work: "confirm_reading"
+    # (the AI's reading is waiting for their OK) or "finish_check" (the
+    # understanding check is open). Null when there's nothing to do. A
+    # nudge only — nothing waits on it. See student_next_step.
+    next_step: NextStep | None = None
 
 
 class DashboardGrade(BaseModel):
@@ -676,7 +709,8 @@ def _serialize(item: QuestionBankItem) -> VariationPayload:
         bank_item_id=str(item.id),
         question=item.question,
         final_answer=item.final_answer,
-        distractors=list(item.distractors or []),
+        # Multi-part look-alikes are free response, as on the practice page.
+        distractors=[] if is_multi_part(item.question, item.final_answer) else list(item.distractors or []),
         solution_steps=_student_solution_steps(item.solution_steps),
         difficulty=item.difficulty,
         figure_svg=item.figure_svg,
@@ -1077,6 +1111,58 @@ async def move_preview_seat(
     return {"status": "ok"}
 
 
+async def _next_steps(
+    db: AsyncSession, submission_ids: list[uuid.UUID],
+) -> dict[uuid.UUID, NextStep | None]:
+    """`student_next_step` for each of a student's submissions, in three
+    queries whatever the count, against the homework's toggles as they
+    are now. Loads only the columns the rule reads —
+    a submission row also carries every page's image."""
+    if not submission_ids:
+        return {}
+    rows = (await db.execute(
+        select(
+            Submission,
+            Assignment.integrity_check_enabled,
+            Assignment.ai_grading_enabled,
+        )
+        .join(Assignment, Assignment.id == Submission.assignment_id)
+        .options(load_only(
+            Submission.id,
+            Submission.extraction,
+            Submission.extraction_confirmed_at,
+            Submission.extraction_flagged_at,
+        ))
+        .where(Submission.id.in_(submission_ids))
+    )).all()
+    checks = {
+        c.submission_id: c for c in (await db.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id.in_(submission_ids))
+        )).scalars().all()
+    }
+    # "Published" the way every student surface means it: the stamp AND
+    # the snapshot (see get_dashboard).
+    published = set((await db.execute(
+        select(SubmissionGrade.submission_id).where(
+            SubmissionGrade.submission_id.in_(submission_ids),
+            SubmissionGrade.grade_published_at.is_not(None),
+            SubmissionGrade.published_final_score.is_not(None),
+        )
+    )).scalars().all())
+    now = datetime.now(UTC)
+    return {
+        sub.id: student_next_step(
+            sub, checks.get(sub.id),
+            grade_published=sub.id in published,
+            integrity_enabled=integrity_on,
+            ai_grading_enabled=ai_grading_on,
+            now=now,
+        )
+        for sub, integrity_on, ai_grading_on in rows
+    }
+
+
 @router.get("/classes")
 async def list_classes(
     user: User = Depends(get_current_user_full),
@@ -1146,15 +1232,16 @@ async def list_homework(
     )).scalars().all() if aid_rows else []
 
     # Single query to find which of these the student already submitted.
-    submitted_ids: set[uuid.UUID] = set()
+    submission_by_aid: dict[uuid.UUID, uuid.UUID] = {}
     if rows:
         submitted_rows = (await db.execute(
-            select(Submission.assignment_id).where(
+            select(Submission.assignment_id, Submission.id).where(
                 Submission.student_id == user.id,
                 Submission.assignment_id.in_([a.id for a in rows]),
             )
-        )).scalars().all()
-        submitted_ids = set(submitted_rows)
+        )).all()
+        submission_by_aid = {aid: sid for aid, sid in submitted_rows}
+    next_steps = await _next_steps(db, list(submission_by_aid.values()))
 
     return [
         StudentHomeworkSummary(
@@ -1163,7 +1250,11 @@ async def list_homework(
             type=a.type,
             due_at=a.due_at,
             problem_count=len(problem_ids_in_content(a.content)),
-            status="submitted" if a.id in submitted_ids else "not_started",
+            status="submitted" if a.id in submission_by_aid else "not_started",
+            next_step=(
+                next_steps.get(submission_by_aid[a.id])
+                if a.id in submission_by_aid else None
+            ),
         )
         for a in rows
     ]
@@ -1356,6 +1447,7 @@ async def get_dashboard(
     submitted_at_by_aid: dict[uuid.UUID, datetime] = {
         sub_aid: sub_at for _, sub_aid, sub_at in submitted_rows
     }
+    next_steps = await _next_steps(db, list(submission_by_aid.values()))
 
     # Published grades keyed by submission_id for the dedupe below.
     #
@@ -1408,6 +1500,7 @@ async def get_dashboard(
                 section_name=meta["section_name"],
                 status="submitted",
                 is_late=bool(a.due_at and a.due_at < now),
+                next_step=next_steps.get(submission_id) if submission_id else None,
             ))
             continue
 
@@ -1717,6 +1810,10 @@ async def homework_detail(
         final_score=final_score,
         grade_published_at=grade_published_at,
         breakdown=breakdown_out,
+        next_step=(
+            (await _next_steps(db, [sub.id])).get(sub.id)
+            if sub is not None else None
+        ),
     )
 
 
@@ -1848,7 +1945,9 @@ async def practice_detail(
             figure_svg=it.figure_svg,
             solution_steps=_student_solution_steps(it.solution_steps),
             final_answer=it.final_answer,
-            distractors=it.distractors,
+            # Multi-part problems are free response (part_labels.py),
+            # including ones a teacher edited into parts after generation.
+            distractors=None if is_multi_part(it.question, it.final_answer) else it.distractors,
             difficulty=it.difficulty,
         )
         for pos, it in enumerate(items, start=1)
@@ -1934,21 +2033,34 @@ async def check_page_orientation(
     body: PageOrientationRequest,
     user: User = Depends(get_current_user_full),
 ) -> PageOrientationResponse:
-    """Does a page the student just added look sideways?
+    """Do the pages the student just added read upright, at a size the
+    reader can make out?
 
-    Backs the "This page looks sideways — rotate it?" nudge on the
-    upload screen. Free (a pixel check, no model call) and advisory:
-    it never rotates anything — the student does, with the rotate
-    button, and the turn is applied at submit.
+    Backs the upload screen, which holds Submit while a page reads as
+    sideways and refuses a PDF page that turn-in would. Free (a pixel
+    check, no model call). It never rotates anything — the student does,
+    with the rotate button, and the turn is applied at submit.
+
+    Orientation is enforced on the client only, never at submit: the
+    check can be wrong, and the student's "It's already upright" has to
+    be able to overrule it. Turn-in enforces the size floor alone.
     """
     b64 = body.image.split(",", 1)[1] if body.image.startswith("data:") else body.image
     try:
-        validate_and_decode_image(b64)
+        _, media_type = validate_and_decode_upload(b64)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    # Image decoding is CPU work — keep it off the event loop.
+    # Image decoding and PDF rendering are CPU work — off the event loop.
+    if media_type == "application/pdf":
+        pdf = await asyncio.to_thread(pdf_page_checks, b64)
+        return PageOrientationResponse(sideways=bool(pdf["sideways_pages"]), **pdf)
+    sideways = await asyncio.to_thread(page_looks_sideways, b64)
     return PageOrientationResponse(
-        sideways=await asyncio.to_thread(page_looks_sideways, b64),
+        sideways=sideways,
+        page_count=1,
+        sideways_pages=[1] if sideways else [],
+        too_small_pages=[],
+        preview=None,
     )
 
 
@@ -2007,7 +2119,24 @@ async def submit_homework(
                 status_code=400,
                 detail=f"File {i + 1}: {e}",
             ) from e
-        if media_type != "application/pdf":
+        if media_type == "application/pdf":
+            # A PDF page is held to the same floor as a photo: a phone
+            # photo saved as a PDF reads no better than the photo. A PDF
+            # that can't be opened is left for the reader, as before.
+            edges = await asyncio.to_thread(pdf_scan_long_edges, b64)
+            small = next(
+                ((p, e) for p, e in enumerate(edges, 1) if e is not None and e < MIN_PAGE_LONG_EDGE),
+                None,
+            )
+            if small is not None:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"File {i + 1}, page {small[0]} is too small to read ({small[1]}px). "
+                        "Take it again closer up, so the page fills the screen."
+                    ),
+                )
+        else:
             try:
                 long_edge = image_long_edge(decoded)
             except Exception as e:
@@ -2030,7 +2159,7 @@ async def submit_homework(
             except Exception as e:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"File {i + 1}: couldn't read this image to rotate it",
+                    detail=f"File {i + 1}: couldn't read this file to rotate it",
                 ) from e
             # Count what is stored, not what was sent.
             total_bytes += len(b64) * 3 // 4

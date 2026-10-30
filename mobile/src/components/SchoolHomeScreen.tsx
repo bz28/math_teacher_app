@@ -12,6 +12,7 @@ import {
 } from "../services/api";
 import { useCachedResource } from "../hooks/useCachedResource";
 import { scoreColor } from "../utils/scoreColor";
+import { NEXT_STEP_COPY } from "../utils/nextStep";
 import { useColors, spacing, typography, radii, type ColorPalette } from "../theme";
 
 interface Props {
@@ -106,9 +107,12 @@ export function SchoolHomeScreen({ onJoinClass, onOpenAssignment }: Props) {
             </View>
           ) : (
             <>
+              {/* Turned in with one step left — quickest thing on the
+                  screen to finish, so it leads. Calm, not an alert. */}
+              <Section title="One more step" items={data!.in_review.filter((a) => a.next_step)} colors={colors} styles={styles} step onOpen={onOpenAssignment} />
               <Section title="Overdue" tone="error" items={data!.overdue} colors={colors} styles={styles} onOpen={onOpenAssignment} />
               <Section title="Due this week" items={data!.due_this_week} colors={colors} styles={styles} onOpen={onOpenAssignment} />
-              <Section title="In review" items={data!.in_review} colors={colors} styles={styles} muted onOpen={onOpenAssignment} />
+              <Section title="In review" items={data!.in_review.filter((a) => !a.next_step)} colors={colors} styles={styles} muted onOpen={onOpenAssignment} />
               <GradedSection items={data!.recently_graded} colors={colors} styles={styles} onOpen={onOpenAssignment} />
             </>
           )}
@@ -125,6 +129,7 @@ function Section({
   styles,
   tone,
   muted,
+  step,
   onOpen,
 }: {
   title: string;
@@ -133,6 +138,8 @@ function Section({
   styles: ReturnType<typeof makeStyles>;
   tone?: "error";
   muted?: boolean;
+  /** Rows carry a next_step: show the step instead of a status. */
+  step?: boolean;
   onOpen: (assignmentId: string) => void;
 }) {
   if (items.length === 0) return null;
@@ -153,7 +160,9 @@ function Section({
               {a.course_name} · {a.section_name}
             </Text>
           </View>
-          {muted ? (
+          {step && a.next_step ? (
+            <Text style={[styles.rowStatus, styles.rowStep]}>{NEXT_STEP_COPY[a.next_step].label}</Text>
+          ) : muted ? (
             <Text style={styles.rowStatus}>Submitted</Text>
           ) : (
             <Text style={[styles.rowStatus, tone === "error" && { color: colors.error }]}>
@@ -267,6 +276,7 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   rowTitle: { ...typography.body, fontSize: 15, color: colors.text },
   rowMeta: { ...typography.caption, color: colors.textMuted, fontSize: 12 },
   rowStatus: { ...typography.label, color: colors.textSecondary, fontSize: 12 },
+  rowStep: { color: colors.primary, fontWeight: "600" },
   score: { ...typography.bodyBold, fontSize: 16 },
 
   centered: {

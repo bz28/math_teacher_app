@@ -445,3 +445,71 @@ async def seed_insights_homework(seed: Seed) -> str:
         ))
         await s.commit()
         return name
+
+
+async def seed_confirmable_submission(
+    seed: Seed, *, page_b64: str, integrity_check_enabled: bool,
+) -> tuple[str, str, str]:
+    """A published AI-graded homework in the seeded section, with one
+    submission whose reading is in and waiting on the student's Confirm —
+    the precondition for the confirm-reading flow. A distinct student per
+    call so it never collides with the other flows' submissions. Returns
+    the assignment id and that student's access + refresh tokens."""
+    course_id = uuid.UUID(seed.course_id)
+    now = datetime.now(UTC)
+    async with get_session_factory()() as s:
+        section_id = (await s.execute(
+            select(SectionEnrollment.section_id).where(
+                SectionEnrollment.student_id == uuid.UUID(seed.student_id),
+                SectionEnrollment.course_id == course_id,
+            ).limit(1)
+        )).scalar_one()
+        hw = Assignment(
+            course_id=course_id, unit_ids=[uuid.UUID(seed.unit_id)],
+            teacher_id=uuid.UUID(seed.teacher_id), title="Confirm HW",
+            type="homework", status="published", content={"problem_ids": []},
+            integrity_check_enabled=integrity_check_enabled, ai_grading_enabled=True,
+        )
+        s.add(hw)
+        await s.flush()
+        item = QuestionBankItem(
+            course_id=course_id, unit_id=uuid.UUID(seed.unit_id),
+            originating_assignment_id=hw.id, title="Solve",
+            question="Solve 2x = 4.", final_answer="x = 2",
+            status="approved", source="generated",
+        )
+        s.add(item)
+        await s.flush()
+        hw.content = {"problem_ids": [str(item.id)]}
+        s.add(AssignmentSection(assignment_id=hw.id, section_id=section_id, published_at=now))
+        # A school student: the student homework pages send a student
+        # without a school to /home.
+        school_id = (await s.execute(
+            select(User.school_id).where(User.id == uuid.UUID(seed.teacher_id))
+        )).scalar_one()
+        student = User(
+            email=f"harness_confirmer_{uuid.uuid4().hex[:6]}@t.com",
+            password_hash=hash_password("x"), grade_level=8, role="student",
+            name="Harness Confirmer", school_id=school_id,
+        )
+        s.add(student)
+        await s.flush()
+        s.add(SectionEnrollment(section_id=section_id, course_id=course_id, student_id=student.id))
+        s.add(Submission(
+            assignment_id=hw.id, student_id=student.id, section_id=section_id,
+            status="submitted", is_late=False,
+            files=[{"data": page_b64, "media_type": "image/png"}],
+            extraction={
+                "steps": [{
+                    "problem_position": 1, "step_num": 1,
+                    "latex": "2x = 4", "plain_english": "two x equals four",
+                }],
+                "final_answers": [{
+                    "problem_position": 1, "answer_latex": "x = 2", "answer_plain": "x equals 2",
+                }],
+                "confidence": 0.93,
+            },
+        ))
+        refresh = await create_refresh_token(s, student.id)
+        await s.commit()
+        return str(hw.id), create_access_token(str(student.id), "student"), refresh

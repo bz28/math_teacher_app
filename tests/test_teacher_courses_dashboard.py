@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from httpx import AsyncClient
 from sqlalchemy import text
@@ -79,6 +80,25 @@ async def _seed_teacher_with_course(name: str = "Algebra 1") -> dict[str, uuid.U
             "unit_id": unit.id,
             "teacher_token": create_access_token(str(teacher.id), "teacher"),
         }
+
+
+async def _seed_student_in_section(
+    s: Any, section_id: uuid.UUID, course_id: uuid.UUID,
+) -> uuid.UUID:
+    """Another enrolled student, in the caller's open session."""
+    student = User(
+        email=f"student_{uuid.uuid4().hex[:8]}@t.com",
+        password_hash=hash_password("x"),
+        grade_level=8,
+        role="student",
+        name="S2",
+    )
+    s.add(student)
+    await s.flush()
+    s.add(SectionEnrollment(
+        section_id=section_id, course_id=course_id, student_id=student.id,
+    ))
+    return student.id
 
 
 async def _publish_homework(
@@ -422,8 +442,9 @@ async def test_courses_flagged_skipped_unreadable(
 async def test_courses_flagged_complete_without_disposition(
     client: AsyncClient,
 ) -> None:
-    """Inconclusive integrity checks (status=complete but no disposition
-    — e.g. turn cap, no sampled problems) are flagged for teacher review."""
+    """A turn-cap inconclusive check (complete, no disposition) is flagged
+    for teacher review; a check the student simply didn't finish is NOT —
+    walking away raises scrutiny on the roster but never flags."""
     w = await _seed_teacher_with_course()
     hw_id = await _publish_homework(
         course_id=w["course_id"], teacher_id=w["teacher_id"],
@@ -441,7 +462,22 @@ async def test_courses_flagged_complete_without_disposition(
             submission_id=sub.id,
             status="complete",
             disposition=None,
+            incomplete_reason="turn_cap",
         ))
+        for reason in ("not_started", "left_partway"):
+            other = await _seed_student_in_section(s, w["section_id"], w["course_id"])
+            unfinished = Submission(
+                assignment_id=hw_id, student_id=other,
+                section_id=w["section_id"], status="submitted",
+            )
+            s.add(unfinished)
+            await s.flush()
+            s.add(IntegrityCheckSubmission(
+                submission_id=unfinished.id,
+                status="complete",
+                disposition=None,
+                incomplete_reason=reason,
+            ))
         await s.commit()
 
     c = (await client.get(
@@ -450,13 +486,12 @@ async def test_courses_flagged_complete_without_disposition(
     assert c["flagged"] == 1
 
 
-async def test_courses_flagged_abandoned_interview(
+async def test_courses_abandoned_interview_is_not_flagged(
     client: AsyncClient,
 ) -> None:
-    """An interview the student walked away from sits in awaiting_student
-    forever (no scheduler finalizes it). Once it's stalled past the
-    wall-clock deadline it must count toward needs-attention so the badge
-    nudges the teacher to look — a freshly-stalled one must NOT."""
+    """An interview the student walked away from is "didn't finish the
+    check", which is never a flag — not while it's open, and not once it
+    has stalled past the deadline (the roster marks it instead)."""
     from api.core.integrity_pipeline import ABANDONED_INTERVIEW_DEADLINE
 
     w = await _seed_teacher_with_course()
@@ -504,7 +539,7 @@ async def test_courses_flagged_abandoned_interview(
     c = (await client.get(
         "/v1/teacher/courses", headers=_auth(w["teacher_token"]),
     )).json()["courses"][0]
-    assert c["flagged"] == 1
+    assert c["flagged"] == 0
 
 
 async def test_courses_flagged_extraction_flagged_at(

@@ -10,10 +10,15 @@ jest.mock("../services/api", () => ({
 }));
 const mockedApi = api as jest.Mocked<typeof api>;
 
+const STUCK_LABEL = "I'm stuck — not sure how to explain this";
+const STUCK_MESSAGE = "I'm stuck — I'm not sure how to explain this.";
+const NUDGE = "Give it a try in your own words — even a guess helps.";
+
 const STATE = {
   submission_id: "sub-1",
   overall_status: "awaiting_student",
   disposition: null,
+  stuck_tap_used: false,
   problems: [{ problem_id: "p1", hw_position: 3, status: "pending", question: "What is 2+2?" }],
   transcript: [
     { ordinal: 0, role: "agent", content: "How did you get your answer?", created_at: "x", is_variant_probe: false },
@@ -22,6 +27,23 @@ const STATE = {
 
 describe("IntegrityChatScreen", () => {
   beforeEach(() => jest.clearAllMocks());
+
+  it("a check closed unfinished says so instead of thanking the student", async () => {
+    mockedApi.getIntegrityState.mockResolvedValue({
+      ...STATE, overall_status: "complete", closed_unfinished: true,
+    } as never);
+    render(<IntegrityChatScreen submissionId="sub-1" onExit={jest.fn()} />);
+    expect(await waitForText(/closed because it wasn't finished/)).toBeTruthy();
+    expect(screen.queryByText(/Thanks for explaining your work/)).toBeNull();
+  });
+
+  it("a finished check keeps the thank-you", async () => {
+    mockedApi.getIntegrityState.mockResolvedValue({
+      ...STATE, overall_status: "complete", disposition: "pass", closed_unfinished: false,
+    } as never);
+    render(<IntegrityChatScreen submissionId="sub-1" onExit={jest.fn()} />);
+    expect(await waitForText(/Thanks for explaining your work/)).toBeTruthy();
+  });
 
   it("renders the sampled problem and the agent's opening turn", async () => {
     mockedApi.getIntegrityState.mockResolvedValue(STATE as never);
@@ -56,6 +78,7 @@ describe("IntegrityChatScreen", () => {
       "I added two and two",
       expect.any(Number),
       expect.objectContaining({ device_type: "mobile" }),
+      false,
     );
     expect(screen.getByText("Nice — why does that work?")).toBeTruthy();
   });
@@ -120,14 +143,15 @@ describe("IntegrityChatScreen", () => {
     expect(screen.getByText(/Add a little more — at least 5 characters\./)).toBeTruthy();
   });
 
-  it("sends the truthful 'I'm stuck' message, bypassing the min-char gate", async () => {
+  it("sends a stuck turn, bypassing the min-char gate, then disables the chip", async () => {
     mockedApi.getIntegrityState.mockResolvedValue(STATE as never);
     mockedApi.postIntegrityTurn.mockResolvedValue({
       ...STATE,
       overall_status: "in_progress",
+      stuck_tap_used: true,
       transcript: [
         ...STATE.transcript,
-        { ordinal: 1, role: "student", content: "I'm stuck — not sure how to explain this.", created_at: "x", is_variant_probe: false },
+        { ordinal: 1, role: "student", content: STUCK_MESSAGE, created_at: "x", is_variant_probe: false },
         { ordinal: 2, role: "agent", content: "That's okay — let's start small.", created_at: "x", is_variant_probe: false },
       ],
     } as never);
@@ -136,16 +160,46 @@ describe("IntegrityChatScreen", () => {
     await waitForText("How did you get your answer?");
     // Tap the chip with the composer EMPTY — the truthful "I can't explain"
     // must send without hitting the 5-char minimum.
-    fireEvent.press(screen.getByLabelText("I'm stuck — not sure how to explain this"));
+    fireEvent.press(screen.getByLabelText(STUCK_LABEL));
     await flush();
 
     expect(mockedApi.postIntegrityTurn).toHaveBeenCalledWith(
       "sub-1",
-      "I'm stuck — not sure how to explain this.",
+      "",
       expect.any(Number),
       expect.objectContaining({ device_type: "mobile" }),
+      true,
     );
     expect(await waitForText("That's okay — let's start small.")).toBeTruthy();
+    // Spent: the chip disables with a nudge, and a second tap sends nothing.
+    expect(screen.getByLabelText(STUCK_LABEL)).toBeDisabled();
+    expect(screen.getByText(NUDGE)).toBeTruthy();
+    fireEvent.press(screen.getByLabelText(STUCK_LABEL));
+    await flush();
+    expect(mockedApi.postIntegrityTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it("after the stuck tap, a short typed answer still sends", async () => {
+    mockedApi.getIntegrityState.mockResolvedValue({ ...STATE, stuck_tap_used: true } as never);
+    mockedApi.postIntegrityTurn.mockResolvedValue({ ...STATE, stuck_tap_used: true } as never);
+    render(<IntegrityChatScreen submissionId="sub-1" onExit={jest.fn()} />);
+
+    await waitForText("How did you get your answer?");
+    // Resumed with the tap spent: chip disabled, one nudge shown.
+    expect(screen.getByLabelText(STUCK_LABEL)).toBeDisabled();
+    expect(screen.getAllByText(NUDGE)).toHaveLength(1);
+
+    fireEvent.changeText(screen.getByPlaceholderText("Explain how you solved it…"), "y=2x+3");
+    await flush();
+    fireEvent.press(screen.getByLabelText("Send"));
+    await flush();
+    expect(mockedApi.postIntegrityTurn).toHaveBeenCalledWith(
+      "sub-1",
+      "y=2x+3",
+      expect.any(Number),
+      expect.objectContaining({ device_type: "mobile" }),
+      false,
+    );
   });
 
   it("times out the 'Preparing…' wait and offers a retry instead of spinning forever", async () => {

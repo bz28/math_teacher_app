@@ -42,10 +42,14 @@ const INACTIVITY_TICK_MS = 5_000;
 // desktop, so we set expectations a touch longer (matches web's mobile
 // budget). It's an "about this long" hint, never a cutoff.
 const BUDGET_LABEL = "~5 min";
-// The truthful "I can't explain this" — sent by the stuck chip, bypassing
-// the min-char gate so honesty is always one tap, never coached into a
-// fabricated answer by a character minimum.
-const STUCK_MESSAGE = "I'm stuck — not sure how to explain this.";
+// The truthful "I can't explain this" — the stuck chip sends a `stuck` turn
+// that bypasses the min-char gate, so honesty is one tap, never coached into
+// a fabricated answer by a character minimum. Allowed ONCE per problem
+// (server-enforced); after that the chip disables with a nudge to try in
+// their own words. The server writes the canonical text — this copy is only the
+// optimistic echo and must match it.
+const STUCK_MESSAGE = "I'm stuck — I'm not sure how to explain this.";
+const STUCK_USED_HINT = "Give it a try in your own words — even a guess helps.";
 
 interface Props {
   submissionId: string;
@@ -92,6 +96,7 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
 
   const isPreparing = (s: IntegrityState) => s.overall_status === "extracting";
   const complete = state?.overall_status === "complete";
+  const stuckUsed = state?.stuck_tap_used ?? false;
 
   // Poll only while the check is still preparing. Tracks elapsed time and
   // gives up after PREPARE_TIMEOUT_MS so a stalled pipeline never spins
@@ -163,21 +168,27 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
   }, [telemetry, markActivity]);
 
   const send = useCallback(
-    async (override?: string) => {
-      // `override` (the "I'm stuck" chip) bypasses the min-char gate so the
-      // truthful "I can't explain" is always sendable, never blocked.
-      const message = (override ?? input).trim();
-      if (sending || !message) return;
-      if (override == null && message.length < MIN_INTEGRITY_MESSAGE_CHARS) return;
+    async (stuck = false) => {
+      // `stuck` (the "I'm stuck" chip) bypasses the min-char gate so the
+      // truthful "I can't explain" is sendable — once per problem.
+      const message = input.trim();
+      if (sending) return;
+      if (stuck ? stuckUsed : message.length < MIN_INTEGRITY_MESSAGE_CHARS) return;
       setSending(true);
       setSendError(null);
       markActivity();
       // Clear the composer + echo the message optimistically.
-      setPending(message);
-      if (override == null) setInput("");
+      setPending(stuck ? STUCK_MESSAGE : message);
+      if (!stuck) setInput("");
       try {
         const seconds = Math.round((Date.now() - turnStart.current) / 1000);
-        const next = await postIntegrityTurn(submissionId, message, seconds, telemetry.collect());
+        const next = await postIntegrityTurn(
+          submissionId,
+          stuck ? "" : message,
+          seconds,
+          telemetry.collect(),
+          stuck,
+        );
         setState(next);
         setPending(null);
         telemetry.reset();
@@ -189,7 +200,7 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
         // Surface the failure and give the student their words back so a flaky
         // network doesn't silently swallow what they typed.
         setPending(null);
-        if (override == null) setInput(message);
+        if (!stuck) setInput(message);
         setSendError("Couldn't send that — try again.");
         // The turn can 409 if the check finalized server-side (completed or
         // hit the turn cap). Refetch so the UI reflects that — e.g. flips to
@@ -203,11 +214,20 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
         setSending(false);
       }
     },
-    [input, sending, submissionId, telemetry, markActivity],
+    [input, sending, stuckUsed, submissionId, telemetry, markActivity],
   );
 
-  const trimmedLen = input.trim().length;
-  const belowThreshold = trimmedLen > 0 && trimmedLen < MIN_INTEGRITY_MESSAGE_CHARS;
+  const canSend = input.trim().length >= MIN_INTEGRITY_MESSAGE_CHARS;
+  // One hint at a time: a too-short draft shows the 5-char floor hint;
+  // otherwise, once the tap is spent, a nudge explains the greyed-out chip.
+  const hint =
+    input.trim().length > 0 && !canSend
+      ? stuckUsed
+        ? `Add a little more — at least ${MIN_INTEGRITY_MESSAGE_CHARS} characters.`
+        : `Add a little more — at least ${MIN_INTEGRITY_MESSAGE_CHARS} characters. Stuck? Tap the line above.`
+      : stuckUsed
+        ? STUCK_USED_HINT
+        : null;
 
   // ── Pre-chat states ───────────────────────────────────
   // Timeout fallback takes precedence: a stalled "Preparing…" wait gets a
@@ -401,14 +421,14 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
                 Your teacher uses a quick chat to hear how you worked through a problem, in your own
                 words. No trick questions, nothing to look up — just explain your thinking.
               </Text>
-              {/* Why it's worth finishing — honest framing: the teacher reads
-                  it and decides, the chat doesn't move a score on its own. */}
+              {/* Why it's worth finishing — honest framing: the chat doesn't
+                  affect the grade, so nothing here may promise credit. */}
               <View style={styles.introNudge}>
                 <Text style={styles.introNudgeText}>
                   <Text style={styles.introNudgeStrong}>
-                    Your teacher reads this conversation when they grade your work.
+                    Your teacher reads this conversation alongside your work.
                   </Text>{" "}
-                  Explaining your thinking here is the best way to get credit for what you
+                  Explaining your thinking here is the best way to show them what you
                   understand.
                 </Text>
               </View>
@@ -451,12 +471,25 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
             </View>
           )}
 
+          {/* A check closed unfinished (reopened after the deadline) gets
+              the honest version, not a thank-you. */}
           {complete && (
             <View style={styles.completeBanner}>
-              <Ionicons name="checkmark-circle" size={20} color={colors.success} />
-              <Text style={styles.completeText}>
-                Thanks for explaining your work! You're all done here.
-              </Text>
+              {state?.closed_unfinished ? (
+                <>
+                  <Ionicons name="information-circle" size={20} color={colors.textMuted} />
+                  <Text style={styles.completeText}>
+                    This check closed because it wasn't finished. Your work is still turned in.
+                  </Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle" size={20} color={colors.success} />
+                  <Text style={styles.completeText}>
+                    Thanks for explaining your work! You're all done here.
+                  </Text>
+                </>
+              )}
             </View>
           )}
         </ScrollView>
@@ -491,12 +524,9 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
                 editable={!sending}
               />
               <AnimatedPressable
-                style={[
-                  styles.sendButton,
-                  (trimmedLen < MIN_INTEGRITY_MESSAGE_CHARS || sending) && styles.sendDisabled,
-                ]}
+                style={[styles.sendButton, (!canSend || sending) && styles.sendDisabled]}
                 onPress={() => send()}
-                disabled={trimmedLen < MIN_INTEGRITY_MESSAGE_CHARS || sending}
+                disabled={!canSend || sending}
                 accessibilityLabel="Send"
               >
                 {sending ? (
@@ -506,25 +536,26 @@ export function IntegrityChatScreen({ submissionId, onExit }: Props) {
                 )}
               </AnimatedPressable>
             </View>
-            {/* Low-emphasis honest-out: a truthful "I can't explain this" must
-                be one tap, never gated by the character minimum. */}
+            {/* Low-emphasis honest-out: a truthful "I can't explain this" is
+                one tap, never gated by the character minimum — once per
+                problem. Spent, it stays visible but disabled, with a nudge
+                toward a guess in their own words. */}
             <AnimatedPressable
-              onPress={() => send(STUCK_MESSAGE)}
-              disabled={sending}
-              style={styles.stuckChip}
+              onPress={() => send(true)}
+              disabled={sending || stuckUsed}
+              style={[styles.stuckChip, stuckUsed && styles.stuckChipUsed]}
               accessibilityRole="button"
               accessibilityLabel="I'm stuck — not sure how to explain this"
+              accessibilityState={{ disabled: sending || stuckUsed }}
+              accessibilityHint={stuckUsed ? STUCK_USED_HINT : undefined}
             >
               <Ionicons name="help-circle-outline" size={14} color={colors.textSecondary} />
               <Text style={styles.stuckChipText}>I'm stuck — not sure how to explain this</Text>
             </AnimatedPressable>
             {sendError ? (
               <Text style={styles.sendErrorText}>{sendError}</Text>
-            ) : belowThreshold ? (
-              <Text style={styles.thresholdHint}>
-                Add a little more — at least {MIN_INTEGRITY_MESSAGE_CHARS} characters. Stuck? Tap
-                the line above.
-              </Text>
+            ) : hint ? (
+              <Text style={styles.thresholdHint}>{hint}</Text>
             ) : null}
           </View>
         )}
@@ -769,6 +800,7 @@ const makeStyles = (colors: ColorPalette) =>
       paddingVertical: spacing.xs,
       paddingHorizontal: spacing.xs,
     },
+    stuckChipUsed: { opacity: 0.5 },
     stuckChipText: { ...typography.caption, fontSize: 12, color: colors.textSecondary },
     sendErrorText: {
       ...typography.caption,

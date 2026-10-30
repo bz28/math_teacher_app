@@ -976,7 +976,6 @@ export interface TeacherCourse {
   name: string;
   subject: string;
   grade_level: number | null;
-  description: string | null;
   status: string;
   section_count: number;
   doc_count: number;
@@ -1493,13 +1492,13 @@ export const teacher = {
   courseSetupStatus(id: string) {
     return apiFetch<CourseSetupStatus>(`/teacher/courses/${id}/setup-status`);
   },
-  createCourse(data: { name: string; subject?: string; grade_level?: number; description?: string }) {
+  createCourse(data: { name: string; subject?: string; grade_level?: number }) {
     return apiFetch<{ id: string }>("/teacher/courses", {
       method: "POST",
       body: JSON.stringify(data),
     });
   },
-  updateCourse(id: string, data: Record<string, unknown>) {
+  updateCourse(id: string, data: { name: string }) {
     return apiFetch<{ status: string }>(`/teacher/courses/${id}`, {
       method: "PATCH",
       body: JSON.stringify(data),
@@ -2171,6 +2170,14 @@ export const teacher = {
   },
 };
 
+/** Why a complete check carries no disposition. */
+export type IntegrityIncompleteReason = "not_started" | "left_partway" | "turn_cap";
+
+/** The roster's "Didn't finish the check" state. never_confirmed = the
+ *  student never confirmed the reading, so the check never ran (only
+ *  after the same 12h deadline an abandoned check gets). */
+export type UnfinishedCheck = "never_confirmed" | "not_started" | "left_partway";
+
 export interface IntegrityOverview {
   overall_status: "complete" | "in_progress";
   disposition: IntegrityDisposition | null;
@@ -2185,6 +2192,10 @@ export interface IntegrityOverview {
    *  marks the check reviewed; the other outcomes drop it from the
    *  roster's flagged filter. */
   resolution: IntegrityResolution;
+  /** Why a complete check has no disposition, plus "unreadable" for a
+   *  skipped check — both read complete + null disposition otherwise.
+   *  Lets the roster's Flagged filter mirror the server count. */
+  incomplete_reason: IntegrityIncompleteReason | "unreadable" | null;
 }
 
 export interface TeacherSubmissionRow {
@@ -2227,6 +2238,8 @@ export interface TeacherSubmissionRow {
    *  the normal path. */
   ai_grading_status: string | null;
   integrity_overview: IntegrityOverview | null;
+  /** "Didn't finish the check" — its own pill and banner, never flagged. */
+  unfinished_check: UnfinishedCheck | null;
   /** Student explicitly said "Reader got something wrong" on the
    *  post-submit confirm screen. Non-null = no AI grading or
    *  integrity ran — teacher grades manually. Folded into the
@@ -2592,7 +2605,13 @@ export interface StudentHomeworkSummary {
   problem_count: number;
   /** "not_started" | "submitted". Drives the badge on the HW list. */
   status: string;
+  /** What's left on turned-in work: confirm the AI's reading, or finish
+   *  the understanding check. Null when there's nothing to do. A nudge
+   *  only — grading never waits on it. */
+  next_step: StudentNextStep | null;
 }
+
+export type StudentNextStep = "confirm_reading" | "finish_check";
 
 export interface StudentPracticeSummary {
   assignment_id: string;
@@ -2698,6 +2717,10 @@ export interface StudentHomeworkDetail {
    *  published_breakdown snapshot — the live teacher draft never
    *  surfaces here. */
   breakdown: StudentProblemFeedback[] | null;
+  /** What's left on turned-in work: confirm the AI's reading, or finish
+   *  the understanding check. Null when there's nothing to do. A nudge
+   *  only — grading never waits on it. */
+  next_step: StudentNextStep | null;
 }
 
 /** Backend `SubmissionFileOut` (api/schemas/extraction.py). `data` is
@@ -2778,6 +2801,10 @@ export interface DashboardAssignment {
   section_name: string;
   status: "not_started" | "submitted";
   is_late: boolean;
+  /** What's left on turned-in work: confirm the AI's reading, or finish
+   *  the understanding check. Null when there's nothing to do. A nudge
+   *  only — grading never waits on it. */
+  next_step: StudentNextStep | null;
 }
 
 export interface DashboardGrade {
@@ -2918,13 +2945,15 @@ export const schoolStudent = {
       `/school/student/homework/${assignmentId}/problems/${bankItemId}/flagged`,
     );
   },
-  /** Free pixel check behind the upload screen's "looks sideways —
-   *  rotate it?" nudge. `image` is a small copy of one page. */
+  /** Free pixel check behind the upload screen's sideways block (and,
+   *  for a PDF, its too-small pages). `image` is a small copy of one
+   *  photo, or a whole PDF. */
   pageOrientation(image: string) {
-    return apiFetch<{ sideways: boolean }>(`/school/student/homework/page-orientation`, {
-      method: "POST",
-      body: JSON.stringify({ image }),
-    });
+    const json = JSON.stringify({ image });
+    return apiFetch<Schemas["PageOrientationResponse"]>(
+      `/school/student/homework/page-orientation`,
+      { method: "POST", body: json, timeout: uploadTimeoutFor(json.length) },
+    );
   },
   /** `rotations`: clockwise quarter turns per file, parallel to `files`
    *  — the server stores each page the way the student turned it. */
@@ -2954,6 +2983,9 @@ export const schoolStudent = {
     submissionId: string,
     body: {
       message: string;
+      /** True for an "I'm stuck" tap: the server ignores `message` and
+       *  writes its own canonical text. Allowed once per problem. */
+      stuck?: boolean;
       seconds_on_turn?: number;
       /** Client-captured behavioral signals — teacher-facing evidence
        *  only, never surfaced back to the student. Shape mirrors the
@@ -3168,6 +3200,12 @@ export interface IntegrityStateResponse {
   extraction: IntegrityExtraction | null;
   problems: IntegrityProblemSummary[];
   transcript: IntegrityTurn[];
+  /** True once the student has used their one "I'm stuck" tap on the
+   *  problem. The button disables (server-enforced either way). */
+  stuck_tap_used: boolean;
+  /** Closed because the student didn't finish it (never answered / left
+   *  partway). The chat says so instead of the "thanks" closing. */
+  closed_unfinished: boolean;
 }
 
 // ── Teacher integrity detail (mirror api/routes/integrity_check.py) ──
@@ -3287,6 +3325,10 @@ export interface TeacherIntegrityDetail {
   // no AI verdict ran (skipped_unreadable / force-finalize) — the banner
   // falls back to the hardcoded INTEGRITY_STYLE label in those cases.
   headline: string | null;
+  /** Why a complete check has no disposition. not_started / left_partway
+   *  = the student didn't finish; turn_cap = inconclusive. Null when the
+   *  agent reached a verdict or the check is still open. */
+  incomplete_reason: IntegrityIncompleteReason | null;
   inline_variant_used: boolean;
   inline_variant_result: IntegrityInlineVariantResult | null;
   activity_summary: IntegrityActivitySummary | null;

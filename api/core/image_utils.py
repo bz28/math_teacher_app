@@ -140,14 +140,19 @@ def rotate_upload(data_base64: str, media_type: str, rotation: int) -> str:
     re-encodes in the same format, so everything that later shows or
     reads the page (the AI reader, the teacher's photo view, the student's
     confirm screen) gets it upright with no rotation logic of its own.
-    Rotation 0 returns the input untouched, byte for byte.
+    Rotation 0 returns the input untouched, byte for byte. A PDF turns
+    every page (`rotate_pdf`).
 
     The result stays under `MAX_IMAGE_BYTES` — re-encoding can grow a
     file, so an over-cap result is scaled down until it fits — and keeps
     the photo's colour profile. Raises ValueError for an image it can't
     or won't decode.
     """
-    if rotation == 0 or not media_type.startswith("image/"):
+    if rotation == 0:
+        return data_base64
+    if media_type == "application/pdf":
+        return rotate_pdf(data_base64, rotation)
+    if not media_type.startswith("image/"):
         return data_base64
     with _open_bounded(base64.b64decode(data_base64)) as opened:
         icc = opened.info.get("icc_profile")
@@ -202,14 +207,23 @@ def page_looks_sideways(data_base64: str) -> bool:
     On 341 real pages (21 hand-labelled sideways) it caught 17 of the 21
     and flagged 1 upright page. Returns False for anything it can't read.
     """
-    from PIL import ImageChops, ImageFilter
-
     try:
         with _open_bounded(base64.b64decode(data_base64)) as opened:
             # JPEGs decode straight at reduced scale — cheap however large
             # the upload. Other formats ignore this.
             opened.draft("L", (_ORIENTATION_EDGE * 2, _ORIENTATION_EDGE * 2))
             gray = ImageOps.grayscale(ImageOps.exif_transpose(opened))
+    except Exception:
+        return False
+    return _image_looks_sideways(gray)
+
+
+def _image_looks_sideways(img: Image.Image) -> bool:
+    """`page_looks_sideways` on an already-open, upright-as-stored image."""
+    from PIL import ImageChops, ImageFilter
+
+    try:
+        gray = ImageOps.grayscale(img)
         gray.thumbnail((_ORIENTATION_EDGE, _ORIENTATION_EDGE))
         blurred = gray.filter(ImageFilter.BoxBlur(15))
         # Ink = pixels clearly darker than their neighbourhood, which
@@ -367,6 +381,154 @@ def _render_pdf(pdfium: Any, data_base64: str) -> list[str]:
     finally:
         pdf.close()
     return out
+
+
+# A PDF page counts as a scan (a photo saved as a PDF) only when pictures
+# cover at least this much of it AND it has no text and no vector paths.
+# Typed text and tablet handwriting (vector strokes, often over a small
+# raster "paper" background) are sharp at any size, so there is no pixel
+# size to hold them to.
+_PDF_SCAN_COVERAGE = 0.5
+
+
+def pdf_scan_long_edges(data_base64: str) -> list[int | None]:
+    """Per PDF page, in order: the long edge, in pixels, of the photo the
+    page was made from — the same number `image_long_edge` gives for a
+    photo uploaded on its own — or None for a page that isn't a scan.
+
+    Measured from the embedded picture's own pixels, not a render:
+    `pdf_pages_as_images` scales every page to the same size, so a
+    320×240 photo saved as a PDF renders big but just as unreadable.
+    Empty when the PDF can't be read."""
+    import pypdfium2 as pdfium
+    import pypdfium2.raw as pdfium_c
+
+    with _PDF_LOCK:
+        try:
+            pdf = pdfium.PdfDocument(base64.b64decode(data_base64))
+        except Exception:  # noqa: BLE001 — an unreadable PDF has no pages to measure
+            return []
+        out: list[int | None] = []
+        try:
+            for i in range(min(len(pdf), _PDF_MAX_PAGES)):
+                out.append(_scan_long_edge(pdf[i], pdfium_c))
+        except Exception:  # noqa: BLE001 — a page that won't load isn't refused
+            logger.warning("pdf measure: stopped after %d of %d pages", len(out), len(pdf), exc_info=True)
+        finally:
+            pdf.close()
+        return out
+
+
+def _scan_long_edge(page: Any, pdfium_c: Any) -> int | None:
+    # Every doubt lets the page through: this can refuse a turn-in.
+    try:
+        page_w, page_h = page.get_size()
+        # Any text or vector drawing, at any depth, means the page carries
+        # content sharper than its pictures — not a scan.
+        drawn = (pdfium_c.FPDF_PAGEOBJ_TEXT, pdfium_c.FPDF_PAGEOBJ_PATH)
+        if next(iter(page.get_objects(filter=drawn)), None) is not None:
+            return None
+        covered = 0.0
+        px_per_pt = 0.0
+        # Top level only: a picture nested in a form is positioned in the
+        # form's space, so its bounds would mislead.
+        for obj in page.get_objects(filter=(pdfium_c.FPDF_PAGEOBJ_IMAGE,), max_depth=0):
+            left, bottom, right, top = obj.get_bounds()
+            if right <= left or top <= bottom:
+                continue
+            covered += (right - left) * (top - bottom)
+            px_w, px_h = obj.get_px_size()
+            px_per_pt = max(px_per_pt, max(px_w, px_h) / max(right - left, top - bottom))
+    except Exception:  # noqa: BLE001 — a page we can't measure isn't refused
+        return None
+    if page_w <= 0 or page_h <= 0 or covered < _PDF_SCAN_COVERAGE * page_w * page_h:
+        return None
+    # The whole page at the picture's own density, so a scan saved as a
+    # few strips measures the same as one picture.
+    return round(px_per_pt * float(max(page_w, page_h)))
+
+
+def rotate_pdf(data_base64: str, rotation: int) -> str:
+    """Turn every page of a PDF `rotation` degrees clockwise. Sets each
+    page's /Rotate, which every viewer and `pdf_pages_as_images` honour,
+    so the content is untouched. Raises ValueError for a PDF it can't read."""
+    import pypdfium2 as pdfium
+
+    with _PDF_LOCK:
+        try:
+            pdf = pdfium.PdfDocument(base64.b64decode(data_base64))
+        except Exception as e:
+            raise ValueError("Unreadable PDF") from e
+        try:
+            for i in range(len(pdf)):
+                page = pdf[i]
+                page.set_rotation((page.get_rotation() + rotation) % 360)
+            buf = io.BytesIO()
+            pdf.save(buf)
+        finally:
+            pdf.close()
+    return base64.b64encode(buf.getvalue()).decode("ascii")
+
+
+# The long edge of the PDF page preview the upload screen shows (and
+# rotates) in place of a photo.
+_PDF_PREVIEW_EDGE = 640
+
+
+def pdf_page_checks(data_base64: str) -> dict[str, Any]:
+    """The upload screen's checks for one PDF, per page as the reader
+    sees it: how many pages, which read as sideways (1-based), which are
+    scans too small to read, and a small JPEG preview of the first
+    sideways page (else page 1) for the student to look at and turn.
+
+    One open of the PDF under `_PDF_LOCK`, rendering each page at the
+    sideways check's own resolution (not the reader's 2400 px), so the
+    lock grading shares is held briefly. A page that fails to render
+    still counts but is never flagged; an unreadable PDF has no pages."""
+    import pypdfium2 as pdfium
+    import pypdfium2.raw as pdfium_c
+
+    renders: list[Image.Image | None] = []
+    edges: list[int | None] = []
+    with _PDF_LOCK:
+        try:
+            pdf = pdfium.PdfDocument(base64.b64decode(data_base64))
+        except Exception:  # noqa: BLE001 — an unreadable PDF has no pages to check
+            return {"page_count": 0, "sideways_pages": [], "too_small_pages": [], "preview": None}
+        try:
+            for i in range(min(len(pdf), _PDF_MAX_PAGES)):
+                render: Image.Image | None = None
+                edge: int | None = None
+                try:
+                    page = pdf[i]
+                    edge = _scan_long_edge(page, pdfium_c)
+                    width, height = page.get_size()
+                    scale = _ORIENTATION_EDGE / max(width, height, 1)
+                    render = page.render(scale=scale).to_pil().convert("RGB")
+                except Exception:  # noqa: BLE001 — counted, not flagged
+                    logger.warning("pdf check: page %d of %d didn't render", i + 1, len(pdf), exc_info=True)
+                renders.append(render)
+                edges.append(edge)
+        finally:
+            pdf.close()
+    # Pixel analysis needs no pdfium: outside the lock.
+    sideways = [i + 1 for i, img in enumerate(renders) if img is not None and _image_looks_sideways(img)]
+    shown = renders[sideways[0] - 1] if sideways else next((r for r in renders if r is not None), None)
+    preview = None
+    if shown is not None:
+        thumb = shown.copy()
+        thumb.thumbnail((_PDF_PREVIEW_EDGE, _PDF_PREVIEW_EDGE))
+        buf = io.BytesIO()
+        thumb.save(buf, format="JPEG", quality=80)
+        preview = base64.b64encode(buf.getvalue()).decode("ascii")
+    return {
+        "page_count": len(renders),
+        "sideways_pages": sideways,
+        "too_small_pages": [
+            i + 1 for i, edge in enumerate(edges) if edge is not None and edge < MIN_PAGE_LONG_EDGE
+        ],
+        "preview": preview,
+    }
 
 
 def to_content_block(media_type: str, data_base64: str) -> dict[str, Any]:

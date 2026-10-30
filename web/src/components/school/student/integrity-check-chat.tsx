@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
+  ApiError,
   schoolStudent,
   type IntegrityExtraction,
   type IntegrityProblemSummary,
@@ -66,12 +67,15 @@ interface Props {
 
 const MIN_MESSAGE_CHARS = 5;
 
-// The honest "I can't explain this" exit. Tapping the chip sends this
-// as the student's message, bypassing the MIN_MESSAGE_CHARS gate so a
-// truthful "I'm stuck" is always one tap away — never a blocked send
-// that effectively coaches a frozen kid into fabricating an answer.
-// The agent already handles arbitrary input and replies supportively.
+// The honest "I can't explain this" exit. Tapping the chip sends a
+// `stuck` turn that skips the typed minimum, so a truthful "I'm stuck"
+// is one tap away instead of a blocked send that coaches a frozen kid
+// into fabricating an answer. It's allowed ONCE per problem (server-
+// enforced); after that the chip disables with a nudge to try in their
+// own words. The server writes the canonical text into the transcript —
+// this copy is only the optimistic echo and must match it.
 const STUCK_MESSAGE = "I'm stuck — I'm not sure how to explain this.";
+const STUCK_USED_HINT = "Give it a try in your own words — even a guess helps.";
 
 /**
  * Kid-facing conversational integrity chat.
@@ -252,19 +256,17 @@ export function IntegrityCheckChat({
     return "";
   }, [visibleTranscript]);
 
-  // `override` is the honest "I'm stuck" chip path: it carries its own
-  // message and skips the MIN_MESSAGE_CHARS gate (the gate exists only
-  // to stop empty / one-word free-text sends — it must never block the
-  // truthful "I can't explain this"). Free-text sends pass no override
-  // and stay gated.
-  async function handleSend(override?: string) {
-    const trimmed = (override ?? message).trim();
-    const isOverride = override != null;
+  const stuckUsed = state?.stuck_tap_used ?? false;
+
+  // `stuck` is the honest "I'm stuck" chip path: it skips the typed
+  // minimum (which exists only to stop empty / one-word free-text sends)
+  // and is spendable once per problem. Free-text sends stay gated.
+  async function handleSend(stuck = false) {
+    const trimmed = message.trim();
     if (sending || isComplete) return;
-    if (!isOverride && trimmed.length < MIN_MESSAGE_CHARS) return;
-    if (trimmed.length === 0) return;
-    setPendingStudentMessage(trimmed);
-    if (!isOverride) setMessage("");
+    if (stuck ? stuckUsed : trimmed.length < MIN_MESSAGE_CHARS) return;
+    setPendingStudentMessage(stuck ? STUCK_MESSAGE : trimmed);
+    if (!stuck) setMessage("");
     setSending(true);
     setError(null);
     try {
@@ -274,7 +276,8 @@ export function IntegrityCheckChat({
       );
       const telemetryPayload = telemetry.snapshot();
       const next = await schoolStudent.postIntegrityTurn(submissionId, {
-        message: trimmed,
+        message: stuck ? "" : trimmed,
+        stuck,
         seconds_on_turn: seconds,
         telemetry: telemetryPayload,
       });
@@ -288,10 +291,26 @@ export function IntegrityCheckChat({
       // here stops the inactivity nudge from firing immediately on
       // a turn that finished right at the threshold.
       lastActivityRef.current = Date.now();
-    } catch {
-      setError("Couldn't send that — try again.");
+    } catch (err) {
+      const status = err instanceof ApiError ? err.status : null;
+      // A 400 carries the server's own student-facing reason (e.g. the
+      // stuck tap was already spent in another tab) — show it verbatim.
+      setError(
+        status === 400 && err instanceof Error
+          ? err.message
+          : "Couldn't send that — try again.",
+      );
       setPendingStudentMessage(null);
-      setMessage(trimmed);
+      // Hand a typed draft back; a stuck tap has no draft to restore.
+      if (!stuck) setMessage(trimmed);
+      // The server said no (tap spent in another tab, the check closed:
+      // finished, the turn cap, or past its deadline in a tab left open).
+      // Refetch so the chip and composer reflect it, as mobile does.
+      try {
+        setState(await schoolStudent.getIntegrityState(submissionId));
+      } catch {
+        /* keep current state; the error above already says it failed */
+      }
     } finally {
       setSending(false);
     }
@@ -315,8 +334,13 @@ export function IntegrityCheckChat({
     );
   }
 
-  const canSend =
-    !sending && !isComplete && message.trim().length >= MIN_MESSAGE_CHARS;
+  const draftOk = message.trim().length >= MIN_MESSAGE_CHARS;
+  const canSend = !sending && !isComplete && draftOk;
+  // One hint at a time: a too-short draft shows the 5-char floor hint
+  // under the composer; otherwise, once the tap is spent, a nudge sits
+  // beside the disabled chip explaining why it's greyed out.
+  const showFloorHint = message.length > 0 && !draftOk;
+  const showStuckUsedHint = stuckUsed && !showFloorHint;
 
   const hasReference = state.problems.length > 0;
 
@@ -493,16 +517,15 @@ export function IntegrityCheckChat({
                   page helps us see it&rsquo;s really you.
                 </p>
                 {/* Why it's worth finishing. Honest on purpose: the chat
-                    doesn't move a score by itself — the teacher reads it
-                    and decides — so "improves your grade" is the wrong
-                    promise. "Best way to get credit for what you
-                    understand" is the true one, and it's the reason a
+                    doesn't affect the grade, so nothing here may promise
+                    credit or points. "Best way to show your teacher what
+                    you understand" is the true reason, and it's why a
                     student shouldn't tap Leave. */}
                 <p className="mt-2.5 rounded-[--radius-sm] border border-primary/25 bg-primary-bg px-3 py-2 text-sm leading-relaxed text-primary-dark">
                   <span className="font-semibold">
-                    Your teacher reads this conversation when they grade your work.
+                    Your teacher reads this conversation alongside your work.
                   </span>{" "}
-                  Explaining your thinking here is the best way to get credit for
+                  Explaining your thinking here is the best way to show them
                   what you understand.
                 </p>
               </div>
@@ -539,13 +562,29 @@ export function IntegrityCheckChat({
 
           {isComplete ? (
             <div className="border-t border-border-light px-2 py-4 text-center">
-              <p className="font-serif text-base text-text-primary">
-                Thanks for walking me through that!
-              </p>
-              <p className="mt-1 text-sm text-text-secondary">
-                Your teacher has everything they need — you&rsquo;ll see
-                your grade once they publish it.
-              </p>
+              {/* A check closed unfinished (a tab reopened after the
+                  deadline) gets the honest version, not a thank-you for
+                  a conversation that didn't happen. */}
+              {state?.closed_unfinished ? (
+                <>
+                  <p className="font-serif text-base text-text-primary">
+                    This check closed because it wasn&rsquo;t finished.
+                  </p>
+                  <p className="mt-1 text-sm text-text-secondary">
+                    Your work is still turned in.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="font-serif text-base text-text-primary">
+                    Thanks for walking me through that!
+                  </p>
+                  <p className="mt-1 text-sm text-text-secondary">
+                    Your teacher has everything they need — you&rsquo;ll see
+                    your grade once they publish it.
+                  </p>
+                </>
+              )}
               {/* Practice nudge — only renders when the agent's disposition
                   suggests more study would help AND a practice set is
                   actually linked to this HW. Any other combination stays
@@ -584,17 +623,30 @@ export function IntegrityCheckChat({
               {/* The honest exit. A frozen student who genuinely can't
                   put their reasoning into words taps this instead of
                   being told their truthful "idk" is too short. Sends a
-                  fixed message that bypasses the char gate so the agent
-                  can respond with support, not a rejection. Low emphasis
-                  on purpose — always available, never the loud default. */}
-              <button
-                type="button"
-                onClick={() => void handleSend(STUCK_MESSAGE)}
-                disabled={sending}
-                className="mb-2 inline-flex items-center rounded-full border border-border-light bg-bg-subtle px-3 py-1 text-xs font-medium text-text-secondary transition-colors hover:border-primary hover:text-primary disabled:opacity-50"
-              >
-                I&rsquo;m stuck — not sure how to explain this
-              </button>
+                  stuck turn that bypasses the char gate so the agent can
+                  respond with support, not a rejection. Low emphasis on
+                  purpose — never the loud default. One use per problem:
+                  once spent it stays visible but disabled, with a nudge
+                  toward a guess in their own words. */}
+              <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+                <button
+                  type="button"
+                  onClick={() => void handleSend(true)}
+                  disabled={sending || stuckUsed}
+                  aria-describedby={showStuckUsedHint ? "integrity-stuck-used-hint" : undefined}
+                  className="inline-flex items-center rounded-full border border-border-light bg-bg-subtle px-3 py-1 text-xs font-medium text-text-secondary transition-colors enabled:hover:border-primary enabled:hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  I&rsquo;m stuck — not sure how to explain this
+                </button>
+                {showStuckUsedHint && (
+                  <span
+                    id="integrity-stuck-used-hint"
+                    className="text-xs text-text-muted"
+                  >
+                    {STUCK_USED_HINT}
+                  </span>
+                )}
+              </div>
               <div className="flex items-end gap-2">
                 <textarea
                   value={message}
@@ -661,8 +713,7 @@ export function IntegrityCheckChat({
               </div>
               <div className="mt-1 flex items-start justify-between gap-2">
                 <p className="text-xs text-text-muted">
-                  {message.length > 0 &&
-                    message.trim().length < MIN_MESSAGE_CHARS &&
+                  {showFloorHint &&
                     `Try a sentence or two (${MIN_MESSAGE_CHARS}+ characters).`}
                 </p>
                 {/* Plain Enter inserts a newline; only ⌘/Ctrl+Enter

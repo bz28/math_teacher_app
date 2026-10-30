@@ -14,7 +14,8 @@ import { useAuthStore } from "@/stores/auth";
 import { MathText } from "@/components/shared/math-text";
 import { PageErrorState } from "@/components/ui";
 import { SkeletonStep } from "@/components/ui/skeleton";
-import { isLearnable, isMCQ } from "./_components/practice-shared";
+import { isMCQ } from "@/lib/practice-choices";
+import { isLearnable } from "./_components/practice-shared";
 import { PracticeRunner } from "./_components/practice-runner";
 import { LearnRunner } from "./_components/learn-runner";
 

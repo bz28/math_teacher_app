@@ -2064,12 +2064,17 @@ export interface paths {
         put?: never;
         /**
          * Check Page Orientation
-         * @description Does a page the student just added look sideways?
+         * @description Do the pages the student just added read upright, at a size the
+         *     reader can make out?
          *
-         *     Backs the "This page looks sideways — rotate it?" nudge on the
-         *     upload screen. Free (a pixel check, no model call) and advisory:
-         *     it never rotates anything — the student does, with the rotate
-         *     button, and the turn is applied at submit.
+         *     Backs the upload screen, which holds Submit while a page reads as
+         *     sideways and refuses a PDF page that turn-in would. Free (a pixel
+         *     check, no model call). It never rotates anything — the student does,
+         *     with the rotate button, and the turn is applied at submit.
+         *
+         *     Orientation is enforced on the client only, never at submit: the
+         *     check can be wrong, and the student's "It's already upright" has to
+         *     be able to overrule it. Turn-in enforces the size floor alone.
          */
         post: operations["check_page_orientation_v1_school_student_homework_page_orientation_post"];
         delete?: never;
@@ -3689,7 +3694,7 @@ export interface paths {
          *     teacher right now, one row per submission, prioritized.
          *
          *     Reuses the exact predicates the courses dashboard and Submissions
-         *     inbox use (_to_review_case / _flagged_case), so the queue can never
+         *     inbox use (_to_review_case / flagged_case), so the queue can never
          *     disagree with the per-course pills. Owner-gated: only submissions on
          *     published homework the teacher owns, non-preview students, dropped
          *     after un-enrollment via the SectionEnrollment guard.
@@ -4613,8 +4618,6 @@ export interface components {
         };
         /** CreateCourseRequest */
         CreateCourseRequest: {
-            /** Description */
-            description?: string | null;
             /** Grade Level */
             grade_level?: number | null;
             /** Name */
@@ -4773,6 +4776,8 @@ export interface components {
             due_at: string | null;
             /** Is Late */
             is_late: boolean;
+            /** Next Step */
+            next_step?: ("confirm_reading" | "finish_check") | null;
             /** Section Name */
             section_name: string;
             /**
@@ -5358,6 +5363,11 @@ export interface components {
         };
         /** IntegrityStateResponse */
         IntegrityStateResponse: {
+            /**
+             * Closed Unfinished
+             * @default false
+             */
+            closed_unfinished: boolean;
             /** Disposition */
             disposition: string | null;
             extraction: components["schemas"]["ExtractionOut"] | null;
@@ -5365,6 +5375,8 @@ export interface components {
             overall_status: string;
             /** Problems */
             problems: components["schemas"]["ProblemSummary"][];
+            /** Stuck Tap Used */
+            stuck_tap_used: boolean;
             /** Submission Id */
             submission_id: string;
             /** Transcript */
@@ -5519,8 +5531,16 @@ export interface components {
         };
         /** PageOrientationResponse */
         PageOrientationResponse: {
+            /** Page Count */
+            page_count: number;
+            /** Preview */
+            preview: string | null;
             /** Sideways */
             sideways: boolean;
+            /** Sideways Pages */
+            sideways_pages: number[];
+            /** Too Small Pages */
+            too_small_pages: number[];
         };
         /**
          * PasteEvent
@@ -5983,6 +6003,8 @@ export interface components {
             final_score?: number | null;
             /** Grade Published At */
             grade_published_at?: string | null;
+            /** Next Step */
+            next_step?: ("confirm_reading" | "finish_check") | null;
             /** Problems */
             problems: components["schemas"]["StudentHomeworkProblem"][];
             /** Published */
@@ -6029,6 +6051,8 @@ export interface components {
             assignment_id: string;
             /** Due At */
             due_at: string | null;
+            /** Next Step */
+            next_step?: ("confirm_reading" | "finish_check") | null;
             /** Problem Count */
             problem_count: number;
             /** Status */
@@ -6294,6 +6318,8 @@ export interface components {
             disposition: string | null;
             /** Headline */
             headline: string | null;
+            /** Incomplete Reason */
+            incomplete_reason: ("not_started" | "left_partway" | "turn_cap") | null;
             /** Inline Variant Result */
             inline_variant_result: string | null;
             /** Inline Variant Used */
@@ -6611,10 +6637,18 @@ export interface components {
         };
         /** TurnRequest */
         TurnRequest: {
-            /** Message */
+            /**
+             * Message
+             * @default
+             */
             message: string;
             /** Seconds On Turn */
             seconds_on_turn?: number | null;
+            /**
+             * Stuck
+             * @default false
+             */
+            stuck: boolean;
             telemetry?: components["schemas"]["TurnTelemetry"] | null;
         };
         /**
@@ -6717,16 +6751,10 @@ export interface components {
         };
         /** UpdateCourseRequest */
         UpdateCourseRequest: {
-            /** Description */
-            description?: string | null;
-            /** Grade Level */
-            grade_level?: number | null;
             /** Name */
             name?: string | null;
             /** Status */
             status?: string | null;
-            /** Subject */
-            subject?: string | null;
         };
         /** UpdateDocumentRequest */
         UpdateDocumentRequest: {

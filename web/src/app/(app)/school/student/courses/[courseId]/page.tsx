@@ -11,6 +11,7 @@ import {
 import { PageErrorState } from "@/components/ui";
 import { SkeletonCard } from "@/components/ui/skeleton";
 import { formatDue } from "@/lib/utils";
+import { NEXT_STEP_COPY } from "@/components/school/student/next-step";
 
 type TabKey = "homework" | "practice";
 const TABS: { key: TabKey; label: string }[] = [
@@ -154,8 +155,17 @@ function HomeworkList({ courseId }: { courseId: string }) {
                 {hw.problem_count === 1 ? "problem" : "problems"}
                 {hw.due_at ? ` · ${formatDue(hw.due_at)}` : ""}
               </div>
+              {hw.next_step && (
+                <p className="mt-1.5 text-xs text-text-secondary">
+                  {NEXT_STEP_COPY[hw.next_step].hint}
+                </p>
+              )}
             </div>
-            {hw.status === "submitted" ? (
+            {hw.next_step ? (
+              <span className="shrink-0 rounded-full bg-primary-bg px-2.5 py-0.5 text-xs font-semibold text-primary group-hover:bg-primary group-hover:text-white">
+                {NEXT_STEP_COPY[hw.next_step].label}
+              </span>
+            ) : hw.status === "submitted" ? (
               <span className="rounded-full bg-success-light px-2 py-0.5 text-xs font-semibold text-success">
                 Submitted ✓
               </span>

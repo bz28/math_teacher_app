@@ -1,11 +1,10 @@
 """Teacher course management — CRUD."""
 
 import uuid
-from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import AfterValidator, BaseModel, Field
+from pydantic import AfterValidator, BaseModel
 from sqlalchemy import Integer, and_, case, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +16,7 @@ from api.core.class_rubric import (
     credit_guidance,
     rubric_revision,
 )
-from api.core.integrity_pipeline import ABANDONED_INTERVIEW_DEADLINE
+from api.core.integrity_pipeline import UNFINISHED_REASONS
 from api.core.subjects import VALID_SUBJECTS
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
@@ -75,14 +74,10 @@ class CreateCourseRequest(BaseModel):
     name: CourseName
     subject: CourseSubject = "math"
     grade_level: CourseGrade | None = None
-    description: str | None = Field(default=None, max_length=2000)
 
 
 class UpdateCourseRequest(BaseModel):
     name: CourseName | None = None
-    subject: CourseSubject | None = None
-    grade_level: CourseGrade | None = None
-    description: str | None = Field(default=None, max_length=2000)
     status: CourseStatus | None = None
 
 
@@ -170,12 +165,24 @@ def _dirty_case() -> Any:
     )
 
 
-def _flagged_case() -> Any:
+def flagged_case() -> Any:
     """Counts submissions needing teacher attention from the integrity
-    pipeline — flagged disposition, unreadable extraction, inconclusive
-    complete (turn cap / no sampled problems), an abandoned interview
-    stalled past the wall-clock deadline, or student-raised 'reader got
-    something wrong' before confirm.
+    pipeline — flagged disposition, unreadable extraction, an inconclusive
+    check (no verdict, and not because the student walked away: the turn
+    cap, or an old close with no recorded reason — the roster shows both
+    as "Inconclusive"), an AI-grading skip with no grade, or
+    student-raised 'reader got something wrong' before confirm.
+
+    The one definition of "flagged": the courses dashboard, the needs-
+    attention queue and the per-homework inbox all sum this, and the
+    review page's Flagged filter (`isFlagged` in the roster) mirrors it
+    row for row, so the count a teacher clicks and the list she lands on
+    agree.
+
+    A student who didn't finish the understanding check is deliberately
+    NOT here. Walking away from a check raises scrutiny — the roster says
+    "Didn't finish the check" on that row — but it isn't evidence of
+    anything, and integrity never auto-flags.
 
     Each integrity-check-based branch also requires the check to be
     unresolved: once a teacher marks it reviewed, it's handled and no
@@ -184,7 +191,6 @@ def _flagged_case() -> Any:
     integrity_unresolved = (
         IntegrityCheckSubmission.resolution == "unresolved"
     )
-    abandoned_cutoff = datetime.now(UTC) - ABANDONED_INTERVIEW_DEADLINE
     return case(
         (
             and_(
@@ -204,20 +210,12 @@ def _flagged_case() -> Any:
             and_(
                 IntegrityCheckSubmission.status == "complete",
                 IntegrityCheckSubmission.disposition.is_(None),
-                integrity_unresolved,
-            ),
-            1,
-        ),
-        # Abandoned interview: still in awaiting_student / in_progress past
-        # the deadline. Not yet finalized (a teacher opening the roster
-        # does that lazily), but counted here so the needs-attention badge
-        # nudges them to look in the first place.
-        (
-            and_(
-                IntegrityCheckSubmission.status.in_(
-                    ("awaiting_student", "in_progress"),
+                or_(
+                    IntegrityCheckSubmission.incomplete_reason.is_(None),
+                    IntegrityCheckSubmission.incomplete_reason.notin_(
+                        UNFINISHED_REASONS,
+                    ),
                 ),
-                IntegrityCheckSubmission.updated_at < abandoned_cutoff,
                 integrity_unresolved,
             ),
             1,
@@ -252,7 +250,7 @@ async def _course_attention(
     counts_row = (await db.execute(
         select(
             func.coalesce(func.sum(_to_review_case()).cast(Integer), 0).label("to_review"),
-            func.coalesce(func.sum(_flagged_case()).cast(Integer), 0).label("flagged"),
+            func.coalesce(func.sum(flagged_case()).cast(Integer), 0).label("flagged"),
         )
         .select_from(Submission)
         .join(Assignment, Assignment.id == Submission.assignment_id)
@@ -307,7 +305,7 @@ async def create_course(
     teacher = (await db.execute(select(User).where(User.id == current_user.user_id))).scalar_one()
     course = Course(
         school_id=teacher.school_id, name=body.name,
-        subject=body.subject, grade_level=body.grade_level, description=body.description,
+        subject=body.subject, grade_level=body.grade_level,
     )
     db.add(course)
     await db.flush()
@@ -343,7 +341,7 @@ async def list_courses(
         select(
             Assignment.course_id.label("course_id"),
             func.coalesce(func.sum(_to_review_case()).cast(Integer), 0).label("to_review"),
-            func.coalesce(func.sum(_flagged_case()).cast(Integer), 0).label("flagged"),
+            func.coalesce(func.sum(flagged_case()).cast(Integer), 0).label("flagged"),
         )
         .select_from(Submission)
         .join(Assignment, Assignment.id == Submission.assignment_id)
@@ -440,7 +438,7 @@ async def needs_attention(
     teacher right now, one row per submission, prioritized.
 
     Reuses the exact predicates the courses dashboard and Submissions
-    inbox use (_to_review_case / _flagged_case), so the queue can never
+    inbox use (_to_review_case / flagged_case), so the queue can never
     disagree with the per-course pills. Owner-gated: only submissions on
     published homework the teacher owns, non-preview students, dropped
     after un-enrollment via the SectionEnrollment guard.
@@ -451,7 +449,7 @@ async def needs_attention(
     the review surface for that exact (HW × section), focusing the
     student via a query param.
     """
-    flagged_case = _flagged_case()
+    flagged_expr = flagged_case()
     dirty_case = _dirty_case()
     # Overdue is decided in SQL so timezone handling stays in the DB.
     overdue_case = case(
@@ -473,7 +471,7 @@ async def needs_attention(
             Assignment.due_at.label("due_at"),
             Section.id.label("section_id"),
             Section.name.label("section_name"),
-            flagged_case.label("flagged"),
+            flagged_expr.label("flagged"),
             dirty_case.label("dirty"),
             SubmissionGrade.grade_published_at.label("grade_published_at"),
             overdue_case.label("is_overdue"),
@@ -500,7 +498,7 @@ async def needs_attention(
             Assignment.type == "homework",
             Assignment.status == "published",
             User.is_preview.is_(False),
-            or_(flagged_case == 1, _to_review_case() == 1),
+            or_(flagged_expr == 1, _to_review_case() == 1),
         )
     )).all()
 
@@ -553,7 +551,7 @@ async def get_course(
     attention = await _course_attention(db, current_user.user_id, course_id)
     return {
         "id": str(course.id), "name": course.name, "subject": course.subject,
-        "grade_level": course.grade_level, "description": course.description,
+        "grade_level": course.grade_level,
         "status": course.status, "created_at": course.created_at.isoformat(),
         "to_review": attention["to_review"],
         "flagged": attention["flagged"],
@@ -647,12 +645,6 @@ async def update_course(
         return {"status": "ok"}
     if body.name is not None:
         course.name = body.name
-    if body.subject is not None:
-        course.subject = body.subject
-    if body.grade_level is not None:
-        course.grade_level = body.grade_level
-    if body.description is not None:
-        course.description = body.description
     if body.status is not None:
         course.status = body.status
     await db.commit()
