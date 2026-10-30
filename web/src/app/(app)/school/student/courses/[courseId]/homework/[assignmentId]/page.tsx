@@ -9,7 +9,6 @@ import {
   type StudentHomeworkDetail,
   type StudentProblemFeedback,
   type StudentSubmission,
-  type SubmissionFile,
 } from "@/lib/api";
 import { useAuthStore } from "@/stores/auth";
 import { formatDue } from "@/lib/utils";
@@ -25,23 +24,7 @@ import { SubmissionExtractionConfirmView } from "@/components/school/student/sub
 import { ExtractionFlaggedTerminalView } from "@/components/school/student/extraction-flagged-terminal-view";
 import { IntegrityPendingView } from "@/components/school/student/integrity-pending-view";
 import { AssignmentTimeline } from "@/components/school/student/assignment-timeline";
-import type { IntegrityExtraction } from "@/lib/api";
-
-type Mode =
-  | { kind: "homework" }
-  | { kind: "integrity_pending" }
-  | { kind: "integrity_pending_timeout" }
-  | {
-      kind: "integrity_confirm";
-      extraction: IntegrityExtraction;
-      files: SubmissionFile[];
-      integrityCheckEnabled: boolean;
-    }
-  | { kind: "integrity_chat" }
-  /** Student flagged "reader got something wrong" on the confirm
-   *  screen. Submission is routed to the teacher for manual
-   *  grading; no AI calls run. Terminal — nothing else to do. */
-  | { kind: "extraction_flagged" };
+import { routeSubmittedHomework, type HomeworkMode } from "@/lib/homework-route";
 
 export default function HomeworkPage() {
   const { courseId, assignmentId } = useParams<{ courseId: string; assignmentId: string }>();
@@ -52,30 +35,28 @@ export default function HomeworkPage() {
   const [hw, setHw] = useState<StudentHomeworkDetail | null>(null);
   const [submission, setSubmission] = useState<StudentSubmission | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<Mode>({ kind: "homework" });
+  const [mode, setMode] = useState<HomeworkMode>({ kind: "homework" });
   // True only for the render right after the student submits in this
   // session — drives the celebratory entrance animation on the
   // SubmittedView. A plain revisit (navigating back to already-turned-in
   // work) leaves this false so the check-bounce doesn't replay each time.
   const [justSubmitted, setJustSubmitted] = useState(false);
-  // Client-side flag: the student clicked through the post-extraction
-  // confirm screen in this session, so we should not keep shoving it
-  // in their face if they come back before sending their first turn.
-  // Backend has no explicit "confirmed_at" on the submission — once
-  // they send a message the status flips to `in_progress` and routing
-  // naturally skips the confirm branch, so this flag only covers the
-  // brief window before their first turn.
-  const [confirmedThisSession, setConfirmedThisSession] = useState(false);
   // Post-publish view filter — flips the problems list to show only
   // partial/zero rows. Default off so the student lands on the
   // complete record; flipping the toggle is the "go fix what I got
   // wrong" mode. Page-level state so the toggle survives a re-fetch
   // (visibility-change re-loads keep the filter intact).
   const [missedOnly, setMissedOnly] = useState(false);
+  // Bumped every time loadAll routes to the preparing screen. Keys
+  // IntegrityPendingView so re-entering it from inside itself (its
+  // onReady re-routes back to preparing) remounts it and restarts its
+  // poll — it stops polling once it has fired onReady.
+  const [pendingRun, setPendingRun] = useState(0);
 
   // Load (or re-load) the homework + submission + integrity state.
-  // Called on mount, after submit, and after the chat finishes so
-  // the entry prompt visibility / progress indicator stay in sync.
+  // Called on mount, after submit, after the confirm screen's Confirm
+  // or Flag, when the preparing screen is ready, and after the chat
+  // finishes, so the entry prompt / progress indicator stay in sync.
   async function loadAll(aid: string) {
     try {
       const detail = await schoolStudent.homeworkDetail(aid);
@@ -86,82 +67,14 @@ export default function HomeworkPage() {
           schoolStudent.getIntegrityState(detail.submission_id).catch(() => null),
         ]);
         if (sub) setSubmission(sub);
-
-        // Routing precedence (top match wins):
-        //
-        // 1. Flagged   — student said "reader got it wrong". Nothing
-        //                downstream ran; go straight to the terminal.
-        // 2. Extracting — Vision hasn't finished yet. Show the
-        //                preparing spinner + poll.
-        // 3. Awaiting confirm — extraction done, student hasn't
-        //                pressed Confirm/Flag. Integrity + grading
-        //                are gated on that press, so there's no
-        //                IntegrityCheckSubmission row yet and the
-        //                integrity-state endpoint can't tell us
-        //                apart from "extracting". Drive this one off
-        //                the submission row directly.
-        // 4. Integrity state — once the student has confirmed, the
-        //                existing integrity state machine takes
-        //                over (pending → awaiting_student → chat).
-        if (sub?.extraction_flagged_at != null) {
-          setMode({ kind: "extraction_flagged" });
-          return;
-        }
-        if (sub && sub.extraction == null) {
-          // Extraction only runs when either integrity or AI grading
-          // is on — if both are off, `sub.extraction` stays null
-          // forever and a 90s spinner waiting for it is a bug, not a
-          // wait. Fall through to the homework view and let the
-          // submitted state render as normal.
-          if (
-            !sub.integrity_check_enabled &&
-            !sub.ai_grading_enabled
-          ) {
-            setMode({ kind: "homework" });
-            return;
-          }
-          // Still extracting (or extraction failed — IntegrityPendingView
-          // handles the timeout fallback in that case).
-          setMode({ kind: "integrity_pending" });
-          return;
-        }
-        if (
-          sub &&
-          sub.extraction_confirmed_at == null &&
-          sub.extraction != null &&
-          sub.files != null &&
-          sub.files.length > 0 &&
-          !confirmedThisSession
-        ) {
-          setMode({
-            kind: "integrity_confirm",
-            extraction: sub.extraction,
-            files: sub.files,
-            integrityCheckEnabled: sub.integrity_check_enabled,
-          });
-          return;
-        }
-
-        if (integrity) {
-          // Student has confirmed — fall through to the integrity
-          // state machine. Auto-route:
-          //   "extracting"       → preparing screen + poll
-          //   "awaiting_student" → chat (we've already shown the
-          //                         submission-level confirm above;
-          //                         the integrity-sampled per-problem
-          //                         confirm was collapsed into that)
-          //   "in_progress"      → chat
-          //   "complete" / "skipped_unreadable" / "no_check"
-          //                      → stay on homework view
-          if (integrity.overall_status === "extracting") {
-            setMode({ kind: "integrity_pending" });
-          } else if (
-            integrity.overall_status === "awaiting_student"
-            || integrity.overall_status === "in_progress"
-          ) {
-            setMode({ kind: "integrity_chat" });
-          }
-        }
+        // Always set the mode: loadAll also runs from inside the
+        // confirm and preparing screens, and leaving the mode alone
+        // strands the student on a screen whose job is done.
+        const next = routeSubmittedHomework(
+          sub, integrity, detail.grade_published_at != null,
+        );
+        if (next.kind === "integrity_pending") setPendingRun((n) => n + 1);
+        setMode(next);
       }
     } catch (e) {
       // A preview whose seat is in a period this homework was never
@@ -188,8 +101,7 @@ export default function HomeworkPage() {
   useEffect(() => {
     if (!assignmentId) return;
     loadAll(assignmentId);
-    // loadAll intentionally reads component state via closure (mode,
-    // confirmedThisSession, etc.) — adding it to deps would re-fetch
+    // loadAll is recreated every render — adding it to deps would re-fetch
     // on every unrelated state change. Route only re-runs on route
     // change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -215,6 +127,7 @@ export default function HomeworkPage() {
   if (mode.kind === "integrity_pending" && hw.submission_id && assignmentId) {
     return (
       <IntegrityPendingView
+        key={pendingRun}
         submissionId={hw.submission_id}
         assignmentId={assignmentId}
         onReady={async () => {
@@ -261,7 +174,6 @@ export default function HomeworkPage() {
         extraction={mode.extraction}
         integrityCheckEnabled={mode.integrityCheckEnabled}
         onContinue={async () => {
-          setConfirmedThisSession(true);
           // Re-fetch + reroute from server truth. Handles the 409
           // recovery case where the confirm endpoint bailed because
           // the submission was flagged in another tab: loadAll sees
