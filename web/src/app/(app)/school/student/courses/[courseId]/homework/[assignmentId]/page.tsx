@@ -41,6 +41,9 @@ export default function HomeworkPage() {
   // SubmittedView. A plain revisit (navigating back to already-turned-in
   // work) leaves this false so the check-bounce doesn't replay each time.
   const [justSubmitted, setJustSubmitted] = useState(false);
+  // Set when this session's flag carried a note/edits the server didn't
+  // store (already flagged, or state moved on) — the terminal says so.
+  const [flagDetailsDropped, setFlagDetailsDropped] = useState(false);
   // Post-publish view filter — flips the problems list to show only
   // partial/zero rows. Default off so the student lands on the
   // complete record; flipping the toggle is the "go fix what I got
@@ -185,7 +188,8 @@ export default function HomeworkPage() {
             setMode({ kind: "integrity_chat" });
           }
         }}
-        onFlagged={async () => {
+        onFlagged={async ({ detailsDropped }) => {
+          setFlagDetailsDropped(detailsDropped);
           // Flag skips grading + integrity. Re-fetch in case the
           // server had already moved on (e.g. someone confirmed in
           // another tab) so the student lands on the right terminal.
@@ -200,7 +204,7 @@ export default function HomeworkPage() {
   }
 
   if (mode.kind === "extraction_flagged") {
-    return <ExtractionFlaggedTerminalView />;
+    return <ExtractionFlaggedTerminalView detailsDropped={flagDetailsDropped} />;
   }
 
   if (mode.kind === "integrity_chat" && hw.submission_id) {

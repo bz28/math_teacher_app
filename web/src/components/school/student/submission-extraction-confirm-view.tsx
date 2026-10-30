@@ -21,6 +21,7 @@ import {
 import { useBlobUrl } from "@/hooks/use-blob-url";
 import { Modal } from "@/components/ui/modal";
 import { useDeviceType } from "./use-device-type";
+import { FLAG_NOTE_MAX, hasEditableLines } from "./extraction-flag";
 
 interface Props {
   submissionId: string;
@@ -38,11 +39,14 @@ interface Props {
   /** Student confirmed the reader got it right (with optional edits
    *  applied). Parent transitions to the chat / submitted view. */
   onContinue: () => void;
-  /** Student said the reader got something wrong. We fire the flag
-   *  endpoint here and hand control back to the parent, which
-   *  transitions onward — the flag is a signal for the teacher, not
-   *  a gate. */
-  onFlagged: () => void;
+  /** Student said most of the reading is wrong ("Most of it is wrong").
+   *  We fire the flag endpoint here and hand control back to the
+   *  parent, which transitions onward — the flag is a signal for the
+   *  teacher, not a gate. `detailsDropped` is true when the student
+   *  sent a note or edits the server did not store (it was already
+   *  flagged, or had moved on), so the terminal doesn't claim they
+   *  went along. */
+  onFlagged: (result: { detailsDropped: boolean }) => void;
 }
 
 /**
@@ -177,6 +181,7 @@ function EditableRow({
   onClearEdit,
   ariaLabel,
   registerPendingCommit,
+  highlight,
 }: {
   editKey: string;
   /** Plain-text fallback used to seed the textarea. Vision returns
@@ -206,6 +211,9 @@ function EditableRow({
    *  parent invokes it from goTo / handleContinue so an in-flight
    *  draft survives pagination instead of being silently dropped. */
   registerPendingCommit: (fn: (() => void) | null) => void;
+  /** Fix mode: the student said only a few lines are wrong, so every
+   *  pencil is filled in to show where to tap. */
+  highlight: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [showOriginal, setShowOriginal] = useState(false);
@@ -231,8 +239,8 @@ function EditableRow({
       // Empty save: on an already-edited row this is the student's
       // "wipe my edit" gesture — drop it so the original Vision read
       // stands again. On a never-edited row it's a no-op (we don't
-      // surface deletion of original Vision rows here; that's what
-      // the "Reader got something wrong" flag is for).
+      // surface deletion of original Vision rows here; a reading that
+      // wrong is what "Something looks wrong" → "Most of it" is for).
       if (isEdited) onClearEdit(editKey);
       return;
     }
@@ -307,7 +315,11 @@ function EditableRow({
           onClick={startEdit}
           aria-label={`Edit ${ariaLabel}`}
           title="Looks wrong? Tap to fix."
-          className="shrink-0 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-[--radius-sm] border border-border-light text-text-muted transition-colors hover:border-primary hover:text-primary sm:min-h-[32px] sm:min-w-[32px]"
+          className={`shrink-0 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-[--radius-sm] border transition-colors sm:min-h-[32px] sm:min-w-[32px] ${
+            highlight
+              ? "border-primary bg-primary-bg text-primary hover:bg-primary hover:text-white motion-safe:animate-[fix-pencil-pulse_1.1s_ease-out_2]"
+              : "border-border-light text-text-muted hover:border-primary hover:text-primary"
+          }`}
         >
           <PencilIcon className="h-4 w-4" />
         </button>
@@ -358,9 +370,33 @@ export function SubmissionExtractionConfirmView({
   //   Continue → server stamps extraction_confirmed_at, applies any
   //              `edits` overlay, spawns integrity + AI grading.
   //   Flag     → server stamps extraction_flagged_at, submission goes
-  //              to the teacher for manual grading. No AI calls run
-  //              and any in-progress edits are discarded — flagging
-  //              is the stronger signal.
+  //              to the teacher for manual grading. No AI calls run.
+  //              The student's optional note and any edits they made
+  //              ride along so the teacher sees where the misread is.
+  //
+  // "Something looks wrong" doesn't flag straight away: it first asks
+  // how much is wrong. Most misreads are a line or two the student can
+  // fix themselves (prod: 25 flags with zero edits, 36 confirms with
+  // edits), and a fix keeps the AI grade + the chat. "Most of it" goes
+  // to the note step, then flags.
+  const [flagStep, setFlagStep] = useState<"choose" | "note" | null>(null);
+  const [fixMode, setFixMode] = useState(false);
+  const [note, setNote] = useState("");
+  const flagTitleId = useId();
+  const problemsRef = useRef<HTMLDivElement>(null);
+  // Switching steps unmounts the button that had focus; land it on the
+  // new step's heading so keyboard and screen-reader users aren't
+  // dropped onto <body> (and a phone keyboard doesn't pop for an
+  // optional note). Opening is handled by Modal's own initial focus.
+  const stepHeadingRef = useRef<HTMLHeadingElement>(null);
+  const prevFlagStep = useRef<typeof flagStep>(null);
+  useEffect(() => {
+    if (prevFlagStep.current !== null && flagStep !== null) {
+      stepHeadingRef.current?.focus();
+    }
+    prevFlagStep.current = flagStep;
+  }, [flagStep]);
+  const canFixLines = useMemo(() => hasEditableLines(extraction), [extraction]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Sparse map of student corrections keyed by step / final-answer
@@ -467,23 +503,50 @@ export function SubmissionExtractionConfirmView({
     }
   }
 
+  function openFlagStep() {
+    // Bank an open editor's draft first, so it counts toward the
+    // "your fixes go too" line and is sent with the flag.
+    commitPending();
+    setError(null);
+    setFlagStep(canFixLines ? "choose" : "note");
+  }
+
+  function startFixing() {
+    setFlagStep(null);
+    setFixMode(true);
+    setError(null);
+    // The flag button sits below the problems; bring the lines (and
+    // the hint above them) back into view.
+    problemsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   async function handleFlag() {
     setSubmitting(true);
     setError(null);
+    // Whether this request carried anything for the teacher. If the
+    // server didn't store it (already flagged, or the state moved on),
+    // the terminal must not claim it went along.
+    const sentDetails = !!note.trim() || Object.keys(editsRef.current).length > 0;
     try {
-      await schoolStudent.flagExtractionSubmission(submissionId);
-      onFlagged();
+      const res = await schoolStudent.flagExtractionSubmission(submissionId, {
+        note,
+        edits: editsRef.current,
+      });
+      setFlagStep(null);
+      onFlagged({ detailsDropped: sentDetails && !!res.already_flagged });
     } catch (e) {
       // 409 = server already past the confirm/flag decision (student
       // confirmed in another tab, or the submission was already
       // flagged). Exit to the terminal and let the parent re-route
-      // rather than looping on "Try again".
+      // rather than looping on "Try again". Nothing from this request
+      // was stored.
       if (e instanceof ApiError && e.status === 409) {
-        onFlagged();
+        setFlagStep(null);
+        onFlagged({ detailsDropped: sentDetails });
         return;
       }
-      setError("Couldn't save your flag. Try again.");
       setSubmitting(false);
+      setError("Couldn't send it to your teacher. Try again.");
     }
   }
 
@@ -519,11 +582,15 @@ export function SubmissionExtractionConfirmView({
 
       {totalProblems === 0 ? (
         <p className="mt-6 italic text-sm text-text-muted">
-          No legible work was extracted from your photos. Flag so your
-          teacher knows, or continue if this looks right.
+          No legible work was read from your photos. Tap &ldquo;Something
+          looks wrong&rdquo; so your teacher knows, or continue if this
+          looks right.
         </p>
       ) : (
-        <div className="mt-6 grid gap-4 md:grid-cols-[180px_1fr]">
+        <div
+          ref={problemsRef}
+          className="mt-6 grid scroll-mt-4 gap-4 md:grid-cols-[180px_1fr]"
+        >
           {/* Persistent file strip — vertical on desktop, horizontal
               scroll on mobile. Every page stays visible so the student
               can match the active problem to its source page. */}
@@ -533,6 +600,29 @@ export function SubmissionExtractionConfirmView({
           />
 
           <div>
+            {fixMode && (
+              <div
+                role="status"
+                className="mb-3 flex items-start gap-2.5 rounded-[--radius-sm] border border-primary/30 bg-primary-bg/60 px-3 py-2.5"
+              >
+                <span
+                  aria-hidden
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-white"
+                >
+                  <PencilIcon className="h-3.5 w-3.5" />
+                </span>
+                <p className="text-sm leading-relaxed text-text-primary">
+                  <span className="font-semibold">
+                    Tap a line to fix it, then confirm.
+                  </span>
+                  {totalProblems > 1 && (
+                    <span className="text-text-secondary">
+                      {" "}Use Next to check your other problems too.
+                    </span>
+                  )}
+                </p>
+              </div>
+            )}
             <ProblemPagination
               total={totalProblems}
               active={activeIndex}
@@ -563,6 +653,7 @@ export function SubmissionExtractionConfirmView({
                   registerPendingCommit={(fn) => {
                     pendingCommitRef.current = fn;
                   }}
+                  highlight={fixMode}
                 />
               </section>
             )}
@@ -598,6 +689,135 @@ export function SubmissionExtractionConfirmView({
           onClose={() => setZoomedFile(null)}
         />
       )}
+
+      <Modal
+        open={flagStep !== null}
+        onClose={() => !submitting && setFlagStep(null)}
+        dismissible={!submitting}
+        labelledById={flagTitleId}
+        className="w-full max-w-md bg-surface p-5 sm:p-6"
+      >
+        {flagStep === "choose" ? (
+          <div>
+            <h2
+              id={flagTitleId}
+              ref={stepHeadingRef}
+              tabIndex={-1}
+              className="font-serif text-2xl leading-tight text-text-primary focus:outline-none"
+            >
+              How much did we get wrong?
+            </h2>
+            <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">
+              If it&rsquo;s only a few lines, fixing them yourself is quickest.
+            </p>
+            {/* Fixing it yourself is the path we steer toward: one
+                prominent card. Sending it to the teacher stays a real,
+                always-visible button — a student whose work truly was
+                misread must be able to find it — just quieter. */}
+            <button
+              type="button"
+              onClick={startFixing}
+              className="mt-5 flex w-full items-center gap-3.5 rounded-[--radius-md] border-2 border-primary bg-primary-bg p-4 text-left transition-colors hover:bg-primary-bg/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+            >
+              <span
+                aria-hidden
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-white"
+              >
+                <PencilIcon className="h-[18px] w-[18px]" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-base font-bold text-text-primary">
+                  Just a few lines
+                </span>
+                <span className="mt-0.5 block text-sm text-text-secondary">
+                  I&rsquo;ll fix them myself, then confirm.
+                </span>
+              </span>
+            </button>
+            <div className="mt-3 flex flex-col items-center">
+              <button
+                type="button"
+                onClick={() => setFlagStep("note")}
+                aria-label="Most of it is wrong? Send it to my teacher to grade from my photos."
+                className="inline-flex min-h-[44px] items-center rounded-[--radius-sm] px-3 text-sm text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                Most of it is wrong?&nbsp;
+                <span className="font-semibold text-primary underline underline-offset-2">
+                  Send it to my teacher
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setFlagStep(null)}
+                className="min-h-[44px] rounded-[--radius-sm] px-3 text-xs font-medium text-text-muted transition-colors hover:text-text-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              >
+                Never mind
+              </button>
+            </div>
+          </div>
+        ) : flagStep === "note" ? (
+          <div>
+            <h2
+              id={flagTitleId}
+              ref={stepHeadingRef}
+              tabIndex={-1}
+              className="font-serif text-2xl leading-tight text-text-primary focus:outline-none"
+            >
+              Send it to your teacher
+            </h2>
+            <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">
+              Your teacher will grade this homework from your photos instead.
+            </p>
+            <label
+              htmlFor={`${flagTitleId}-note`}
+              className="mt-5 block text-sm font-semibold text-text-primary"
+            >
+              What did it get wrong?{" "}
+              <span className="font-normal text-text-muted">(optional)</span>
+            </label>
+            <textarea
+              id={`${flagTitleId}-note`}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              maxLength={FLAG_NOTE_MAX}
+              rows={3}
+              placeholder="For example: it read my 7s as 1s on problem 3"
+              className="mt-1.5 block w-full rounded-[--radius-sm] border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none"
+            />
+            <div className="mt-1 flex items-start justify-between gap-3 text-xs text-text-muted">
+              <span>
+                {editCount > 0
+                  ? `The ${editCount === 1 ? "line" : `${editCount} lines`} you fixed will go too.`
+                  : "Your teacher sees this with your photos."}
+              </span>
+              {note.length > FLAG_NOTE_MAX - 100 && (
+                <span className="shrink-0 tabular-nums">
+                  {note.length}/{FLAG_NOTE_MAX}
+                </span>
+              )}
+            </div>
+            {error && <p className="mt-3 text-sm text-error">{error}</p>}
+            <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => (canFixLines ? setFlagStep("choose") : setFlagStep(null))}
+                disabled={submitting}
+                className="min-h-[44px] rounded-[--radius-sm] border border-border px-4 text-sm font-medium text-text-secondary hover:border-text-muted disabled:opacity-50"
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                onClick={handleFlag}
+                disabled={submitting}
+                className="min-h-[44px] rounded-[--radius-sm] bg-primary px-5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-primary-dark disabled:opacity-50"
+              >
+                {submitting ? "Sending…" : "Send to my teacher"}
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
 
       {/* "What's next" panel sits right above the buttons so the
           student reads it the moment before they choose. Only when the
@@ -635,11 +855,11 @@ export function SubmissionExtractionConfirmView({
       <div className="mt-6 flex flex-col items-center gap-3 sm:flex-row sm:justify-end">
         <button
           type="button"
-          onClick={handleFlag}
+          onClick={openFlagStep}
           disabled={submitting}
           className="min-h-[44px] w-full rounded-[--radius-sm] border border-border px-4 py-3 text-sm font-medium text-text-secondary hover:border-warning hover:text-warning-dark disabled:opacity-50 sm:w-auto sm:py-2"
         >
-          {submitting ? "Saving…" : "This reading is completely wrong"}
+          Something looks wrong
         </button>
         {/* "Looks good →" advances on non-final problems, terminates
             on the last. Always enabled — the pagination already nudges
@@ -865,12 +1085,14 @@ function ProblemBlock({
   onSaveEdit,
   onClearEdit,
   registerPendingCommit,
+  highlight,
 }: {
   group: ProblemGroup;
   edits: Record<string, string>;
   onSaveEdit: (key: string, text: string) => void;
   onClearEdit: (key: string) => void;
   registerPendingCommit: (fn: (() => void) | null) => void;
+  highlight: boolean;
 }) {
   return (
     <>
@@ -906,6 +1128,7 @@ function ProblemBlock({
                   onSaveEdit={onSaveEdit}
                   onClearEdit={onClearEdit}
                   registerPendingCommit={registerPendingCommit}
+                  highlight={highlight}
                   readOnlyDisplay={
                     edited !== null ? (
                       sourceIsLatex ? (
@@ -968,6 +1191,7 @@ function ProblemBlock({
                 onSaveEdit={onSaveEdit}
                 onClearEdit={onClearEdit}
                 registerPendingCommit={registerPendingCommit}
+                highlight={highlight}
                 readOnlyDisplay={
                   edited !== null ? (
                     sourceIsLatex ? (

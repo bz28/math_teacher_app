@@ -19,7 +19,7 @@ export type HomeworkMode =
       integrityCheckEnabled: boolean;
     }
   | { kind: "integrity_chat" }
-  /** Student flagged "reader got something wrong" on the confirm
+  /** Student flagged the reading ("Most of it is wrong") on the confirm
    *  screen. Submission is routed to the teacher for manual
    *  grading; no AI calls run. Terminal — nothing else to do. */
   | { kind: "extraction_flagged" };
@@ -34,7 +34,7 @@ export type HomeworkMode =
  *  on — the same rule as the server's "one more step" nudge
  *  (`student_next_step` in api/core/integrity_pipeline.py). Precedence
  *  (top match wins):
- *   1. Flagged       — student said "reader got it wrong". Nothing
+ *   1. Flagged       — student said most of the reading is wrong. Nothing
  *                      downstream ran; terminal screen.
  *   2. Extracting    — the reader hasn't finished. Preparing spinner +
  *                      poll, unless no toggle is on or the grade is

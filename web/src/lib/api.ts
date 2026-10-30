@@ -2394,6 +2394,13 @@ export interface TeacherSubmissionDetail {
    *  ran: a teacher can regrade an unconfirmed submission by hand. */
   extraction_confirmed_at: string | null;
   extraction_flagged_at: string | null;
+  /** The student's optional "what did it get wrong?" note, sent with the
+   *  flag. Null when blank or flagged before notes existed. */
+  extraction_flag_note: string | null;
+  /** Lines the student corrected on the confirm screen (the rows marked
+   *  `edited`). On a flagged reading, these are the fixes they made
+   *  before sending it to the teacher. */
+  extraction_edit_count: number;
   breakdown: GradeBreakdownEntry[] | null;
   ai_breakdown: AiGradeEntry[] | null;
   final_score: number | null;
@@ -3019,14 +3026,25 @@ export const schoolStudent = {
         : { method: "POST" },
     );
   },
-  /** Student said "Reader got something wrong" — routes submission
+  /** Student said most of the reading is wrong — routes submission
    *  to teacher for manual grading. Does NOT spawn integrity or
    *  grading. Mutually exclusive with confirmExtraction — the
-   *  server 409s if either terminal state is already set. */
-  flagExtractionSubmission(submissionId: string) {
+   *  server 409s if either terminal state is already set.
+   *
+   *  Optional `note` ("what did it get wrong?") and `edits` (lines the
+   *  student fixed first, same shape as confirmExtraction's) ride along
+   *  for the teacher; neither is ever graded. */
+  flagExtractionSubmission(
+    submissionId: string,
+    body?: { note?: string; edits?: Record<string, string> },
+  ) {
+    const note = body?.note?.trim() || null;
+    const edits = body?.edits && Object.keys(body.edits).length > 0 ? body.edits : null;
     return apiFetch<{ status: string; already_flagged?: boolean }>(
       `/school/student/submissions/${submissionId}/flag-extraction`,
-      { method: "POST" },
+      note || edits
+        ? { method: "POST", body: JSON.stringify({ note, edits }) }
+        : { method: "POST" },
     );
   },
   // ── Learn-mode chat + Practice→Learn pivot ──

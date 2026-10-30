@@ -424,6 +424,18 @@ html {
   }
 }
 
+/* ── Confirm screen: "Just a few lines" fix mode ──
+   One short ring on each edit pencil when fix mode starts, so the
+   student's eye lands on where to tap. Applied under motion-safe: only. */
+@keyframes fix-pencil-pulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-primary) 45%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 8px color-mix(in srgb, var(--color-primary) 0%, transparent);
+  }
+}
+
 /* ── Marketing: display typography ──
    text-wrap-balance prevents widow lines on multi-line headlines.
    Sizes/weights are set on the @theme display scale; this just

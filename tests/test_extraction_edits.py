@@ -138,6 +138,33 @@ def test_validate_strips_whitespace(extraction):
     assert sanitized == {"1:1": "x=2"}
 
 
+def test_validate_drops_no_op_edits(extraction):
+    """A line typed back to what was read — in either field, since mobile
+    seeds from plain_english and web from latex — isn't a correction."""
+    sanitized = validate_edits_against_extraction(extraction, {
+        "1:1": " x=5 ",            # == latex
+        "1:2": "y=10",             # == latex (plain empty)
+        "2:1": "let n be the number",  # == plain
+        "1:final": "five",         # == answer_plain
+        "2:final": "17 apples",    # a real change
+    })
+    assert sanitized == {"2:final": "17 apples"}
+
+
+def test_validate_keeps_a_cleared_row(extraction):
+    assert validate_edits_against_extraction(extraction, {"1:1": ""}) == {"1:1": ""}
+
+
+def test_validate_no_op_needs_every_duplicate_row_to_match():
+    """Two finals share a position and the overlay rewrites both, so an
+    edit matching only one of them still changes the other."""
+    ext = {"steps": [], "final_answers": [
+        {"problem_position": 1, "answer_latex": "5", "answer_plain": ""},
+        {"problem_position": 1, "answer_latex": "6", "answer_plain": ""},
+    ]}
+    assert validate_edits_against_extraction(ext, {"1:final": "5"}) == {"1:final": "5"}
+
+
 def test_validate_drops_non_string_values(extraction):
     sanitized = validate_edits_against_extraction(extraction, {"1:1": 42})
     assert sanitized == {}
