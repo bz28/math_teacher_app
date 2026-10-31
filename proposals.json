@@ -1,0 +1,1541 @@
+[
+  {
+    "proposal": {
+      "surface_key": "admin.leads,admin.schools,admin.quality,admin.harness_runs,admin.llm_calls",
+      "title": "Add the admin dashboard's dev origin to the API's CORS allowlist",
+      "category": "bug",
+      "severity": "high",
+      "rationale": "All 5 admin surfaces fail to load any data: every screenshot shows the full-page 'Couldn't load this view' / 'API UNREACHABLE' error state, and console_errors on each surface show the browser blocking the preflight with 'Access to fetch at ... from origin http://localhost:5173 has been blocked by CORS policy: ... No Access-Control-Allow-Origin header'. api/config.py:47 (cors_origins) lists localhost:8081, localhost:3000, and production domains, but not the admin dashboard's Vite dev origin http://localhost:5173, so CORSMiddleware (api/middleware/setup.py:30) never stamps the header back and every admin fetch is rejected before it reaches a route.",
+      "change": "Add 'http://localhost:5173' to the default cors_origins list in api/config.py:47, matching the pattern already used for the web app's localhost:3000/8081 entries. This unblocks Leads, Schools, Quality, Harness runs, and LLM calls for anyone running the admin dashboard locally.",
+      "est_size": "S",
+      "confidence": 0.85,
+      "defect_key": "bug/admin-dashboard-cors-blocked",
+      "evidence": [],
+      "id": "0bacd2ea5dc1",
+      "score": 2.55
+    },
+    "status": "proposed",
+    "created": "2026-10-09T13:18:25.573488+00:00",
+    "updated": "2026-10-09T13:18:25.573488+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Let a student ask a guided follow-up about their own graded submission",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "The product's integrity check already runs a one-on-one conversational agent before a grade clears (api/core/integrity_ai.py), and Learn mode already has a step-by-step tutor chat (tutor.py) \u2014 but per PRODUCT_CONTEXT.md's feature map, once a grade is released the student only sees the grade + feedback and can generate more practice; there's no guided conversation scoped to 'why did I lose points on problem 3' for an already-graded submission.",
+      "change": "Add a short, guided (never answer-giving, per the tutoring principle) AI chat scoped to one graded problem, reachable from the grade-review screen, reusing the existing tutor/step-decomposition conversational pattern instead of building a new engine.",
+      "est_size": "M",
+      "confidence": 0.45,
+      "defect_key": "feature/post-grade-ask-why-chat",
+      "evidence": [],
+      "id": "bdf7d14fbd10",
+      "score": 0.45
+    },
+    "status": "proposed",
+    "created": "2026-10-09T13:18:25.573488+00:00",
+    "updated": "2026-10-09T13:18:25.573488+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Auto-generate a class-wide reteach mini-lesson when a concept, not just a student, is slipping",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "Teacher-day analytics already surface 'which concepts the class is missing' and per-student practice generation already exists (api/core/practice.py), but PRODUCT_CONTEXT.md describes the path today as student-level practice, not a class-level reteach artifact \u2014 there's no one-click 'most of the class missed X, here's a short reteach + fresh practice set to assign to everyone' action.",
+      "change": "When teacher-day analytics flags a concept missed by a threshold share of the section (not just one student), surface a one-click 'Generate reteach pack' action that produces a short worked-example mini-lesson plus a fresh practice set for the whole section, reusing the existing generation + verification pipeline (assignment_generation.py).",
+      "est_size": "M",
+      "confidence": 0.4,
+      "defect_key": "feature/class-wide-reteach-pack",
+      "evidence": [],
+      "id": "c0a0e71d45fc",
+      "score": 0.4
+    },
+    "status": "proposed",
+    "created": "2026-10-09T13:18:25.573488+00:00",
+    "updated": "2026-10-09T13:18:25.573488+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "llm:ai_grading",
+      "title": "Investigate failing `ai_grading` LLM calls",
+      "category": "bug",
+      "severity": "medium",
+      "rationale": "24 production `ai_grading` call(s) failed (success=false). Sample call fc163585-49f0-419b-bda2-c217ae7b23d6.",
+      "change": "Inspect the `ai_grading` call path and its error handling; reproduce with the sample call and address the failure.",
+      "est_size": "M",
+      "confidence": 0.6,
+      "defect_key": "llm-failed/ai_grading",
+      "evidence": [],
+      "id": "60e42b12c8fa",
+      "score": 0.6
+    },
+    "status": "proposed",
+    "created": "2026-10-09T18:29:54.713359+00:00",
+    "updated": "2026-10-09T18:29:54.713359+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "web.public.register,web.public.privacy,web.public.terms,web.public.support",
+      "title": "Underline inline body-copy links instead of relying on color alone",
+      "category": "a11y",
+      "severity": "high",
+      "rationale": "axe's high-severity 'link-in-text-block' rule fires on register (2 elements), privacy (3), terms (4), and support (1) per findings.json. Confirmed in shots/web.public.register.png: the 'Terms of Service' / 'Privacy Policy' links in the signup consent line are only distinguishable by their green color against the surrounding black paragraph, no underline at rest. Grounded in code: web/src/app/register/page.tsx:474,478 use className=\"text-primary hover:underline\" (underline only on :hover), and the identical class=\"text-primary hover:underline\" pattern repeats on ~10 inline links inside the legal body copy \u2014 web/src/app/(legal)/terms/page.tsx:155,157,165,194,203,204 and web/src/app/(legal)/privacy/page.tsx:71,109,118,143,144 and support/page.tsx:96 \u2014 exactly the policy/contact links a reader relies on, on precisely the pages where legibility matters most.",
+      "change": "Change the shared inline-link styling from hover:underline to a persistent underline (e.g. 'text-primary underline underline-offset-2') across register's consent line and the legal-page body-copy links, so links read as links at rest, not only on hover.",
+      "est_size": "S",
+      "confidence": 0.85,
+      "defect_key": "a11y/link-in-text-block",
+      "evidence": [],
+      "id": "44a933d6e982",
+      "score": 2.55
+    },
+    "status": "proposed",
+    "created": "2026-10-09T22:44:51.737929+00:00",
+    "updated": "2026-10-09T22:44:51.737929+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Surface a per-student integrity-confidence trend across assignments, not just per-submission badges",
+      "category": "feature",
+      "severity": "low",
+      "rationale": "api/models/integrity_check.py emits per-problem badges/confidence/reasoning for a single submission, and PRODUCT_CONTEXT.md is explicit that integrity 'raises scrutiny, never auto-flags' \u2014 but the feature map only describes per-submission verdicts, with no aggregation across a student's history. A one-off low-confidence badge is easy to miss in a single review pass; a repeating pattern across several assignments is exactly the kind of scrutiny-raising (not auto-punishing) signal the product's own principle calls for, and isn't surfaced today.",
+      "change": "On the teacher's per-student view, show a lightweight trend indicator (e.g. 'low-confidence on 3 of last 5 submissions') built from existing integrity_check records \u2014 a teacher-reviewed signal, not a flag or score.",
+      "est_size": "M",
+      "confidence": 0.35,
+      "defect_key": "feature/integrity-trend-across-assignments",
+      "evidence": [],
+      "id": "1f81f30f22e3",
+      "score": 0.175
+    },
+    "status": "proposed",
+    "created": "2026-10-09T22:44:51.737929+00:00",
+    "updated": "2026-10-09T22:44:51.737929+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "admin.leads,admin.schools,admin.quality,admin.harness_runs,admin.llm_calls",
+      "title": "Fix CORS so the admin dashboard can reach the API",
+      "category": "bug",
+      "severity": "high",
+      "rationale": "Every admin surface logs console errors: \"Access to fetch at 'http://localhost:8000/v1/admin/...' from origin 'http://localhost:5173' has been blocked by CORS policy: ... No 'Access-Control-Allow-Origin' header\". The admin.leads screenshot confirms the visible effect: a full-page \"Couldn't load this view. Can't reach our servers right now\" error with an API UNREACHABLE badge in the sidebar, instead of any leads data. Every admin list page (leads, schools, quality, harness runs, LLM calls) hits the same /v1/admin/schools preflight failure plus its own endpoint, so the entire ops/quality dashboard is unusable.",
+      "change": "Add the admin dashboard's origin (http://localhost:5173 in dev, and its deployed origin) to the API's CORS allow-list (likely a FastAPI CORSMiddleware config in api/) so admin endpoints return Access-Control-Allow-Origin and preflight OPTIONS succeeds.",
+      "est_size": "S",
+      "confidence": 0.9,
+      "defect_key": "bug/admin-api-cors-blocked",
+      "evidence": [],
+      "id": "041d10cd54a3",
+      "score": 2.7
+    },
+    "status": "proposed",
+    "created": "2026-10-10T05:54:29.811923+00:00",
+    "updated": "2026-10-10T05:54:29.811923+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "demo.hub,demo.present,demo.present_integrity,demo.present_grading,demo.present_generation,demo.present_teacher_day",
+      "title": "Add semantic landmarks to the sales demo app layout",
+      "category": "a11y",
+      "severity": "medium",
+      "rationale": "All six demo app pages report the identical three structural hits: no top-level <main> landmark, an <aside> nested inside another landmark instead of top-level, and 38 elements of page content not contained by any landmark. Since every demo route shares one shell layout, this is a single fix in that shared component. The sales demo is what reps show prospects live, so screen-reader/keyboard navigation of it reflects directly on the product.",
+      "change": "In the demo app's shared shell/layout component, wrap the primary content in a single <main> landmark and move the sidebar <aside> to be a top-level landmark sibling (not nested inside <main> or another section), so axe's landmark-one-main, landmark-complementary-is-top-level, and region checks pass.",
+      "est_size": "S",
+      "confidence": 0.65,
+      "defect_key": "a11y/demo-app-missing-landmarks",
+      "evidence": [],
+      "id": "223a8da1fcaf",
+      "score": 1.3
+    },
+    "status": "proposed",
+    "created": "2026-10-10T05:54:29.811923+00:00",
+    "updated": "2026-10-10T05:54:29.811923+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "One-click reteach set generation from a detected class-wide gap",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "PRODUCT_CONTEXT.md describes teacher-day analytics as already surfacing \"which concepts the class is missing\" and generation as already able to turn a worksheet/topic into a checked problem set, but the two are described as separate flows \u2014 there's no stated bridge where a detected class-wide miss becomes a pre-scoped generation job in one click.",
+      "change": "On the teacher-day analytics view, when a concept is flagged as a class-wide miss, add a button that pre-fills the question-bank generation flow with that concept/topic so the teacher can review and assign a reteach set in one click instead of starting generation from scratch.",
+      "est_size": "M",
+      "confidence": 0.4,
+      "defect_key": "feature/reteach-one-click-from-class-gap",
+      "evidence": [],
+      "id": "d0e7f6fc0a2b",
+      "score": 0.4
+    },
+    "status": "proposed",
+    "created": "2026-10-10T05:54:29.811923+00:00",
+    "updated": "2026-10-10T05:54:29.811923+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "admin.leads,admin.schools,admin.quality,admin.harness_runs,admin.llm_calls",
+      "title": "Add the admin dashboard's dev origin to the API's CORS allowlist",
+      "category": "bug",
+      "severity": "high",
+      "rationale": "All 5 admin surfaces log identical console errors: 'Access to fetch ... from origin http://localhost:5173 has been blocked by CORS policy: ... No Access-Control-Allow-Origin header'. admin.leads.png shows the resulting full-page failure state ('API UNREACHABLE', 'Couldn't load this view'). Root cause confirmed in code: api/config.py:47-53 defines the default `cors_origins` as only `localhost:8081` (mobile) and `localhost:3000` (web) \u2014 the admin dashboard's Vite dev port `localhost:5173` is absent, so every admin API call fails preflight in local dev.",
+      "change": "Add `http://localhost:5173` to the default `cors_origins` list in api/config.py:47-53 (and the CORS_ORIGINS example in .env.example) so the admin dashboard can reach the API out of the box in local dev.",
+      "est_size": "S",
+      "confidence": 0.9,
+      "defect_key": "bug/admin-cors-missing-origin",
+      "evidence": [],
+      "id": "e0c7da4ee61e",
+      "score": 2.7
+    },
+    "status": "proposed",
+    "created": "2026-10-10T12:34:20.150871+00:00",
+    "updated": "2026-10-10T12:34:20.150871+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Resurface resolved weak spots on a spaced-repetition schedule",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "The feature map documents Weak Spots/Review (api/routes/weak_spots.py) for surfacing recurring errors and Practice for unlimited repetition, but nothing re-schedules a concept after a student gets it right once \u2014 there's no mechanism to confirm the fix actually held, so a 'fixed' weak spot can silently relapse and never resurface.",
+      "change": "Add a lightweight spaced-repetition scheduler that re-queues a resolved weak-spot concept back into the student's Practice feed at increasing intervals (e.g. 2/7/21 days) until it's answered correctly unprompted each time, shown as a 'due for review' queue on the existing Review screen.",
+      "est_size": "M",
+      "confidence": 0.4,
+      "defect_key": "feature/weak-spot-spaced-repetition",
+      "evidence": [],
+      "id": "393cb2b94fa4",
+      "score": 0.4
+    },
+    "status": "proposed",
+    "created": "2026-10-10T12:34:20.150871+00:00",
+    "updated": "2026-10-10T12:34:20.150871+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "admin.leads,admin.schools,admin.quality,admin.harness_runs,admin.llm_calls",
+      "title": "Allow the admin dashboard's dev origin in API CORS config",
+      "category": "bug",
+      "severity": "high",
+      "rationale": "Every admin.* surface logs CORS preflight failures against http://localhost:8000/v1/admin/* ('No 'Access-Control-Allow-Origin' header', net::ERR_FAILED) and the screenshot (shots/admin.leads.png) shows the dashboard rendering a full-page 'Couldn't load this view / API UNREACHABLE' error instead of any data. Confirmed in code: api/config.py:47-53 sets `cors_origins` to localhost:8081/3000 plus prod domains, but the dashboard (dashboard/, a Vite app) serves on localhost:5173, which is absent from the list \u2014 so api/middleware/setup.py:31's CORSMiddleware rejects every admin fetch. This isn't a cosmetic a11y hit; it is the entire admin app failing to load any data.",
+      "change": "Add the dashboard's origin(s) to `cors_origins` in api/config.py (at minimum http://localhost:5173 for local dev; confirm and add the deployed dashboard's prod origin too if it's not already covered by an existing entry).",
+      "est_size": "S",
+      "confidence": 0.9,
+      "defect_key": "bug/admin-cors-origin-missing",
+      "evidence": [],
+      "id": "8be036485fb5",
+      "score": 2.7
+    },
+    "status": "proposed",
+    "created": "2026-10-11T05:48:44.405960+00:00",
+    "updated": "2026-10-11T05:48:44.405960+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Give teachers who run multiple sections one cross-section concept-mastery view",
+      "category": "feature",
+      "severity": "low",
+      "rationale": "PRODUCT_CONTEXT.md describes teacher-day analytics as 'which students are slipping and which concepts the class is missing' scoped to grade review 'per section and per student' \u2014 the described surfaces are single-section. A teacher running several sections of the same course has no described way to see which concept is weak across all of them at once, only one section at a time.",
+      "change": "Add a course-level (not just section-level) concept-mastery rollup to the teacher analytics view that aggregates the existing per-section concept-gap signal across all of a teacher's sections for that course.",
+      "est_size": "M",
+      "confidence": 0.35,
+      "defect_key": "feature/multi-section-concept-heatmap",
+      "evidence": [],
+      "id": "45752486c73f",
+      "score": 0.175
+    },
+    "status": "proposed",
+    "created": "2026-10-11T05:48:44.405960+00:00",
+    "updated": "2026-10-11T05:48:44.405960+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "admin.leads,admin.schools,admin.harness_runs,admin.llm_calls",
+      "title": "Add a visible page-level h1 to admin dashboard list pages",
+      "category": "a11y",
+      "severity": "medium",
+      "rationale": "Axe's page-has-heading-one rule fired on Leads, Schools, Harness runs, and LLM calls, but not on Quality \u2014 the screenshot of Leads shows only the sidebar nav item ('Leads') styled active, with no page-body heading at all, unlike what Quality presumably has.",
+      "change": "Add a visible <h1> with the page title (e.g. 'Leads', 'Schools', 'Harness runs', 'LLM calls') to the top of each of those four admin dashboard page components, matching whatever pattern the Quality page already uses.",
+      "est_size": "S",
+      "confidence": 0.8,
+      "defect_key": "a11y/admin-missing-h1",
+      "evidence": [],
+      "id": "8f81cb76da60",
+      "score": 1.6
+    },
+    "status": "proposed",
+    "created": "2026-10-11T12:52:02.374827+00:00",
+    "updated": "2026-10-11T12:52:02.374827+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Add one-click reteach mini-lesson generation from class weak-concept analytics",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "The teacher-day analytics already surface which concepts the class is missing and Practice can generate more problems on a weak spot, but per PRODUCT_CONTEXT.md the feature map stops at 'a path from a struggle signal to a reteach/practice set' \u2014 there's no generated instructional explanation, only more problems. Teachers still have to build the reteach explanation themselves.",
+      "change": "From the teacher-day 'concepts the class is missing' view, add a button that generates a short worked-example mini-lesson (a plain-English explanation plus 2-3 worked problems) for the class's most-missed concept, routed through the existing generation pipeline's answer-verification step before showing it to the teacher for approval.",
+      "est_size": "M",
+      "confidence": 0.45,
+      "defect_key": "feature/reteach-mini-lesson-generation",
+      "evidence": [],
+      "id": "60cc45592504",
+      "score": 0.45
+    },
+    "status": "proposed",
+    "created": "2026-10-11T12:52:02.374827+00:00",
+    "updated": "2026-10-11T12:52:02.374827+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Generate a parent-friendly progress digest from grades and integrity receipts",
+      "category": "feature",
+      "severity": "low",
+      "rationale": "Grading already produces a per-problem written 'receipt' and integrity emits a verdict plus reasoning, but nothing packages that into a guardian-readable summary, and no parent-facing surface exists in the feature map \u2014 this reuses already-generated, already-verified content rather than adding messaging infrastructure (which stays out of scope).",
+      "change": "Add a teacher-triggered export/print view that turns a student's recent grades and integrity verdicts into a one-page plain-English summary (what they did well, what's still shaky, what's being practiced next) the teacher can hand to a guardian \u2014 a generated/printable page, not a messaging feature.",
+      "est_size": "M",
+      "confidence": 0.4,
+      "defect_key": "feature/guardian-progress-digest",
+      "evidence": [],
+      "id": "567954005644",
+      "score": 0.2
+    },
+    "status": "proposed",
+    "created": "2026-10-11T12:52:02.374827+00:00",
+    "updated": "2026-10-11T12:52:02.374827+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "admin.leads,admin.schools,admin.quality,admin.harness_runs,admin.llm_calls",
+      "title": "Add the admin dashboard's dev origin to the API's CORS allowlist",
+      "category": "bug",
+      "severity": "high",
+      "rationale": "All 5 admin surfaces show identical console errors: 'blocked by CORS policy: ... No Access-Control-Allow-Origin header' for every fetch to localhost:8000, and the screenshot for admin.leads renders the app's own 'No response from the backend / API UNREACHABLE' error state full-page \u2014 the dashboard is completely unusable. Root cause confirmed in code: api/config.py:47-53 hardcodes cors_origins to [localhost:8081, localhost:3000, veradicai.com, www.veradicai.com, the vercel domain] \u2014 it never includes http://localhost:5173, which is the dashboard's Vite dev server port (dashboard/ is a Vite app). Every admin page is the same symptom of one missing origin, not 5 separate bugs.",
+      "change": "Add \"http://localhost:5173\" to the cors_origins default list in api/config.py (alongside the existing localhost entries), so the locally-run admin dashboard can call the API without a CORS preflight failure.",
+      "est_size": "S",
+      "confidence": 0.9,
+      "defect_key": "bug/admin-cors-missing-dev-origin",
+      "evidence": [],
+      "id": "af89b7199945",
+      "score": 2.7
+    },
+    "status": "proposed",
+    "created": "2026-10-11T22:01:20.415468+00:00",
+    "updated": "2026-10-11T22:01:20.415468+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "web.public.landing,web.public.demo,web.public.for_districts,web.public.subjects_math,web.public.subjects_physics,web.public.subjects_chemistry,web.public.students,admin.quality,demo.hub,demo.present,demo.present_integrity,demo.present_grading,demo.present_generation,demo.present_teacher_day",
+      "title": "Stop using --color-text-muted on normal-size body/caption text",
+      "category": "a11y",
+      "severity": "high",
+      "rationale": "axe's color-contrast rule fires on nearly every public/demo surface (landing 7 elements, demo 6, for-districts 3, subjects pages 5-10 each, students 10, demo.hub/present* 13 each) \u2014 this isn't scattered noise, it's one systemic issue. web/src/app/globals.css:43-47 documents the root cause itself: '--color-text-secondary is WCAG AA at 14px on --color-bg; --color-text-muted is AA-Large [only]' (i.e. --color-text-muted, #7D7669 on cream, only clears the relaxed large-text threshold). That class is applied in 32 .tsx files across the app, including on small captions/taglines (e.g. the landing page's 'Built for teachers \u00b7 Sold to schools' caption visible in the screenshot) and body copy that doesn't meet the large-text size, so it fails AA for normal text everywhere it's used that way.",
+      "change": "Audit the 32 usages of the `text-muted` utility (backed by --color-text-muted) in web/src/app; for any usage on text under the WCAG large-text threshold (<18.66px bold / <24px regular), swap to `text-secondary` (--color-text-secondary, already documented as AA at 14px) instead. Keep --color-text-muted only for genuinely large-text contexts.",
+      "est_size": "M",
+      "confidence": 0.75,
+      "defect_key": "a11y/muted-text-below-contrast-threshold",
+      "evidence": [],
+      "id": "56544cd047a2",
+      "score": 1.125
+    },
+    "status": "proposed",
+    "created": "2026-10-11T22:01:20.415468+00:00",
+    "updated": "2026-10-11T22:01:20.415468+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "One-click reteach packet generated from the class's missed concepts",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "PRODUCT_CONTEXT.md describes teacher-day analytics surfacing 'which concepts the class is missing' and a 'path from a struggle signal to a reteach/practice set' as the value prop, and generation (api/core/assignment_generation.py) already turns a worksheet/topic into a verified problem set \u2014 but the feature map lists no single action that closes the loop from 'the class is weak on X' straight to 'here is a reteach mini-lesson + practice set for X, ready to assign.' Today the teacher would have to notice the weak concept, then separately open question-bank generation and specify it by hand.",
+      "change": "On the teacher-day analytics view, add a 'Reteach this' action next to each surfaced weak concept that pre-fills the existing generation flow with that concept/topic, so the teacher goes from signal to a ready-to-assign reteach set in one click instead of two disconnected screens.",
+      "est_size": "M",
+      "confidence": 0.5,
+      "defect_key": "feature/reteach-packet-from-missed-concepts",
+      "evidence": [],
+      "id": "6305c274216a",
+      "score": 0.5
+    },
+    "status": "proposed",
+    "created": "2026-10-11T22:01:20.415468+00:00",
+    "updated": "2026-10-11T22:01:20.415468+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Show the student their own integrity/understanding-check result, in plain language",
+      "category": "feature",
+      "severity": "low",
+      "rationale": "PRODUCT_CONTEXT.md describes the integrity understanding-check as emitting 'per-problem badges/confidence/reasoning' that the teacher sees, but the student-facing feature map (Section 4) lists no surface where the student themselves sees *why* they were asked to explain their work or what the check concluded about their understanding \u2014 today it reads as teacher-only tooling bolted onto the student's submission flow.",
+      "change": "After a student completes the understanding-check conversation, show them a short plain-language summary of what it concluded (e.g. 'you clearly explained your steps on problems 1-2; problem 3 needs another look') before returning to their homework view \u2014 closing the loop for the student, not just the teacher.",
+      "est_size": "S",
+      "confidence": 0.45,
+      "defect_key": "feature/student-facing-understanding-explanation",
+      "evidence": [],
+      "id": "8ddc00f5a63d",
+      "score": 0.45
+    },
+    "status": "proposed",
+    "created": "2026-10-11T22:01:20.415468+00:00",
+    "updated": "2026-10-11T22:01:20.415468+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Prompt students to retake a clearer photo when a submission is marked skipped_unreadable",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "PRODUCT_CONTEXT.md notes the integrity check marks an unreadable submission 'skipped_unreadable' instead of penalizing it, but the feature map describes no follow-up action for the student \u2014 today that appears to be a dead end where the problem just stays ungraded.",
+      "change": "When a submission (or an individual problem within it) is flagged skipped_unreadable, surface an in-app nudge on the student's homework-detail screen to retake and resubmit a clearer photo of that problem, closing the loop instead of letting unreadable work silently fall out of grade -> understand.",
+      "est_size": "M",
+      "confidence": 0.4,
+      "defect_key": "feature/unreadable-submission-resubmit-nudge",
+      "evidence": [],
+      "id": "5b7ef0dfc1f0",
+      "score": 0.4
+    },
+    "status": "proposed",
+    "created": "2026-10-12T05:58:52.207592+00:00",
+    "updated": "2026-10-12T05:58:52.207592+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Auto-suggest targeted practice right after a shaky integrity check",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "PRODUCT_CONTEXT.md describes the integrity understanding-check as emitting per-problem badges/verdicts for the teacher's review, and a separate Practice mode that generates problems from a seed/assignment \u2014 but nothing today closes the loop back to the student in the moment their own understanding check comes up shaky. The student-facing follow-up is a real gap in the homework -> grade -> understand -> reteach loop, not a duplicate of existing teacher-facing analytics.",
+      "change": "When an integrity check's verdict for a problem is low-confidence/shaky, immediately offer the student a 'Practice this concept' entry point that generates 2-3 similar problems via the existing practice engine, scoped to that exact problem's concept.",
+      "est_size": "M",
+      "confidence": 0.35,
+      "defect_key": "feature/integrity-practice-nudge",
+      "evidence": [],
+      "id": "5df957ab70ff",
+      "score": 0.35
+    },
+    "status": "proposed",
+    "created": "2026-10-13T00:42:52.110874+00:00",
+    "updated": "2026-10-13T00:42:52.110874+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "One-click reteach set generation from a class-wide concept gap",
+      "category": "feature",
+      "severity": "low",
+      "rationale": "PRODUCT_CONTEXT.md's teacher-day description says analytics surface 'which concepts the class is missing' and there is 'a path from a struggle signal to a reteach/practice set,' but the described path is per-student ('a week of concept practice writes itself' / 'one-click ... the practice writes itself'). A class-level concept gap (e.g. 60% of the section missed the same skill) surfaced by analytics has no described one-click path to a ready-to-assign class-wide reteach set, distinct from the per-student practice flow already shipped.",
+      "change": "On the teacher-day analytics view, when a concept is flagged as class-wide (missed by a configurable threshold of students), add a one-click action that calls the existing assignment-generation engine to draft a class-wide reteach assignment targeting that concept.",
+      "est_size": "M",
+      "confidence": 0.3,
+      "defect_key": "feature/class-wide-reteach-oneclick",
+      "evidence": [],
+      "id": "ed6999c70400",
+      "score": 0.15
+    },
+    "status": "proposed",
+    "created": "2026-10-13T00:42:52.110874+00:00",
+    "updated": "2026-10-13T00:42:52.110874+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Trigger one scaffolded practice problem right after a low-confidence understanding check",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "PRODUCT_CONTEXT.md describes the integrity check as a one-on-one conversation that emits a per-problem confidence/verdict for the teacher, with Practice/Weak-spots as a separate, later review mechanism. Nothing closes the loop back to the student in the same session when a check comes back low-confidence \u2014 the student finishes the chat and moves on, and remediation only happens whenever the teacher next assigns practice.",
+      "change": "When an integrity check verdict is low-confidence/can't-explain for a problem, immediately offer the student one scaffolded practice problem on that concept (reusing the existing practice-generation engine) before they leave the submission screen, instead of waiting for the teacher's next assignment.",
+      "est_size": "M",
+      "confidence": 0.4,
+      "defect_key": "feature/integrity-same-session-remediation",
+      "evidence": [],
+      "id": "f7054414d768",
+      "score": 0.4
+    },
+    "status": "proposed",
+    "created": "2026-10-13T14:14:27.138112+00:00",
+    "updated": "2026-10-13T14:14:27.138112+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Generate a one-paragraph misconception briefing alongside the concept-gap practice set",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "PRODUCT_CONTEXT.md's teacher-day description and the demo.hub screenshot ('See the gap, fix it in one click ... the practice writes itself') show the product already surfaces which class-wide concept is missing and auto-generates practice for it. Neither describes anything that explains WHY students are missing it \u2014 the teacher gets a student list and a worksheet, not the pattern behind the wrong answers.",
+      "change": "When teacher-day surfaces a class-wide concept gap, use the grading data already collected (wrong-answer steps from grading_ai.py) to generate a short note describing the common wrong method or misconception across the affected submissions, shown next to the one-click practice set.",
+      "est_size": "M",
+      "confidence": 0.4,
+      "defect_key": "feature/teacher-misconception-digest",
+      "evidence": [],
+      "id": "c27dcfef26dd",
+      "score": 0.4
+    },
+    "status": "proposed",
+    "created": "2026-10-13T14:14:27.138112+00:00",
+    "updated": "2026-10-13T14:14:27.138112+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "web.public.register,web.public.privacy,web.public.terms,web.public.support",
+      "title": "Give inline prose links a static underline, not just hover:underline",
+      "category": "a11y",
+      "severity": "medium",
+      "rationale": "axe's link-in-text-block rule fired on /register (2 elements), /privacy (3), /terms (4), /support (1) -- links styled only by color with no visible affordance until hover, which fails for non-hover/color-blind users. Confirmed pattern in code: `className=\"text-primary hover:underline\"` (color-only by default) repeated across web/src/app/register/page.tsx:474,478 (Terms of Service / Privacy Policy consent links), web/src/app/(legal)/privacy/page.tsx:71,109,118,143 (mailto/contact links), web/src/app/(legal)/terms/page.tsx:155,157,165,194,203, and web/src/app/(legal)/support/page.tsx:96 -- same hand-rolled class string at every site, no shared component.",
+      "change": "Add a static `underline` (or `underline-offset-2`) class alongside `text-primary` at each cited inline link so the link is distinguishable at rest, not just on hover.",
+      "est_size": "S",
+      "confidence": 0.85,
+      "defect_key": "a11y/link-in-text-block-no-static-underline",
+      "evidence": [],
+      "id": "ed4b2fef6d4f",
+      "score": 1.7
+    },
+    "status": "proposed",
+    "created": "2026-10-13T22:49:38.317178+00:00",
+    "updated": "2026-10-13T22:49:38.317178+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Give students a recap of what the understanding-check surfaced after it runs",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "PRODUCT_CONTEXT.md section 3 describes the integrity understanding-check as emitting 'per-problem badges/confidence/reasoning and an overall verdict' that the teacher reviews, but the feature map (section 4) lists no student-facing summary of their own understanding-check conversation -- students get grades + feedback, but not a closing recap of which steps they explained well vs. struggled to justify. Without it, the one pedagogically rich moment (the student explaining their own reasoning) ends without reinforcing what was learned, leaving the loop teacher-facing only.",
+      "change": "After an understanding-check conversation ends, show the student a short recap (which problems they explained clearly, which concept question tripped them up) on their homework-detail view -- read-only, no new grading logic, no new AI call (reuse the already-stored per-problem reasoning).",
+      "est_size": "M",
+      "confidence": 0.4,
+      "defect_key": "feature/student-understanding-check-recap",
+      "evidence": [],
+      "id": "4e2c5d29d56b",
+      "score": 0.4
+    },
+    "status": "proposed",
+    "created": "2026-10-13T22:49:38.317178+00:00",
+    "updated": "2026-10-13T22:49:38.317178+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Show a concept-gap trend across assignments, not just per-assignment analytics",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "PRODUCT_CONTEXT.md section 3 (Teacher-day) says the teacher gets 'analytics on which students are slipping and which concepts the class is missing' but describes this per the current to-do list, not over time; section 4 lists practice-activity analytics as per-section. There's no described view of whether a concept gap flagged two weeks ago actually closed after a reteach, which is the natural next question after 'fix it in one click'.",
+      "change": "Add a small trend view on the teacher's concept-analytics page: for each concept flagged as a class gap, show whether the miss-rate improved or persisted across the last 2-3 assignments that touched it.",
+      "est_size": "M",
+      "confidence": 0.35,
+      "defect_key": "feature/cross-assignment-concept-trend",
+      "evidence": [],
+      "id": "6d3bd26fba5c",
+      "score": 0.35
+    },
+    "status": "proposed",
+    "created": "2026-10-13T22:49:38.317178+00:00",
+    "updated": "2026-10-13T22:49:38.317178+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "One-click 'reteach packet' generated from a section's aggregated weak spots",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "Teacher-day already surfaces which concepts the class is missing (api/routes/teacher_practice_activity.py, practice_activity.py) and Generation already produces trusted, re-derived problem sets (assignment_generation.py). There's no bridge that turns 'this class is missing factoring' directly into an assignable mini-lesson + practice set without the teacher manually opening Generation and re-specifying the topic.",
+      "change": "Add a 'Generate reteach packet' action on the teacher-day class-insights view that pre-seeds the existing Generation flow with the class's top weak concept(s) (source material + focus pre-filled from practice_activity analytics), producing a short reteach explanation plus a practice set in one step instead of two manual ones.",
+      "est_size": "M",
+      "confidence": 0.5,
+      "defect_key": "feature/reteach-packet-from-weak-spots",
+      "evidence": [],
+      "id": "12e54650982d",
+      "score": 0.5
+    },
+    "status": "proposed",
+    "created": "2026-10-14T11:55:05.740124+00:00",
+    "updated": "2026-10-14T11:55:05.740124+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Link a flagged integrity conversation directly to targeted practice for that student",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "Integrity (integrity_ai.py, integrity_pipeline.py) already stores per-problem badges/confidence/reasoning and the full conversation transcript, and Practice (practice.py) already generates unlimited similar problems from a seed. Today a teacher who sees a student couldn't explain their work has to manually go set up practice for that student/topic \u2014 there's no direct path from 'this understanding check raised scrutiny' to 'assign this student more of exactly this.'",
+      "change": "On the teacher's integrity-check review view, add a one-click 'Assign practice on this' button next to a flagged problem that calls the existing practice generation with that problem's topic/seed and that specific student pre-selected.",
+      "est_size": "M",
+      "confidence": 0.5,
+      "defect_key": "feature/integrity-followup-practice-link",
+      "evidence": [],
+      "id": "edb1dfb51789",
+      "score": 0.5
+    },
+    "status": "proposed",
+    "created": "2026-10-14T11:55:05.740124+00:00",
+    "updated": "2026-10-14T11:55:05.740124+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "admin.leads,admin.schools,admin.quality,admin.harness_runs,admin.llm_calls",
+      "title": "Fix CORS misconfiguration blocking all admin dashboard API calls",
+      "category": "bug",
+      "severity": "high",
+      "rationale": "Console errors on all 5 scanned admin surfaces show identical CORS preflight failures against http://localhost:8000 (/v1/admin/leads, /schools, /quality, /harness-runs, /llm-calls): \"blocked by CORS policy: Response to preflight request doesn't pass access control check: No 'Access-Control-Allow-Origin' header is present\". The admin.leads screenshot confirms the resulting broken state end-to-end: a 'Couldn't load this view \u2014 Can't reach our servers right now' banner and an 'API UNREACHABLE' badge in the sidebar, meaning the entire ops/quality dashboard renders no data.",
+      "change": "Add the admin dashboard's origin (http://localhost:5173 in dev, plus the deployed admin origin) to the API's CORS allow-list so admin dashboard fetches succeed; verify against all 5 affected endpoints (leads, schools, quality, harness-runs, llm-calls).",
+      "est_size": "S",
+      "confidence": 0.9,
+      "defect_key": "bug/admin-cors-blocked",
+      "evidence": [],
+      "id": "c09f576b59ee",
+      "score": 2.7
+    },
+    "status": "proposed",
+    "created": "2026-10-14T17:13:39.879695+00:00",
+    "updated": "2026-10-14T17:13:39.879695+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Generate a targeted reteach set directly from the teacher-day concept-gap view",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "PRODUCT_CONTEXT.md describes teacher-day analytics as surfacing 'which concepts the class is missing' with 'a path from a struggle signal to a reteach/practice set,' and a separate Generation capability already turns a worksheet/topic into a vetted, answer-verified problem set \u2014 but no one-click bridge from an analytics concept-gap signal straight into that generation flow is described.",
+      "change": "Add a 'Generate reteach set' action on the teacher-day concept-gap analytics view that pre-fills the existing generation flow with the struggling concept, so the teacher goes from signal to a ready-to-assign set in one click instead of a manual topic search.",
+      "est_size": "M",
+      "confidence": 0.35,
+      "defect_key": "feature/reteach-pack-from-analytics",
+      "evidence": [],
+      "id": "6eaab28d89e5",
+      "score": 0.35
+    },
+    "status": "proposed",
+    "created": "2026-10-14T17:13:39.879695+00:00",
+    "updated": "2026-10-14T17:13:39.879695+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Label each problem as understanding-verified vs. graded-only on the review view",
+      "category": "feature",
+      "severity": "low",
+      "rationale": "PRODUCT_CONTEXT.md states the integrity check samples 'up to ~3 primary problems' per submission and stores per-problem badges/confidence/reasoning only for the sampled ones, implying problems outside that sample carry no badge today \u2014 but nothing in the described review surfaces distinguishes a verified problem from a graded-only one, understating a real product differentiator (grading alone vs. verified understanding).",
+      "change": "On the grade/homework-review view, render a small 'understanding verified' vs 'graded only' label per problem based on whether it has a stored integrity badge, instead of showing all problems identically.",
+      "est_size": "S",
+      "confidence": 0.3,
+      "defect_key": "feature/understanding-check-coverage-label",
+      "evidence": [],
+      "id": "bf59e497e122",
+      "score": 0.3
+    },
+    "status": "proposed",
+    "created": "2026-10-14T17:13:39.879695+00:00",
+    "updated": "2026-10-14T17:13:39.879695+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Let a student ask a follow-up question about one specific graded problem",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "PRODUCT_CONTEXT.md describes grading as a one-shot LLM call that produces a receipt the teacher reviews, and integrity as a separate one-on-one conversational probe \u2014 but there's no student-facing conversational channel for 'why did I lose points on problem 4', only the static receipt. This stays inside the existing homework->grade->understand loop (tutoring still guides, doesn't change the grade) rather than adding a new surface.",
+      "change": "Add a lightweight chat affordance on each graded problem in the student's homework-detail view that opens a short, scoped conversation (reusing the existing tutor/integrity conversational infra) where the AI walks the student through why that specific grade was given, without altering the stored grade.",
+      "est_size": "M",
+      "confidence": 0.3,
+      "defect_key": "feature/grade-clarification-chat",
+      "evidence": [],
+      "id": "507c0d74f54c",
+      "score": 0.3
+    },
+    "status": "proposed",
+    "created": "2026-10-14T21:43:47.742480+00:00",
+    "updated": "2026-10-14T21:43:47.742480+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Show a per-student integrity-signal trend over time, not just per submission",
+      "category": "feature",
+      "severity": "low",
+      "rationale": "PRODUCT_CONTEXT.md states integrity emits a per-submission badge/verdict that 'raises scrutiny, never auto-flags' and that teacher-day is built around a ranked to-do list \u2014 but the feature map only shows a per-submission trace, with no longitudinal view letting a teacher notice a pattern across several assignments (which is more informative than any single flagged submission, and keeps the human, not the AI, doing the flagging).",
+      "change": "Add a per-student integrity-history panel (reachable from the existing student detail/grade-review view) plotting the existing per-submission badges/verdicts across recent assignments, with no new scoring or auto-flagging logic \u2014 purely a different view of data the integrity pipeline already produces.",
+      "est_size": "M",
+      "confidence": 0.3,
+      "defect_key": "feature/integrity-trend-view",
+      "evidence": [],
+      "id": "fe280b76a7af",
+      "score": 0.15
+    },
+    "status": "proposed",
+    "created": "2026-10-14T21:43:47.742480+00:00",
+    "updated": "2026-10-14T21:43:47.742480+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "web.public.register,web.public.privacy,web.public.terms,web.public.support",
+      "title": "Give inline legal/body links a visible default underline, not hover-only",
+      "category": "a11y",
+      "severity": "medium",
+      "rationale": "axe's 'Links must be distinguishable without relying on color' fires on register (2), privacy (3), terms (4), and support (1). The exact same markup pattern is repeated: register/page.tsx:473-479 renders Terms of Service/Privacy Policy as `className=\"text-primary hover:underline\"`, and the legal page bodies (web/src/app/(legal)/privacy/page.tsx:71,109,118,143-144 and the terms/support equivalents) render inline mailto/support links as `class=\"text-primary hover:underline\"` \u2014 in every case the underline is hover-only, so at rest the link is distinguished from surrounding paragraph text by color alone.",
+      "change": "Change `hover:underline` to a default `underline` (or `underline underline-offset-2` for legibility) on these inline text links in register/page.tsx and the privacy/terms/support legal content, so they're identifiable without relying on color.",
+      "est_size": "S",
+      "confidence": 0.8,
+      "defect_key": "a11y/link-in-text-block-no-underline",
+      "evidence": [],
+      "id": "968ca6529f07",
+      "score": 1.6
+    },
+    "status": "proposed",
+    "created": "2026-10-15T04:41:18.696632+00:00",
+    "updated": "2026-10-15T04:41:18.696632+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Turn a flagged weak concept directly into a scoped reteach assignment",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "PRODUCT_CONTEXT.md describes teacher-day analytics as already surfacing 'which students are slipping and which concepts the class is missing' plus 'a path from a struggle signal to a reteach/practice set' \u2014 but the concrete capability inventory (section 4) only lists per-assignment practice generation and question-bank generation, not a one-click bridge from an analytics flag straight to a pre-scoped assignment. Today the teacher apparently still has to manually open Generation/Question bank and rebuild a set for just the flagged students.",
+      "change": "From the teacher-day 'students who need help' / weak-concept view, add a 'Generate reteach assignment' action that runs the existing verified generation pipeline (assignment_generation.py) pre-scoped to the flagged concept and pre-assigned to only the flagged students, instead of requiring the teacher to start a generation job from scratch.",
+      "est_size": "M",
+      "confidence": 0.35,
+      "defect_key": "feature/analytics-to-targeted-reteach-assignment",
+      "evidence": [],
+      "id": "90004af7573a",
+      "score": 0.35
+    },
+    "status": "proposed",
+    "created": "2026-10-15T04:41:18.696632+00:00",
+    "updated": "2026-10-15T04:41:18.696632+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Show whether a flagged student's understanding improved after a reteach",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "The product's whole loop is homework -> grade -> understand -> reteach, and teacher-day already surfaces who's slipping and lets the teacher assign reteach practice \u2014 but PRODUCT_CONTEXT.md's capability list has no longitudinal view of whether a flagged student's integrity/understanding signal actually improved afterward. Without that, the teacher can act on a flag but never sees if the intervention worked.",
+      "change": "On a student's class/grades view, add a small trend indicator (e.g. last 3 understanding-check verdicts for the concept that triggered the flag) so the teacher can see improvement or persistence after assigning reteach practice.",
+      "est_size": "M",
+      "confidence": 0.3,
+      "defect_key": "feature/reteach-effectiveness-trend",
+      "evidence": [],
+      "id": "aca93153b7a4",
+      "score": 0.3
+    },
+    "status": "proposed",
+    "created": "2026-10-15T04:41:18.696632+00:00",
+    "updated": "2026-10-15T04:41:18.696632+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Verify a reteach actually closed the gap, not just that practice was assigned",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "The product loop is homework \u2192 grade \u2192 understand \u2192 reteach, and weak-spots/practice already close the 'reteach assigned' step, but nothing re-checks whether the student's understanding actually improved afterward \u2014 the loop stops at assignment, not verified resolution.",
+      "change": "When a student completes practice tied to a flagged weak spot, run a short integrity-style understanding probe on their next related submission and surface 'gap closed' vs 'still slipping' on the teacher's weak-spot/analytics view, instead of leaving reteach as a one-way assignment.",
+      "est_size": "M",
+      "confidence": 0.4,
+      "defect_key": "feature/reteach-verification-loop",
+      "evidence": [],
+      "id": "50e6a148ad4e",
+      "score": 0.4
+    },
+    "status": "proposed",
+    "created": "2026-10-15T11:30:00.297463+00:00",
+    "updated": "2026-10-15T11:30:00.297463+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Generate a short written misconception digest after each grading batch",
+      "category": "feature",
+      "severity": "low",
+      "rationale": "Teacher-day analytics today surface which concepts the class is missing as a ranked list, but there's no synthesized, plain-language explanation of the actual misconception pattern a teacher could use directly as Monday talking points \u2014 the gap is between 'here are the weak concepts' and 'here's what's actually going wrong and how to address it'.",
+      "change": "After a grading batch completes, generate a short (2\u20133 sentence) AI-written summary of the dominant misconception across missed problems on a concept, shown alongside the existing concept-analytics ranking on the teacher-day view.",
+      "est_size": "M",
+      "confidence": 0.35,
+      "defect_key": "feature/class-misconception-digest",
+      "evidence": [],
+      "id": "bdb10fea292e",
+      "score": 0.175
+    },
+    "status": "proposed",
+    "created": "2026-10-15T11:30:00.297463+00:00",
+    "updated": "2026-10-15T11:30:00.297463+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Turn a failed integrity check into an immediate targeted practice problem",
+      "category": "feature",
+      "severity": "low",
+      "rationale": "PRODUCT_CONTEXT.md describes integrity's understanding-check as ending in 'badges/confidence/reasoning and an overall verdict' for the teacher, and separately describes Practice as generating problems 'from a seed or an assignment.' These two capabilities exist but aren't described as connected \u2014 a student who can't explain their work today just gets flagged, with no immediate next step for that specific problem until the teacher manually intervenes.",
+      "change": "When an integrity check verdict comes back low-confidence/can't-explain for a specific problem, surface a teacher-approved one-click action that feeds that problem's concept into the existing practice generator (practice.py) to hand the student one targeted follow-up problem on the same skill, closing the understand-to-reteach loop at the individual-student level.",
+      "est_size": "M",
+      "confidence": 0.4,
+      "defect_key": "feature/integrity-followup-practice",
+      "evidence": [],
+      "id": "79e25a57fdb1",
+      "score": 0.2
+    },
+    "status": "proposed",
+    "created": "2026-10-15T17:03:28.798224+00:00",
+    "updated": "2026-10-15T17:03:28.798224+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Let students ask the AI follow-up questions about their own returned grade",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "Grading produces a per-problem 'receipt' with written justification, and integrity already runs a pre-clearance conversational check, but PRODUCT_CONTEXT.md's feature map has no post-grade Q&A -- once a grade is posted the student has no way to ask 'why did I lose points on problem 4' other than asking the teacher. This stays inside the AI loop's 'understand' step and fits the 'tutoring guides, never gives answers' principle since it would be grounded in the receipt/rubric for an already-graded problem, not a live answer-giving tool.",
+      "change": "On the student's graded-submission view, add a small 'Ask about this grade' chat affordance per problem that is grounded in that problem's receipt + rubric (read-only context, not live tutoring on an open assignment) so the student can get the reasoning behind a specific point deduction explained in plain language.",
+      "est_size": "M",
+      "confidence": 0.35,
+      "defect_key": "feature/grade-followup-qa",
+      "evidence": [],
+      "id": "6a42fcaafb34",
+      "score": 0.35
+    },
+    "status": "proposed",
+    "created": "2026-10-15T21:26:17.203863+00:00",
+    "updated": "2026-10-15T21:26:17.203863+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "admin.leads,admin.schools,admin.quality,admin.harness_runs,admin.llm_calls",
+      "title": "Allow the admin dashboard's dev origin in the API's CORS config",
+      "category": "bug",
+      "severity": "high",
+      "rationale": "Every admin surface logs the same console error: \"Access to fetch at 'http://localhost:8000/v1/admin/...' from origin 'http://localhost:5173' has been blocked by CORS policy: ... No 'Access-Control-Allow-Origin' header\". admin.leads.png confirms the user-visible effect: the page never loads data and instead shows an 'API unreachable / No response from the backend' banner with a Retry button. api/config.py:47-53 defines the default cors_origins list as [\"http://localhost:8081\", \"http://localhost:3000\", \"https://veradicai.com\", \"https://www.veradicai.com\", \"https://math-teacher-app-eight.vercel.app\"] \u2014 it omits \"http://localhost:5173\", which is the Vite dev server port the admin dashboard runs on, so every admin route is unusable against a locally-run API.",
+      "change": "Add \"http://localhost:5173\" to the default cors_origins list in api/config.py so the admin dashboard's dev server can call the local API.",
+      "est_size": "S",
+      "confidence": 0.9,
+      "defect_key": "bug/admin-dev-cors-blocked",
+      "evidence": [],
+      "id": "7f63005ff3e1",
+      "score": 2.7
+    },
+    "status": "proposed",
+    "created": "2026-10-16T04:33:37.017964+00:00",
+    "updated": "2026-10-16T04:33:37.017964+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Generate a short reteach mini-lesson for concepts the class is missing, not just more practice",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "PRODUCT_CONTEXT.md describes teacher-day analytics that surface 'which concepts the class is missing' and a one-click path straight to a practice set (demo step 05: 'one click, the practice writes itself'), but there's no shipped path from a missed-concept signal to a short, verified re-explanation of the concept itself (distinct from more practice problems) that a teacher could project or share before assigning practice.",
+      "change": "From the teacher-day 'concepts the class is missing' list, add a 'Generate reteach explainer' action that produces a short, answer-key-verified mini-lesson (worked example + the common mistake pattern already captured in grading data) for that concept, reusing the same re-derivation/verification step generation already applies to question-bank content.",
+      "est_size": "M",
+      "confidence": 0.4,
+      "defect_key": "feature/teacher-concept-reteach-explainer",
+      "evidence": [],
+      "id": "32471e59fc99",
+      "score": 0.4
+    },
+    "status": "proposed",
+    "created": "2026-10-16T04:33:37.017964+00:00",
+    "updated": "2026-10-16T04:33:37.017964+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Show a per-student understanding-check trend over time, not just point-in-time verdicts",
+      "category": "feature",
+      "severity": "low",
+      "rationale": "PRODUCT_CONTEXT.md describes integrity verdicts/badges stored per submission and teacher-day analytics on 'which students are slipping,' but the feature map lists only grade review and class-level analytics \u2014 there's no described view of a single student's understanding-check verdicts plotted over the term, so a teacher currently has to infer a trend from individual submission reviews rather than seeing it directly.",
+      "change": "Add a per-student view (reachable from the student's grade/profile page) that plots their integrity understanding-check verdicts over time, reusing the already-stored per-submission integrity records, so a teacher can see whether a flagged student is improving or persistently struggling.",
+      "est_size": "M",
+      "confidence": 0.35,
+      "defect_key": "feature/student-integrity-trend-view",
+      "evidence": [],
+      "id": "e005efa49308",
+      "score": 0.175
+    },
+    "status": "proposed",
+    "created": "2026-10-16T04:33:37.017964+00:00",
+    "updated": "2026-10-16T04:33:37.017964+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Add capture-time photo quality check before submission",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "PRODUCT_CONTEXT.md notes unreadable submissions are marked skipped_unreadable rather than penalized, implying blurry/cropped photos reach grading and integrity-check today and silently fail there; the feature map lists no capture-time quality feedback in the student submission flow.",
+      "change": "On the student photo-submission flow, run a lightweight blur/crop/glare check (reusing document_vision.py / image_extract.py's extraction confidence signal) immediately after capture, prompting 'this looks blurry \u2014 retake?' before the photo is submitted, instead of only discovering it's unreadable after grading runs.",
+      "est_size": "M",
+      "confidence": 0.4,
+      "defect_key": "feature/photo-capture-quality-check",
+      "evidence": [],
+      "id": "5d2652e39517",
+      "score": 0.4
+    },
+    "status": "proposed",
+    "created": "2026-10-16T11:24:31.042736+00:00",
+    "updated": "2026-10-16T11:24:31.042736+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Let a student flag a specific AI-drafted grade for priority teacher re-review",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "PRODUCT_CONTEXT.md's core principle is that grading pre-fills the teacher's review page and the teacher approves/edits every grade, but the feature map shows no student-side avenue to contest a specific problem's grade \u2014 students only view grades/feedback and practice, with no loop back to the teacher when they think a grade is wrong.",
+      "change": "Add an 'I don't think this is right' action on a graded problem in the student grade view that attaches the student's explanation to that submission's entry in the teacher's grade-review queue, flagged for priority review \u2014 no auto-change to the grade, keeping the teacher-approves-every-grade principle intact.",
+      "est_size": "M",
+      "confidence": 0.4,
+      "defect_key": "feature/student-grade-dispute",
+      "evidence": [],
+      "id": "c04d0e94936c",
+      "score": 0.4
+    },
+    "status": "proposed",
+    "created": "2026-10-16T11:24:31.042736+00:00",
+    "updated": "2026-10-16T11:24:31.042736+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Show teachers whether targeted reteach practice actually closed the gap",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "PRODUCT_CONTEXT.md describes teacher-day as surfacing \"a path from a struggle signal to a reteach/practice set\" via practice-activity analytics, but nothing in the feature map closes the loop by showing whether that assigned practice worked. Teachers get a to-do list to act on, then no visible before/after signal that the student's understanding actually improved on the next related assignment.",
+      "change": "On the teacher-day/analytics view, after a student is assigned reteach practice generated from a weak-spot/struggle signal, show a simple before -> after indicator (e.g. mastery on that concept at assignment time vs. on the next graded submission touching the same concept) so the teacher can see the intervention worked instead of re-discovering the same gap next week.",
+      "est_size": "M",
+      "confidence": 0.4,
+      "defect_key": "feature/reteach-loop-mastery-delta",
+      "evidence": [],
+      "id": "5df1f3a53e4f",
+      "score": 0.4
+    },
+    "status": "proposed",
+    "created": "2026-10-16T16:41:07.022325+00:00",
+    "updated": "2026-10-16T16:41:07.022325+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Feed understanding-check failures into the student's Weak Spots, not just grading errors",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "Per PRODUCT_CONTEXT.md, Weak Spots/Review surfaces \"recurring error patterns,\" and Integrity separately \"probes the student to explain their own steps\" and emits a per-problem verdict for the teacher. The two don't appear connected on the student side: a student who got the right answer but couldn't explain it (an integrity-caught gap) looks identical in their own practice queue to one who just made an arithmetic slip, even though the right next practice problem is different.",
+      "change": "When an integrity check flags \"correct answer, couldn't explain the reasoning\" for a concept, add that as its own Weak Spot category (distinct from a wrong-answer error) so the student's Practice/Review targets conceptual re-explanation, not just repetition of the same mechanical steps.",
+      "est_size": "M",
+      "confidence": 0.35,
+      "defect_key": "feature/integrity-gap-in-weak-spots",
+      "evidence": [],
+      "id": "0c80449743dd",
+      "score": 0.35
+    },
+    "status": "proposed",
+    "created": "2026-10-16T16:41:07.022325+00:00",
+    "updated": "2026-10-16T16:41:07.022325+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Show teachers a diff when they edit an AI-generated answer key before publishing",
+      "category": "feature",
+      "severity": "low",
+      "rationale": "The product's core trust principle (PRODUCT_CONTEXT.md section 5) is \"Generation is verified before it's trusted\" \u2014 answers are independently re-derived and key-checked before the teacher sees them. But once the teacher starts editing that draft in the Generate -> Review -> Refine -> Publish flow (visible in the landing page's own product screenshot), there's no visible record of what the AI originally derived vs. what the teacher changed, so the verified-draft guarantee is invisible after the first edit.",
+      "change": "In the question-bank/assignment generation review step, keep and display the original AI-derived answer alongside the teacher's edited answer (a lightweight diff or \"edited from AI draft\" badge per question) so the verification trail survives teacher edits instead of being silently overwritten.",
+      "est_size": "S",
+      "confidence": 0.3,
+      "defect_key": "feature/generation-edit-audit-trail",
+      "evidence": [],
+      "id": "e684e6a2019c",
+      "score": 0.3
+    },
+    "status": "proposed",
+    "created": "2026-10-16T16:41:07.022325+00:00",
+    "updated": "2026-10-16T16:41:07.022325+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Generate a reteach mini-lesson, not just a practice set, from a flagged misconception",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "PRODUCT_CONTEXT.md describes teacher-day as surfacing 'a path from a struggle signal to a reteach/practice set' \u2014 today that path appears to end at generating more practice problems (`api/core/practice.py`), not reteach material itself. There's a gap between 'see the gap' and 'actually reteach it' that stays inside the existing homework->grade->understand->reteach loop.",
+      "change": "When a concept is flagged as a class-wide or individual weak spot, add a one-click action that generates a short reteach packet (plain-English explanation of the specific misconception, one fully-worked example, and a 2-minute warm-up question) using the same answer-verification pipeline as question generation, surfaced alongside the existing 'practice set' action on the teacher-day/weak-spots view.",
+      "est_size": "M",
+      "confidence": 0.35,
+      "defect_key": "feature/reteach-mini-lesson-generator",
+      "evidence": [],
+      "id": "3921d13c785a",
+      "score": 0.35
+    },
+    "status": "proposed",
+    "created": "2026-10-16T21:10:23.890974+00:00",
+    "updated": "2026-10-16T21:10:23.890974+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Show a per-concept mastery trend over time, not just a point-in-time weak-spot list",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "PRODUCT_CONTEXT.md states the teacher-day value prop is 'which students are slipping and which concepts the class is missing' and weak-spots today 'surfaces recurring error patterns' (`api/routes/weak_spots.py`) \u2014 but as a snapshot, not a trajectory. A teacher can't currently tell slipping (getting worse) apart from a student who's already improving on the same concept.",
+      "change": "On the student/class analytics view, add a small per-concept sparkline or improving/plateaued/worsening indicator computed from the existing graded-submission history, so a flagged concept shows direction of travel, not just current state.",
+      "est_size": "M",
+      "confidence": 0.3,
+      "defect_key": "feature/concept-mastery-trend",
+      "evidence": [],
+      "id": "ecdc55c34296",
+      "score": 0.3
+    },
+    "status": "proposed",
+    "created": "2026-10-16T21:10:23.890974+00:00",
+    "updated": "2026-10-16T21:10:23.890974+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Let a student flag a grade for teacher re-review",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "The product's core principle is 'the teacher sees and approves every AI grade \u2014 nothing auto-posts', but the feature map's only grade-correction path runs one direction: the teacher reviews/edits AI-pre-filled grades. There's no described mechanism for a student who thinks a specific grade is wrong to signal that back, so a misgrade surfaces only if the teacher happens to re-check it. A lightweight flag keeps the teacher as sole approver while catching AI grading mistakes faster.",
+      "change": "Add a 'this looks wrong' flag a student can set on an individual graded problem, which adds that submission to the top of the teacher's grade-review queue with a visible flag indicator \u2014 no auto-regrade, the teacher still makes the call.",
+      "est_size": "S",
+      "confidence": 0.4,
+      "defect_key": "feature/student-grade-flag",
+      "evidence": [],
+      "id": "97315b64eb79",
+      "score": 0.8
+    },
+    "status": "proposed",
+    "created": "2026-10-17T10:45:08.387767+00:00",
+    "updated": "2026-10-17T10:45:08.387767+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Let a student ask the AI why they lost points on a graded problem",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "PRODUCT_CONTEXT.md describes grading as producing 'a per-problem grade with written justification' that pre-fills the teacher's review, and separately describes Learn mode as a guided, chat-based tutor. Today the written justification looks like a static readout to the student \u2014 there's no described surface where a student can follow up conversationally on their own grade ('why did I lose a point on #3?'). This closes the grade -> understand loop for the student the same way the integrity check already does it for pre-submission work, using the tutoring-guides-not-answers pattern that already exists in Learn mode.",
+      "change": "On the student's graded-submission view, add a 'ask about this problem' entry point per problem that opens a short guided chat seeded with that problem's grading justification, using the same guide-don't-give-answers tutor pattern as Learn mode.",
+      "est_size": "M",
+      "confidence": 0.45,
+      "defect_key": "feature/grade-explain-chat",
+      "evidence": [],
+      "id": "4c4723b33053",
+      "score": 0.45
+    },
+    "status": "proposed",
+    "created": "2026-10-17T10:45:08.387767+00:00",
+    "updated": "2026-10-17T10:45:08.387767+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Give students their own concept-mastery trend view",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "PRODUCT_CONTEXT.md describes teacher-day analytics as showing 'which concepts the class is missing' and Weak Spots as surfacing a student's recurring error patterns to review, but the only student-facing historical surfaces listed are a plain session History (list+detail) and per-assignment practice-history \u2014 there's no described view where a student sees their own improvement over time on a given concept. Surfacing the trend (not just the current weak list) gives students a reason to keep practicing and mirrors, at student scale, the visibility the product already gives teachers at class scale.",
+      "change": "Add a per-concept mastery-over-time chart to the student's Weak Spots/Review screen, built from existing practice and grading history data, so a student can see a concept trending up after repeated practice rather than only seeing today's weak list.",
+      "est_size": "M",
+      "confidence": 0.4,
+      "defect_key": "feature/student-mastery-trend",
+      "evidence": [],
+      "id": "637553340644",
+      "score": 0.4
+    },
+    "status": "proposed",
+    "created": "2026-10-17T10:45:08.387767+00:00",
+    "updated": "2026-10-17T10:45:08.387767+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Show teachers a per-student integrity trend across assignments, not just per-submission badges",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "The integrity check already emits a verdict/badge per submission and is explicitly designed to 'raise scrutiny, never auto-flag,' but the feature map (grade review per section/student) shows no longitudinal view \u2014 a teacher looking at one submission can't tell whether a low-confidence verdict is a one-off or a repeating pattern worth a conversation with the student.",
+      "change": "Add a small trend strip (last 5-10 submissions' integrity verdicts) to the teacher's per-student grade review page, rendered from existing integrity_check records already stored per submission \u2014 no new scoring logic, just surfacing what's already captured.",
+      "est_size": "M",
+      "confidence": 0.45,
+      "defect_key": "feature/teacher-integrity-trend-view",
+      "evidence": [],
+      "id": "832e6a66ea23",
+      "score": 0.45
+    },
+    "status": "proposed",
+    "created": "2026-10-17T15:36:43.577356+00:00",
+    "updated": "2026-10-17T15:36:43.577356+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Show students a mastery/growth trend over time, not just current weak spots",
+      "category": "feature",
+      "severity": "low",
+      "rationale": "weak_spots.py surfaces a student's current recurring error patterns, but the feature map has no longitudinal 'you're improving on X' view on the student side of the loop \u2014 students doing Practice/Review repeatedly have no way to see whether their accuracy on a topic is actually trending up, which is a core motivator for continued self-study.",
+      "change": "Add a simple accuracy-over-time trend chart per topic/weak-spot to the student's Review/History screen, computed from existing practice and submission history rather than new tracking infrastructure.",
+      "est_size": "M",
+      "confidence": 0.4,
+      "defect_key": "feature/student-growth-trend",
+      "evidence": [],
+      "id": "2df66437ca5a",
+      "score": 0.2
+    },
+    "status": "proposed",
+    "created": "2026-10-17T15:36:43.577356+00:00",
+    "updated": "2026-10-17T15:36:43.577356+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "admin.leads,admin.schools,admin.harness_runs,admin.llm_calls",
+      "title": "Add a page-level h1 to Leads, Schools, Harness runs, and LLM calls admin views",
+      "category": "a11y",
+      "severity": "medium",
+      "rationale": "axe 'page-has-heading-one' fires on these four admin pages. The Quality page (not flagged) renders a large serif h1 ('Solution quality'); the other list-style admin pages apparently render only the left-nav label as text with no top-level heading on the content pane.",
+      "change": "Give each of these admin content panes the same page-title h1 pattern already used on the Quality page, instead of relying on the sidebar nav item as the only text cue.",
+      "est_size": "S",
+      "confidence": 0.7,
+      "defect_key": "a11y/missing-h1-heading",
+      "evidence": [],
+      "id": "de993a4783c2",
+      "score": 1.4
+    },
+    "status": "proposed",
+    "created": "2026-10-17T20:41:22.104682+00:00",
+    "updated": "2026-10-17T20:41:22.104682+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "One-click push of a reteach micro-lesson to the whole section from the class concept-gap signal",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "Teacher-day already surfaces 'which concepts the class is missing' and can hand an individual struggling student a practice set, but there's no path from that class-wide signal to a class-wide reteach \u2014 today the loop only closes at the individual-practice level.",
+      "change": "Reuse the Learn-mode step-decomposition engine to auto-generate a short explainer + worked example for whichever concept teacher-day flags as most-missed, and let the teacher assign it to the entire section in one click instead of only generating per-student practice.",
+      "est_size": "M",
+      "confidence": 0.4,
+      "defect_key": "feature/reteach-microlesson-push",
+      "evidence": [],
+      "id": "f04326ca69d2",
+      "score": 0.4
+    },
+    "status": "proposed",
+    "created": "2026-10-17T20:41:22.104682+00:00",
+    "updated": "2026-10-17T20:41:22.104682+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "demo.present,demo.present_integrity,demo.present_grading,demo.present_generation,demo.present_teacher_day",
+      "title": "Add the missing /present/* routes to the sales demo",
+      "category": "bug",
+      "severity": "high",
+      "rationale": "All five '/present*' screenshots (present, present/integrity, present/grading, present/generation, present/teacher-day) are byte-for-byte identical to demo.hub.png and carry the exact same a11y hit counts (13 color-contrast, 1 aside, 1 main, 38 region) \u2014 proof they all rendered the hub, not the intended story. demo/src/App.tsx only registers routes at '/', '/integrity', '/grading', '/generation', '/teacher-day' (no '/present' prefix and no '/present' index at all); its catch-all `<Route path=\"*\" element={<Navigate to=\"/\" replace />}>` silently swallows every '/present/...' URL back to the hub. PRODUCT_CONTEXT.md documents the intended design explicitly as 'Hub (/) + present mode (/present)' with the four stories underneath it, so this is a routing mismatch against the product's own spec, not a theoretical nitpick.",
+      "change": "In demo/src/App.tsx, add routes under '/present' \u2014 mount '/present' itself (index/hub alias) and '/present/integrity', '/present/grading', '/present/generation', '/present/teacher-day' pointing at IntegritySet/GradingSet/GenerationSet/TeacherDaySet inside the existing StoryLayout \u2014 so a bookmarked or shared present-mode URL opens its story instead of bouncing to the front door.",
+      "est_size": "S",
+      "confidence": 0.9,
+      "defect_key": "bug/demo-present-routes-missing",
+      "evidence": [],
+      "id": "ec81c89a3976",
+      "score": 2.7
+    },
+    "status": "proposed",
+    "created": "2026-10-18T04:36:58.653090+00:00",
+    "updated": "2026-10-18T04:36:58.653090+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "admin.leads,admin.schools,admin.quality,admin.harness_runs,admin.llm_calls",
+      "title": "Add the dashboard's dev origin to the API's CORS allow-list",
+      "category": "bug",
+      "severity": "high",
+      "rationale": "Every admin surface's console_errors show the same CORS preflight failure ('No Access-Control-Allow-Origin header') from http://localhost:5173 to http://localhost:8000/v1/admin/*, and every admin screenshot is stuck on a dead 'Couldn't load this view / API unreachable' state with none of the real dashboard content ever rendering. api/config.py:47-53 hardcodes cors_origins to only localhost:8081, localhost:3000, veradicai.com, www.veradicai.com, and one Vercel preview URL \u2014 localhost:5173, the Vite dev port the standalone `dashboard/` app runs on (confirmed via dashboard/vite.config), is simply absent, so the browser blocks every admin API call before it leaves the page.",
+      "change": "Add \"http://localhost:5173\" to the default cors_origins list in api/config.py:47 so the admin dashboard can reach the API in local/dev; verify the dashboard's deployed production origin is also present in that list.",
+      "est_size": "S",
+      "confidence": 0.85,
+      "defect_key": "bug/admin-cors-missing-dashboard-origin",
+      "evidence": [],
+      "id": "9036cef76da2",
+      "score": 2.55
+    },
+    "status": "proposed",
+    "created": "2026-10-18T04:36:58.653090+00:00",
+    "updated": "2026-10-18T04:36:58.653090+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Auto-suggest a per-student (not just whole-class) reteach assignment",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "api/routes/teacher_insights.py (the Student Insights tab) explicitly scopes its problem-level reteach signal to the whole class only \u2014 its own docstring says 'Whole class only \u2014 no per-student lists' \u2014 and the one practice set it already builds is for the whole section. There's no path from 'this specific student got this specific problem wrong' straight to an auto-assigned, individually-targeted practice set for that student; a teacher has to notice the pattern and hand-assign practice themselves. This stays inside the grade -> understand -> reteach loop, just closes it at the individual level the code says it doesn't cover yet.",
+      "change": "From an approved low/zero grade on a problem, offer a one-click 'assign targeted practice to this student' action that generates a small practice set (via the existing practice generation pipeline) scoped to just that student and that problem/concept.",
+      "est_size": "M",
+      "confidence": 0.4,
+      "defect_key": "feature/per-student-targeted-reteach",
+      "evidence": [],
+      "id": "1913fd3eb99b",
+      "score": 0.4
+    },
+    "status": "proposed",
+    "created": "2026-10-18T04:36:58.653090+00:00",
+    "updated": "2026-10-18T04:36:58.653090+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Let a teacher turn a surfaced weak concept directly into a reteach assignment",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "PRODUCT_CONTEXT.md describes the teacher-day flow as ending with 'a path from a struggle signal to a reteach/practice set... one click \u2014 the practice writes itself' and separately states the reteach loop is 'the handful of students who need them first... then a path from a struggle signal to a reteach/practice set.' It's unclear from the feature map whether the concept-level (not just per-student) struggle signal on the class analytics view already has a direct 'generate assignment for this concept' action, versus requiring the teacher to navigate to question-bank/generation separately.",
+      "change": "On the teacher-day class analytics view (teacher_practice_activity.py-backed UI), add a one-click action on each flagged weak concept that pre-fills the assignment-generation flow (assignment_generation.py) with that concept and the students who need it, cutting the struggle-signal-to-assignment path from multiple navigations to one.",
+      "est_size": "M",
+      "confidence": 0.4,
+      "defect_key": "feature/one-click-reteach-from-weak-concept",
+      "evidence": [],
+      "id": "0b4ab2b51603",
+      "score": 0.4
+    },
+    "status": "proposed",
+    "created": "2026-10-18T11:05:11.456120+00:00",
+    "updated": "2026-10-18T11:05:11.456120+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Surface the exact moment a student couldn't explain their work, not just the badge",
+      "category": "feature",
+      "severity": "low",
+      "rationale": "The integrity understanding-check stores the full conversation per submission for audit (integrity_pipeline.py), but per the product principle that 'a teacher always makes the call,' the teacher currently has to open and read the full transcript to see why a student was flagged \u2014 there's no shipped summary.",
+      "change": "On a flagged integrity result, show a one-line quoted excerpt plus concept tag pulled from the stored conversation (e.g. \"couldn't restate why they combined like terms\") next to the badge, so the teacher can judge without reading the whole transcript turn-by-turn.",
+      "est_size": "S",
+      "confidence": 0.35,
+      "defect_key": "feature/integrity-flag-excerpt",
+      "evidence": [],
+      "id": "fd842ca37548",
+      "score": 0.35
+    },
+    "status": "proposed",
+    "created": "2026-10-18T15:57:24.140911+00:00",
+    "updated": "2026-10-18T15:57:24.140911+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Add a one-click \"generate reteach set\" action from a flagged weak concept",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "PRODUCT_CONTEXT.md describes Teacher-day analytics surfacing \"which concepts the class is missing\" and a separate Generation capability that turns a worksheet/topic into a problem set \u2014 but the feature map lists no documented handoff between the two. A teacher who sees a weak concept still has to manually start a new generation flow and re-type/re-upload the topic, breaking the homework -> grade -> understand -> reteach loop right at the reteach step.",
+      "change": "From a flagged weak-concept row in the teacher-day/analytics view, add a \"Generate reteach set\" button that pre-fills the question-bank generation flow with that concept so the teacher lands on a ready-to-review problem set in one click instead of starting generation from scratch.",
+      "est_size": "M",
+      "confidence": 0.4,
+      "defect_key": "feature/concept-to-reteach-handoff",
+      "evidence": [],
+      "id": "e3b62bf64a28",
+      "score": 0.4
+    },
+    "status": "proposed",
+    "created": "2026-10-18T20:45:05.021698+00:00",
+    "updated": "2026-10-18T20:45:05.021698+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Give students a plain-language view of their own integrity check result",
+      "category": "feature",
+      "severity": "low",
+      "rationale": "PRODUCT_CONTEXT.md describes the integrity check storing the full conversation and emitting badges/reasoning for the teacher's audit, and states the principle that integrity \"raises scrutiny, it does not auto-punish.\" The feature map lists no student-facing view of that result \u2014 a flagged student currently has no way to see what was asked or why, which undercuts the learning value of a check that's supposed to surface understanding gaps to the student, not just the teacher.",
+      "change": "Once a teacher has reviewed a submission, surface a short read-only summary of the integrity check (what was asked, how the student answered, the verdict) in the student's own submission/history view.",
+      "est_size": "S",
+      "confidence": 0.35,
+      "defect_key": "feature/student-integrity-explanation",
+      "evidence": [],
+      "id": "7a69c5aa4ebe",
+      "score": 0.35
+    },
+    "status": "proposed",
+    "created": "2026-10-18T20:45:05.021698+00:00",
+    "updated": "2026-10-18T20:45:05.021698+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Generate a short AI reteach brief for the class's top missed concept",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "The product overview states teacher-day analytics already surface 'which concepts the class is missing' and point to 'a path from a struggle signal to a reteach/practice set,' but the only existing path from there is regenerating more practice problems (api/core/practice.py) \u2014 there's no AI-authored explanation of *why* students are missing a concept or a ready warm-up a teacher can open class with. A short, teacher-reviewable 'here's the likely misconception, here's a 5-minute warm-up' brief extends the existing analytics signal into usable pedagogy, staying inside the homework->grade->understand->reteach loop (not a new LMS surface).",
+      "change": "Add a 'Generate reteach brief' action on the teacher-day concept-gap view that calls a new AI prompt (reusing the existing class-analytics data already computed for the to-do list) to draft: (1) the likely misconception behind the missed concept, (2) a 2-3 problem warm-up with worked solutions, verified the same way generated assignments are today before the teacher sees it.",
+      "est_size": "M",
+      "confidence": 0.4,
+      "defect_key": "feature/class-level-reteach-brief",
+      "evidence": [],
+      "id": "9710e6a245be",
+      "score": 0.4
+    },
+    "status": "proposed",
+    "created": "2026-10-19T04:42:16.863228+00:00",
+    "updated": "2026-10-19T04:42:16.863228+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Let teachers draft a next assignment seeded from class weak-spot data, not just a worksheet/topic",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "Generation today starts from 'a worksheet (or a topic)' per the product overview \u2014 it doesn't start from the class's own weak-spot/analytics data that teacher-day already computes. Closing the reteach loop today means a teacher has to manually notice which concepts are weak, then separately pick a topic to generate against. A one-click 'draft an assignment targeting the class's current weak spots' bridges the two systems that already exist (practice_activity analytics + assignment_generation) without inventing new infrastructure.",
+      "change": "Add a 'From weak spots' source option alongside upload/ai_generated/library/manual in the assignment-generation flow that seeds question_bank_generation.py with the class's current top missed concepts (from teacher_practice_activity.py analytics) instead of a worksheet, then runs through the existing answer-verification pipeline before the teacher reviews it.",
+      "est_size": "M",
+      "confidence": 0.35,
+      "defect_key": "feature/weak-spot-driven-generation",
+      "evidence": [],
+      "id": "0ea46dc249c9",
+      "score": 0.35
+    },
+    "status": "proposed",
+    "created": "2026-10-19T04:42:16.863228+00:00",
+    "updated": "2026-10-19T04:42:16.863228+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Give the student a short self-reflection recap after their understanding-check conversation",
+      "category": "feature",
+      "severity": "low",
+      "rationale": "The integrity understanding-check (api/core/integrity_ai.py) currently emits badges/confidence/reasoning for the teacher only, per the product overview. The student who just had the conversation gets no closing summary of what it revealed about their own understanding \u2014 a missed opportunity to reinforce learning right when it's freshest, and consistent with 'tutoring guides, it doesn't give answers' since it would recap the student's own reasoning, not reveal the grade.",
+      "change": "After the understanding-check conversation ends, show the student a short non-graded recap card (e.g. 'You explained the setup clearly but weren't sure why you flipped the inequality') generated from the same conversation transcript already stored, without exposing the verdict/badge that's reserved for the teacher.",
+      "est_size": "S",
+      "confidence": 0.35,
+      "defect_key": "feature/student-integrity-takeaway",
+      "evidence": [],
+      "id": "f8ec15eb03de",
+      "score": 0.35
+    },
+    "status": "proposed",
+    "created": "2026-10-19T04:42:16.863228+00:00",
+    "updated": "2026-10-19T04:42:16.863228+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "llm:decompose",
+      "title": "Investigate failing `decompose` LLM calls",
+      "category": "bug",
+      "severity": "medium",
+      "rationale": "3 production `decompose` call(s) failed (success=false). Sample call 99d8489d-a328-4036-8fe8-833dab202d6f.",
+      "change": "Inspect the `decompose` call path and its error handling; reproduce with the sample call and address the failure.",
+      "est_size": "M",
+      "confidence": 0.6,
+      "defect_key": "llm-failed/decompose",
+      "evidence": [],
+      "id": "63ab0dce5368",
+      "score": 0.6
+    },
+    "status": "proposed",
+    "created": "2026-10-19T05:15:08.048881+00:00",
+    "updated": "2026-10-19T05:15:08.048881+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "admin.leads,admin.schools,admin.quality,admin.harness_runs,admin.llm_calls",
+      "title": "Allow the admin dashboard origin in the API's CORS allow-list",
+      "category": "bug",
+      "severity": "high",
+      "rationale": "Console errors on all 5 admin surfaces show the browser blocking every admin API call: \"Access to fetch at 'http://localhost:8000/v1/admin/...' from origin 'http://localhost:5173' has been blocked by CORS policy: ... No 'Access-Control-Allow-Origin' header\". Confirmed in code: api/config.py's cors_origins list (and .env.example's CORS_ORIGINS) only contains http://localhost:8081 and http://localhost:3000 plus prod/Vercel domains \u2014 http://localhost:5173, the documented port for the admin dashboard (dashboard/vite.config.ts, DEVELOPMENT.md, tests/harness/improver/surfaces.py), is never in the list. The admin.leads screenshot shows the resulting broken state: a persistent \"No response from the backend\" banner and \"Couldn't load this view / API UNREACHABLE\".",
+      "change": "Add \"http://localhost:5173\" to the cors_origins list in api/config.py and to CORS_ORIGINS in .env.example so CORSMiddleware allows preflight requests from the admin dashboard's dev origin.",
+      "est_size": "S",
+      "confidence": 0.95,
+      "defect_key": "bug/admin-cors-misconfigured",
+      "evidence": [],
+      "id": "9f4074a2dd61",
+      "score": 2.85
+    },
+    "status": "proposed",
+    "created": "2026-10-19T13:15:06.722232+00:00",
+    "updated": "2026-10-19T13:15:06.722232+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Generate a projectable reteach mini-lesson from a class-wide missed concept, not just more practice",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "PRODUCT_CONTEXT.md's Teacher-day description says there's \"a path from a struggle signal to a reteach/practice set\" today, but the only generation capabilities described (Generation, Practice) produce more problems, not a short teachable walkthrough a teacher can run at the board in the few minutes before class starts.",
+      "change": "When teacher-day analytics surface a concept missed class-wide, add a one-click \"Generate reteach walkthrough\" that produces a short worked-example explainer (not another problem set) for the teacher to project and teach from.",
+      "est_size": "M",
+      "confidence": 0.4,
+      "defect_key": "feature/class-reteach-minilesson",
+      "evidence": [],
+      "id": "1c1609aba311",
+      "score": 0.4
+    },
+    "status": "proposed",
+    "created": "2026-10-19T13:15:06.722232+00:00",
+    "updated": "2026-10-19T13:15:06.722232+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Let a student attach a clarification note to a graded problem before the teacher approves it",
+      "category": "feature",
+      "severity": "low",
+      "rationale": "PRODUCT_CONTEXT.md describes grading as AI-drafted and teacher-approved, and integrity checks as the AI probing the student \u2014 but nothing lets the student explain their own reasoning back to the teacher before a grade is finalized. Today the \"explain yourself\" direction only flows AI-to-student, never student-to-teacher, which is the one place a human-in-the-loop product like this would benefit from the student's own voice.",
+      "change": "Add an optional short note field on a graded problem in the student's view (e.g. \"why I think I lost points\") that surfaces inline next to that problem in the teacher's grade-review queue, for the teacher to read before approving the grade.",
+      "est_size": "S",
+      "confidence": 0.35,
+      "defect_key": "feature/student-grade-clarification-note",
+      "evidence": [],
+      "id": "b9fd044d1ede",
+      "score": 0.35
+    },
+    "status": "proposed",
+    "created": "2026-10-19T13:15:06.722232+00:00",
+    "updated": "2026-10-19T13:15:06.722232+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "web.public.register,web.public.privacy,web.public.terms,web.public.support",
+      "title": "Underline inline body-text links instead of relying on color alone",
+      "category": "a11y",
+      "severity": "medium",
+      "rationale": "axe 'link-in-text-block' fires on /register (2 elements), /privacy (3), /terms (4), and /support (1). All four pages use the same inline pattern, `className=\"text-primary hover:underline\"` (web/src/app/register/page.tsx:474,478; web/src/app/(legal)/terms/page.tsx:155,157,165,194,203,204; web/src/app/(legal)/privacy/page.tsx:71,109,118,143,144; web/src/app/(legal)/support/page.tsx:40,69,96) \u2014 the underline only appears on hover, so in the resting state these links (e.g. 'Terms of Service', 'Privacy Policy' inside the register page's signup disclaimer) are distinguished from surrounding text by color alone, which fails for colorblind or low-vision readers.",
+      "change": "Change the repeated `text-primary hover:underline` className to `text-primary underline` (or `underline underline-offset-2`) at each of the listed call sites so inline links are visibly distinct at rest, not just on hover.",
+      "est_size": "S",
+      "confidence": 0.85,
+      "defect_key": "a11y/link-color-only-in-text",
+      "evidence": [],
+      "id": "a07d46c471f8",
+      "score": 1.7
+    },
+    "status": "proposed",
+    "created": "2026-10-19T22:27:53.858356+00:00",
+    "updated": "2026-10-19T22:27:53.858356+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "One-click 'reteach pack' generator from a class's missed concepts",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "The product overview says teacher-day analytics surface 'which concepts the class is missing' and that generation already turns a worksheet/topic into a trusted, re-derived problem set (api/core/assignment_generation.py) \u2014 but there's no described bridge from 'the class is missing concept X' straight to 'here's a fresh, already-verified practice set targeting X, ready to assign.' Today the teacher would have to manually start a new generation job and specify the topic themselves.",
+      "change": "On the teacher-day / class analytics view, when a concept is flagged as a class-wide miss, add a 'Generate reteach set' action that pre-fills the existing question-bank generation flow with that concept and the students who missed it, producing a ready-to-assign practice set in one click instead of a manual topic lookup.",
+      "est_size": "M",
+      "confidence": 0.5,
+      "defect_key": "feature/class-reteach-pack-generator",
+      "evidence": [],
+      "id": "ad56abdba65e",
+      "score": 0.5
+    },
+    "status": "proposed",
+    "created": "2026-10-19T22:27:53.858356+00:00",
+    "updated": "2026-10-19T22:27:53.858356+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Flag a single question with an unusually high miss-rate during grade review",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "Grading pre-fills the teacher's review page per-problem, and class analytics exist at the aggregate level, but the product overview doesn't describe any per-question signal inside the grade-review flow itself \u2014 a teacher reviewing one student's graded homework currently can't tell whether a given wrong answer is an isolated mistake or a question the whole class is bombing (which would point to a confusing question or a genuine class-wide gap) without leaving the review screen.",
+      "change": "In the section/assignment grade-review page (api/routes/teacher_grades.py), compute a per-question miss-rate across the section's graded submissions and surface a small inline badge ('6/24 missed this') next to that problem wherever a teacher is reviewing it, so the signal is visible at the point of decision rather than only in a separate analytics view.",
+      "est_size": "M",
+      "confidence": 0.45,
+      "defect_key": "feature/grading-question-anomaly-flag",
+      "evidence": [],
+      "id": "1057c6b2d58e",
+      "score": 0.45
+    },
+    "status": "proposed",
+    "created": "2026-10-19T22:27:53.858356+00:00",
+    "updated": "2026-10-19T22:27:53.858356+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Show a per-student understanding-check trend over time, not just per-submission badges",
+      "category": "feature",
+      "severity": "low",
+      "rationale": "The integrity pipeline emits a per-problem badge/verdict per submission and stores every conversation turn for audit (api/core/integrity_ai.py, api/models/integrity_check.py), and student history exists as a list + detail view \u2014 but the overview describes no longitudinal rollup of those verdicts. A single low verdict is a snapshot; a teacher deciding whether to intervene needs to know if a student's understanding checks are trending down over several assignments, not just that the latest one flagged.",
+      "change": "Add a simple trend indicator (e.g. last 5 integrity verdicts as a sparkline or up/down arrow) to the student insights / history view, computed from existing stored integrity_check records \u2014 no new AI call required, just an aggregation over data already captured.",
+      "est_size": "S",
+      "confidence": 0.45,
+      "defect_key": "feature/integrity-trend-over-time",
+      "evidence": [],
+      "id": "421547596068",
+      "score": 0.45
+    },
+    "status": "proposed",
+    "created": "2026-10-19T22:27:53.858356+00:00",
+    "updated": "2026-10-19T22:27:53.858356+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Let a student ask a guided follow-up question about a specific published grade",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "The product's understanding-check chat runs once, pre-grade, to probe whether the student understood their own work. Per PRODUCT_CONTEXT.md, nothing closes the loop the other direction: once the teacher approves/publishes a grade with its per-problem 'receipt' justification, the student has no way to ask the AI why they lost points on problem N \u2014 they can only see the receipt text or retake practice blind to what they misunderstood.",
+      "change": "On the published grade view, add a 'Ask about this problem' entry point that opens a tutor-guided chat scoped to that problem's receipt/justification \u2014 guiding the student to see their own error, not just restating the answer, consistent with the existing 'tutoring guides, never gives answers' principle.",
+      "est_size": "M",
+      "confidence": 0.4,
+      "defect_key": "feature/post-grade-ask-about-grade-chat",
+      "evidence": [],
+      "id": "84eba1173bac",
+      "score": 0.4
+    },
+    "status": "proposed",
+    "created": "2026-10-20T04:51:54.640889+00:00",
+    "updated": "2026-10-20T04:51:54.640889+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Turn a surfaced concept gap directly into a reteach practice set",
+      "category": "feature",
+      "severity": "low",
+      "rationale": "PRODUCT_CONTEXT.md describes teacher-day analytics as already identifying 'which concepts the class is missing' and says there's 'a path from a struggle signal to a reteach/practice set,' and separately that Practice can 'generate unlimited similar problems from a seed or an assignment.' But the concept-level signal (the missed concept itself, not a single assignment) and the generation engine aren't described as directly wired together \u2014 today a teacher who sees 'the class is weak on factoring' still has to go manually create or pick an assignment to target it.",
+      "change": "On the teacher's concept-gap signal (wherever 'which concepts the class is missing' is surfaced), add a one-click action that calls the existing verified generation pipeline to draft a short reteach practice set scoped to that exact concept, pre-filled and ready for the teacher to review/assign \u2014 closing struggle-signal -> reteach without a manual detour through the question bank.",
+      "est_size": "M",
+      "confidence": 0.45,
+      "defect_key": "feature/one-click-reteach-from-concept-gap",
+      "evidence": [],
+      "id": "6b39ddf561d7",
+      "score": 0.225
+    },
+    "status": "proposed",
+    "created": "2026-10-20T11:38:30.462522+00:00",
+    "updated": "2026-10-20T11:38:30.462522+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Let a student open a short chat to understand a specific grading correction",
+      "category": "feature",
+      "severity": "low",
+      "rationale": "PRODUCT_CONTEXT.md states grading produces a per-problem 'receipt' with written justification that pre-fills the teacher's review, and that the integrity check is the one place a conversational agent probes a student's understanding \u2014 but that conversation runs before/around grading, not after a teacher has approved a correction. A student who gets a problem marked wrong today sees the written receipt but has no way to ask 'why is this wrong' in the moment, which is exactly the 'understand' step the product is built around.",
+      "change": "On a published/approved grade, add an optional short tutor-mode chat (reusing the existing Learn-mode step-decomposition tutor, which already 'guides, never gives answers') scoped to the one problem the student got wrong, seeded with the grading receipt so the conversation starts from the specific mistake instead of a generic re-explanation.",
+      "est_size": "M",
+      "confidence": 0.4,
+      "defect_key": "feature/post-grade-explain-my-mistake-chat",
+      "evidence": [],
+      "id": "3faf49eb12ff",
+      "score": 0.2
+    },
+    "status": "proposed",
+    "created": "2026-10-20T11:38:30.462522+00:00",
+    "updated": "2026-10-20T11:38:30.462522+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Let a student ask \"why did I lose points here?\" right from their published grade",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "Today the understanding-check conversation only happens once, before the teacher's grade is finalized (integrity_pipeline.py); once a grade is published there's no self-serve way for the student to interrogate a specific wrong/partial answer \u2014 they wait for a teacher-assigned reteach/practice set. This leaves a gap in the homework -> grade -> understand -> reteach loop on the student's side.",
+      "change": "Add a per-problem \"ask about this\" entry point on the student's grade/receipt view that opens a short Learn-mode-style tutor conversation seeded with that problem's grading justification, so students can self-serve understanding immediately instead of only via teacher-assigned practice.",
+      "est_size": "M",
+      "confidence": 0.3,
+      "defect_key": "feature/student-grade-explain-chat",
+      "evidence": [],
+      "id": "00c9fd9ff17f",
+      "score": 0.3
+    },
+    "status": "proposed",
+    "created": "2026-10-20T21:41:08.828955+00:00",
+    "updated": "2026-10-20T21:41:08.828955+00:00"
+  }
+]
