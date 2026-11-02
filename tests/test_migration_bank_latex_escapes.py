@@ -1,4 +1,4 @@
-r"""dc1000098 repairs eaten LaTeX backslashes in bank items, and only there.
+r"""dd1000099 repairs eaten LaTeX backslashes in bank items, and only there.
 
 Runs the real migration with alembic against a scratch database: upgrade to
 the revision before it, seed every shape the JSON columns hold in prod (SQL
@@ -25,7 +25,7 @@ import pytest
 from sqlalchemy.engine import make_url
 
 REPO = Path(__file__).resolve().parents[1]
-PREV, REV = "db1000097", "dc1000098"
+PREV, REV = "dc1000098", "dd1000099"
 
 FRAC = "\f" + "rac"  # what `\frac` became after the bad decode
 

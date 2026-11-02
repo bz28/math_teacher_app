@@ -786,7 +786,7 @@ def restore_latex_escapes(obj: Any) -> Any:
     and newlines are legitimate — and are left to the frontend restore net
     (math-text.tsx).
 
-    Also used by migration dc1000098 to repair rows stored before this ran.
+    Also used by migration dd1000099 to repair rows stored before this ran.
     """
     if isinstance(obj, str):
         if not any(c in obj for c in _CORRUPTION_CHARS):

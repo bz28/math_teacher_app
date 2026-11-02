@@ -1,7 +1,7 @@
 """repair LaTeX backslashes eaten by JSON escapes in question bank items
 
-Revision ID: dc1000098
-Revises: db1000097
+Revision ID: dd1000099
+Revises: dc1000098
 Create Date: 2026-11-02 00:00:00.000000
 
 When the model wrote `\\frac` with one backslash inside its tool-call JSON,
@@ -40,8 +40,8 @@ from alembic import op
 
 from api.core.llm_client import restore_latex_escapes
 
-revision: str = "dc1000098"
-down_revision: str | None = "db1000097"
+revision: str = "dd1000099"
+down_revision: str | None = "dc1000098"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
