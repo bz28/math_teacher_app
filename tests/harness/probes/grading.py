@@ -115,7 +115,7 @@ def _prob(question: str, answer: str, *, flag: bool | None = None) -> list[dict[
 
 
 # ── The golden set ────────────────────────────────────────────────────────
-# 30 cases, ≥2 per matrix row. Rubric is None except in the g-row (class
+# 34 cases, ≥2 per matrix row. Rubric is None except in the g-row (class
 # rules), so the grader applies the shipped DEFAULT rubric — i.e. exactly what
 # a teacher who authors no rubric gets. Two cases are physics (a2, b3) per the "a couple physics" ask.
 
@@ -123,6 +123,15 @@ _UNITS_RULE = {"id": "runits1", "text": "Final answers need units (ft, °, rad/m
 # What every golden problem is worth. With the units rule's 1 point that is
 # the 5% the class-rule cases were labeled against.
 _PROBLEM_POINTS = 20
+
+# The b4/b5/d3 matrix-inverse family share one problem.
+_MX_Q = "Solve the system 2x + 5y = 16, 3x - y = 3 using the inverse matrix."
+_MX_KEY = "x = 31/17, y = 42/17"
+_MX_SETUP = (
+    "A = \\begin{pmatrix} 2 & 5 \\\\ 3 & -1 \\end{pmatrix},\\ "
+    "X = \\begin{pmatrix} x \\\\ y \\end{pmatrix},\\ "
+    "B = \\begin{pmatrix} 16 \\\\ 3 \\end{pmatrix},\\ AX = B"
+)
 
 GOLDEN_CASES: list[GradingCase] = [
     # (a) clean correct, standard method → full ----------------------------
@@ -224,6 +233,85 @@ GOLDEN_CASES: list[GradingCase] = [
             "Different valid physics method — must not be penalized."
         ),
     ),
+    GradingCase(
+        name="b4-matrix-inverse-sign-folded",
+        category="b",
+        problems=_prob(_MX_Q, _MX_KEY),
+        extraction=_ext(
+            [
+                (1, _MX_SETUP),
+                (2, "\\det A = (2)(-1) - (5)(3) = -2 - 15 = -17"),
+                # The negative determinant folded into the adjugate:
+                # (1/-17)[[-1,-5],[-3,2]] written as (1/17)[[1,5],[3,-2]].
+                (3, "A^{-1} = \\frac{1}{17}\\begin{pmatrix} 1 & 5 \\\\ 3 & -2 \\end{pmatrix}"),
+                (4, "X = A^{-1}B = \\frac{1}{17}\\begin{pmatrix} 1(16) + 5(3) \\\\ 3(16) - 2(3) \\end{pmatrix}"
+                    " = \\frac{1}{17}\\begin{pmatrix} 31 \\\\ 42 \\end{pmatrix}"),
+                (5, "x = \\frac{31}{17},\\ y = \\frac{42}{17}"),
+            ],
+            "x = \\frac{31}{17}, y = \\frac{42}{17}",
+        ),
+        expected="full",
+        accepts={"full"},
+        rationale=(
+            "Correct inverse with det = -17 folded into the adjugate's signs — "
+            "(1/17)[[1,5],[3,-2]] IS (1/-17)[[-1,-5],[-3,2]]. Required method "
+            "used, answer matches the key. Was graded 90% (July 2026)."
+        ),
+        extra={"forbids_deduction_mentioning": ["inverse", "notation", "sign"]},
+    ),
+    GradingCase(
+        name="b6-matrix-inverse-july-repro",
+        category="b",
+        # Verbatim the July 2026 misgrade (scripts/cycle_video_prep.py @
+        # 384f235f, Jordan): bank question + key in their stored LaTeX, and
+        # the terse work — no A^{-1}B product shown, so the grader has to
+        # accept the folded inverse on its own.
+        problems=_prob(
+            "Solve the system using an inverse matrix: "
+            "$\\begin{cases} 2x + 5y = 16 \\\\ 3x - y = 3 \\end{cases}$",
+            "$x = \\dfrac{31}{17}, \\quad y = \\dfrac{42}{17}$",
+        ),
+        extraction=_ext(
+            [
+                (1, "\\begin{pmatrix} 2 & 5 \\\\ 3 & -1 \\end{pmatrix}\\begin{pmatrix} x \\\\ y \\end{pmatrix}"
+                    " = \\begin{pmatrix} 16 \\\\ 3 \\end{pmatrix}"),
+                (2, "\\det A = -17"),
+                (3, "A^{-1} = \\frac{1}{17}\\begin{pmatrix} 1 & 5 \\\\ 3 & -2 \\end{pmatrix}"),
+                (4, "x = \\frac{31}{17},\\ y = \\frac{42}{17}"),
+            ],
+            "x = \\frac{31}{17},\\ y = \\frac{42}{17}",
+        ),
+        expected="full",
+        accepts={"full"},
+        rationale=(
+            "The exact submission graded 90% 3/3 in July 2026 (−10 on step 3, "
+            "'notational inconsistency' on a correct folded inverse)."
+        ),
+        extra={"forbids_deduction_mentioning": ["inverse", "notation", "sign"]},
+    ),
+    GradingCase(
+        name="b5-matrix-inverse-unfolded",
+        category="b",
+        problems=_prob(_MX_Q, _MX_KEY),
+        extraction=_ext(
+            [
+                (1, _MX_SETUP),
+                (2, "\\det A = (2)(-1) - (5)(3) = -2 - 15 = -17"),
+                # Same inverse as b4, written the textbook way.
+                (3, "A^{-1} = \\frac{1}{-17}\\begin{pmatrix} -1 & -5 \\\\ -3 & 2 \\end{pmatrix}"),
+                (4, "X = A^{-1}B = \\frac{1}{-17}\\begin{pmatrix} -1(16) - 5(3) \\\\ -3(16) + 2(3) \\end{pmatrix}"
+                    " = \\frac{1}{-17}\\begin{pmatrix} -31 \\\\ -42 \\end{pmatrix}"),
+                (5, "x = \\frac{31}{17},\\ y = \\frac{42}{17}"),
+            ],
+            "x = \\frac{31}{17}, y = \\frac{42}{17}",
+        ),
+        expected="full",
+        accepts={"full"},
+        rationale=(
+            "Control for b4: the identical inverse in unfolded (1/det)·adj form. "
+            "If b5 passes and b4 fails, the sign fold alone is what's misread."
+        ),
+    ),
     # (c) right final answer but broken/circular/fabricated work ------------
     GradingCase(
         name="c1-contradictory-work",
@@ -320,6 +408,30 @@ GOLDEN_CASES: list[GradingCase] = [
         rationale=(
             "Right method (correct factoring), sign error extracting roots → "
             "wrong answer. Partial, not zero."
+        ),
+    ),
+    GradingCase(
+        name="d3-matrix-inverse-sign-error",
+        category="d",
+        problems=_prob(_MX_Q, _MX_KEY),
+        extraction=_ext(
+            [
+                (1, _MX_SETUP),
+                (2, "\\det A = (2)(-1) - (5)(3) = -2 - 15 = -17"),
+                # One sign wrong: the -2 entry written as +2. Not an inverse.
+                (3, "A^{-1} = \\frac{1}{17}\\begin{pmatrix} 1 & 5 \\\\ 3 & 2 \\end{pmatrix}"),
+                (4, "X = A^{-1}B = \\frac{1}{17}\\begin{pmatrix} 1(16) + 5(3) \\\\ 3(16) + 2(3) \\end{pmatrix}"
+                    " = \\frac{1}{17}\\begin{pmatrix} 31 \\\\ 54 \\end{pmatrix}"),
+                (5, "x = \\frac{31}{17},\\ y = \\frac{54}{17}"),
+            ],
+            "x = \\frac{31}{17}, y = \\frac{54}{17}",
+        ),
+        expected="partial",
+        accepts={"partial"},
+        rationale=(
+            "Negative control for b4: right method, one sign error in the "
+            "inverse → y wrong. Partial, so a b4 fix can't just wave every "
+            "inverse through."
         ),
     ),
     # (e) plainly wrong (wrong method + wrong answer) / blank → zero --------
@@ -743,7 +855,7 @@ class GradingProbe(Probe):
     name = "grading"
     needs_browser = False
     default_constraint = (
-        "Grading-quality golden set: 30 hand-labeled submissions spanning "
+        "Grading-quality golden set: 34 hand-labeled submissions spanning "
         "clean-correct, valid-alternative-method, broken-work-right-answer, "
         "arithmetic-slip, plainly-wrong, and required-method/drawing. Asserts the AI grader's "
         "score_status matches the label."

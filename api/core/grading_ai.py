@@ -155,10 +155,12 @@ AND set `student_answer` to null. Do not invent placeholder prose for the answer
 - Keep reasoning concise (1-2 sentences per problem).
 
 Deduction ledger (REQUIRED for every problem — `deductions` field):
-Set `percent` FIRST as your holistic judgment, then itemize a `deductions` \
+Write `reasoning` FIRST: check the student's steps — what is right, what is \
+wrong, and whether any class rule is broken. Then set `percent` from that \
+reasoning, then itemize a `deductions` \
 ledger that RECONCILES to it: 100 − (sum of every entry's `points_off`) must \
 equal `percent`. This makes the grade a transparent receipt rather than an \
-unexplained number — decide the score, then show your arithmetic for it.
+unexplained number — check the work, score it, then show your arithmetic for it.
 - FULL credit (percent 100): emit an empty list (no entries) — nothing was \
 taken off.
 - PARTIAL credit: one entry per distinct thing that cost points, with \
