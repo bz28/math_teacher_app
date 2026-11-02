@@ -69,8 +69,7 @@ def test_a_class_with_no_rules_leaves_the_homework_rubric_as_is() -> None:
 
 
 def test_to_stored_keeps_known_ids_and_stamps_new_ones() -> None:
-    previous = {"rules": [{**_UNITS, "source": "suggestion", "source_label": "HW 5",
-                           "added_at": "2026-10-18T00:00:00+00:00"}]}
+    previous = {"rules": [{**_UNITS, "added_at": "2026-10-18T00:00:00+00:00"}]}
     body = ClassRubric.model_validate({"rules": [
         {"id": "r1", "text": " Final answers need units (ft, °). ", "points": 5},
         {"text": "Label every key point.", "points": 15},
@@ -78,13 +77,12 @@ def test_to_stored_keeps_known_ids_and_stamps_new_ones() -> None:
     stored = body.to_stored(previous)
     assert stored is not None
     kept, new = stored["rules"]
-    # Editing the text keeps the id, origin and date the grades cite.
+    # Editing the text keeps the id the grades cite, and its date.
     assert kept["id"] == "r1"
     assert kept["text"] == "Final answers need units (ft, °)."
-    assert kept["source"] == "suggestion" and kept["source_label"] == "HW 5"
     assert kept["added_at"] == "2026-10-18T00:00:00+00:00"
     assert new["id"].startswith("r") and new["id"] != "r1"
-    assert new["source"] == "settings" and new["added_at"]
+    assert set(new) == {"id", "text", "points", "added_at"} and new["added_at"]
 
 
 def test_an_unknown_id_is_treated_as_a_new_rule() -> None:

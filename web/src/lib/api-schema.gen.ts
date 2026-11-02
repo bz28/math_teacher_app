@@ -4518,14 +4518,6 @@ export interface components {
             id?: string | null;
             /** Points */
             points?: number | null;
-            /**
-             * Source
-             * @default settings
-             * @enum {string}
-             */
-            source: "settings" | "suggestion";
-            /** Source Label */
-            source_label?: string | null;
             /** Text */
             text: string;
         };
