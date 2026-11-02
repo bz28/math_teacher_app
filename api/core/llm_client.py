@@ -739,6 +739,7 @@ def _extract_tool_result(
             result = block.input
             if isinstance(result, dict) and schema is not None:
                 result = _normalize_arrays(result, schema)
+            result = restore_latex_escapes(result)
             return result, json.dumps(result, ensure_ascii=False)
     raise ValueError("No tool_use block in response")
 
@@ -760,6 +761,42 @@ _LATEX_BACKSLASH_RE = re.compile(r'\\(?!")')
 
 def _escape_latex_backslashes(value: str) -> str:
     return _LATEX_BACKSLASH_RE.sub(r"\\\\", value)
+
+
+# A corruption char directly before a letter is a LaTeX command whose backslash
+# was eaten (formfeed+"rac" was `\frac`). Requiring the letter leaves a CRLF
+# line ending (CR before a newline) alone.
+_EATEN_BACKSLASH_RE = re.compile(f"[{_CORRUPTION_CHARS}](?=[A-Za-z])")
+_EATEN_LETTER = {"\f": "f", "\v": "v", "\b": "b", "\r": "r"}
+
+
+def restore_latex_escapes(obj: Any) -> Any:
+    r"""Put back LaTeX backslashes that a JSON decode turned into control chars.
+
+    When the model writes `\frac` (one backslash) inside a JSON string, the
+    decoder reads `\f` as a formfeed, so the value arrives as formfeed + "rac".
+    For tool calls the Anthropic API does that decode itself, so `block.input`
+    already holds the control chars in ordinary string and array fields, where
+    `_normalize_arrays` (which only re-parses arrays that came back as strings)
+    never looks. This walks any parsed structure and rewrites each
+    `\f`/`\v`/`\b`/`\r` that precedes a letter back to backslash + letter.
+    Those chars are never legitimate in model output, so the rewrite is safe on
+    every tool result. It is idempotent: a repaired string has no control chars
+    left to match. `\t`/`\n` (`\times`, `\neq`) are out of reach here — tabs
+    and newlines are legitimate — and are left to the frontend restore net
+    (math-text.tsx).
+
+    Also used by migration dc1000098 to repair rows stored before this ran.
+    """
+    if isinstance(obj, str):
+        if not any(c in obj for c in _CORRUPTION_CHARS):
+            return obj
+        return _EATEN_BACKSLASH_RE.sub(lambda m: "\\" + _EATEN_LETTER[m.group()], obj)
+    if isinstance(obj, list):
+        return [restore_latex_escapes(x) for x in obj]
+    if isinstance(obj, dict):
+        return {k: restore_latex_escapes(v) for k, v in obj.items()}
+    return obj
 
 
 def _has_corruption(obj: object) -> bool:
