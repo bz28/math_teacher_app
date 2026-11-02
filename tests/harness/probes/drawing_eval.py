@@ -320,6 +320,10 @@ class DrawingEvalProbe(Probe):
         return [
             "api/core/integrity_ai.py",
             "api/core/drawing_requirement.py",
+            # The grading ablation calls the real grader, so a grading prompt or
+            # schema change re-keys this probe's ai_grading cassettes.
+            "api/core/grading_ai.py",
+            "api/core/llm_schemas.py",
             "tests/harness/probes/drawing_eval.py",
         ]
 
