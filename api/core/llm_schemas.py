@@ -1123,6 +1123,16 @@ AI_GRADING_SCHEMA: ToolSchema = {
                                 "frontend renders an empty-state itself."
                             ),
                         },
+                        "reasoning": {
+                            "type": "string",
+                            "description": (
+                                "1-2 sentences, written BEFORE the grade: check the "
+                                "student's work and say what decides it. Reference the "
+                                "specific rubric criterion (by name) that drives the "
+                                "decision. This field is for the TEACHER — it drives the "
+                                "AI verdict card on the review page."
+                            ),
+                        },
                         "score_status": {
                             "type": "string",
                             "enum": ["full", "partial", "zero"],
@@ -1139,15 +1149,6 @@ AI_GRADING_SCHEMA: ToolSchema = {
                                 "See the system prompt's calibration bands — be honest, "
                                 "don't inflate. Below 0.4 means you're guessing and your "
                                 "reasoning should say why."
-                            ),
-                        },
-                        "reasoning": {
-                            "type": "string",
-                            "description": (
-                                "1-2 sentence explanation of why this grade was given. "
-                                "Reference the specific rubric criterion (by name) that "
-                                "drove the decision. This field is for the TEACHER — it "
-                                "drives the AI verdict card on the review page."
                             ),
                         },
                         "student_feedback": {
@@ -1224,8 +1225,8 @@ AI_GRADING_SCHEMA: ToolSchema = {
                         },
                     },
                     "required": [
-                        "problem_position", "student_answer", "score_status",
-                        "percent", "confidence", "reasoning", "student_feedback",
+                        "problem_position", "student_answer", "reasoning",
+                        "score_status", "percent", "confidence", "student_feedback",
                         "deductions",
                     ],
                     "additionalProperties": False,
