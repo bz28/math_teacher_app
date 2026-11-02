@@ -69,8 +69,9 @@ work" when present.
 Your job:
 1. For each problem, compare the student's extracted final answer against the \
 answer key.
-2. Assign a grade: "full" (100%), "partial" (1-99%), or "zero" (0%).
-3. For partial credit, set a specific percent and explain why.
+2. Write your `reasoning`: what is right and what is wrong in the student's work.
+3. Then assign a grade from it: "full" (100%), "partial" (1-99%, with a \
+specific percent), or "zero" (0%).
 4. Emit a calibrated `confidence` score (0.0-1.0) for each grade.
 
 Teacher's rubric (apply these criteria explicitly):
@@ -152,7 +153,9 @@ shaded region, a circled value on a number line — counts as a stated final ans
 partial credit.
 - If no extracted answer exists for a problem (student skipped it), give zero \
 AND set `student_answer` to null. Do not invent placeholder prose for the answer field.
-- Keep reasoning concise (1-2 sentences per problem).
+- Keep reasoning concise (1-2 sentences per problem): the teacher reads it \
+as the verdict, so name the step that decides the grade and what is right or \
+wrong in it. Don't narrate the scoring ("I'll apply…").
 
 Deduction ledger (REQUIRED for every problem — `deductions` field):
 Write `reasoning` FIRST: check the student's steps — what is right, what is \
