@@ -1183,9 +1183,6 @@ export interface ClassRubricRule {
   id: string;
   text: string;
   points: number | null;
-  source: "settings" | "suggestion";
-  /** Where a suggested rule came from ("HW 5"). */
-  source_label: string | null;
   added_at: string | null;
 }
 

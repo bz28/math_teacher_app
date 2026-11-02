@@ -327,27 +327,6 @@
             ],
             "title": "Points"
           },
-          "source": {
-            "default": "settings",
-            "enum": [
-              "settings",
-              "suggestion"
-            ],
-            "title": "Source",
-            "type": "string"
-          },
-          "source_label": {
-            "anyOf": [
-              {
-                "maxLength": 300,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Source Label"
-          },
           "text": {
             "maxLength": 300,
             "minLength": 1,

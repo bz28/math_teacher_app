@@ -37,8 +37,7 @@ function parsePoints(raw: string): number | null | "invalid" {
   return Number.isInteger(n) && n >= 0 && n <= 100 ? n : "invalid";
 }
 
-function originLine(r: ClassRubricRule): string {
-  if (r.source === "suggestion" && r.source_label) return `Added while grading ${r.source_label}`;
+function addedLine(r: ClassRubricRule): string {
   if (!r.added_at) return "";
   const d = new Date(r.added_at);
   return `Added ${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
@@ -210,8 +209,8 @@ export function ClassRubricSection({
                 <li key={r.id} className="flex items-center gap-3 py-3">
                   <div className="min-w-0 flex-1">
                     <p className="text-sm leading-snug text-text-primary">{r.text}</p>
-                    {originLine(r) && (
-                      <p className="mt-0.5 text-xs text-text-muted">{originLine(r)}</p>
+                    {addedLine(r) && (
+                      <p className="mt-0.5 text-xs text-text-muted">{addedLine(r)}</p>
                     )}
                   </div>
                   <span
