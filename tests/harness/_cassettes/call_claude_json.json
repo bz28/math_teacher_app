@@ -449,6 +449,94 @@
       ]
     }
   },
+  "1654bd8a6891ed5452799379b080b9a1": {
+    "meta": {
+      "mode": "decompose",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Problem: Triangle $PQR$ has a right angle at $R$, with hypotenuse $PQ = 50$ and leg $PR = 30$. Find the length of le",
+      "recorded_at": 1793923944.8112378
+    },
+    "response": {
+      "answer_type": "text",
+      "final_answer": "$QR = 40$",
+      "steps": [
+        {
+          "description": "We have a right triangle $PQR$ with the right angle at $R$. This means $R$ is the corner with the 90\u00b0 angle, making $PQ$ the **hypotenuse** (the side opposite the right angle, always the longest side), and $PR$ and $QR$ the two **legs**.\n\nThe Pythagorean theorem says: for any right triangle, $$\\text{leg}_1^2 + \\text{leg}_2^2 = \\text{hypotenuse}^2$$\n\nWe know $PQ = 50$ (hypotenuse) and $PR = 30$ (one leg). We need $QR = x$ (the other leg).",
+          "figure_spec": {
+            "right_angle_at": [
+              "R"
+            ],
+            "shape": "triangle",
+            "side_labels": {
+              "PQ": "50",
+              "PR": "30",
+              "QR": "x"
+            },
+            "side_lengths": {
+              "PQ": 50,
+              "PR": 30,
+              "QR": 40
+            },
+            "type": "geometry",
+            "vertices": [
+              "P",
+              "Q",
+              "R"
+            ]
+          },
+          "title": "Understand the Setup"
+        },
+        {
+          "description": "Plugging the known values into $a^2 + b^2 = c^2$, where $c = 50$ is the hypotenuse:\n$$30^2 + x^2 = 50^2$$\n$$900 + x^2 = 2500$$\n$$x^2 = 1600$$",
+          "title": "Apply Pythagorean Theorem"
+        },
+        {
+          "description": "Taking the positive square root (since length must be positive):\n$$x = \\sqrt{1600} = 40$$\n\n**Shortcut to recognize:** $30$-$40$-$50$ is just $10 \\times (3$-$4$-$5)$, the most famous Pythagorean triple. Spotting this pattern lets you skip the algebra entirely!",
+          "title": "Solve for x"
+        }
+      ]
+    }
+  },
+  "16d68875b7edbdea59b1c56827949379": {
+    "meta": {
+      "mode": "decompose",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Problem: In the circle with center $O$ and radius $7$, points $A$, $B$, and $C$ lie on the circle. The central angle",
+      "recorded_at": 1793923945.60044
+    },
+    "response": {
+      "answer_type": "text",
+      "final_answer": "$\\angle ABC = 70\u00b0$",
+      "steps": [
+        {
+          "description": "We have a circle with center $O$ and radius $7$. Three points $A$, $B$, $C$ sit on the circle. The **central angle** $\\angle AOC = 140\u00b0$ opens from the center $O$ and cuts off arc $\\overset{\\frown}{AC}$. The **inscribed angle** $\\angle ABC$ has its vertex on the circle at $B$ and intercepts that exact same arc $\\overset{\\frown}{AC}$.\n\nThe key relationship to know: a central angle and an inscribed angle that share the same intercepted arc are related by a factor of $2$. Specifically, the inscribed angle is always **half** the central angle.",
+          "figure_spec": {
+            "center_label": "O",
+            "chords": [
+              "AB",
+              "BC",
+              "AC"
+            ],
+            "points": {
+              "A": 0,
+              "B": 270,
+              "C": 140
+            },
+            "radius": 7,
+            "radius_label": "7",
+            "shape": "circle",
+            "show_center": true,
+            "type": "geometry"
+          },
+          "title": "Understand the Setup"
+        },
+        {
+          "description": "The **Inscribed Angle Theorem** states:\n$$\\text{Inscribed Angle} = \\frac{1}{2} \\times \\text{Central Angle (same arc)}$$\n\nThis works because the central angle's two sides are radii that reach all the way to the center, while the inscribed angle's sides are chords from a point on the edge \u2014 geometrically, the center is always \"twice as far out\" from the arc, creating exactly a 2:1 ratio.\n\nSubstituting $\\angle AOC = 140\u00b0$:\n$$\\angle ABC = \\frac{1}{2} \\times 140\u00b0 = 70\u00b0$$",
+          "title": "Apply the Inscribed Angle Theorem"
+        }
+      ]
+    }
+  },
   "16db3b7ddbd9d2c6929f5989e47aa143": {
     "meta": {
       "mode": "integrity_answer_equivalence",
@@ -591,6 +679,21 @@
           "student_answer": "No solution (parallel lines)",
           "student_feedback": "You correctly recognized that the two lines are parallel and have no solution \u2014 great reasoning! However, this problem asked you to solve by graphing, so you need to actually draw both lines on a coordinate plane and show that they never intersect to receive full credit."
         }
+      ]
+    }
+  },
+  "2198e58c1f70574a28a476e8268894fb": {
+    "meta": {
+      "mode": "generate_distractors",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "You are a worldclass worldclass math professor with expertise in breaking down m || Problem: In the circle with center $O$ and radius $7$, points $A$, $B$, and $C$ lie on the circle. The central angle",
+      "recorded_at": 1793923978.087561
+    },
+    "response": {
+      "distractors": [
+        "$\\angle ABC = 140\u00b0$",
+        "$\\angle ABC = 35\u00b0$",
+        "$\\angle ABC = 110\u00b0$"
       ]
     }
   },
@@ -1089,6 +1192,36 @@
       ]
     }
   },
+  "2d7b08f9d163277ce9c8e4f59f33aca6": {
+    "meta": {
+      "mode": "generate_distractors",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "You are a worldclass worldclass math professor with expertise in breaking down m || Problem: In the right triangle below, find the length of the hypotenuse $c$. Leave your answer in simplest radical f",
+      "recorded_at": 1793924013.302072
+    },
+    "response": {
+      "distractors": [
+        "$c = 8$",
+        "$c = 2\\sqrt{41}$",
+        "$c = \\sqrt{136}$"
+      ]
+    }
+  },
+  "2db02548dc0e9a075a93f1b4427de6b6": {
+    "meta": {
+      "mode": "generate_distractors",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "You are a worldclass worldclass math professor with expertise in breaking down m || Problem: In the right triangle $ABC$ shown below, the right angle is at $C$, with legs $AC = 3$ and $BC = 4$. Find t",
+      "recorded_at": 1793923977.8149161
+    },
+    "response": {
+      "distractors": [
+        "$AB = 7$",
+        "$AB = \\sqrt{7}$",
+        "$AB = 5.5$"
+      ]
+    }
+  },
   "3066dc94e4e0d325a8041658dc2e337d": {
     "meta": {
       "mode": "ai_grading",
@@ -1136,6 +1269,52 @@
           "score_status": "full",
           "student_answer": "$(2, 3)$",
           "student_feedback": "Great work! You graphed both lines correctly, clearly labeled the intersection point, and identified the solution as (2, 3) \u2014 exactly right."
+        }
+      ]
+    }
+  },
+  "3318ebbc51961fb399bce291c0f63c19": {
+    "meta": {
+      "mode": "generate_questions",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Teacher's instructions:\nFinding the area and circumference of circles from a given radius or diameter, grade 7.\n\nAss",
+      "recorded_at": 1793924019.436786
+    },
+    "response": {
+      "questions": [
+        {
+          "difficulty": "easy",
+          "figure_spec": {
+            "center_label": "O",
+            "points": {
+              "A": 0
+            },
+            "radius": 7,
+            "radius_label": "7 m",
+            "shape": "circle",
+            "show_center": true,
+            "type": "geometry"
+          },
+          "requires_drawing": false,
+          "text": "A circular fountain has a diameter of $14$ m. Find the circumference of the fountain. Use $\\pi \\approx 3.14$ and round your answer to the nearest hundredth.",
+          "title": "Circumference from a given diameter"
+        },
+        {
+          "difficulty": "medium",
+          "figure_spec": {
+            "center_label": "O",
+            "points": {
+              "A": 0
+            },
+            "radius": 9,
+            "radius_label": "9 ft",
+            "shape": "circle",
+            "show_center": true,
+            "type": "geometry"
+          },
+          "requires_drawing": false,
+          "text": "A circular garden has a radius of $9$ ft. Find the area of the garden. Use $\\pi \\approx 3.14$ and round your answer to the nearest hundredth.",
+          "title": "Area from a given radius"
         }
       ]
     }
@@ -1396,6 +1575,21 @@
       ]
     }
   },
+  "479ef66eac428310f3df474f0af2868b": {
+    "meta": {
+      "mode": "generate_distractors",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "You are a worldclass worldclass math professor with expertise in breaking down m || Problem: The diagram shows a regular pentagon. One exterior angle is formed by extending a side of the pentagon as s",
+      "recorded_at": 1793924051.800102
+    },
+    "response": {
+      "distractors": [
+        "$90\u00b0$",
+        "$60\u00b0$",
+        "$36\u00b0$"
+      ]
+    }
+  },
   "47f0822481e2f1bd4927eac9501640f7": {
     "meta": {
       "mode": "ai_grading",
@@ -1454,6 +1648,49 @@
         {
           "description": "Substitute $d = 14$ m and $\\pi \\approx 3.14$ into the formula:\n$$C = \\pi d = 3.14 \\times 14$$\nMultiply:\n$$3.14 \\times 14 = 3.14 \\times 10 + 3.14 \\times 4 = 31.4 + 12.56 = 43.96$$\nSo $C = 43.96$ m, which is already exact to the hundredths place \u2014 no further rounding needed.",
           "title": "Plug In and Compute"
+        }
+      ]
+    }
+  },
+  "48da3cde769a19c87e9993009248c7cf": {
+    "meta": {
+      "mode": "decompose",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Problem: The diagram shows a regular pentagon. One exterior angle is formed by extending a side of the pentagon as s",
+      "recorded_at": 1793924050.831855
+    },
+    "response": {
+      "answer_type": "text",
+      "final_answer": "$(a)$ Each exterior angle $= \\frac{360\u00b0}{5} = 72\u00b0$\n\n$(b)$ Each interior angle $= 180\u00b0 - 72\u00b0 = 108\u00b0$\n\n$(c)$ The student is **incorrect**. The interior angle of a regular pentagon is $108\u00b0$, confirmed by both the supplementary-angle method and the interior angle sum formula: $\\frac{(5-2)\\times180\u00b0}{5} = \\frac{540\u00b0}{5} = 108\u00b0$.",
+      "steps": [
+        {
+          "description": "A **regular pentagon** has 5 equal sides and 5 equal angles. When you extend any one side beyond a vertex, it creates an **exterior angle** \u2014 the angle between the extended line and the next side of the pentagon.\n\nThe key insight: if you imagine walking around the entire pentagon and making a turn at each vertex, you complete exactly one full rotation of $360\u00b0$. Since all 5 exterior angles are equal (it's regular), each one is simply $\\frac{360\u00b0}{5}$.\n\nThis works for **any** convex polygon \u2014 the exterior angles always sum to $360\u00b0$.",
+          "figure_spec": {
+            "angle_labels": {
+              "A": "ext. ?",
+              "B": "?",
+              "C": "?",
+              "D": "?",
+              "E": "?"
+            },
+            "n_sides": 5,
+            "shape": "polygon",
+            "side_length": 1,
+            "type": "geometry"
+          },
+          "title": "Understand the Setup"
+        },
+        {
+          "description": "The exterior angles of **any** convex polygon sum to exactly $360\u00b0$. For a regular pentagon, all 5 exterior angles are equal, so:\n\n$$\\text{Each exterior angle} = \\frac{360\u00b0}{5} = \\boxed{72\u00b0}$$",
+          "title": "Part (a): Each Exterior Angle"
+        },
+        {
+          "description": "At every vertex, the interior and exterior angles sit on a straight line, so they are **supplementary** (they add to $180\u00b0$):\n\n$$\\text{Interior angle} + \\text{Exterior angle} = 180\u00b0$$\n\n$$\\text{Interior angle} = 180\u00b0 - 72\u00b0 = \\boxed{108\u00b0}$$",
+          "title": "Part (b): Each Interior Angle"
+        },
+        {
+          "description": "The student claims each interior angle is $100\u00b0$. From part (b), the correct measure is $108\u00b0$, so the student is **incorrect**.\n\nWe can double-check with a second method \u2014 the interior angle sum formula:\n$$\\text{Sum of interior angles} = (n - 2) \\times 180\u00b0 = (5 - 2) \\times 180\u00b0 = 3 \\times 180\u00b0 = 540\u00b0$$\n\nDividing equally among 5 angles:\n$$\\text{Each interior angle} = \\frac{540\u00b0}{5} = 108\u00b0$$\n\nBoth methods confirm $108\u00b0$, not $100\u00b0$. The student's answer of $100\u00b0$ would only be correct for a regular polygon whose interior angles sum to $500\u00b0$, which doesn't correspond to any standard polygon.",
+          "title": "Part (c): Evaluate the Student's Claim"
         }
       ]
     }
@@ -2162,6 +2399,57 @@
           "score_status": "full",
           "student_answer": "100 m",
           "student_feedback": "Great work! You correctly used d = vt, substituted the values cleanly, and arrived at the right answer of 100 m."
+        }
+      ]
+    }
+  },
+  "66a8d28512820e552c0d4415982e65ff": {
+    "meta": {
+      "mode": "generate_questions",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Teacher's instructions:\nInterior and exterior angle problems for regular polygons such as pentagons and hexagons, gr",
+      "recorded_at": 1793924035.845854
+    },
+    "response": {
+      "questions": [
+        {
+          "difficulty": "easy",
+          "figure_spec": {
+            "angle_labels": {
+              "A": "?",
+              "B": "?",
+              "C": "?",
+              "D": "?",
+              "E": "?",
+              "F": "?"
+            },
+            "n_sides": 6,
+            "shape": "polygon",
+            "side_length": 1,
+            "type": "geometry"
+          },
+          "requires_drawing": false,
+          "text": "A regular hexagon has all interior angles equal. \n\n(a) Using the formula for the sum of interior angles of a polygon, find the total sum of the interior angles of a regular hexagon. \n\n(b) Find the measure of **one** interior angle of the regular hexagon.",
+          "title": "Interior angle sum of a regular hexagon"
+        },
+        {
+          "difficulty": "medium",
+          "figure_spec": {
+            "angle_labels": {
+              "A": "ext. angle = ?",
+              "B": "?",
+              "C": "?",
+              "D": "?",
+              "E": "?"
+            },
+            "n_sides": 5,
+            "shape": "polygon",
+            "side_length": 1,
+            "type": "geometry"
+          },
+          "requires_drawing": false,
+          "text": "The diagram shows a regular pentagon. One exterior angle is formed by extending a side of the pentagon as shown.\n\n(a) Find the measure of each exterior angle of the regular pentagon.\n\n(b) The interior and exterior angles at any vertex are supplementary. Use your answer from part (a) to find the measure of each **interior** angle of the regular pentagon.\n\n(c) A student claims that the interior angle of a regular pentagon is $100\u00b0$. Is the student correct? Justify your answer.",
+          "title": "Exterior angle of a regular pentagon"
         }
       ]
     }
@@ -3231,6 +3519,45 @@
       ]
     }
   },
+  "97b9e1d4acfa5dcffa484d3f385d44b2": {
+    "meta": {
+      "mode": "decompose",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Problem: In the right triangle below, the hypotenuse has length $15$ and one leg has length $9$. Find the length of ",
+      "recorded_at": 1793924012.459112
+    },
+    "response": {
+      "answer_type": "text",
+      "final_answer": "$x = 12$",
+      "steps": [
+        {
+          "description": "We have a right triangle with the **hypotenuse** (the side opposite the right angle) equal to $15$, one **leg** equal to $9$, and we need to find the other leg $x$.\n\nThe key tool here is the **Pythagorean Theorem**: in any right triangle with legs $a$, $b$ and hypotenuse $c$,\n$$a^2 + b^2 = c^2$$\n\n**Shortcut to look for first:** Before crunching algebra, check whether the numbers match a known **Pythagorean triple** \u2014 a set of whole numbers that perfectly satisfy the theorem. The most famous triple is $3$-$4$-$5$. Notice that $9 = 3 \\times 3$ and $15 = 3 \\times 5$, so this triangle might just be the $3$-$4$-$5$ triple scaled up by $3$.",
+          "figure_spec": {
+            "right_angle_at": [
+              "C"
+            ],
+            "shape": "triangle",
+            "side_labels": {
+              "AB": "15",
+              "AC": "9",
+              "BC": "x"
+            },
+            "type": "geometry",
+            "vertices": [
+              "A",
+              "B",
+              "C"
+            ]
+          },
+          "title": "Understand the Problem"
+        },
+        {
+          "description": "The $3$-$4$-$5$ triple scaled by $3$ gives:\n$$3 \\times 3 = 9, \\quad 3 \\times 4 = 12, \\quad 3 \\times 5 = 15$$\n\nSo the missing leg must be $x = 12$.\n\nWe can verify instantly with the Pythagorean Theorem:\n$$9^2 + 12^2 = 81 + 144 = 225 = 15^2 \\ \u2713$$",
+          "title": "Apply the Triple Scale"
+        }
+      ]
+    }
+  },
   "9a6c8bab35826ba9f95ed49259c94ea0": {
     "meta": {
       "mode": "ai_grading",
@@ -3250,6 +3577,21 @@
           "student_answer": "$10 \\text{ m/s}$",
           "student_feedback": "Excellent work! You correctly used conservation of energy to set up the equation, solved for v, and substituted the values cleanly to get the right answer of 10 m/s."
         }
+      ]
+    }
+  },
+  "9bb3dfb7cae61b2306e3e9d45bb047ec": {
+    "meta": {
+      "mode": "generate_distractors",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "You are a worldclass worldclass math professor with expertise in breaking down m || Problem: Triangle $PQR$ has a right angle at $R$, with hypotenuse $PQ = 50$ and leg $PR = 30$. Find the length of le",
+      "recorded_at": 1793923978.163973
+    },
+    "response": {
+      "distractors": [
+        "$QR = 20$",
+        "$QR = 80$",
+        "$QR = \\sqrt{2500 - 900}$"
       ]
     }
   },
@@ -3343,6 +3685,43 @@
           "score_status": "full",
           "student_answer": "$10 \\text{ m/s}$",
           "student_feedback": "Excellent work! You correctly used conservation of energy to set up the equation, solved for v, and substituted the values cleanly to get the right answer of 10 m/s."
+        }
+      ]
+    }
+  },
+  "a1542a1789d072de642f111919152353": {
+    "meta": {
+      "mode": "decompose",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Problem: A circular fountain has a diameter of $14$ m. Find the circumference of the fountain. Use $\\pi \\approx 3.14",
+      "recorded_at": 1793924027.156922
+    },
+    "response": {
+      "answer_type": "text",
+      "final_answer": "$C = 43.96 \\text{ m}$",
+      "steps": [
+        {
+          "description": "We're given a circular fountain with a **diameter** of $14$ m and asked to find its **circumference** \u2014 the total distance around the circle.\n\nThe key formula is:\n$$C = \\pi d$$\nwhere $d$ is the diameter. Since the problem gives us the diameter directly, we can plug straight in \u2014 no extra steps needed.",
+          "figure_spec": {
+            "center_label": "O",
+            "points": {
+              "A": 0
+            },
+            "radius": 7,
+            "radius_label": "7 m",
+            "shape": "circle",
+            "show_center": true,
+            "type": "geometry"
+          },
+          "title": "Understand the Problem"
+        },
+        {
+          "description": "The diameter is twice the radius: $d = 2 \\times 7 = 14$ m.\n\nSubstituting $\\pi \\approx 3.14$ and $d = 14$:\n$$C = \\pi d = 3.14 \\times 14$$",
+          "title": "Substitute Into Formula"
+        },
+        {
+          "description": "$$3.14 \\times 14 = 3.14 \\times 10 + 3.14 \\times 4 = 31.4 + 12.56 = 43.96$$\n\nSo $C = 43.96$ m, which is already exact to the nearest hundredth.",
+          "title": "Multiply to Get C"
         }
       ]
     }
@@ -3466,6 +3845,21 @@
           "student_answer": "$(2, 3)$",
           "student_feedback": "Great work! You set the two equations equal, solved for x = 2, and correctly substituted back to find y = 3 \u2014 your solution is spot on."
         }
+      ]
+    }
+  },
+  "a9741ad3033fbdc07b0b8baf39373315": {
+    "meta": {
+      "mode": "generate_distractors",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "You are a worldclass worldclass math professor with expertise in breaking down m || Problem: In the right triangle below, the hypotenuse has length $15$ and one leg has length $9$. Find the length of ",
+      "recorded_at": 1793924013.218663
+    },
+    "response": {
+      "distractors": [
+        "$x = 6$",
+        "$x = 24$",
+        "$x = \\sqrt{306}$"
       ]
     }
   },
@@ -3894,6 +4288,60 @@
       ]
     }
   },
+  "ba3fc9528d7baf586b4f326746d89b78": {
+    "meta": {
+      "mode": "decompose",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Problem: A regular hexagon has all interior angles equal. \n\n(a) Using the formula for the sum of interior angles of ",
+      "recorded_at": 1793924046.259134
+    },
+    "response": {
+      "answer_type": "diagram",
+      "final_answer": "$(a)$ Sum of interior angles $= (6-2)\\times180\u00b0 = \\mathbf{720\u00b0}$\n\n$(b)$ One interior angle $= \\dfrac{720\u00b0}{6} = \\mathbf{120\u00b0}$",
+      "steps": [
+        {
+          "description": "We have a **regular hexagon** \u2014 a 6-sided polygon where every side is equal and every interior angle is equal (all marked $?$ in the figure).\n\nThe key tool here is the **interior angle sum formula**: for any polygon with $n$ sides,\n$$\\text{Sum of interior angles} = (n - 2) \\times 180\u00b0$$\nThe idea behind this formula: any polygon can be cut into triangles from one vertex. A hexagon splits into $4$ triangles, and each triangle contributes $180\u00b0$.\n\nOnce we have the total sum (part a), dividing equally among all $6$ angles gives us one angle (part b).",
+          "figure_spec": {
+            "angle_labels": {
+              "A": "?",
+              "B": "?",
+              "C": "?",
+              "D": "?",
+              "E": "?",
+              "F": "?"
+            },
+            "n_sides": 6,
+            "shape": "polygon",
+            "side_length": 1,
+            "type": "geometry"
+          },
+          "title": "Understand the Problem"
+        },
+        {
+          "description": "A hexagon has $n = 6$ sides. Plugging into the formula:\n$$\\text{Sum} = (n - 2) \\times 180\u00b0 = (6 - 2) \\times 180\u00b0 = 4 \\times 180\u00b0 = 720\u00b0$$\n\n**The total sum of the interior angles of a regular hexagon is $720\u00b0$.**",
+          "title": "Apply the Angle Sum Formula"
+        },
+        {
+          "description": "Since the hexagon is **regular**, all $6$ angles are identical. Dividing the total sum equally:\n$$\\text{One angle} = \\frac{720\u00b0}{6} = 120\u00b0$$\n\nEvery interior angle marked $?$ equals $120\u00b0$.",
+          "figure_spec": {
+            "angle_labels": {
+              "A": "120\u00b0",
+              "B": "120\u00b0",
+              "C": "120\u00b0",
+              "D": "120\u00b0",
+              "E": "120\u00b0",
+              "F": "120\u00b0"
+            },
+            "n_sides": 6,
+            "shape": "polygon",
+            "side_length": 1,
+            "type": "geometry"
+          },
+          "title": "Find One Interior Angle"
+        }
+      ]
+    }
+  },
   "bad7fc15e1a7289ec76203fe29df0026": {
     "meta": {
       "mode": "ai_grading",
@@ -4064,6 +4512,21 @@
           "student_answer": null,
           "student_feedback": "You didn't show any work or provide an answer for this one. Even writing out a factoring attempt like (x \u2212 2)(x \u2212 3) = 0 would earn partial credit \u2014 give it a try next time!"
         }
+      ]
+    }
+  },
+  "c5009e01e831e65a56d61632545bd3bb": {
+    "meta": {
+      "mode": "generate_distractors",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "You are a worldclass worldclass math professor with expertise in breaking down m || Problem: A circular fountain has a diameter of $14$ m. Find the circumference of the fountain. Use $\\pi \\approx 3.14",
+      "recorded_at": 1793924028.092672
+    },
+    "response": {
+      "distractors": [
+        "$C = 21.98 \\text{ m}",
+        "$C = 87.92 \\text{ m}",
+        "$C = 43.96 \\text{ cm}"
       ]
     }
   },
@@ -4421,6 +4884,69 @@
       ]
     }
   },
+  "d304d17d73eaccb2a664fedc6071a2b0": {
+    "meta": {
+      "mode": "decompose",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Problem: In the right triangle $ABC$ shown below, the right angle is at $C$, with legs $AC = 3$ and $BC = 4$. Find t",
+      "recorded_at": 1793923944.142486
+    },
+    "response": {
+      "answer_type": "text",
+      "final_answer": "$AB = 5$",
+      "steps": [
+        {
+          "description": "We have a right triangle with two known legs: $AC = 3$ and $BC = 4$. The right angle sits at $C$, making $AB$ the **hypotenuse** \u2014 the side directly across from the right angle, which is always the longest side. The goal is to find the length of $AB$.\n\nThe key tool here is the **Pythagorean Theorem**: in any right triangle, the square of the hypotenuse equals the sum of the squares of the two legs:\n$$a^2 + b^2 = c^2$$\nwhere $a$ and $b$ are the legs and $c$ is the hypotenuse.",
+          "figure_spec": {
+            "right_angle_at": [
+              "C"
+            ],
+            "shape": "triangle",
+            "side_labels": {
+              "AB": "c",
+              "AC": "3",
+              "BC": "4"
+            },
+            "side_lengths": {
+              "AB": 5,
+              "AC": 3,
+              "BC": 4
+            },
+            "type": "geometry",
+            "vertices": [
+              "A",
+              "B",
+              "C"
+            ]
+          },
+          "title": "Understand the Problem"
+        },
+        {
+          "description": "Substitute $a = 3$ and $b = 4$ into the Pythagorean Theorem:\n$$3^2 + 4^2 = c^2$$\n$$9 + 16 = c^2$$\n$$25 = c^2$$",
+          "title": "Plug In and Simplify"
+        },
+        {
+          "description": "Take the square root of both sides. Since a length must be positive:\n$$c = \\sqrt{25} = 5$$\n\nThis is the famous **3-4-5 Pythagorean triple** \u2014 a pattern worth memorizing, as it appears constantly in geometry problems.",
+          "title": "Solve for c"
+        }
+      ]
+    }
+  },
+  "d488ef504e508e7ac2ca405c99e15310": {
+    "meta": {
+      "mode": "generate_distractors",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "You are a worldclass worldclass math professor with expertise in breaking down m || Problem: A regular hexagon has all interior angles equal. \n\n(a) Using the formula for the sum of interior angles of ",
+      "recorded_at": 1793924052.339873
+    },
+    "response": {
+      "distractors": [
+        "$(a)$ Sum $= 900\u00b0$, $(b)$ One angle $= 150\u00b0$",
+        "$(a)$ Sum $= 1080\u00b0$, $(b)$ One angle $= 180\u00b0$",
+        "$(a)$ Sum $= 720\u00b0$, $(b)$ One angle $= 60\u00b0$"
+      ]
+    }
+  },
   "d4988e9b391c414ca977ffbfc4a6d844": {
     "meta": {
       "mode": "ai_grading",
@@ -4600,6 +5126,117 @@
       ]
     }
   },
+  "d9bda3ee1fd1894cc6c079757110fb91": {
+    "meta": {
+      "mode": "decompose",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Problem: In the right triangle below, find the length of the hypotenuse $c$. Leave your answer in simplest radical f",
+      "recorded_at": 1793924010.257455
+    },
+    "response": {
+      "answer_type": "text",
+      "final_answer": "$c = 10$",
+      "steps": [
+        {
+          "description": "We have a right triangle with the right angle at $C$. The two **legs** are $AC = 6$ and $BC = 8$, and we need to find the **hypotenuse** $c = AB$ \u2014 the side opposite the right angle.\n\nThe key tool here is the **Pythagorean Theorem**: in any right triangle, the sum of the squares of the two legs equals the square of the hypotenuse:\n$$a^2 + b^2 = c^2$$",
+          "figure_spec": {
+            "right_angle_at": [
+              "C"
+            ],
+            "shape": "triangle",
+            "side_labels": {
+              "AB": "c",
+              "AC": "6",
+              "BC": "8"
+            },
+            "type": "geometry",
+            "vertices": [
+              "A",
+              "B",
+              "C"
+            ]
+          },
+          "title": "Understand the Problem"
+        },
+        {
+          "description": "Plug in the two known legs, $a = 6$ and $b = 8$:\n$$6^2 + 8^2 = c^2$$\n$$36 + 64 = c^2$$\n$$100 = c^2$$",
+          "title": "Apply the Pythagorean Theorem"
+        },
+        {
+          "description": "Take the square root of both sides:\n$$c = \\sqrt{100} = 10$$\n\nThis is a **whole number**, so no radical is needed. You may recognize this as the classic **3-4-5 Pythagorean triple** scaled by $2$ (i.e., $6$-$8$-$10$).",
+          "title": "Solve for $c$"
+        }
+      ]
+    }
+  },
+  "da21f197d0e18e8f93e427108a214c73": {
+    "meta": {
+      "mode": "decompose",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Problem: A regular hexagon $ABCDEF$ has a side length of $8$. \n(a) Find the measure of each interior angle. \n(b) The",
+      "recorded_at": 1793923976.776052
+    },
+    "response": {
+      "answer_type": "text",
+      "final_answer": "**(a)** Each interior angle $= \\frac{(6-2)\\times180\u00b0}{6} = \\boxed{120\u00b0}$\n\n**(b)** Drawing diagonals $AC$, $AD$, $AE$ from vertex $A$ creates $\\boxed{4}$ triangles, each with area:\n$$A = \\frac{96\\sqrt{3}}{4} = \\boxed{24\\sqrt{3}}$$",
+      "steps": [
+        {
+          "description": "We have a regular hexagon $ABCDEF$ with side length $8$. A **regular hexagon** has 6 equal sides and 6 equal interior angles.\n\n**Part (a):** Use the interior angle formula for any regular polygon.\n**Part (b):** Drawing diagonals from vertex $A$ to every non-adjacent vertex (skipping $B$ and $F$, which are neighbors) means drawing $AC$, $AD$, and $AE$. These 3 diagonals slice the hexagon into triangular regions \u2014 we need to count them and find each area.\n\n**Key insight for (b):** A regular hexagon can be decomposed into equilateral triangles because all its sides are equal and each interior angle is $120\u00b0 = 60\u00b0 \\times 2$, which is tightly related to the $60\u00b0$ angles of equilateral triangles.",
+          "figure_spec": {
+            "n_sides": 6,
+            "shape": "polygon",
+            "side_labels": {
+              "AB": "8"
+            },
+            "side_length": 8,
+            "type": "geometry",
+            "vertex_names": [
+              "A",
+              "B",
+              "C",
+              "D",
+              "E",
+              "F"
+            ]
+          },
+          "title": "Understand the Problem"
+        },
+        {
+          "description": "For any regular $n$-gon, the sum of interior angles is $(n-2) \\times 180\u00b0$, so each interior angle equals:\n$$\\text{Each angle} = \\frac{(n-2) \\times 180\u00b0}{n}$$\n\nFor a hexagon, $n = 6$:\n$$\\frac{(6-2) \\times 180\u00b0}{6} = \\frac{4 \\times 180\u00b0}{6} = \\frac{720\u00b0}{6} = 120\u00b0$$\n\nEvery interior angle of the hexagon measures $\\mathbf{120\u00b0}$.",
+          "title": "Part (a): Interior Angle Formula"
+        },
+        {
+          "description": "The vertices adjacent to $A$ are $B$ and $F$, so the **non-adjacent** vertices are $C$, $D$, and $E$. Drawing diagonals $AC$, $AD$, and $AE$ partitions the hexagon into exactly **4 triangles**:\n$$\\triangle ABC, \\quad \\triangle ACD, \\quad \\triangle ADE, \\quad \\triangle AEF$$\n\nEach of these is an **equilateral triangle** with side length $8$. Here's why: in a regular hexagon, every diagonal that \"skips one vertex\" (like $AC$ or $AE$) has the same length as $\\sqrt{3}$ times the side \u2014 but the central diagonal $AD = 2 \\times 8 = 16$ splits symmetrically. The two outer triangles ($\\triangle ABC$ and $\\triangle AEF$) each have sides $AB = BC = 8$ and $\\angle ABC = 60\u00b0$ (since the interior angle at $B$ is $120\u00b0$ and $\\triangle ABC$ is isoceles, the base angles are each $30\u00b0$... \n\nActually, let's be precise: the 4 triangles are **not all equilateral**, but they are all triangles of equal area. We use the total area of the hexagon divided by 4 to find each triangle's area.",
+          "figure_spec": {
+            "n_sides": 6,
+            "shape": "polygon",
+            "side_labels": {
+              "AB": "8"
+            },
+            "side_length": 8,
+            "type": "geometry",
+            "vertex_names": [
+              "A",
+              "B",
+              "C",
+              "D",
+              "E",
+              "F"
+            ]
+          },
+          "title": "Part (b): Count the Triangles"
+        },
+        {
+          "description": "A regular hexagon with side $s$ is made of **6 equilateral triangles** (all meeting at the center), so its total area is:\n$$A_{\\text{hexagon}} = 6 \\times \\frac{\\sqrt{3}}{4}s^2$$\n\nWith $s = 8$:\n$$A_{\\text{hexagon}} = 6 \\times \\frac{\\sqrt{3}}{4}(64) = 6 \\times 16\\sqrt{3} = 96\\sqrt{3}$$",
+          "title": "Hexagon Area Formula"
+        },
+        {
+          "description": "The 3 diagonals from $A$ divide the hexagon into **4 triangles of equal area** (the hexagon's symmetry guarantees this \u2014 each triangle spans the same angular \"wedge\" of the figure).\n\n$$A_{\\text{each triangle}} = \\frac{96\\sqrt{3}}{4} = 24\\sqrt{3}$$\n\nSo each triangle has area $24\\sqrt{3} \\approx 41.6$ square units.",
+          "title": "Area of Each Triangle"
+        }
+      ]
+    }
+  },
   "da354ae7617fb0f259569c760611dd26": {
     "meta": {
       "mode": "ai_grading",
@@ -4647,6 +5284,74 @@
           "score_status": "full",
           "student_answer": "100 m",
           "student_feedback": "Great work! You correctly used d = vt, substituted the values, and arrived at the right answer of 100 m."
+        }
+      ]
+    }
+  },
+  "db37c4b6388756d59dba2e47da00350c": {
+    "meta": {
+      "mode": "generate_questions",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Teacher's instructions:\nRight-triangle problems using the Pythagorean theorem, with numeric side lengths to solve fo",
+      "recorded_at": 1793924002.1005409
+    },
+    "response": {
+      "questions": [
+        {
+          "difficulty": "easy",
+          "figure_spec": {
+            "right_angle_at": [
+              "C"
+            ],
+            "shape": "triangle",
+            "side_labels": {
+              "AB": "c",
+              "AC": "6",
+              "BC": "8"
+            },
+            "side_lengths": {
+              "AB": 10,
+              "AC": 6,
+              "BC": 8
+            },
+            "type": "geometry",
+            "vertices": [
+              "A",
+              "B",
+              "C"
+            ]
+          },
+          "requires_drawing": false,
+          "text": "In the right triangle below, find the length of the hypotenuse $c$. Leave your answer in simplest radical form if it is not a whole number.",
+          "title": "Pythagorean theorem \u2014 find the hypotenuse"
+        },
+        {
+          "difficulty": "medium",
+          "figure_spec": {
+            "right_angle_at": [
+              "C"
+            ],
+            "shape": "triangle",
+            "side_labels": {
+              "AB": "15",
+              "AC": "9",
+              "BC": "x"
+            },
+            "side_lengths": {
+              "AB": 15,
+              "AC": 9,
+              "BC": 12
+            },
+            "type": "geometry",
+            "vertices": [
+              "A",
+              "B",
+              "C"
+            ]
+          },
+          "requires_drawing": false,
+          "text": "In the right triangle below, the hypotenuse has length $15$ and one leg has length $9$. Find the length of the missing leg $x$.",
+          "title": "Pythagorean theorem \u2014 find a missing leg"
         }
       ]
     }
@@ -4776,6 +5481,113 @@
           "score_status": "full",
           "student_answer": "$x = 7, y = 3$",
           "student_feedback": "Excellent work! You correctly used substitution, solved step-by-step without any errors, and arrived at the right answer."
+        }
+      ]
+    }
+  },
+  "e63960f1b57c04426098cde0de20db73": {
+    "meta": {
+      "mode": "generate_questions",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Teacher's instructions:\nEvery problem MUST be a geometry problem that requires a diagram: triangles (include at leas",
+      "recorded_at": 1793923935.5784
+    },
+    "response": {
+      "questions": [
+        {
+          "difficulty": "easy",
+          "figure_spec": {
+            "right_angle_at": [
+              "C"
+            ],
+            "shape": "triangle",
+            "side_labels": {
+              "AB": "c",
+              "AC": "3",
+              "BC": "4"
+            },
+            "side_lengths": {
+              "AB": 5,
+              "AC": 3,
+              "BC": 4
+            },
+            "type": "geometry",
+            "vertices": [
+              "A",
+              "B",
+              "C"
+            ]
+          },
+          "requires_drawing": false,
+          "text": "In the right triangle $ABC$ shown below, the right angle is at $C$, with legs $AC = 3$ and $BC = 4$. Find the length of the hypotenuse $AB$.",
+          "title": "Right triangle \u2014 find the hypotenuse"
+        },
+        {
+          "difficulty": "medium",
+          "figure_spec": {
+            "right_angle_at": [
+              "R"
+            ],
+            "shape": "triangle",
+            "side_labels": {
+              "PQ": "50",
+              "PR": "30",
+              "QR": "x"
+            },
+            "side_lengths": {
+              "PQ": 50,
+              "PR": 30,
+              "QR": 40
+            },
+            "type": "geometry",
+            "vertices": [
+              "P",
+              "Q",
+              "R"
+            ]
+          },
+          "requires_drawing": false,
+          "text": "Triangle $PQR$ has a right angle at $R$, with hypotenuse $PQ = 50$ and leg $PR = 30$. Find the length of leg $QR$.",
+          "title": "Scaled right triangle \u2014 missing leg"
+        },
+        {
+          "difficulty": "medium",
+          "figure_spec": {
+            "center_label": "O",
+            "chords": [
+              "AB",
+              "BC",
+              "AC"
+            ],
+            "points": {
+              "A": 0,
+              "B": 270,
+              "C": 140
+            },
+            "radius": 7,
+            "radius_label": "7",
+            "shape": "circle",
+            "show_center": true,
+            "type": "geometry"
+          },
+          "requires_drawing": false,
+          "text": "In the circle with center $O$ and radius $7$, points $A$, $B$, and $C$ lie on the circle. The central angle $\\angle AOC = 140\u00b0$. Find the measure of the inscribed angle $\\angle ABC$, which intercepts the same arc $\\overset{\\frown}{AC}$.",
+          "title": "Inscribed angle in a circle"
+        },
+        {
+          "difficulty": "hard",
+          "figure_spec": {
+            "n_sides": 6,
+            "shape": "polygon",
+            "side_labels": {
+              "AB": "8"
+            },
+            "side_length": 8,
+            "type": "geometry"
+          },
+          "requires_drawing": false,
+          "text": "A regular hexagon $ABCDEF$ has a side length of $8$. \n(a) Find the measure of each interior angle. \n(b) The hexagon is divided into equilateral triangles by drawing all diagonals from vertex $A$ to non-adjacent vertices. How many such triangles are formed, and what is the area of each triangle?",
+          "title": "Interior angles of a regular hexagon"
         }
       ]
     }
@@ -5220,6 +6032,21 @@
           "student_answer": "$10$ m/s",
           "student_feedback": "Excellent work! You correctly used conservation of energy to set up the equation, solved for v, and substituted the values cleanly to get the right answer of 10 m/s."
         }
+      ]
+    }
+  },
+  "f4058e434909ffa4ce15dcd5ad1c6147": {
+    "meta": {
+      "mode": "generate_distractors",
+      "model": "claude-haiku-4-5-20251001",
+      "prompt": "You are a worldclass worldclass math professor with expertise in breaking down m || Problem: A regular hexagon $ABCDEF$ has a side length of $8$. \n(a) Find the measure of each interior angle. \n(b) The",
+      "recorded_at": 1793923977.9766881
+    },
+    "response": {
+      "distractors": [
+        "$108\u00b0$",
+        "$135\u00b0$",
+        "$144\u00b0$"
       ]
     }
   },

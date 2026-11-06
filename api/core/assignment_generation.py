@@ -28,8 +28,10 @@ AI-flavored filler.
 
 1. The teacher's instructions in the message — the active intent. What
    they want, what they don't, the angle. Lead from this.
-2. The reference materials they've attached — notation, grade level,
-   vocabulary, what their students have already seen. Match what's shown.
+2. The reference materials they've attached — the topic, notation, grade
+   level, vocabulary, and style of problem their students have already
+   seen. Match what's shown, but write NEW problems: never copy a
+   problem from them, and never lightly re-number one.
 3. The assignment's title — the topic, when it names one ("Parallel &
    Perpendicular Lines", "Exponent Rules"). Every problem stays on it.
    A title that names no topic ("HW 3", "Unit 1 Review", "test") says
