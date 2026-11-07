@@ -21,6 +21,7 @@ import re
 from typing import Any
 
 from api.core.grading_ai import (
+    _bucket_steps_by_position,
     _build_breakdown,
     _build_system_prompt,
     _build_user_message,
@@ -330,6 +331,60 @@ class TestBuildBreakdownStepRefClamp:
         ]
         breakdown, _ = _build_breakdown(grades, _pos_to_bid(1))
         assert breakdown[0]["deductions"][0]["step_ref"] == 4
+
+
+class TestStepNumbersArePerProblem:
+    """The extractor's `step_num` counts across the whole homework; a
+    deduction's `step_ref` (the model echoes the label it was shown) is
+    checked against, and highlighted on the review page as, the problem's
+    own 1..N. The grader must therefore see per-problem numbers."""
+
+    _PROBLEMS: list[dict[str, Any]] = [
+        {"position": 1, "question": "q1", "final_answer": "a1"},
+        {"position": 2, "question": "q2", "final_answer": "a2"},
+    ]
+    # Prod shape: step_num numbered 1..6 across the homework.
+    _EXTRACTION: dict[str, Any] = {
+        "steps": [
+            {"step_num": 1, "problem_position": None, "latex": "scratch", "plain_english": ""},
+            {"step_num": 2, "problem_position": 1, "latex": "p1a", "plain_english": ""},
+            {"step_num": 3, "problem_position": 1, "latex": "p1b", "plain_english": ""},
+            {"step_num": 4, "problem_position": 2, "latex": "p2a", "plain_english": ""},
+            {"step_num": 5, "problem_position": 2, "latex": "", "plain_english": ""},
+            {"step_num": 6, "problem_position": 2, "latex": "p2b", "plain_english": "slip"},
+        ],
+        "final_answers": [],
+    }
+
+    def test_each_problem_is_numbered_from_one(self) -> None:
+        sections = _sections_by_position(_build_user_message(self._EXTRACTION, self._PROBLEMS))
+        assert "Step 1: p1a" in sections[1] and "Step 2: p1b" in sections[1]
+        # The empty step is dropped, as the review page drops it, so
+        # p2b is the problem's 2nd step on both.
+        assert "Step 1: p2a" in sections[2] and "Step 2: p2b — slip" in sections[2]
+        assert not re.search(r"Step [3-6]\b", sections[1] + sections[2])
+
+    def test_other_work_is_unnumbered(self) -> None:
+        msg = _build_user_message(self._EXTRACTION, self._PROBLEMS)
+        other = msg[msg.index("## Other work"):]
+        assert "Work: scratch" in other and "Step" not in other
+
+    def test_echoed_label_survives_the_range_check(self) -> None:
+        # The model anchors the slip to the "Step 2" it saw under problem
+        # 2 — kept. Its homework-wide step_num (6) would be out of range.
+        steps_by_pos, _ = _bucket_steps_by_position(self._EXTRACTION["steps"], {1, 2})
+        counts = {p: len(steps_by_pos.get(p, [])) for p in (1, 2)}
+        assert counts == {1: 2, 2: 2}
+        grades: list[dict[str, Any]] = [{
+            "problem_position": 2, "score_status": "partial", "percent": 90,
+            "deductions": [
+                {"points_off": 5, "step_ref": 2, "reason": "slip"},
+                {"points_off": 5, "step_ref": 6, "reason": "old numbering"},
+            ],
+        }]
+        breakdown, _ = _build_breakdown(grades, _pos_to_bid(1, 2), pos_to_step_count=counts)
+        refs = [d["step_ref"] for d in breakdown[0]["deductions"]]
+        assert refs == [2, None]
 
 
 class TestBuildUserMessageDelimiters:

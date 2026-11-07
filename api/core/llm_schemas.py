@@ -1201,9 +1201,11 @@ AI_GRADING_SCHEMA: ToolSchema = {
                                     "step_ref": {
                                         "type": ["integer", "null"],
                                         "description": (
-                                            "The `step_num` of the student's extracted "
-                                            "work this deduction is about, for the "
-                                            "review UI to highlight that step. Null "
+                                            "The N of the \"Step N\" line in this "
+                                            "problem's student work that this "
+                                            "deduction is about (numbered from 1 "
+                                            "within the problem), for the review UI "
+                                            "to highlight that step. Null "
                                             "when the deduction isn't tied to one "
                                             "specific step (e.g. 'no work shown', "
                                             "'final answer wrong')."

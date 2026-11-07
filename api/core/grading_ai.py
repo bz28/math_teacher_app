@@ -170,9 +170,10 @@ with points_off 5; percent 60 → entries summing to 40.
 points_off 100 and reason "No valid work / final answer wrong" is fine.
 - Each entry's `reason` is concise and teacher-facing and names the rubric \
 criterion that drove it (e.g. "Partial credit: small execution error — sign \
-flip reading the roots"). Set `step_ref` to the `step_num` of the student's \
-extracted work the deduction is about (so the review UI can highlight that \
-step), or null when it isn't step-specific (e.g. "no work shown", "final \
+flip reading the roots"). Set `step_ref` to the N of the "Step N" line, \
+under that problem's "Student's work", that the deduction is about (so the \
+review UI can highlight that step) — steps are numbered from 1 within each \
+problem — or null when it isn't step-specific (e.g. "no work shown", "final \
 answer wrong"). Set `rule_id` to a class rule's id when that rule is what the \
 deduction applies, else null. Keep the ledger consistent with `reasoning` — same \
 call, itemized.
@@ -301,18 +302,23 @@ def _build_rubric_block(rubric: dict[str, Any] | None) -> str:
     return "\n".join(parts)
 
 
-def _format_step(step: dict[str, Any]) -> str:
+def _format_step(step: dict[str, Any], label: str) -> str:
     """Render one extraction step as a single line for the grader's
     user message. Prefer LaTeX + plain-english side-by-side — the
     extractor sets either to empty string when only one is meaningful,
     so we use ` or ` fallthrough to skip empty fields rather than
-    printing bare separators."""
+    printing bare separators.
+
+    `label` is "Step N" with N the step's 1-based place in its problem's
+    work — never the extractor's `step_num`, which counts across the whole
+    homework. The model echoes N back as a deduction's `step_ref`, which is
+    range-checked against, and highlighted on the review page as, the
+    problem's own 1..N."""
     latex = step.get("latex") or ""
     plain = step.get("plain_english") or ""
-    label = f"Step {step.get('step_num', '?')}"
     if latex and plain:
         return f"{label}: {latex} — {plain}"
-    return f"{label}: {latex or plain or '(empty step)'}"
+    return f"{label}: {latex or plain}"
 
 
 def _format_visual_work(v: dict[str, Any]) -> str:
@@ -445,10 +451,17 @@ def _bucket_steps_by_position(
     used to range-check each deduction's `step_ref` is derived from the same
     buckets — so the count a `step_ref` is validated against always matches
     the numbering the model saw. The two MUST NOT drift.
+
+    A step with neither LaTeX nor text is dropped, as the teacher review
+    page drops it (`teacher_assignments`): the grader numbers a problem's
+    steps 1..N in this order and the review page highlights `step_ref` as
+    the N-th step it shows, so both must count the same steps.
     """
     steps_by_pos: dict[int, list[dict[str, Any]]] = {}
     unattributed: list[dict[str, Any]] = []
     for s in steps:
+        if not (s.get("latex") or s.get("plain_english")):
+            continue
         pos = s.get("problem_position")
         if isinstance(pos, int) and not isinstance(pos, bool) and pos in valid_positions:
             steps_by_pos.setdefault(pos, []).append(s)
@@ -623,8 +636,8 @@ def _build_user_message(
         problem_steps = steps_by_pos.get(position, [])
         lines.append("Student's work:")
         if problem_steps:
-            for s in problem_steps:
-                lines.append(f"  {_format_step(s)}")
+            for n, s in enumerate(problem_steps, 1):
+                lines.append(f"  {_format_step(s, f'Step {n}')}")
         else:
             lines.append("  (no work shown for this problem)")
 
@@ -680,8 +693,9 @@ def _build_user_message(
             "a problem's grade on their own."
         )
         lines.append("<student_work>")
+        # Unnumbered: a deduction anchors only to a problem's own steps.
         for s in unattributed_steps:
-            lines.append(f"  {_format_step(s)}")
+            lines.append(f"  {_format_step(s, 'Work')}")
         for fa in unattributed_finals:
             lines.append(f"  Final answer: {_format_final_answer(fa)}")
         # When every drawing on the homework is checked apart from the
@@ -900,7 +914,7 @@ def _reconcile_deductions(
     ALWAYS reconciles to the persisted percent.
 
     `step_ref` is additionally range-checked: the model numbers it 1-based
-    against the student's written steps it saw for this problem, but it
+    against the "Step N" labels it saw for this problem, but it
     sometimes numbers against finer logical units (e.g. the 4 entries of a
     matrix on a 2-step problem → step_ref=4). A `step_ref` outside
     `1..step_count` would anchor a review-UI highlight to a step that doesn't
