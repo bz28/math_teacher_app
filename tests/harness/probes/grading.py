@@ -19,6 +19,8 @@ a five-way matrix:
   (e) plainly wrong / blank                    → "zero"
   (f) required method / drawing (by graphing, using elimination)
                                                → partial when skipped, full when done
+  (h) a valid theorem other than the answer key's → "full"; an invalid one, or
+      skipping a theorem the question names     → "partial"
 
 The probe runs `grade_submission_with_ai` on each case and passes the case when
 the returned `score_status` lands in that case's accepted set (a near-match
@@ -115,7 +117,7 @@ def _prob(question: str, answer: str, *, flag: bool | None = None) -> list[dict[
 
 
 # ── The golden set ────────────────────────────────────────────────────────
-# 34 cases, ≥2 per matrix row. Rubric is None except in the g-row (class
+# 38 cases, ≥2 per matrix row. Rubric is None except in the g-row (class
 # rules), so the grader applies the shipped DEFAULT rubric — i.e. exactly what
 # a teacher who authors no rubric gets. Two cases are physics (a2, b3) per the "a couple physics" ask.
 
@@ -123,6 +125,26 @@ _UNITS_RULE = {"id": "runits1", "text": "Final answers need units (ft, °, rad/m
 # What every golden problem is worth. With the units rule's 1 point that is
 # the 5% the class-rule cases were labeled against.
 _PROBLEM_POINTS = 20
+
+# The h-row (the key's theorem isn't required): two real Unit 5 problems.
+_HL_Q = (
+    "**Given:** $\\overline{BE}$ bisects $\\overline{AC}$ at point $M$, "
+    "$\\overline{AB} \\perp \\overline{BE}$, $\\overline{EC} \\perp \\overline{BE}$, and "
+    "$\\overline{AB} \\cong \\overline{EC}$.\n\n**Prove:** $\\triangle ABM \\cong \\triangle ECM$\n\n"
+    "Write a two-column proof. State which theorem you use to conclude the triangles are congruent."
+)
+_HL_KEY = (
+    "$\\triangle ABM \\cong \\triangle ECM$ by the **Hypotenuse-Leg (HL) Theorem**: both "
+    "triangles are right triangles, their hypotenuses are equal ($AM = MC$ since $M$ "
+    "bisects $\\overline{AC}$), and one pair of legs is equal ($\\overline{AB} \\cong "
+    "\\overline{EC}$, given)."
+)
+_THIRD_Q = (
+    "In $\\triangle ABC$ and $\\triangle DEF$, $\\angle A \\cong \\angle D$ and "
+    "$\\angle B \\cong \\angle E$. Given that $m\\angle A = 52°$ and $m\\angle B = 79°$, "
+    "find $m\\angle C$ and $m\\angle F$. State the theorem you used."
+)
+_THIRD_KEY = "$m\\angle C = m\\angle F = 49°$, by the **Third Angles Theorem**."
 
 # The b4/b5/d3 matrix-inverse family share one problem.
 _MX_Q = "Solve the system 2x + 5y = 16, 3x - y = 3 using the inverse matrix."
@@ -819,6 +841,94 @@ GOLDEN_CASES: list[GradingCase] = [
         accepts={"partial"},
         rationale="Two answers lack °: the rule's 5 points come off once, as this teacher did.",
     ),
+    # ── h: the key's theorem is one valid route, not a requirement ────
+    # Prod, Unit 5 congruent triangles (Nov 2026): keys read "by the HL
+    # Theorem" / "by the Third Angles Theorem" and the grader docked valid
+    # proofs for citing another theorem ("the answer key requires HL").
+    GradingCase(
+        name="h1-aas-proof-for-an-hl-key",
+        category="h",
+        problems=_prob(_HL_Q, _HL_KEY),
+        extraction=_ext(
+            [
+                (1, "1)\\ \\overline{BE} \\text{ bisects } \\overline{AC} \\text{ at } M,\\ "
+                    "\\overline{AB}\\perp\\overline{BE},\\ \\overline{EC}\\perp\\overline{BE},\\ "
+                    "\\overline{AB}\\cong\\overline{EC} \\quad \\text{Given}"),
+                (2, "2)\\ \\overline{AM}\\cong\\overline{MC} \\quad \\text{Def. of segment bisector}"),
+                (3, "3)\\ \\angle ABM, \\angle CEM \\text{ are right angles} \\quad \\text{Def. of } \\perp"),
+                (4, "4)\\ \\angle ABM \\cong \\angle CEM \\quad \\text{Right angles congruence theorem}"),
+                (5, "5)\\ \\angle AMB \\cong \\angle CME \\quad \\text{Vertical angles theorem}"),
+                (6, "6)\\ \\triangle ABM \\cong \\triangle ECM \\quad \\text{AAS}"),
+            ],
+            "\\triangle ABM \\cong \\triangle ECM\\ \\text{(AAS)}",
+        ),
+        expected="full",
+        accepts={"full"},
+        rationale=(
+            "Valid AAS: two angle pairs plus AM ≅ MC, which is opposite the right "
+            "angle, not between the two angles. The teacher gave 100; the grader "
+            "gave 75 for 'HL required'."
+        ),
+        extra={"forbids_deduction_mentioning": ["hl", "hypotenuse"]},
+    ),
+    GradingCase(
+        name="h2-triangle-sum-for-a-third-angles-key",
+        category="h",
+        problems=_prob(_THIRD_Q, _THIRD_KEY),
+        extraction=_ext(
+            [
+                (1, "m\\angle C = 180 - (52 + 79) = 49"),
+                (2, "m\\angle D = 52,\\ m\\angle E = 79 \\text{ (congruent angles)}"),
+                (3, "m\\angle F = 180 - (52 + 79) = 49"),
+                (4, "\\text{Triangle Sum Theorem}"),
+            ],
+            "m\\angle C = 49^\\circ,\\ m\\angle F = 49^\\circ,\\ \\text{Triangle Sum Theorem}",
+        ),
+        expected="full",
+        accepts={"full"},
+        rationale="The Triangle Sum Theorem applied to both triangles justifies both angles.",
+        extra={"forbids_deduction_mentioning": ["third angles"]},
+    ),
+    GradingCase(
+        name="h3-sas-that-is-really-ssa",
+        category="h",
+        problems=_prob(_HL_Q, _HL_KEY),
+        extraction=_ext(
+            [
+                (1, "1)\\ \\overline{BE} \\text{ bisects } \\overline{AC} \\text{ at } M,\\ "
+                    "\\overline{AB}\\perp\\overline{BE},\\ \\overline{EC}\\perp\\overline{BE},\\ "
+                    "\\overline{AB}\\cong\\overline{EC} \\quad \\text{Given}"),
+                (2, "2)\\ \\overline{AM}\\cong\\overline{CM} \\quad \\text{Def. of segment bisector}"),
+                (3, "3)\\ \\angle ABM \\cong \\angle ECM \\quad \\text{All right angles are congruent}"),
+                (4, "4)\\ \\triangle ABM \\cong \\triangle ECM \\quad \\text{SAS}"),
+            ],
+            "\\triangle ABM \\cong \\triangle ECM\\ \\text{SAS}",
+        ),
+        expected="partial",
+        accepts={"partial", "zero"},
+        rationale=(
+            "The right angle is not between AB and AM, so this is SSA, not SAS: "
+            "an invalid step, whatever the key uses. The teacher gave 70."
+        ),
+    ),
+    GradingCase(
+        name="h4-named-theorem-not-used",
+        category="h",
+        problems=_prob(_THIRD_Q.replace(
+            "State the theorem you used.", "Use the Third Angles Theorem."), _THIRD_KEY),
+        extraction=_ext(
+            [
+                (1, "m\\angle C = 180 - (52 + 79) = 49"),
+                (2, "m\\angle F = 180 - (52 + 79) = 49"),
+                (3, "\\text{Triangle Sum Theorem}"),
+            ],
+            "m\\angle C = 49^\\circ,\\ m\\angle F = 49^\\circ",
+        ),
+        expected="partial",
+        accepts={"partial"},
+        rationale="Here the question names the theorem, so it is a required method.",
+        extra={"requires_deduction_mentioning": "third angles"},
+    ),
     GradingCase(
         name="e2-blank",
         category="e",
@@ -855,9 +965,10 @@ class GradingProbe(Probe):
     name = "grading"
     needs_browser = False
     default_constraint = (
-        "Grading-quality golden set: 34 hand-labeled submissions spanning "
+        "Grading-quality golden set: 38 hand-labeled submissions spanning "
         "clean-correct, valid-alternative-method, broken-work-right-answer, "
-        "arithmetic-slip, plainly-wrong, and required-method/drawing. Asserts the AI grader's "
+        "arithmetic-slip, plainly-wrong, required-method/drawing, class rules, and "
+        "valid-alternative-theorem. Asserts the AI grader's "
         "score_status matches the label."
     )
 
