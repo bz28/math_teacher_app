@@ -2780,19 +2780,21 @@ async def get_my_submission(
         select(
             Assignment.integrity_check_enabled,
             Assignment.ai_grading_enabled,
-            Assignment.status,
         ).where(Assignment.id == sub.assignment_id)
     )).one_or_none()
     integrity_on = bool(toggles.integrity_check_enabled) if toggles else False
     grading_on = bool(toggles.ai_grading_enabled) if toggles else False
-    # Only worth asking for flagged work. An unpublished homework takes no
-    # turn-ins, so it offers no retake (the endpoint re-checks enrollment).
-    can_retake = (
-        sub.extraction_flagged_at is not None
-        and toggles is not None
-        and (toggles.status == "published" or user.is_preview)
-        and await _retake_block(db, sub) is None
-    )
+    # Only worth asking for flagged work, and only through the endpoint's
+    # own gates — the homework still takes turn-ins (published, student
+    # still enrolled) and `_retake_block` — so the offer never leads to a
+    # refusal after the student has retaken every page.
+    can_retake = False
+    if sub.extraction_flagged_at is not None and await _retake_block(db, sub) is None:
+        try:
+            await _load_assignment_for_student(db, sub.assignment_id, user)
+            can_retake = True
+        except HTTPException:
+            pass
 
     return StudentSubmissionDetail(
         submission_id=str(sub.id),

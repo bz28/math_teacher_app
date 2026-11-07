@@ -269,6 +269,23 @@ async def test_not_once_the_homework_no_longer_takes_turn_ins(
     assert (await _retake(client, world, sid)).status_code == 403
 
 
+async def test_not_offered_to_a_student_who_left_the_class(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """The offer goes through the endpoint's own enrollment gate, so a
+    student is never asked to retake every page only to be refused."""
+    sid = await _submit_and_flag(client, world)
+    assert await _can_retake(client, world) is True
+    async with get_session_factory()() as s:
+        await s.execute(
+            text("DELETE FROM section_enrollments WHERE student_id = :id"),
+            {"id": world["student_id"]},
+        )
+        await s.commit()
+    assert await _can_retake(client, world) is False
+    assert (await _retake(client, world, sid)).status_code == 403
+
+
 async def test_a_retake_past_due_is_late_and_cant_launder_a_late_original(
     client: AsyncClient, world: dict[str, Any],
 ) -> None:

@@ -214,7 +214,15 @@ export default function HomeworkPage() {
           <SubmissionPanel
             assignmentId={hw.assignment_id}
             dueAt={hw.due_at}
-            retake={{ submissionId, onCancel: () => setRetaking(false) }}
+            retake={{
+              submissionId,
+              // Reload on the way out: a retake refused meanwhile (the
+              // teacher started grading) must stop being offered.
+              onCancel: () => {
+                setRetaking(false);
+                void loadAll(hw.assignment_id);
+              },
+            }}
             onSubmitted={async () => {
               setRetaking(false);
               setFlagDetailsDropped(false);
