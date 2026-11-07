@@ -644,6 +644,10 @@ class StudentSubmissionDetail(BaseModel):
     # spinner when no pipeline will ever populate `extraction`.
     integrity_check_enabled: bool
     ai_grading_enabled: bool
+    # The student flagged the reading and may still replace their photos
+    # for a fresh one (POST /submissions/{id}/retake) — see `_retake_block`.
+    # Drives the "Retake photos" offer on the flagged screen.
+    can_retake: bool = False
 
 
 # ── Dashboard / grades shapes ──
@@ -2102,42 +2106,11 @@ async def check_page_orientation(
     )
 
 
-@router.post("/homework/{assignment_id}/submit")
-async def submit_homework(
-    assignment_id: uuid.UUID,
-    body: SubmitHomeworkRequest,
-    user: User = Depends(get_current_user_full),
-    db: AsyncSession = Depends(get_db),
-) -> SubmitHomeworkResponse:
-    """Insert a submission for this student/HW. One-shot — resubmission
-    is not allowed in v1; a second call returns 409. Soft-locks late
-    submissions (sets is_late=true, doesn't reject).
-    """
-    assignment = await _load_assignment_for_student(db, assignment_id, user)
-
-    # Already submitted? One-shot enforcement.
-    existing = (await db.execute(
-        select(Submission.id).where(
-            Submission.assignment_id == assignment_id,
-            Submission.student_id == user.id,
-        )
-        .limit(1)
-    )).scalar_one_or_none()
-    if existing is not None:
-        if not user.is_preview:
-            raise HTTPException(status_code=409, detail="Already submitted")
-        # A teacher's preview is a rehearsal, not a turn-in. One-shot
-        # exists so a student can't resubmit after seeing feedback —
-        # applied to her own shadow it would mean a single rehearsal
-        # permanently burned the flow on this homework, since nothing
-        # deletes a submission. Replace the previous rehearsal instead.
-        # Grade, grading job and integrity rows cascade off this row;
-        # LLM call records are SET NULL, so the spend stays on the books.
-        await db.execute(
-            sql_delete(Submission).where(Submission.id == existing)
-        )
-        await db.flush()
-
+async def _validated_upload_files(body: SubmitHomeworkRequest) -> list[dict[str, str]]:
+    """Validate, size-check and turn each page of a turn-in, returning
+    the files as stored. Shared by submit and retake, so a retake is
+    held to exactly the rules the first turn-in was. 400 on an
+    unreadable or too-small page, 413 over the whole-submission cap."""
     # The work is required and is the source of truth — what the
     # teacher reviews and what the integrity checker reads for per-
     # problem answer extraction. Each file is validated by magic bytes
@@ -2212,6 +2185,46 @@ async def submit_homework(
                 f"(max {MAX_SUBMISSION_TOTAL_BYTES // 1024 // 1024}MB total)"
             ),
         )
+    return validated_files
+
+
+@router.post("/homework/{assignment_id}/submit")
+async def submit_homework(
+    assignment_id: uuid.UUID,
+    body: SubmitHomeworkRequest,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> SubmitHomeworkResponse:
+    """Insert a submission for this student/HW. One-shot — resubmission
+    is not allowed in v1; a second call returns 409. Soft-locks late
+    submissions (sets is_late=true, doesn't reject).
+    """
+    assignment = await _load_assignment_for_student(db, assignment_id, user)
+
+    # Already submitted? One-shot enforcement.
+    existing = (await db.execute(
+        select(Submission.id).where(
+            Submission.assignment_id == assignment_id,
+            Submission.student_id == user.id,
+        )
+        .limit(1)
+    )).scalar_one_or_none()
+    if existing is not None:
+        if not user.is_preview:
+            raise HTTPException(status_code=409, detail="Already submitted")
+        # A teacher's preview is a rehearsal, not a turn-in. One-shot
+        # exists so a student can't resubmit after seeing feedback —
+        # applied to her own shadow it would mean a single rehearsal
+        # permanently burned the flow on this homework, since nothing
+        # deletes a submission. Replace the previous rehearsal instead.
+        # Grade, grading job and integrity rows cascade off this row;
+        # LLM call records are SET NULL, so the spend stays on the books.
+        await db.execute(
+            sql_delete(Submission).where(Submission.id == existing)
+        )
+        await db.flush()
+
+    validated_files = await _validated_upload_files(body)
 
     # The submissions schema requires a section_id on the row.
     section_id = await _section_for_student_work(db, user, assignment)
@@ -2569,6 +2582,173 @@ async def flag_extraction_submission(
     return {"status": "ok"}
 
 
+async def _retake_block(db: AsyncSession, sub: Submission) -> str | None:
+    """Why this student can't retake the photos of this turn-in; None = they can.
+
+    Submit is one-shot so a student can't resubmit after seeing feedback.
+    A retake is the narrow exception for a reading the student flagged,
+    while there's still no feedback of any kind to have seen:
+
+    - flagged, and not since confirmed — the reading was rejected, so
+      neither the understanding check nor AI grading ever started;
+    - not already retaken — once, so the original stays the one kept
+      (`retake_original`) and a student can't cycle through photos;
+    - no grade data of any kind (`has_any_grade`) — not an AI grade, not
+      a teacher's partial hand grade, nothing published. Once the
+      teacher starts grading from the photos, those are the photos;
+    - no understanding check row. A flagged reading never starts one;
+      this is the backstop should that ever change.
+
+    Whether the homework still takes turn-ins (published, student still
+    enrolled) is checked by the caller through the same loader submit
+    uses.
+    """
+    from api.core.grading_queue import has_any_grade
+
+    if sub.extraction_flagged_at is None or sub.extraction_confirmed_at is not None:
+        return "Only a reading you sent to your teacher can be retaken"
+    if sub.retaken_at is not None:
+        return "You've already retaken these photos"
+    grade = (await db.execute(
+        select(SubmissionGrade).where(SubmissionGrade.submission_id == sub.id)
+    )).scalar_one_or_none()
+    if has_any_grade(grade):
+        return "Your teacher has started grading this homework"
+    started = (await db.execute(
+        select(IntegrityCheckSubmission.id)
+        .where(IntegrityCheckSubmission.submission_id == sub.id)
+        .limit(1)
+    )).scalar_one_or_none()
+    if started is not None:
+        return "The understanding check has already started"
+    return None
+
+
+def _iso(value: datetime | None) -> str | None:
+    return value.isoformat() if value else None
+
+
+@router.post("/submissions/{submission_id}/retake")
+async def retake_submission(
+    submission_id: uuid.UUID,
+    body: SubmitHomeworkRequest,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> SubmitHomeworkResponse:
+    """Replace the photos of a flagged, ungraded turn-in and read them again.
+
+    For the student who sent the reading to their teacher because the
+    photos were the problem — sideways, blurry, a page missing. Allowed
+    once, under `_retake_block`'s rules, while the homework still takes
+    turn-ins. The new photos go through exactly submit's validation
+    (`_validated_upload_files`), and the reading is spawned the same way.
+    The submission then walks the normal path again: the student checks
+    the new reading, confirms or flags it.
+
+    Nothing is destroyed: the turn-in it replaces — files, reading, edits,
+    flag and note, original submitted_at and is_late — is kept on
+    `retake_original` and shown to the teacher.
+
+    Lateness follows submit's rule — work is late when it was turned in
+    after the due date — and a retake can't launder it: the new photos
+    are late if they arrive past due, and a late original stays late.
+
+    Rejects: 404 / 403 (not found / not yours, or the homework no longer
+    takes turn-ins), 409 when a retake isn't allowed (with why), and
+    submit's 400 / 413 for the files themselves.
+    """
+    sub = (await db.execute(
+        select(Submission).where(Submission.id == submission_id)
+    )).scalar_one_or_none()
+    if sub is None:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    if sub.student_id != user.id:
+        raise HTTPException(status_code=403, detail="Not your submission")
+    # Same gate as submit: published (or the teacher's preview), and the
+    # student is still in a section it was assigned to.
+    assignment = await _load_assignment_for_student(db, sub.assignment_id, user)
+    block = await _retake_block(db, sub)
+    if block is not None:
+        raise HTTPException(status_code=409, detail=block)
+
+    validated_files = await _validated_upload_files(body)
+
+    now = datetime.now(UTC)
+    is_late = sub.is_late or bool(assignment.due_at and now > assignment.due_at)
+    original = {
+        "files": sub.files,
+        "extraction": sub.extraction,
+        "extraction_edits": sub.extraction_edits,
+        "extraction_edited_at": _iso(sub.extraction_edited_at),
+        "extraction_flagged_at": _iso(sub.extraction_flagged_at),
+        "extraction_flag_note": sub.extraction_flag_note,
+        "submitted_at": _iso(sub.submitted_at),
+        "is_late": sub.is_late,
+    }
+    previous_file_count = len(sub.files or [])
+    # Conditional on the state `_retake_block` just approved, so a
+    # double tap, or a confirm racing in from another tab, can't retake
+    # twice or retake a reading that was confirmed meanwhile.
+    result = await db.execute(
+        update(Submission)
+        .where(
+            Submission.id == submission_id,
+            Submission.extraction_flagged_at.is_not(None),
+            Submission.extraction_confirmed_at.is_(None),
+            Submission.retaken_at.is_(None),
+        )
+        .values(
+            files=validated_files,
+            extraction=None,
+            extraction_edits=None,
+            extraction_edited_at=None,
+            extraction_flagged_at=None,
+            extraction_flag_note=None,
+            submitted_at=now,
+            is_late=is_late,
+            retaken_at=now,
+            retake_original=original,
+        )
+    )
+    if result.rowcount == 0:  # type: ignore[attr-defined]
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Submission state changed — reload and try again",
+        )
+    await db.commit()
+
+    # Spawned exactly as submit spawns it, and logged after the spawn for
+    # the same reason (see submit_homework): the retake is durable by
+    # here, and a failure in between must not strand it unread.
+    if assignment.integrity_check_enabled or assignment.ai_grading_enabled:
+        _spawn_background_task(_run_extraction_background(submission_id))
+
+    try:
+        metadata: dict[str, Any] = {
+            "assignment_id": str(sub.assignment_id),
+            "file_count": len(validated_files),
+            "previous_file_count": previous_file_count,
+            "is_late": is_late,
+        }
+        orientations = _orientation_report(body.orientations, len(validated_files))
+        if orientations is not None:
+            metadata["page_orientations"] = orientations
+        await record_student_activity(
+            db, user, "submission.retake", "submission", submission_id, metadata,
+            school_id=await _school_id_for(db, course_id=assignment.course_id),
+        )
+        await db.commit()
+    except Exception:
+        logger.exception("submission.retake activity write failed")
+
+    return SubmitHomeworkResponse(
+        submission_id=str(submission_id),
+        submitted_at=now,
+        is_late=is_late,
+    )
+
+
 @router.get("/homework/{assignment_id}/submission")
 async def get_my_submission(
     assignment_id: uuid.UUID,
@@ -2600,10 +2780,19 @@ async def get_my_submission(
         select(
             Assignment.integrity_check_enabled,
             Assignment.ai_grading_enabled,
+            Assignment.status,
         ).where(Assignment.id == sub.assignment_id)
     )).one_or_none()
     integrity_on = bool(toggles.integrity_check_enabled) if toggles else False
     grading_on = bool(toggles.ai_grading_enabled) if toggles else False
+    # Only worth asking for flagged work. An unpublished homework takes no
+    # turn-ins, so it offers no retake (the endpoint re-checks enrollment).
+    can_retake = (
+        sub.extraction_flagged_at is not None
+        and toggles is not None
+        and (toggles.status == "published" or user.is_preview)
+        and await _retake_block(db, sub) is None
+    )
 
     return StudentSubmissionDetail(
         submission_id=str(sub.id),
@@ -2616,6 +2805,7 @@ async def get_my_submission(
         extraction_flagged_at=sub.extraction_flagged_at,
         integrity_check_enabled=integrity_on,
         ai_grading_enabled=grading_on,
+        can_retake=can_retake,
     )
 
 

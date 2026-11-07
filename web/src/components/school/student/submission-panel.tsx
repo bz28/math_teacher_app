@@ -53,6 +53,10 @@ interface Props {
   /** Called after a successful submit so the parent can swap into
    *  the submitted read-only view. */
   onSubmitted: (resp: SubmitHomeworkResponse) => void;
+  /** Retake mode: replace the photos of this flagged, ungraded
+   *  submission instead of turning in for the first time. Same staging,
+   *  checks and validation; the copy says what's different. */
+  retake?: { submissionId: string; onCancel: () => void };
 }
 
 /**
@@ -146,6 +150,7 @@ export function SubmissionPanel({
   assignmentId,
   dueAt,
   onSubmitted,
+  retake,
 }: Props) {
   const [stagedFiles, setStagedFiles] = useState<StagedFile[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -417,11 +422,14 @@ export function SubmissionPanel({
     setError(null);
     try {
       const valid = stagedFiles.filter((f) => !f.error && f.base64);
-      const resp = await schoolStudent.submitHomework(assignmentId, {
+      const body = {
         files: valid.map((f) => f.base64),
         rotations: valid.map((f) => f.rotation),
         orientations: valid.map((f) => orientationReport(f, f.checked)),
-      });
+      };
+      const resp = retake
+        ? await schoolStudent.retakeSubmission(retake.submissionId, body)
+        : await schoolStudent.submitHomework(assignmentId, body);
       onSubmitted(resp);
     } catch (err) {
       // Never surface a raw exception message to a student. Staged
@@ -455,16 +463,26 @@ export function SubmissionPanel({
   return (
     <div className="mt-8 overflow-hidden rounded-[--radius-lg] border border-border bg-surface shadow-[0_1px_2px_rgba(20,19,15,0.04)]">
       <div className="border-b border-border-light bg-primary-bg/30 px-6 py-5">
-        <p className="eyebrow text-primary/80">Turn in your work</p>
-        <h2 className="mt-1.5 font-serif text-[1.75rem] leading-tight text-text-primary">
-          Submit your homework
-        </h2>
-        <p className="mt-2 max-w-prose text-sm leading-relaxed text-text-secondary">
-          Add clear photos or a PDF of your completed work — up to {MAX_FILES}{" "}
-          files. If your work runs over a few pages, snap each one in order. Your
-          teacher sees exactly what you turn in, so a steady, well-lit shot goes
-          a long way.
+        <p className="eyebrow text-primary/80">
+          {retake ? "Retake your photos" : "Turn in your work"}
         </p>
+        <h2 className="mt-1.5 font-serif text-[1.75rem] leading-tight text-text-primary">
+          {retake ? "New photos of the same homework" : "Submit your homework"}
+        </h2>
+        {retake ? (
+          <p className="mt-2 max-w-prose text-sm leading-relaxed text-text-secondary">
+            Add every page again, upright, in a bright spot. We&apos;ll read
+            them fresh for you to check. Your teacher still sees your first
+            photos, and you can only retake once.
+          </p>
+        ) : (
+          <p className="mt-2 max-w-prose text-sm leading-relaxed text-text-secondary">
+            Add clear photos or a PDF of your completed work — up to {MAX_FILES}{" "}
+            files. If your work runs over a few pages, snap each one in order. Your
+            teacher sees exactly what you turn in, so a steady, well-lit shot goes
+            a long way.
+          </p>
+        )}
       </div>
 
       <div className="px-6 py-5">
@@ -706,17 +724,28 @@ export function SubmissionPanel({
               </span>
               <div className="min-w-0">
                 <p className="font-serif text-lg leading-snug text-text-primary">
-                  Ready to turn it in?
+                  {retake ? "Ready to send your new photos?" : "Ready to turn it in?"}
                 </p>
-                <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">
-                  Your teacher will see exactly{" "}
-                  <span className="font-semibold text-text-primary">
-                    {turnInCount}
-                  </span>{" "}
-                  of work — nothing else. Once you turn it in you won&apos;t be
-                  able to change it, so take one last look if you&apos;d like.
-                  You&apos;ve got this.
-                </p>
+                {retake ? (
+                  <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">
+                    These{" "}
+                    <span className="font-semibold text-text-primary">
+                      {turnInCount}
+                    </span>{" "}
+                    replace your first photos, and this is your one retake — so
+                    check every page is here and upright.
+                  </p>
+                ) : (
+                  <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">
+                    Your teacher will see exactly{" "}
+                    <span className="font-semibold text-text-primary">
+                      {turnInCount}
+                    </span>{" "}
+                    of work — nothing else. Once you turn it in you won&apos;t be
+                    able to change it, so take one last look if you&apos;d like.
+                    You&apos;ve got this.
+                  </p>
+                )}
                 {sidewaysPages.length > 0 && (
                   <p className="mt-2 flex items-start gap-1.5 text-sm font-semibold text-warning-dark">
                     <AlertTriangleIcon className="mt-0.5 h-4 w-4 shrink-0 text-warning" strokeWidth={2} />
@@ -738,7 +767,9 @@ export function SubmissionPanel({
                 disabled={!canSubmit}
                 className="order-1 inline-flex min-h-[44px] items-center justify-center rounded-[--radius-sm] bg-primary px-5 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:bg-primary-dark disabled:opacity-50 sm:order-2"
               >
-                {submitting ? "Turning it in…" : "Turn it in"}
+                {submitting
+                  ? retake ? "Sending…" : "Turning it in…"
+                  : retake ? "Send new photos" : "Turn it in"}
               </button>
             </div>
           </motion.div>
@@ -747,13 +778,27 @@ export function SubmissionPanel({
             key="cta"
             className="mt-6 flex flex-col-reverse items-end gap-2 sm:flex-row sm:items-center sm:justify-between"
           >
-            {submitHint ? (
-              <p
-                id="submit-hint"
-                className="text-xs leading-relaxed text-text-muted"
-              >
-                {submitHint}
-              </p>
+            {submitHint || retake ? (
+              <div className="flex flex-col items-end gap-1 sm:items-start">
+                {submitHint && (
+                  <p
+                    id="submit-hint"
+                    className="text-xs leading-relaxed text-text-muted"
+                  >
+                    {submitHint}
+                  </p>
+                )}
+                {retake && (
+                  <button
+                    type="button"
+                    onClick={retake.onCancel}
+                    disabled={submitting}
+                    className="inline-flex min-h-[44px] items-center text-sm font-medium text-text-secondary underline decoration-border underline-offset-[3px] hover:text-text-primary disabled:opacity-50"
+                  >
+                    Keep my first photos
+                  </button>
+                )}
+              </div>
             ) : (
               <span aria-hidden className="hidden sm:block" />
             )}
@@ -768,7 +813,8 @@ export function SubmissionPanel({
                   : "bg-primary hover:bg-primary-dark",
               )}
             >
-              Review &amp; turn in{isLate ? " (late)" : ""}
+              {retake ? "Review new photos" : <>Review &amp; turn in</>}
+              {isLate ? " (late)" : ""}
             </button>
           </div>
         )}

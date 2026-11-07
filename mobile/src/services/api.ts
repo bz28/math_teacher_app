@@ -459,6 +459,21 @@ export const submitHomework = (
     uploadTimeoutFor(files.reduce((n, f) => n + f.length, 0)),
   );
 
+/** Replace the photos of a flagged, ungraded turn-in for a fresh reading —
+ *  once. Same arguments and validation as `submitHomework`; the original
+ *  photos are kept for the teacher. */
+export const retakeSubmission = (
+  submissionId: string,
+  files: string[],
+  rotations?: number[],
+  orientations?: string[],
+) =>
+  apiPost<{ submission_id: string; submitted_at: string; is_late: boolean }>(
+    `/school/student/submissions/${submissionId}/retake`,
+    { files, rotations, orientations },
+    uploadTimeoutFor(files.reduce((n, f) => n + f.length, 0)),
+  );
+
 /** Free pixel check behind the upload screen's sideways block (and, for
  *  a PDF, its too-small pages). `image` is a small copy of one photo, or
  *  a whole PDF. */

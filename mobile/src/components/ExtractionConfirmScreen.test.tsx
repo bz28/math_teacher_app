@@ -246,3 +246,27 @@ describe("ExtractionConfirmScreen", () => {
     expect(screen.queryByText("Did we read this right?")).toBeNull();
   });
 });
+
+describe("ExtractionConfirmScreen after a flag", () => {
+  beforeEach(() => jest.clearAllMocks());
+  const FLAGGED = { ...SUBMISSION, extraction_flagged_at: "2026-06-01T00:05:00Z" };
+
+  it("offers a retake when the server allows one", async () => {
+    mockedApi.getSubmission.mockResolvedValue({ ...FLAGGED, can_retake: true } as never);
+    const onRetake = jest.fn();
+    render(
+      <ExtractionConfirmScreen assignmentId="a" onDone={jest.fn()} onIntegrityCheck={jest.fn()} onRetake={onRetake} />,
+    );
+    fireEvent.press(await waitForText("Retake photos"));
+    expect(onRetake).toHaveBeenCalled();
+  });
+
+  it("doesn't when it won't", async () => {
+    mockedApi.getSubmission.mockResolvedValue({ ...FLAGGED, can_retake: false } as never);
+    render(
+      <ExtractionConfirmScreen assignmentId="a" onDone={jest.fn()} onIntegrityCheck={jest.fn()} onRetake={jest.fn()} />,
+    );
+    expect(await waitForText("Your teacher will grade this by hand.")).toBeTruthy();
+    expect(screen.queryByText("Retake photos")).toBeNull();
+  });
+});

@@ -2690,6 +2690,19 @@ class TeacherSubmissionDetailProblem(BaseModel):
     graph: TeacherGraphCheck | None = None
 
 
+class TeacherRetakeOriginal(BaseModel):
+    """The turn-in a student's retake replaced — what the teacher needs to
+    see it was the same work: the photos, when they came in, and what the
+    student said was wrong with that reading. The original reading itself
+    stays on the row for audit but isn't rendered."""
+
+    files: list[dict[str, str]] | None = None
+    submitted_at: datetime | None = None
+    is_late: bool = False
+    extraction_flagged_at: datetime | None = None
+    extraction_flag_note: str | None = None
+
+
 class TeacherSubmissionDetail(BaseModel):
     submission_id: str
     assignment_id: str
@@ -2732,6 +2745,11 @@ class TeacherSubmissionDetail(BaseModel):
     # rows marked `edited` below. Lets the flagged callout say "they
     # fixed 2 lines first" without the client re-counting every bucket.
     extraction_edit_count: int = 0
+    # Set when the student flagged the first reading and replaced their
+    # photos for a fresh one. Everything above describes the NEW turn-in;
+    # the one it replaced is in `retake_original`.
+    retaken_at: datetime | None = None
+    retake_original: TeacherRetakeOriginal | None = None
     # Current grading state. None when the teacher hasn't touched this
     # submission yet. `breakdown` + `final_score` are teacher-draft
     # until `grade_published_at` is set, at which point the student
@@ -2799,6 +2817,21 @@ async def get_submission_detail(
     grade = (await db.execute(
         select(SubmissionGrade).where(SubmissionGrade.submission_id == sub.id)
     )).scalar_one_or_none()
+
+    # Deferred on the model (it can hold a second set of pages), so it is
+    # read explicitly, and only for the rare row that has one.
+    retake_original: TeacherRetakeOriginal | None = None
+    if sub.retaken_at is not None:
+        raw_original = (await db.execute(
+            select(Submission.retake_original).where(Submission.id == sub.id)
+        )).scalar_one_or_none() or {}
+        retake_original = TeacherRetakeOriginal(
+            files=raw_original.get("files"),
+            submitted_at=raw_original.get("submitted_at"),
+            is_late=bool(raw_original.get("is_late")),
+            extraction_flagged_at=raw_original.get("extraction_flagged_at"),
+            extraction_flag_note=raw_original.get("extraction_flag_note"),
+        )
 
     # Build a lookup of AI-extracted student answers by problem_id.
     # The AI grading step writes `student_answer` into each breakdown
@@ -3227,6 +3260,8 @@ async def get_submission_detail(
         extraction_flagged_at=sub.extraction_flagged_at,
         extraction_flag_note=sub.extraction_flag_note,
         extraction_edit_count=len(sub.extraction_edits or {}),
+        retaken_at=sub.retaken_at,
+        retake_original=retake_original,
         submission_id=str(sub.id),
         assignment_id=str(assignment.id),
         assignment_title=assignment.title,

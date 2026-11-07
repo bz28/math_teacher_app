@@ -44,6 +44,9 @@ export default function HomeworkPage() {
   // Set when this session's flag carried a note/edits the server didn't
   // store (already flagged, or state moved on) — the terminal says so.
   const [flagDetailsDropped, setFlagDetailsDropped] = useState(false);
+  // The student chose "Retake photos" on the flagged screen: the upload
+  // panel, in retake mode, takes its place.
+  const [retaking, setRetaking] = useState(false);
   // Post-publish view filter — flips the problems list to show only
   // partial/zero rows. Default off so the student lands on the
   // complete record; flipping the toggle is the "go fix what I got
@@ -204,7 +207,32 @@ export default function HomeworkPage() {
   }
 
   if (mode.kind === "extraction_flagged") {
-    return <ExtractionFlaggedTerminalView detailsDropped={flagDetailsDropped} />;
+    if (retaking && hw.submission_id) {
+      const submissionId = hw.submission_id;
+      return (
+        <div className="mx-auto max-w-3xl">
+          <SubmissionPanel
+            assignmentId={hw.assignment_id}
+            dueAt={hw.due_at}
+            retake={{ submissionId, onCancel: () => setRetaking(false) }}
+            onSubmitted={async () => {
+              setRetaking(false);
+              setFlagDetailsDropped(false);
+              // The retake clears the flag and starts a fresh reading;
+              // loadAll routes to the preparing screen, then the confirm
+              // screen once the new reading lands.
+              await loadAll(hw.assignment_id);
+            }}
+          />
+        </div>
+      );
+    }
+    return (
+      <ExtractionFlaggedTerminalView
+        detailsDropped={flagDetailsDropped}
+        onRetake={submission?.can_retake ? () => setRetaking(true) : undefined}
+      />
+    );
   }
 
   if (mode.kind === "integrity_chat" && hw.submission_id) {

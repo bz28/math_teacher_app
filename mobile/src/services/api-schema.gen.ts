@@ -2489,6 +2489,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/school/student/submissions/{submission_id}/retake": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retake Submission
+         * @description Replace the photos of a flagged, ungraded turn-in and read them again.
+         *
+         *     For the student who sent the reading to their teacher because the
+         *     photos were the problem — sideways, blurry, a page missing. Allowed
+         *     once, under `_retake_block`'s rules, while the homework still takes
+         *     turn-ins. The new photos go through exactly submit's validation
+         *     (`_validated_upload_files`), and the reading is spawned the same way.
+         *     The submission then walks the normal path again: the student checks
+         *     the new reading, confirms or flags it.
+         *
+         *     Nothing is destroyed: the turn-in it replaces — files, reading, edits,
+         *     flag and note, original submitted_at and is_late — is kept on
+         *     `retake_original` and shown to the teacher.
+         *
+         *     Lateness follows submit's rule — work is late when it was turned in
+         *     after the due date — and a retake can't launder it: the new photos
+         *     are late if they arrive past due, and a late original stays late.
+         *
+         *     Rejects: 404 / 403 (not found / not yours, or the homework no longer
+         *     takes turn-ins), 409 when a retake isn't allowed (with why), and
+         *     submit's 400 / 413 for the files themselves.
+         */
+        post: operations["retake_submission_v1_school_student_submissions__submission_id__retake_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/session": {
         parameters: {
             query?: never;
@@ -6203,6 +6243,11 @@ export interface components {
         StudentSubmissionDetail: {
             /** Ai Grading Enabled */
             ai_grading_enabled: boolean;
+            /**
+             * Can Retake
+             * @default false
+             */
+            can_retake: boolean;
             extraction: components["schemas"]["ExtractionOut"] | null;
             /** Extraction Confirmed At */
             extraction_confirmed_at: string | null;
@@ -6409,6 +6454,30 @@ export interface components {
             /** Teacher Dismissed */
             teacher_dismissed: boolean;
         };
+        /**
+         * TeacherRetakeOriginal
+         * @description The turn-in a student's retake replaced — what the teacher needs to
+         *     see it was the same work: the photos, when they came in, and what the
+         *     student said was wrong with that reading. The original reading itself
+         *     stays on the row for audit but isn't rendered.
+         */
+        TeacherRetakeOriginal: {
+            /** Extraction Flag Note */
+            extraction_flag_note?: string | null;
+            /** Extraction Flagged At */
+            extraction_flagged_at?: string | null;
+            /** Files */
+            files?: {
+                [key: string]: string;
+            }[] | null;
+            /**
+             * Is Late
+             * @default false
+             */
+            is_late: boolean;
+            /** Submitted At */
+            submitted_at?: string | null;
+        };
         /** TeacherSubmissionDetail */
         TeacherSubmissionDetail: {
             /** Ai Breakdown */
@@ -6467,6 +6536,9 @@ export interface components {
             other_work: components["schemas"]["TeacherSubmissionStep"][];
             /** Problems */
             problems: components["schemas"]["TeacherSubmissionDetailProblem"][];
+            retake_original?: components["schemas"]["TeacherRetakeOriginal"] | null;
+            /** Retaken At */
+            retaken_at?: string | null;
             /** Reviewed At */
             reviewed_at?: string | null;
             /** Student Email */
@@ -10974,6 +11046,41 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retake_submission_v1_school_student_submissions__submission_id__retake_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubmitHomeworkRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubmitHomeworkResponse"];
                 };
             };
             /** @description Validation Error */

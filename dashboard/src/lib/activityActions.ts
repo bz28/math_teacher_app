@@ -311,6 +311,15 @@ export const ACTIVITY_ACTIONS: Record<ActivityFamily, ActivityAction[]> = {
       detail: () => "Said the reader got something wrong — sent for manual grading",
     },
     {
+      action: "submission.retake",
+      label: "Retook photos",
+      detail: (m) =>
+        join(
+          `Replaced ${plural(num(m, "previous_file_count"), "file")} with ${plural(num(m, "file_count"), "file")} for a fresh reading`,
+          m.is_late ? "late" : undefined,
+        ),
+    },
+    {
       action: "practice.next_variation",
       label: "Served practice",
       detail: (m) =>

@@ -9,6 +9,7 @@ jest.mock("../services/api", () => ({
   getHomework: jest.fn(),
   getSubmission: jest.fn(),
   submitHomework: jest.fn(),
+  retakeSubmission: jest.fn(),
   checkPageOrientation: jest.fn(),
 }));
 jest.mock("../hooks/useCameraCapture", () => ({
@@ -305,5 +306,62 @@ describe("HomeworkScreen one more step", () => {
     render(<HomeworkScreen {...PROPS} />);
     expect(await waitForText("Submitted — in review")).toBeTruthy();
     expect(screen.queryByText("One more step")).toBeNull();
+  });
+});
+
+describe("HomeworkScreen retake", () => {
+  const FLAGGED_HW = {
+    ...GRADED,
+    submission_id: "sub-1",
+    grade_published_at: null,
+    final_score: null,
+    breakdown: null,
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockedApi.getHomework.mockResolvedValue(FLAGGED_HW as never);
+    mockedApi.checkPageOrientation.mockResolvedValue({
+      sideways: false, page_count: 1, sideways_pages: [], too_small_pages: [], preview: null,
+    } as never);
+    mockedApi.retakeSubmission.mockResolvedValue({} as never);
+    jest.spyOn(Alert, "alert").mockImplementation((_t, _m, buttons) => {
+      buttons?.find((b) => b.text === "Take a photo")?.onPress?.();
+    });
+  });
+
+  it("offers nothing when the server says no retake", async () => {
+    mockedApi.getSubmission.mockResolvedValue({ files: [], can_retake: false } as never);
+    render(<HomeworkScreen {...PROPS} />);
+    expect(await waitForText("Submitted — in review")).toBeTruthy();
+    expect(screen.queryByText("Retake photos")).toBeNull();
+  });
+
+  it("replaces the photos through the retake endpoint, with the same checks", async () => {
+    mockedApi.getSubmission.mockResolvedValue({ files: [], can_retake: true } as never);
+    const onSubmitted = jest.fn();
+    render(<HomeworkScreen {...PROPS} onSubmitted={onSubmitted} />);
+    await fireEvent.press(await waitForText("Retake photos"));
+    expect(await waitForText("Retake your photos")).toBeTruthy();
+
+    await fireEvent.press(screen.getByText("Add your work"));
+    await waitFor(() => expect(screen.queryByText("Checking your pages…")).toBeNull());
+    await fireEvent.press(screen.getByText("Review & turn in 1 page"));
+    expect(screen.getByText("Ready to send your new photos?")).toBeTruthy();
+    await fireEvent.press(screen.getByText("Send new photos"));
+
+    await waitFor(() =>
+      expect(mockedApi.retakeSubmission).toHaveBeenCalledWith("sub-1", ["PHOTO_B64"], [0], ["upright"]),
+    );
+    expect(mockedApi.submitHomework).not.toHaveBeenCalled();
+    expect(onSubmitted).toHaveBeenCalled();
+  });
+
+  it("opens straight into retaking from the flagged screen, and can back out", async () => {
+    mockedApi.getSubmission.mockResolvedValue({ files: [], can_retake: true } as never);
+    render(<HomeworkScreen {...PROPS} startRetake />);
+    expect(await waitForText("Retake your photos")).toBeTruthy();
+    await fireEvent.press(screen.getByText("Keep my first photos"));
+    expect(await waitForText("Submitted — in review")).toBeTruthy();
   });
 });
