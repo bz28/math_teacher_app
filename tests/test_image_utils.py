@@ -492,3 +492,159 @@ class TestPdfPageChecks:
         assert pdf_page_checks(_b64(_PDF_HEADER + b"pdf")) == {
             "page_count": 0, "sideways_pages": [], "too_small_pages": [], "preview": None,
         }
+
+
+# ── pdf_pages_as_images (what the reader and the drawing check see) ──
+
+
+def _corners(size: tuple[int, int]) -> Image.Image:
+    """A photo with a coloured block in each corner, so a crop or a turn
+    can be checked by where the blocks land: red top-left, blue
+    top-right, green bottom-left, black bottom-right."""
+    img = Image.new("RGB", size, "white")
+    w, h, s = size[0], size[1], max(size) // 20
+    for box, colour in (
+        ((0, 0, s, s), (255, 0, 0)),
+        ((w - s, 0, w, s), (0, 0, 255)),
+        ((0, h - s, s, h), (0, 160, 0)),
+        ((w - s, h - s, w, h), (0, 0, 0)),
+    ):
+        img.paste(colour, box)
+    return img
+
+
+def _add_text(pdf: object, page: object, text: str, x: float, y: float) -> None:
+    import ctypes
+
+    import pypdfium2.raw as pdfium_c
+
+    obj = pdfium_c.FPDFPageObj_NewTextObj(pdf.raw, b"Helvetica", 9.0)  # type: ignore[attr-defined]
+    wide = ctypes.create_string_buffer((text + "\0").encode("utf-16-le"))
+    pdfium_c.FPDFText_SetText(obj, ctypes.cast(wide, ctypes.POINTER(pdfium_c.FPDF_WCHAR)))
+    pdfium_c.FPDFPageObj_Transform(obj, 1, 0, 0, 1, x, y)
+    pdfium_c.FPDFPage_InsertObject(page.raw, obj)  # type: ignore[attr-defined]
+
+
+def printed_pdf(
+    photo: Image.Image | None,
+    *,
+    at: tuple[float, float, float, float] = (74, 94, 542, 718),
+    texts: tuple[tuple[str, float, float], ...] = (),
+    fill: tuple[int, int, int] | None = None,
+) -> str:
+    """A Letter page the way Google Docs or a browser prints a photo: white
+    paper under everything, the photo placed at `at` (left, bottom, right,
+    top) with margins round it, and any text (print chrome, a typed line).
+    `fill` instead draws a filled shape at `at` — a stand-in for a photo
+    painted as a pattern fill, which pdfium shows as a plain path."""
+    import pypdfium2 as pdfium
+    import pypdfium2.raw as pdfium_c
+
+    pdf = pdfium.PdfDocument.new()
+    page = pdf.new_page(612, 792)
+
+    def rect(box: tuple[float, float, float, float], rgb: tuple[int, int, int]) -> None:
+        obj = pdfium_c.FPDFPageObj_CreateNewRect(box[0], box[1], box[2] - box[0], box[3] - box[1])
+        pdfium_c.FPDFPageObj_SetFillColor(obj, *rgb, 255)
+        pdfium_c.FPDFPath_SetDrawMode(obj, pdfium_c.FPDF_FILLMODE_ALTERNATE, False)
+        pdfium_c.FPDFPage_InsertObject(page.raw, obj)
+
+    rect((0, 0, 612, 792), (255, 255, 255))
+    if photo is not None:
+        image = pdfium.PdfImage.new(pdf)
+        image.set_bitmap(pdfium.PdfBitmap.from_pil(photo))
+        image.set_matrix(pdfium.PdfMatrix().scale(at[2] - at[0], at[3] - at[1]).translate(at[0], at[1]))
+        page.insert_obj(image)
+    if fill is not None:
+        rect(at, fill)
+    for text, x, y in texts:
+        _add_text(pdf, page, text, x, y)
+    page.gen_content()
+    buf = io.BytesIO()
+    pdf.save(buf)
+    pdf.close()
+    return _b64(buf.getvalue())
+
+
+# What Chrome and Gmail print in the page's outer edge.
+_CHROME = (("11/6/26, 9:14 PM   Gmail - homework", 20, 782), ("https://mail.google.com/   1/1", 20, 4))
+
+
+def _image(b64: str) -> Image.Image:
+    return Image.open(io.BytesIO(base64.b64decode(b64))).convert("RGB")
+
+
+def _is(rgb: tuple[int, ...], want: tuple[int, int, int]) -> bool:
+    return all(abs(a - b) < 60 for a, b in zip(rgb, want, strict=True))
+
+
+class TestPdfPagesAsImages:
+    def test_a_printed_photo_is_cut_out_of_its_margins_at_its_own_resolution(self) -> None:
+        [page] = pdf_pages_as_images(printed_pdf(_corners((1500, 2000)), texts=_CHROME))
+        img = _image(page)
+        # The photo's own pixels plus a hairline of padding — not the 2400 px
+        # page, and not the ~60% of a page the photo filled there.
+        assert 1500 <= img.width <= 1560 and 2000 <= img.height <= 2060
+        assert _is(img.getpixel((40, 40)), (255, 0, 0))
+        assert _is(img.getpixel((img.width - 40, 40)), (0, 0, 255))
+        assert _is(img.getpixel((40, img.height - 40)), (0, 160, 0))
+        assert _is(img.getpixel((img.width - 40, img.height - 40)), (0, 0, 0))
+
+    def test_a_photo_painted_as_a_fill_is_cut_out_of_the_print_chrome(self) -> None:
+        # Gmail's print of a photo: one filled shape (pdfium can't see the
+        # pattern's picture) between a header and a footer.
+        [page] = pdf_pages_as_images(
+            printed_pdf(None, at=(42, 210, 582, 750), fill=(120, 120, 120), texts=_CHROME)
+        )
+        img = _image(page)
+        assert max(img.size) == 2400
+        assert abs(img.width / img.height - 1) < 0.05  # the 540 × 540 pt shape, not the page
+        assert _is(img.getpixel((img.width // 2, img.height // 2)), (120, 120, 120))
+
+    def test_a_typed_page_keeps_all_its_text(self) -> None:
+        # A student's own header half an inch down is work, not chrome.
+        texts = (("Jane Doe - Period 3", 72, 750), ("1. x = 3", 72, 400), ("page 2", 300, 36))
+        [page] = pdf_pages_as_images(printed_pdf(None, texts=texts))
+        img = _image(page)
+        assert max(img.size) == 2400
+        dark = [y for y in range(img.height) if min(img.crop((0, y, img.width, y + 1)).getextrema()[0]) < 100]
+        # The header and the footer line are both on the render.
+        assert dark[0] < img.height * 0.1 and dark[-1] > img.height * 0.9
+
+    def test_a_blank_page_is_rendered_whole(self) -> None:
+        [page] = pdf_pages_as_images(printed_pdf(None))
+        assert _image(page).size == (1855, 2400)
+
+    def test_a_full_page_scan_is_the_scan(self) -> None:
+        [page] = pdf_pages_as_images(pdf_of([_corners((1200, 1600))]))
+        img = _image(page)
+        assert img.size == (1200, 1600)
+        assert _is(img.getpixel((20, 20)), (255, 0, 0))
+
+    def test_a_turned_pdf_is_cut_the_same_way_then_turned(self) -> None:
+        from api.core.image_utils import rotate_pdf
+
+        pdf = printed_pdf(_corners((1500, 2000)), texts=_CHROME)
+        [straight] = pdf_pages_as_images(pdf)
+        for turn in (90, 180, 270):
+            [page] = pdf_pages_as_images(rotate_pdf(pdf, turn))
+            img = _image(page)
+            want = _image(straight).rotate(-turn, expand=True)
+            assert abs(img.width - want.width) <= 2 and abs(img.height - want.height) <= 2, turn
+            # The same cut, turned clockwise: every corner block where the
+            # turned photo has it (the red top-left ends top-right at 90°).
+            for x, y in ((40, 40), (img.width - 40, 40), (40, img.height - 40), (img.width - 40, img.height - 40)):
+                assert _is(img.getpixel((x, y)), want.getpixel((x, y))), (turn, x, y)
+        quarter = _image(pdf_pages_as_images(rotate_pdf(pdf, 90))[0])
+        assert _is(quarter.getpixel((quarter.width - 40, 40)), (255, 0, 0))
+
+    def test_each_page_is_its_own_view(self) -> None:
+        import pypdfium2 as pdfium
+
+        photo = pdfium.PdfDocument(base64.b64decode(printed_pdf(_corners((1500, 2000)))))
+        typed = pdfium.PdfDocument(base64.b64decode(printed_pdf(None, texts=(("1. x = 3", 72, 400),))))
+        photo.import_pages(typed)
+        buf = io.BytesIO()
+        photo.save(buf)
+        pages = [_image(p) for p in pdf_pages_as_images(_b64(buf.getvalue()))]
+        assert pages[0].height < 2100 and max(pages[1].size) == 2400
