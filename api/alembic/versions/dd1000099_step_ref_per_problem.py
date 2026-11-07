@@ -34,8 +34,11 @@ Every stored shape is tolerated: SQL NULL, JSON null, a non-object
 breakdown, entries without `deductions`, a null ref, a non-int ref.
 
 Not idempotent: a ref is read as a `step_num`, and after the rewrite it is
-an index. Alembic runs it once. A grade written by the old container during
-the deploy overlap keeps a homework-wide ref; its only cost is a missing or
+an index. Alembic runs it once. The grade rows are locked while they are
+rewritten, so a save landing mid-migration waits rather than being
+overwritten. A grade written by the old container during the deploy overlap,
+or saved from a review page opened before the deploy (the save echoes the
+refs it loaded), keeps a homework-wide ref; its only cost is a missing or
 misplaced highlight.
 
 Downgrade maps each per-problem index back to that step's `step_num`.
@@ -169,7 +172,8 @@ def _rewrite(remap: Remap) -> None:
         "FROM submission_grades g "
         "JOIN submissions s ON s.id = g.submission_id "
         "JOIN assignments a ON a.id = s.assignment_id "
-        "WHERE s.extraction IS NOT NULL"
+        "WHERE s.extraction IS NOT NULL "
+        "FOR UPDATE OF g"
     )).all()
     for gid, ai_raw, b_raw, pb_raw, ex_raw, ed_raw, content_raw in rows:
         steps = step_nums_by_position(_load(ex_raw), _load(ed_raw))
