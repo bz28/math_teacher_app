@@ -27,6 +27,7 @@ import {
   type SubmissionState,
 } from "../services/api";
 import { confidenceBand, groupExtraction } from "../utils/extraction";
+import { answerPreview, FLAG_NOTE_STARTERS, flagNoteReady, withStarter } from "../utils/extractionFlag";
 import { useColors, spacing, typography, radii, type ColorPalette } from "../theme";
 
 const POLL_MS = 2500;
@@ -60,11 +61,17 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
   // Only touched fields land here; sent to confirm-extraction.
   const [edits, setEdits] = useState<Record<string, string>>({});
   const [zoomFile, setZoomFile] = useState<SubmissionFile | null>(null);
-  // "Something looks wrong" first asks how much: a few lines → fix mode
-  // (fields highlighted + a hint, then the usual confirm); most of it →
-  // an optional note, then the flag, with any edits kept for the teacher.
-  const [flagStep, setFlagStep] = useState<"choose" | "note" | null>(null);
+  // "Something looks wrong" first asks which problem looks wrong: picking
+  // one scrolls to it in fix mode (fields highlighted + a hint naming it,
+  // then the usual confirm). "The whole reading is wrong" → a required
+  // note, then the flag, with any edits kept for the teacher. Mirrors web
+  // (submission-extraction-confirm-view.tsx).
+  const [flagStep, setFlagStep] = useState<"which" | "note" | null>(null);
   const [fixMode, setFixMode] = useState(false);
+  const [fixTarget, setFixTarget] = useState<number | null>(null);
+  // Where each problem card sits in the scroll, so a picked problem can be
+  // scrolled to.
+  const problemY = useRef<Record<number, number>>({});
   const [note, setNote] = useState("");
   const [flagError, setFlagError] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
@@ -140,7 +147,7 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
   }, [state, acting, edits, onDone, onIntegrityCheck]);
 
   const doFlag = useCallback(async () => {
-    if (!state || acting) return;
+    if (!state || acting || !flagNoteReady(note)) return;
     setActing(true);
     setFlagError(null);
     try {
@@ -162,10 +169,12 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
     }
   }, [state, acting, note, edits, onDone, assignmentId]);
 
-  const startFixing = useCallback(() => {
+  const startFixing = useCallback((position: number) => {
     setFlagStep(null);
     setFixMode(true);
-    scrollRef.current?.scrollTo({ y: 0, animated: true });
+    setFixTarget(position);
+    Haptics.selectionAsync();
+    scrollRef.current?.scrollTo({ y: Math.max(0, (problemY.current[position] ?? 0) - spacing.md), animated: true });
   }, []);
 
   // Record a line's text, dropping it when it's back to what was read —
@@ -279,7 +288,11 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
         {fixMode && (
           <View style={styles.fixHint} accessibilityRole="text" accessibilityLiveRegion="polite">
             <Ionicons name="pencil" size={16} color={colors.primary} />
-            <Text style={styles.fixHintText}>Tap a line to fix it, then confirm.</Text>
+            <Text style={styles.fixHintText}>
+              {fixTarget != null
+                ? `Fix the line on Problem ${fixTarget} that's wrong, then confirm.`
+                : "Tap a line to fix it, then confirm."}
+            </Text>
           </View>
         )}
 
@@ -341,7 +354,13 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
               ? g.finalAnswer.answer_plain || g.finalAnswer.answer_latex
               : "";
             return (
-              <View key={g.position ?? "other"} style={styles.problem}>
+              <View
+                key={g.position ?? "other"}
+                style={[styles.problem, fixMode && g.position != null && g.position === fixTarget && styles.problemTarget]}
+                onLayout={(e) => {
+                  if (g.position != null) problemY.current[g.position] = e.nativeEvent.layout.y;
+                }}
+              >
                 <Text style={styles.problemNum}>
                   {g.position == null ? "Other work" : `Problem ${g.position}`}
                 </Text>
@@ -403,37 +422,46 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
           </View>
         )}
 
-        {flagStep === "choose" ? (
+        {flagStep === "which" ? (
           <View style={styles.stepCard}>
-            <Text style={styles.stepTitle}>How much did we get wrong?</Text>
-            <Text style={styles.stepBody}>If it's only a few lines, fixing them yourself is quickest.</Text>
-            <AnimatedPressable
-              style={[styles.option, styles.optionPrimary]}
-              onPress={startFixing}
-              accessibilityRole="button"
-              accessibilityLabel="Just a few lines. I'll fix them myself, then confirm."
-            >
-              <View style={[styles.optionIcon, { backgroundColor: colors.primary }]}>
-                <Ionicons name="pencil" size={16} color={colors.textOnPrimary} />
-              </View>
-              <View style={styles.flex}>
-                <Text style={styles.optionTitle}>Just a few lines</Text>
-                <Text style={styles.optionBody}>I'll fix them myself, then confirm.</Text>
-              </View>
-            </AnimatedPressable>
-            {/* Fixing it yourself is the steered path (the card above);
-                sending it to the teacher stays a real, always-visible
-                button for a student whose work truly was misread — just
-                quieter. */}
+            <Text style={styles.stepTitle}>Which problem looks wrong?</Text>
+            <Text style={styles.stepBody}>
+              Tap it and fix the line yourself. Under each number is the answer we read.
+            </Text>
+            {/* One decision: which problem. Fixing it is the steered path, so
+                the tiles are the step; the whole-reading flag stays a real,
+                always-visible button below — just quieter. */}
+            <View style={styles.tiles}>
+              {groups.map((g) => {
+                if (g.position == null) return null;
+                const answer = answerPreview(g.finalAnswer);
+                if (g.steps.length === 0 && answer == null) return null;
+                const position = g.position;
+                return (
+                  <AnimatedPressable
+                    key={position}
+                    style={styles.tile}
+                    onPress={() => startFixing(position)}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      answer ? `Problem ${position}, we read ${answer}. Fix it.` : `Problem ${position}. Fix it.`
+                    }
+                  >
+                    <Text style={styles.tileNum}>{position}</Text>
+                    <Text style={[styles.tileAnswer, !answer && styles.tileNoAnswer]} numberOfLines={1}>
+                      {answer ?? "no answer"}
+                    </Text>
+                  </AnimatedPressable>
+                );
+              })}
+            </View>
             <AnimatedPressable
               style={styles.textAction}
               onPress={() => setFlagStep("note")}
               accessibilityRole="button"
-              accessibilityLabel="Most of it is wrong? Send it to my teacher to grade from my photos."
+              accessibilityLabel="The whole reading is wrong"
             >
-              <Text style={styles.secondaryActionText}>
-                Most of it is wrong? <Text style={styles.secondaryActionLink}>Send it to my teacher</Text>
-              </Text>
+              <Text style={styles.secondaryActionLink}>The whole reading is wrong</Text>
             </AnimatedPressable>
             <AnimatedPressable
               style={styles.textAction}
@@ -446,20 +474,32 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
           </View>
         ) : flagStep === "note" ? (
           <View style={styles.stepCard}>
-            <Text style={styles.stepTitle}>Send it to your teacher</Text>
-            <Text style={styles.stepBody}>Your teacher will grade this homework from your photos instead.</Text>
-            <Text style={styles.noteLabel}>
-              What did it get wrong? <Text style={styles.noteOptional}>(optional)</Text>
+            <Text style={styles.stepTitle}>What's wrong with the reading?</Text>
+            <Text style={styles.stepBody}>
+              Your teacher will grade this homework from your photos instead, so tell them where to look.
             </Text>
+            <View style={styles.chips}>
+              {FLAG_NOTE_STARTERS.map((starter) => (
+                <AnimatedPressable
+                  key={starter}
+                  style={styles.chip}
+                  onPress={() => setNote((n) => withStarter(n, starter))}
+                  accessibilityRole="button"
+                  accessibilityLabel={starter}
+                >
+                  <Text style={styles.chipText}>{starter}</Text>
+                </AnimatedPressable>
+              ))}
+            </View>
             <TextInput
               style={[styles.editField, styles.noteField]}
               value={note}
               onChangeText={setNote}
               maxLength={FLAG_NOTE_MAX}
               multiline
-              placeholder="For example: it read my 7s as 1s on problem 3"
+              placeholder="Or say it in your own words, like: it read my 7s as 1s"
               placeholderTextColor={colors.textMuted}
-              accessibilityLabel="What did it get wrong? (optional)"
+              accessibilityLabel="What's wrong with the reading?"
               // The card sits at the bottom of the scroll; once the keyboard
               // is up (KeyboardAvoidingView shrinks the view), bring it back
               // into sight so the student can see what they type.
@@ -471,11 +511,11 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
                 : "Your teacher sees this with your photos."}
             </Text>
             {flagError && <Text style={styles.flagError}>{flagError}</Text>}
-            <Button label="Send to my teacher" onPress={doFlag} loading={acting} />
+            <Button label="Send to my teacher" onPress={doFlag} loading={acting} disabled={!flagNoteReady(note)} />
             <Button
               label="Back"
               variant="ghost"
-              onPress={() => setFlagStep(canFixLines ? "choose" : null)}
+              onPress={() => setFlagStep(canFixLines ? "which" : null)}
               disabled={acting}
             />
           </View>
@@ -486,13 +526,13 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
               <Button
                 label="Something looks wrong"
                 variant="secondary"
-                onPress={() => setFlagStep(canFixLines ? "choose" : "note")}
+                onPress={() => setFlagStep(canFixLines ? "which" : "note")}
                 disabled={acting}
               />
             </View>
             {canFixLines && (
               <Text style={styles.flagHint}>
-                Fix a few lines yourself, or send it to your teacher to grade from your photos.
+                A line misread? Tap it and fix it yourself.
               </Text>
             )}
           </>
@@ -560,6 +600,35 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     gap: spacing.sm,
   },
   problemNum: { ...typography.eyebrow, fontSize: 10, color: colors.textMuted },
+  // The problem the student picked as wrong.
+  problemTarget: { borderWidth: 2, borderColor: colors.primary },
+  tiles: { flexDirection: "row", flexWrap: "wrap", gap: spacing.sm },
+  tile: {
+    width: "31%",
+    minHeight: 72,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    paddingHorizontal: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    backgroundColor: colors.card,
+  },
+  tileNum: { ...typography.displaySerifItalic, fontSize: 24, lineHeight: 28, color: colors.text },
+  tileAnswer: { ...typography.caption, fontSize: 12, color: colors.textSecondary, maxWidth: "100%" },
+  tileNoAnswer: { color: colors.textMuted, fontStyle: "italic" },
+  chips: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs },
+  chip: {
+    minHeight: 36,
+    justifyContent: "center",
+    paddingHorizontal: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 999,
+    backgroundColor: colors.card,
+  },
+  chipText: { ...typography.caption, fontSize: 13, color: colors.textSecondary },
   emptyStep: { ...typography.body, color: colors.textMuted, fontSize: 14, fontStyle: "italic" },
   answer: { ...typography.bodyBold, fontSize: 14, color: colors.text, marginTop: spacing.xs },
   editField: {
@@ -598,26 +667,10 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
   },
   stepTitle: { ...typography.displaySerifItalic, fontSize: 22, lineHeight: 26, color: colors.text },
   stepBody: { ...typography.body, fontSize: 14, lineHeight: 20, color: colors.textSecondary, marginTop: -spacing.xs },
-  option: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radii.md,
-    padding: spacing.md,
-  },
-  optionPrimary: { borderWidth: 2, borderColor: colors.primary, backgroundColor: colors.primaryBg },
-  // Compact text-style actions under the primary card — still ≥44pt tall.
+  // Compact text-style actions under the tiles — still ≥44pt tall.
   textAction: { minHeight: 44, alignItems: "center", justifyContent: "center", paddingHorizontal: spacing.md },
-  secondaryActionText: { ...typography.body, fontSize: 14, color: colors.textSecondary, textAlign: "center" },
-  secondaryActionLink: { ...typography.bodyBold, color: colors.primary, textDecorationLine: "underline" },
+  secondaryActionLink: { ...typography.bodyBold, fontSize: 14, color: colors.textSecondary, textDecorationLine: "underline" },
   dismissText: { ...typography.caption, fontSize: 13, color: colors.textMuted },
-  optionIcon: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" },
-  optionTitle: { ...typography.bodyBold, fontSize: 15, color: colors.text },
-  optionBody: { ...typography.body, fontSize: 13, lineHeight: 18, color: colors.textSecondary, marginTop: 2 },
-  noteLabel: { ...typography.bodyBold, fontSize: 14, color: colors.text },
-  noteOptional: { ...typography.body, color: colors.textMuted },
   noteField: { minHeight: 84, textAlignVertical: "top" },
   noteMeta: { ...typography.caption, fontSize: 12, color: colors.textMuted, marginTop: -spacing.xs },
   answerRow: { gap: spacing.xs, marginTop: spacing.xs },

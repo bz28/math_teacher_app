@@ -19,7 +19,7 @@ export type HomeworkMode =
       integrityCheckEnabled: boolean;
     }
   | { kind: "integrity_chat" }
-  /** Student flagged the reading ("Most of it is wrong") on the confirm
+  /** Student flagged the reading ("The whole reading is wrong") on the confirm
    *  screen. Submission is routed to the teacher for manual
    *  grading; no AI calls run. Terminal — nothing else to do. */
   | { kind: "extraction_flagged" };
