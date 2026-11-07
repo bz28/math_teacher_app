@@ -391,11 +391,21 @@ def _page_view(page: Any, pdfium_c: Any) -> tuple[tuple[float, float, float, flo
     width, height = page.get_width(), page.get_height()
     whole = ((0.0, 0.0, 0.0, 0.0), _PDF_RENDER_LONG_EDGE / max(width, height, 1))
     try:
-        cl, cb, cr, ct = page.get_cropbox()
+        # The box pdfium displays (crop ∩ media, inherited ones included) —
+        # `get_cropbox` misses a box set on the parent pages node.
+        cl, cb, cr, ct = page.get_bbox()
         band = _PDF_CHROME_BAND * (ct - cb)
         box: list[float] | None = None
         only_pictures = True
         px_per_pt = 0.0
+        # Annotations (ink a student added in an iPad app without
+        # flattening) are rendered but aren't page objects: their rects
+        # count as content. Links draw nothing.
+        for rect in _annotation_rects(page, pdfium_c):
+            left, bottom, right, top = max(rect[0], cl), max(rect[1], cb), min(rect[2], cr), min(rect[3], ct)
+            if right > left and top > bottom:
+                box = _union(box, (left, bottom, right, top))
+                only_pictures = False
         # Top level only: a nested object's bounds are in its form's space.
         for obj in page.get_objects(max_depth=0):
             ol, ob, orr, ot = obj.get_bounds()
@@ -408,11 +418,7 @@ def _page_view(page: Any, pdfium_c: Any) -> tuple[tuple[float, float, float, flo
                 obj, pdfium_c, (right - left) * (top - bottom), (cr - cl) * (ct - cb)
             ):
                 continue
-            box = (
-                [left, bottom, right, top]
-                if box is None
-                else [min(box[0], left), min(box[1], bottom), max(box[2], right), max(box[3], top)]
-            )
+            box = _union(box, (left, bottom, right, top))
             if obj.type == pdfium_c.FPDF_PAGEOBJ_IMAGE:
                 px_w, px_h = obj.get_px_size()
                 px_per_pt = max(px_per_pt, max(px_w, px_h) / max(orr - ol, ot - ob, 1e-6))
@@ -422,6 +428,8 @@ def _page_view(page: Any, pdfium_c: Any) -> tuple[tuple[float, float, float, flo
             return whole
         left, bottom = max(cl, box[0] - _PDF_CROP_PAD), max(cb, box[1] - _PDF_CROP_PAD)
         right, top = min(cr, box[2] + _PDF_CROP_PAD), min(ct, box[3] + _PDF_CROP_PAD)
+        if right - left < 1 or top - bottom < 1:
+            return whole
         # Cut from each side of the unrotated page; /Rotate turns the
         # page clockwise, so each side moves one place per quarter turn.
         cut = (left - cl, bottom - cb, cr - right, ct - top)
@@ -436,8 +444,36 @@ def _page_view(page: Any, pdfium_c: Any) -> tuple[tuple[float, float, float, flo
         return whole
 
 
+def _union(box: list[float] | None, rect: tuple[float, float, float, float]) -> list[float]:
+    if box is None:
+        return list(rect)
+    return [min(box[0], rect[0]), min(box[1], rect[1]), max(box[2], rect[2]), max(box[3], rect[3])]
+
+
+def _annotation_rects(page: Any, pdfium_c: Any) -> list[tuple[float, float, float, float]]:
+    out: list[tuple[float, float, float, float]] = []
+    for i in range(pdfium_c.FPDFPage_GetAnnotCount(page.raw)):
+        annot = pdfium_c.FPDFPage_GetAnnot(page.raw, i)
+        if not annot:
+            continue
+        try:
+            rect = pdfium_c.FS_RECTF()
+            if pdfium_c.FPDFAnnot_GetSubtype(annot) != pdfium_c.FPDF_ANNOT_LINK and pdfium_c.FPDFAnnot_GetRect(
+                annot, rect
+            ):
+                out.append((rect.left, min(rect.bottom, rect.top), rect.right, max(rect.bottom, rect.top)))
+        finally:
+            pdfium_c.FPDFPage_CloseAnnot(annot)
+    return out
+
+
 def _is_paper(obj: Any, pdfium_c: Any, area: float, page_area: float) -> bool:
+    """A white, unstroked shape covering the page: a frame drawn round
+    the page is kept."""
     if area < _PDF_PAPER_COVERAGE * page_area:
+        return False
+    mode, stroke = ctypes.c_int(), ctypes.c_int()
+    if not pdfium_c.FPDFPath_GetDrawMode(obj.raw, mode, stroke) or stroke.value:
         return False
     r, g, b, a = (ctypes.c_uint() for _ in range(4))
     if not pdfium_c.FPDFPageObj_GetFillColor(obj.raw, r, g, b, a):
@@ -482,9 +518,9 @@ def pdf_scan_long_edges(data_base64: str) -> list[int | None]:
     page was made from — the same number `image_long_edge` gives for a
     photo uploaded on its own — or None for a page that isn't a scan.
 
-    Measured from the embedded picture's own pixels, not a render:
-    `pdf_pages_as_images` scales every page to the same size, so a
-    320×240 photo saved as a PDF renders big but just as unreadable.
+    Measured from the embedded picture's own pixels, not a render: a
+    render's size says nothing about the ink's — a 320×240 photo saved as
+    a PDF can render big and be just as unreadable.
     Empty when the PDF can't be read."""
     import pypdfium2 as pdfium
     import pypdfium2.raw as pdfium_c

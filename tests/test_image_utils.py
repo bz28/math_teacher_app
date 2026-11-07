@@ -648,3 +648,62 @@ class TestPdfPagesAsImages:
         photo.save(buf)
         pages = [_image(p) for p in pdf_pages_as_images(_b64(buf.getvalue()))]
         assert pages[0].height < 2100 and max(pages[1].size) == 2400
+
+
+def raw_pdf(content: str, *, pages_node: str = "", page: str = "", extra: tuple[str, ...] = ()) -> str:
+    """A one-page PDF written by hand, for page trees pdfium's own writer
+    never makes: boxes inherited from the pages node, annotations."""
+    objs = [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        f"<< /Type /Pages /Kids [3 0 R] /Count 1 {pages_node} >>",
+        f"<< /Type /Page /Parent 2 0 R {page} /Contents 4 0 R >>",
+        f"<< /Length {len(content)} >>\nstream\n{content}\nendstream",
+        *extra,
+    ]
+    out, offsets = "%PDF-1.4\n", []
+    for i, obj in enumerate(objs, 1):
+        offsets.append(len(out))
+        out += f"{i} 0 obj\n{obj}\nendobj\n"
+    xref = len(out)
+    out += f"xref\n0 {len(objs) + 1}\n0000000000 65535 f \n" + "".join(f"{o:010d} 00000 n \n" for o in offsets)
+    out += f"trailer\n<< /Size {len(objs) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF"
+    return _b64(out.encode())
+
+
+# Two black squares far apart: a cut that loses either loses work.
+_TWO_SQUARES = "0 0 0 rg 100 100 20 20 re f 400 600 20 20 re f"
+
+
+def _ink_box(b64: str) -> tuple[int, int, int, int] | None:
+    return _image(b64).convert("L").point(lambda v: 255 if v < 128 else 0).getbbox()
+
+
+class TestPdfCutKeepsTheWork:
+    @pytest.mark.parametrize(
+        "pages_node",
+        ["/MediaBox [0 0 612 792] /CropBox [50 50 562 742]", "/MediaBox [50 50 662 842]"],
+    )
+    def test_a_box_inherited_from_the_page_tree(self, pages_node: str) -> None:
+        [page] = pdf_pages_as_images(raw_pdf(_TWO_SQUARES, pages_node=pages_node))
+        img = _image(page)
+        # Both squares, at the two far corners, with only the padding round them.
+        assert _ink_box(page) == pytest.approx((26, 26, img.width - 26, img.height - 26), abs=3)
+
+    def test_an_unflattened_annotation_is_work(self) -> None:
+        drawn = "0 0 0 rg 0 0 100 100 re f"
+        annot = "<< /Type /Annot /Subtype /Square /Rect [450 50 550 150] /AP << /N 6 0 R >> >>"
+        form = (
+            f"<< /Type /XObject /Subtype /Form /BBox [0 0 100 100] /Length {len(drawn)} >>"
+            f"\nstream\n{drawn}\nendstream"
+        )
+        [page] = pdf_pages_as_images(
+            raw_pdf(_TWO_SQUARES, page="/MediaBox [0 0 612 792] /Annots [5 0 R]", extra=(annot, form))
+        )
+        img = _image(page)
+        box = _ink_box(page)
+        assert box is not None and box[2] > img.width - 40  # the annotation is the right edge
+
+    def test_a_framed_page_keeps_its_frame(self) -> None:
+        framed = "1 1 1 rg 0 0 0 RG 10 w 5 5 602 782 re B 0 0 0 rg 300 300 20 20 re f"
+        [page] = pdf_pages_as_images(raw_pdf(framed, page="/MediaBox [0 0 612 792]"))
+        assert _image(page).size == (1855, 2400)

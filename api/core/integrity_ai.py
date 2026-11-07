@@ -266,7 +266,8 @@ async def extract_student_work_from_pages(
         raw = f.get("data", "")
         recorded_media = f.get("media_type", "image/jpeg")
         base64_data, media_type = _strip_data_url_prefix(raw, recorded_media)
-        parts = [(base64_data, media_type)]
+        # EXIF-orient + downscale phone photos before Vision sees them.
+        parts = [(preprocess_image_for_vision(base64_data, media_type), media_type)]
         if media_type == "application/pdf":
             # Sent as a document, a PDF page is rasterized by the API at a
             # fixed ~1.2 MP, so a photo printed to PDF reached the reader
@@ -274,7 +275,7 @@ async def extract_student_work_from_pages(
             # render, cut to the work (`pdf_pages_as_images`); a PDF pdfium
             # can't read still goes as a document. A typed PDF's text layer
             # isn't sent — its rendered text reads as well.
-            rendered = await asyncio.to_thread(pdf_pages_as_images, base64_data)
+            rendered = await asyncio.to_thread(_pdf_pages_for_vision, base64_data)
             if rendered:
                 parts = [(page, "image/jpeg") for page in rendered]
         # Label every page before its image. Without this, asking the
@@ -290,10 +291,7 @@ async def extract_student_work_from_pages(
                 "type": "text",
                 "text": f"--- Page {page_number} of {len(files)}{of_parts} ---",
             })
-            # EXIF-orient + downscale, as for a phone photo.
-            content.append(to_content_block(
-                part_media_type, preprocess_image_for_vision(data, part_media_type),
-            ))
+            content.append(to_content_block(part_media_type, data))
     content.append({
         "type": "text",
         "text": briefing + instruction if briefing else instruction,
@@ -354,6 +352,12 @@ async def extract_student_work_from_pages(
         },
     )
     return result
+
+
+def _pdf_pages_for_vision(data_base64: str) -> list[str]:
+    """A PDF's pages as the reader gets them: rendered and cut to the work,
+    then downscaled like a photo. CPU-bound — run it off the event loop."""
+    return [preprocess_image_for_vision(page, "image/jpeg") for page in pdf_pages_as_images(data_base64)]
 
 
 _VERIFY_PROMPT = (
