@@ -26,6 +26,7 @@ import { orientationCheckCopy } from "../utils/orientationCheckCopy";
 import {
   boundedPageCheck,
   onlySomePagesSideways,
+  orientationReport,
   pdfTooSmallError,
   sidewaysHint,
   sidewaysPrompt,
@@ -68,6 +69,9 @@ interface StagedFile {
   upright: boolean;
   /** The page check hasn't answered yet; turn-in waits for it. */
   checking: boolean;
+  /** The page check answered in time. False after a failure or timeout,
+   *  which holds nothing — reported at turn-in as "unchecked". */
+  checked: boolean;
   /** PDFs: a JPEG of one page the server rendered, to show and turn. */
   preview?: string;
 }
@@ -134,7 +138,7 @@ export function HomeworkScreen({
     const id = newId();
     setFiles((f) => [
       ...f,
-      { id, base64, kind, name, rotation: 0, pageCount: 1, sidewaysPages: [], upright: false, checking: true },
+      { id, base64, kind, name, rotation: 0, pageCount: 1, sidewaysPages: [], upright: false, checking: true, checked: false },
     ]);
     void checkPages(id, base64, kind);
   };
@@ -164,7 +168,9 @@ export function HomeworkScreen({
           preview: res.preview ?? undefined,
         }
       : {};
-    setFiles((prev) => prev.map((f) => (f.id === id ? { ...f, ...update, checking: false } : f)));
+    setFiles((prev) =>
+      prev.map((f) => (f.id === id ? { ...f, ...update, checking: false, checked: res !== null } : f)),
+    );
   };
 
   const markUpright = (id: string) => {
@@ -220,6 +226,7 @@ export function HomeworkScreen({
         assignmentId,
         files.map((f) => f.base64),
         files.map((f) => f.rotation),
+        files.map((f) => orientationReport(f, f.checked)),
       );
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onSubmitted();

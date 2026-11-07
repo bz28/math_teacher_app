@@ -148,7 +148,7 @@ describe("HomeworkScreen sideways pages", () => {
 
     await fireEvent.press(reviewButton());
     await fireEvent.press(screen.getByText("Turn it in"));
-    expect(mockedApi.submitHomework).toHaveBeenCalledWith("hw1", ["PHOTO_B64"], [270]);
+    expect(mockedApi.submitHomework).toHaveBeenCalledWith("hw1", ["PHOTO_B64"], [270], ["rotated"]);
   });
 
   it("lets the student overrule the check with \"It's already upright\"", async () => {
@@ -159,7 +159,7 @@ describe("HomeworkScreen sideways pages", () => {
 
     await fireEvent.press(reviewButton());
     await fireEvent.press(screen.getByText("Turn it in"));
-    expect(mockedApi.submitHomework).toHaveBeenCalledWith("hw1", ["PHOTO_B64"], [0]);
+    expect(mockedApi.submitHomework).toHaveBeenCalledWith("hw1", ["PHOTO_B64"], [0], ["student_says_upright"]);
   });
 
   it("waits for the check before turn-in", async () => {
@@ -182,7 +182,9 @@ describe("HomeworkScreen sideways pages", () => {
     expect(await screen.findByLabelText("Rotate page a quarter turn clockwise")).toBeTruthy();
     expect(screen.queryByText(/is sideways/)).toBeNull();
     await fireEvent.press(reviewButton());
-    expect(screen.getByText("Turn it in")).toBeTruthy();
+    await fireEvent.press(screen.getByText("Turn it in"));
+    // Nothing was held — and the audit log is told so.
+    expect(mockedApi.submitHomework).toHaveBeenCalledWith("hw1", ["PHOTO_B64"], [0], ["unchecked"]);
   });
 
   it("reads an older API's answer without crashing (partial deploy)", async () => {
@@ -222,7 +224,7 @@ describe("HomeworkScreen sideways pages", () => {
       expect(screen.queryByText(/is sideways/)).toBeNull();
       await fireEvent.press(reviewButton());
       await fireEvent.press(screen.getByText("Turn it in"));
-      expect(mockedApi.submitHomework).toHaveBeenCalledWith("hw1", ["PDF_B64"], [90]);
+      expect(mockedApi.submitHomework).toHaveBeenCalledWith("hw1", ["PDF_B64"], [90], ["rotated"]);
     });
 
     it("offers no rotate when only some pages are sideways", async () => {

@@ -4753,6 +4753,20 @@
             "title": "Files",
             "type": "array"
           },
+          "orientations": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Orientations"
+          },
           "rotations": {
             "anyOf": [
               {

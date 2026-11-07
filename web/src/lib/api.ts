@@ -2963,7 +2963,7 @@ export const schoolStudent = {
    *  — the server stores each page the way the student turned it. */
   submitHomework(
     assignmentId: string,
-    body: { files: string[]; rotations?: number[] },
+    body: { files: string[]; rotations?: number[]; orientations?: string[] },
   ) {
     const json = JSON.stringify(body);
     return apiFetch<SubmitHomeworkResponse>(`/school/student/homework/${assignmentId}/submit`, {
