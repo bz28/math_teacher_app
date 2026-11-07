@@ -606,7 +606,13 @@ export function SubmissionExtractionConfirmView({
       ) : (
         <div
           ref={problemsRef}
-          className="mt-6 grid scroll-mt-4 gap-4 md:grid-cols-[180px_1fr]"
+          // minmax(0, …), not the implicit auto track: a grid item's
+          // minimum width is its content's, and the horizontal page strip's
+          // content is every thumbnail side by side. With a few pages the
+          // column grew past a phone's width and pushed every line's
+          // pencil and the Next button off-screen — the student could see
+          // the misread but not reach the control to fix it.
+          className="mt-6 grid scroll-mt-4 grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-[180px_minmax(0,1fr)]"
         >
           {/* Persistent file strip — vertical on desktop, horizontal
               scroll on mobile. Every page stays visible so the student
