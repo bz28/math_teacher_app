@@ -252,6 +252,9 @@ class IntegrityConversationTurn(Base):
 
     Content semantics by role:
     - agent: `content` is the assistant's text reply.
+    - agent_note: assistant text the student never saw — the agent
+      narrating its own bookkeeping after a rejected finish_check (see
+      integrity_pipeline.ROLE_AGENT_NOTE). Audit trail only.
     - student: `content` is the student's message.
     - tool_call: `content` is JSON-encoded tool input, `tool_name` +
       `tool_use_id` identify the call.

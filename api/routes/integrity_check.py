@@ -709,7 +709,7 @@ async def post_student_turn(
 
 class TeacherTranscriptTurn(BaseModel):
     ordinal: int
-    role: str  # "agent" | "student" | "tool_call" | "tool_result"
+    role: str  # "agent" | "agent_note" | "student" | "tool_call" | "tool_result"
     content: str
     tool_name: str | None = None
     seconds_on_turn: int | None = None

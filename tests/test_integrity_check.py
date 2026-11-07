@@ -3030,6 +3030,260 @@ async def test_finish_check_accepts_verified_pass_with_mid_concept_probe(
         assert check.disposition == "pass"
 
 
+# ── One closing per turn: no narration, no double goodbye ──────────
+
+_CANNED_CLOSING = (
+    "Thanks for talking through your work with me! Your homework is "
+    "with your teacher now."
+)
+
+
+def _verdict(problem_id: str, use_id: str, **extra_rubric: str) -> Any:
+    return make_tool_use(
+        "submit_problem_verdict",
+        {
+            "problem_id": problem_id,
+            "rubric": {
+                "paraphrase_originality": "high",
+                "causal_fluency": "high",
+                **extra_rubric,
+            },
+            "reasoning": "scored from the chat.",
+        },
+        use_id=use_id,
+    )
+
+
+def _finish(use_id: str, disposition: str = "pass") -> Any:
+    return make_tool_use(
+        "finish_check",
+        {
+            "disposition": disposition,
+            "summary": "Wrap-up.",
+            "headline": "Student understood their own work",
+            "inline_variant_result": "not_applicable",
+        },
+        use_id=use_id,
+    )
+
+
+def _agent_after_last_student(body: dict[str, Any]) -> list[str]:
+    """Agent turns the student sees after their latest message."""
+    transcript = body["transcript"]
+    last_student = max(
+        i for i, t in enumerate(transcript) if t["role"] == "student"
+    )
+    return [
+        t["content"] for t in transcript[last_student + 1:]
+        if t["role"] == "agent"
+    ]
+
+
+async def test_narration_after_rejected_finish_never_reaches_student(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Prod bug (3 checks): the agent signs off, calls finish_check(pass),
+    and the verified-tier gate rejects it; the agent's next response
+    narrates its own bookkeeping ("the student did answer the twist —
+    recording that and finalizing") alongside the re-filed verdict. That
+    narration must not reach the student — they see the one goodbye, no
+    canned repeat — but it stays in the audit trail as an agent_note,
+    out of the teacher's conversation view too. Script mirrors the prod
+    response sequence (one tool per response)."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+    await _force_verified_tier(submission_id)
+    problem_id = await _only_problem_id(submission_id)
+
+    goodbye = "Spot on — you clearly understood why it works. Nice job!"
+    narration = (
+        "The student did answer the what-if twist — let me record that "
+        "properly and finalize."
+    )
+    set_agent_script([
+        [_verdict(problem_id, "uv1")],
+        [
+            make_text(goodbye),
+            make_tool_use(
+                "label_student_reply",
+                {"engagement": "answering", "wrapping_up": True},
+                use_id="ul1",
+            ),
+        ],
+        [_finish("uf1")],  # rejected: no conceptual probe scored
+        [make_text(narration), _verdict(problem_id, "uv2", transfer="high")],
+        [_finish("uf2")],
+    ])
+    r = await _post_turn(
+        client, world, submission_id,
+        {"message": "No — without parallel lines the angles aren't equal."},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["overall_status"] == "complete"
+    # Exactly one closing: the sign-off. No narration, no canned repeat.
+    assert _agent_after_last_student(body) == [goodbye]
+    assert all(narration not in t["content"] for t in body["transcript"])
+
+    async with get_session_factory()() as s:
+        notes = (await s.execute(
+            select(IntegrityConversationTurn.content)
+            .where(IntegrityConversationTurn.role == "agent_note")
+        )).scalars().all()
+        assert notes == [narration]
+
+    # The teacher payload keeps the note (audit), tagged so the
+    # conversation view can leave it out.
+    r = await client.get(
+        f"/v1/teacher/integrity/submissions/{submission_id}",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200
+    by_content = {t["content"]: t["role"] for t in r.json()["transcript"]}
+    assert by_content[narration] == "agent_note"
+    assert by_content[goodbye] == "agent"
+
+
+async def test_probe_after_rejected_finish_reaches_student(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """The other branch of the same rejection: the agent hasn't actually
+    run the conceptual probe, so it asks one. That question is for the
+    student and must be shown, even though a goodbye went out first."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+    await _force_verified_tier(submission_id)
+    problem_id = await _only_problem_id(submission_id)
+
+    goodbye = "Nice work walking me through that."
+    probe = "One quick one: if the 3 were a 5, would x get bigger or smaller?"
+    set_agent_script([
+        [make_text(goodbye), _verdict(problem_id, "uv1"), _finish("uf1")],
+        [make_text(probe)],
+    ])
+    r = await _post_turn(
+        client, world, submission_id,
+        {"message": "You factor it and set each one to zero."},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["overall_status"] != "complete"
+    assert _agent_after_last_student(body) == [goodbye, probe]
+
+
+async def test_closing_after_question_rejection_reaches_student(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """When finish_check is rejected because the agent's message asked a
+    question, that message was never a goodbye, so the agent's
+    replacement closing is genuine student-facing text and is shown —
+    and it's the only goodbye (no canned repeat). 7 prod checks take
+    this path."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+    problem_id = await _only_problem_id(submission_id)
+
+    question = "Good — and why did you divide by 2 there?"
+    closing = "Your work is all set — thanks for chatting through it with me."
+    set_agent_script([
+        [make_text(question), _verdict(problem_id, "uv1"), _finish("uf1")],
+        [make_text(closing), _finish("uf2")],
+    ])
+    r = await _post_turn(
+        client, world, submission_id, {"message": "I split it into two parts."},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["overall_status"] == "complete"
+    assert _agent_after_last_student(body) == [question, closing]
+
+
+async def test_agent_goodbye_gets_no_canned_closing(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Prod bug B: every completed check ended with the agent's goodbye
+    AND the canned one. The dominant prod shape: goodbye rides with the
+    verdict, finish_check follows in a text-free response. The agent's
+    reply this turn is its goodbye, so no canned closing follows it."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+    problem_id = await _only_problem_id(submission_id)
+
+    goodbye = "Great chat — your work is all set and with your teacher!"
+    set_agent_script([
+        [make_text(goodbye), _verdict(problem_id, "uv1")],
+        [_finish("uf1")],
+    ])
+    r = await _post_turn(
+        client, world, submission_id, {"message": "Two numbers that multiply to 6."},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["overall_status"] == "complete"
+    assert _agent_after_last_student(body) == [goodbye]
+
+
+async def test_goodbye_alongside_finish_gets_no_canned_closing(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Same bug, goodbye in the very response that finishes the check
+    (after a feedback reply): both agent messages show, no canned one."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+    problem_id = await _only_problem_id(submission_id)
+
+    feedback = "Exactly right — that's why the factors work."
+    goodbye = "Your proof is in great shape. Thanks for chatting!"
+    set_agent_script([
+        [make_text(feedback), _verdict(problem_id, "uv1")],
+        [
+            make_text(goodbye),
+            make_tool_use(
+                "label_student_reply",
+                {"engagement": "answering", "wrapping_up": True},
+                use_id="ul1",
+            ),
+            _finish("uf1"),
+        ],
+    ])
+    r = await _post_turn(
+        client, world, submission_id, {"message": "Two numbers that multiply to 6."},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["overall_status"] == "complete"
+    assert _agent_after_last_student(body) == [feedback, goodbye]
+
+
+async def test_silent_finish_still_gets_canned_closing(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """When the agent finalizes without a word to the student after their
+    reply, the canned closing is the goodbye — the student's message
+    never hangs unanswered."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+    problem_id = await _only_problem_id(submission_id)
+
+    set_agent_script([
+        [_verdict(problem_id, "uv1")],
+        [_finish("uf1")],
+    ])
+    r = await _post_turn(
+        client, world, submission_id, {"message": "Two numbers that multiply to 6."},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["overall_status"] == "complete"
+    assert _agent_after_last_student(body) == [_CANNED_CLOSING]
+
+
 # ── Telemetry ──────────────────────────────────────────────────────
 
 

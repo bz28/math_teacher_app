@@ -3231,6 +3231,7 @@ export interface IntegrityStateResponse {
 
 export type TeacherIntegrityTurnRole =
   | "agent"
+  | "agent_note"
   | "student"
   | "tool_call"
   | "tool_result";
