@@ -3173,6 +3173,46 @@ async def test_probe_after_rejected_finish_reaches_student(
     assert _agent_after_last_student(body) == [goodbye, probe]
 
 
+async def test_hidden_text_is_shown_when_the_check_stays_open(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Post-rejection text without a `?` is hidden on the assumption the
+    agent is wrapping up. If the turn then ends with the check still open
+    (here: a second rejected finish, then a text-only reply), the agent
+    wasn't done talking — the hidden text may be an instruction the
+    student needs, and the model believes it was said. It's shown."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+    await _force_verified_tier(submission_id)
+    problem_id = await _only_problem_id(submission_id)
+
+    goodbye = "Nice work walking me through that."
+    instruction = "Before we wrap up, tell me in one sentence why AC = CA matters."
+    wait = "Take your time."
+    set_agent_script([
+        [make_text(goodbye), _verdict(problem_id, "uv1"), _finish("uf1")],
+        [make_text(instruction), _verdict(problem_id, "uv2")],
+        [_finish("uf2")],  # rejected again: still no conceptual probe
+        [make_text(wait)],
+    ])
+    r = await _post_turn(
+        client, world, submission_id,
+        {"message": "You factor it and set each one to zero."},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["overall_status"] != "complete"
+    assert _agent_after_last_student(body) == [goodbye, instruction, wait]
+
+    async with get_session_factory()() as s:
+        notes = (await s.execute(
+            select(IntegrityConversationTurn.id)
+            .where(IntegrityConversationTurn.role == "agent_note")
+        )).scalars().all()
+        assert notes == []
+
+
 async def test_closing_after_question_rejection_reaches_student(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:

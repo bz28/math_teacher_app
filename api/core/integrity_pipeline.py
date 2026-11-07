@@ -1386,6 +1386,7 @@ async def process_student_turn(
     # and whether a finish_check has been rejected this turn.
     latest_shown: str | None = None
     finish_rejected = False
+    notes: list[IntegrityConversationTurn] = []
     for loop_iter in range(MAX_AGENT_LOOPS_PER_TURN):
         problems = await _load_problems_for_prompt(check.id, db)
         turns = await _load_turns(check.id, db)
@@ -1419,6 +1420,7 @@ async def process_student_turn(
                 "sending that again?",
                 db,
             )
+            _reveal_notes_if_still_open(check, notes)
             # If this was the last allowed student turn, force-finalize
             # here — otherwise the check would be stuck in in_progress
             # forever (endpoint's hard-cap guard rejects future turns).
@@ -1439,9 +1441,9 @@ async def process_student_turn(
                 text_reply, tool_uses,
                 finish_rejected=finish_rejected, latest_shown=latest_shown,
             ):
-                await _append_agent_text(
+                notes.append(await _append_agent_text(
                     check.id, text_reply, db, role=ROLE_AGENT_NOTE,
-                )
+                ))
             else:
                 await _append_agent_text(check.id, text_reply, db)
                 latest_shown = text_reply
@@ -1500,6 +1502,8 @@ async def process_student_turn(
             if latest_shown is None:
                 await _append_agent_text(check.id, _CANNED_CLOSING, db)
             break
+
+    _reveal_notes_if_still_open(check, notes)
 
     # Hard cap on student turns: if this was the 10th student turn
     # and the check isn't complete, force-finalize.
@@ -1575,21 +1579,42 @@ def _is_post_rejection_narration(
     )
 
 
+def _reveal_notes_if_still_open(
+    check: IntegrityCheckSubmission,
+    notes: list[IntegrityConversationTurn],
+) -> None:
+    """Show this turn's notes to the student if the check didn't finish.
+
+    Hiding post-rejection text assumes the agent is wrapping up. If the
+    turn ends with the check still open (another rejection, the loop
+    cap, a failed call), the agent evidently wasn't done talking: a
+    hidden note may be an instruction the student needs, and the model
+    believes it was said. Show it, so the student's screen and the
+    model's history agree.
+    """
+    if check.status == STATUS_COMPLETE:
+        return
+    for note in notes:
+        note.role = ROLE_AGENT
+
+
 async def _append_agent_text(
     check_id: uuid.UUID,
     text: str,
     db: AsyncSession,
     *,
     role: str = ROLE_AGENT,
-) -> None:
+) -> IntegrityConversationTurn:
     ordinal = await _next_ordinal(check_id, db)
-    db.add(IntegrityConversationTurn(
+    turn = IntegrityConversationTurn(
         integrity_check_submission_id=check_id,
         ordinal=ordinal,
         role=role,
         content=text,
-    ))
+    )
+    db.add(turn)
     await db.flush()
+    return turn
 
 
 async def _record_tool_call(
