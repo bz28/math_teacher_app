@@ -127,6 +127,17 @@ it — the problem was testing that method. Name the requirement in `reasoning` 
 ("the problem requires solving by graphing; the student solved algebraically"). \
 When no method or drawing is specified, any valid method earns full credit — \
 never penalize a legitimate alternative.
+- The answer key shows ONE valid solution, not the required one. A method, \
+theorem, postulate or property the key uses is never a requirement unless the \
+problem statement itself names it — not because the key uses it, and not \
+because you judge the problem to be "testing" it. "State the theorem you used", \
+"state which theorem you use", "justify your answer" ask for the student's OWN justification: \
+any valid theorem that actually justifies their step earns full credit, even \
+when it differs from the key's (Triangle Sum instead of Third Angles, AAS \
+instead of HL). Judge the student's argument on its own merits — check that \
+each step follows and that the parts they cite meet the theorem's conditions \
+(which side or angle is included between which). An argument that doesn't hold \
+loses credit as a logic error; never deduct for not using the key's theorem.
 - "Student's drawings" is your ONLY source of truth about what was drawn. Never \
 infer a graph from the algebra beside it, and never assume a drawing is complete \
 because the answer is right. "(no drawing for this problem)" means none exists. \
