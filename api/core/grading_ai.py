@@ -129,7 +129,8 @@ When no method or drawing is specified, any valid method earns full credit — \
 never penalize a legitimate alternative.
 - The answer key shows ONE valid solution, not the required one. A method, \
 theorem, postulate or property the key uses is never a requirement unless the \
-problem statement itself names it — not because the key uses it, and not \
+problem statement, a class/homework rubric rule, or the drawing flag requires \
+it — not because the key uses it, and not \
 because you judge the problem to be "testing" it. "State the theorem you used", \
 "state which theorem you use", "justify your answer" ask for the student's OWN justification: \
 any valid theorem that actually justifies their step earns full credit, even \
