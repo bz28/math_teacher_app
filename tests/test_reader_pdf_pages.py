@@ -97,3 +97,39 @@ async def test_a_pdf_pdfium_cant_read_still_goes_as_a_document(sent: list[dict[s
     await integrity_ai.extract_student_work_from_pages([{"data": junk, "media_type": "application/pdf"}])
     assert _shape(sent) == ["--- Page 1 of 1 ---", "document"]
     assert sent[1]["source"]["data"] == junk
+
+
+async def test_a_pdf_past_the_page_cap_goes_whole_as_a_document(
+    sent: list[dict[str, Any]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Rendering only the first pages would silently drop the rest of the
+    # student's work; the document path reads every page.
+    from api.core import image_utils
+
+    monkeypatch.setattr(image_utils, "_PDF_MAX_PAGES", 1)
+    pdf = _two_page(printed_pdf(_corners((1500, 2000))), printed_pdf(_corners((1500, 2000))))
+    await integrity_ai.extract_student_work_from_pages([{"data": pdf, "media_type": "application/pdf"}])
+    assert _shape(sent) == ["--- Page 1 of 1 ---", "document"]
+    assert sent[1]["source"]["data"] == pdf
+
+
+async def test_a_page_that_wont_render_sends_the_whole_pdf_as_a_document(
+    sent: list[dict[str, Any]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import pypdfium2 as pdfium
+
+    real_render = pdfium.PdfPage.render
+    calls = {"n": 0}
+
+    def flaky(self: Any, *a: Any, **k: Any) -> Any:
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise RuntimeError("bad page")
+        return real_render(self, *a, **k)
+
+    monkeypatch.setattr(pdfium.PdfPage, "render", flaky)
+    pdf = _two_page(printed_pdf(_corners((1500, 2000))), printed_pdf(_corners((1500, 2000))))
+    await integrity_ai.extract_student_work_from_pages([{"data": pdf, "media_type": "application/pdf"}])
+    assert calls["n"] == 2
+    assert _shape(sent) == ["--- Page 1 of 1 ---", "document"]
+    assert sent[1]["source"]["data"] == pdf

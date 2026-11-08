@@ -347,18 +347,22 @@ _PDF_MAX_PAGES = 30
 _PDF_LOCK = threading.Lock()
 
 
-def pdf_pages_as_images(data_base64: str) -> list[str]:
+def pdf_pages_as_images(data_base64: str, *, complete: bool = False) -> list[str]:
     """Each page of a PDF as a base64 JPEG, in order, cut to the page's
     content (`_page_view`). These are what the reader reads — all under
     the file's one page number — and what a drawing is cropped from, so
     a drawing's bbox means the same thing to both.
-    Empty when the PDF can't be read. pdfium isn't thread-safe, so
-    renders take `_PDF_LOCK` (callers run this off the event loop)."""
+    Empty when the PDF can't be read. Otherwise a PDF past
+    `_PDF_MAX_PAGES`, or one with a page that won't render, gives the
+    pages it could — or, with `complete`, nothing: the reader then sends
+    the PDF itself rather than silently lose a page of work.
+    pdfium isn't thread-safe, so renders take `_PDF_LOCK` (callers run
+    this off the event loop)."""
     import pypdfium2 as pdfium  # imported here: only PDF uploads need it
     import pypdfium2.raw as pdfium_c
 
     with _PDF_LOCK:
-        return _render_pdf(pdfium, pdfium_c, data_base64)
+        return _render_pdf(pdfium, pdfium_c, data_base64, complete=complete)
 
 
 # Browser print chrome (the date, title, URL and page number Chrome,
@@ -481,14 +485,19 @@ def _is_paper(obj: Any, pdfium_c: Any, area: float, page_area: float) -> bool:
     return (r.value, g.value, b.value) == (255, 255, 255)
 
 
-def _render_pdf(pdfium: Any, pdfium_c: Any, data_base64: str) -> list[str]:
+def _render_pdf(pdfium: Any, pdfium_c: Any, data_base64: str, *, complete: bool) -> list[str]:
     try:
         pdf = pdfium.PdfDocument(base64.b64decode(data_base64))
     except Exception:  # noqa: BLE001 — an unreadable PDF has no pages to crop
         logger.warning("pdf render: unreadable PDF, no pages")
         return []
-    if len(pdf) > _PDF_MAX_PAGES:
-        logger.warning("pdf render: %d pages, rendering the first %d", len(pdf), _PDF_MAX_PAGES)
+    pages = len(pdf)
+    if pages > _PDF_MAX_PAGES:
+        if complete:
+            logger.warning("pdf render: %d pages, past the %d cap: not rendered", pages, _PDF_MAX_PAGES)
+            pdf.close()
+            return []
+        logger.warning("pdf render: %d pages, rendering the first %d", pages, _PDF_MAX_PAGES)
     out: list[str] = []
     try:
         for i in range(min(len(pdf), _PDF_MAX_PAGES)):
@@ -498,8 +507,10 @@ def _render_pdf(pdfium: Any, pdfium_c: Any, data_base64: str) -> list[str]:
             buf = io.BytesIO()
             img.save(buf, format="JPEG", quality=90)
             out.append(base64.b64encode(buf.getvalue()).decode("ascii"))
-    except Exception:  # noqa: BLE001 — keep the pages that rendered
-        logger.warning("pdf render: stopped after %d of %d pages", len(out), len(pdf), exc_info=True)
+    except Exception:  # noqa: BLE001 — keep the pages that rendered, unless all are needed
+        logger.warning("pdf render: stopped after %d of %d pages", len(out), pages, exc_info=True)
+        if complete:
+            out = []
     finally:
         pdf.close()
     return out

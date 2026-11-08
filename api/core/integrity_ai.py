@@ -272,12 +272,16 @@ async def extract_student_work_from_pages(
             # Sent as a document, a PDF page is rasterized by the API at a
             # fixed ~1.2 MP, so a photo printed to PDF reached the reader
             # far smaller than the photo itself. Its pages go as images we
-            # render, cut to the work (`pdf_pages_as_images`); a PDF pdfium
-            # can't read still goes as a document. A typed PDF's text layer
-            # isn't sent — its rendered text reads as well.
+            # render, cut to the work (`pdf_pages_as_images`). A PDF we
+            # can't render in full (unreadable, past the page cap, a page
+            # that fails) still goes as a document: never fewer pages than
+            # before. A typed PDF's text layer isn't sent — its rendered
+            # text reads as well.
             rendered = await asyncio.to_thread(_pdf_pages_for_vision, base64_data)
             if rendered:
                 parts = [(page, "image/jpeg") for page in rendered]
+            else:
+                logger.warning("extract: PDF file %d not rendered in full, sent as a document", page_number)
         # Label every page before its image. Without this, asking the
         # model for a `page_index` would be asking it to count ordinal
         # image positions with nothing to count against — the blocks are
@@ -357,7 +361,10 @@ async def extract_student_work_from_pages(
 def _pdf_pages_for_vision(data_base64: str) -> list[str]:
     """A PDF's pages as the reader gets them: rendered and cut to the work,
     then downscaled like a photo. CPU-bound — run it off the event loop."""
-    return [preprocess_image_for_vision(page, "image/jpeg") for page in pdf_pages_as_images(data_base64)]
+    return [
+        preprocess_image_for_vision(page, "image/jpeg")
+        for page in pdf_pages_as_images(data_base64, complete=True)
+    ]
 
 
 _VERIFY_PROMPT = (
