@@ -1129,8 +1129,9 @@ AI_GRADING_SCHEMA: ToolSchema = {
                                 "1-2 sentences, written BEFORE the grade: check the "
                                 "student's work and say what decides it. Reference the "
                                 "specific rubric criterion (by name) that drives the "
-                                "decision. This field is for the TEACHER — it drives the "
-                                "AI verdict card on the review page."
+                                "decision. A finished verdict, not think-aloud. This "
+                                "field is for the TEACHER — it drives the AI verdict card "
+                                "on the review page."
                             ),
                         },
                         "score_status": {
