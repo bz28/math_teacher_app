@@ -292,6 +292,29 @@ class TestBuildAgentMessages:
         assert tool_result["content"][0]["type"] == "tool_result"
         assert tool_result["content"][0]["tool_use_id"] == "u1"
 
+    def test_agent_note_goes_back_as_the_models_own_text(self) -> None:
+        """A note the student never saw is still what the model said, so
+        it returns as assistant text grouped with its tool calls — the
+        model's history is unchanged by hiding it from the student."""
+        turns = [
+            _turn(0, "agent_note", "Recording the twist and finalizing."),
+            _turn(
+                1, "tool_call", json.dumps({"disposition": "pass"}),
+                tool_name="finish_check", tool_use_id="u3",
+            ),
+        ]
+        messages = _build_agent_messages("B", turns)
+        assert messages[1] == {
+            "role": "assistant",
+            "content": [
+                {"type": "text", "text": "Recording the twist and finalizing."},
+                {
+                    "type": "tool_use", "id": "u3", "name": "finish_check",
+                    "input": {"disposition": "pass"},
+                },
+            ],
+        }
+
     def test_standalone_tool_call_without_preceding_text(self) -> None:
         turns = [
             _turn(

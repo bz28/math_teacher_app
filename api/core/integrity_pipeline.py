@@ -246,6 +246,12 @@ _RUBRIC_SELF_CORRECTION_VALUES = frozenset({
 
 # Turn role labels.
 ROLE_AGENT = "agent"
+# Agent text the student never sees: the agent narrating its own
+# bookkeeping after a rejected finish_check, once its closing has already
+# reached the student (see _is_post_rejection_narration). Kept for the
+# audit trail and fed back to the model as its own words; left out of
+# the student transcript and the teacher's conversation view.
+ROLE_AGENT_NOTE = "agent_note"
 ROLE_STUDENT = "student"
 ROLE_TOOL_CALL = "tool_call"
 ROLE_TOOL_RESULT = "tool_result"
@@ -1375,7 +1381,12 @@ async def process_student_turn(
     system_prompt = build_agent_system_prompt(posture)
     tier = _tier_from_reason(check.probe_selection_reason)
 
-    # Agent loop.
+    # Agent loop. Two pieces of per-turn state decide what the student
+    # sees: the latest agent message shown to them since their reply,
+    # and whether a finish_check has been rejected this turn.
+    latest_shown: str | None = None
+    finish_rejected = False
+    notes: list[IntegrityConversationTurn] = []
     for loop_iter in range(MAX_AGENT_LOOPS_PER_TURN):
         problems = await _load_problems_for_prompt(check.id, db)
         turns = await _load_turns(check.id, db)
@@ -1409,6 +1420,7 @@ async def process_student_turn(
                 "sending that again?",
                 db,
             )
+            _reveal_notes_if_still_open(check, notes)
             # If this was the last allowed student turn, force-finalize
             # here — otherwise the check would be stuck in in_progress
             # forever (endpoint's hard-cap guard rejects future turns).
@@ -1421,9 +1433,20 @@ async def process_student_turn(
             b for b in content_blocks if getattr(b, "type", None) == "tool_use"
         ]
 
-        # Persist any text the agent produced alongside tool calls.
+        # Persist any text the agent produced alongside tool calls —
+        # shown to the student unless it's narration (see
+        # _is_post_rejection_narration), which is kept as a note.
         if text_reply:
-            await _append_agent_text(check.id, text_reply, db)
+            if _is_post_rejection_narration(
+                text_reply, tool_uses,
+                finish_rejected=finish_rejected, latest_shown=latest_shown,
+            ):
+                notes.append(await _append_agent_text(
+                    check.id, text_reply, db, role=ROLE_AGENT_NOTE,
+                ))
+            else:
+                await _append_agent_text(check.id, text_reply, db)
+                latest_shown = text_reply
 
         if not tool_uses:
             # Pure text reply — done with this student turn.
@@ -1440,6 +1463,11 @@ async def process_student_turn(
             await _record_tool_result(
                 check.id, getattr(block, "id", ""), result_text, db,
             )
+            if (
+                getattr(block, "name", "") == TOOL_FINISH_CHECK
+                and result_text.startswith("rejected")
+            ):
+                finish_rejected = True
 
         # The engagement label rides alongside the reply text. When it's
         # the only tool in a response that already has text and the agent
@@ -1464,17 +1492,18 @@ async def process_student_turn(
 
         # After tool calls, keep looping so the agent can continue
         # (it will see the tool_results when we rebuild messages).
-        # When finish_check succeeds, the check is complete — write a
-        # canned closing so the student sees a clear goodbye and exit
-        # the loop.
+        # When finish_check succeeds, the check is complete — exit the
+        # loop. If the agent already answered the student this turn, that
+        # message is its goodbye: finish_check is refused while the
+        # latest one holds a question, so it's the agent's last word, and
+        # a canned closing after it just says goodbye twice. Only a check
+        # finished without a word to the student gets the canned one.
         if check.status == STATUS_COMPLETE:
-            await _append_agent_text(
-                check.id,
-                "Thanks for talking through your work with me! Your "
-                "homework is with your teacher now.",
-                db,
-            )
+            if latest_shown is None:
+                await _append_agent_text(check.id, _CANNED_CLOSING, db)
             break
+
+    _reveal_notes_if_still_open(check, notes)
 
     # Hard cap on student turns: if this was the 10th student turn
     # and the check isn't complete, force-finalize.
@@ -1508,17 +1537,84 @@ def _first_text_block(content_blocks: list[Any]) -> str | None:
     return None
 
 
-async def _append_agent_text(
-    check_id: uuid.UUID, text: str, db: AsyncSession,
+_CANNED_CLOSING = (
+    "Thanks for talking through your work with me! Your homework is "
+    "with your teacher now."
+)
+
+
+def _is_post_rejection_narration(
+    text_reply: str,
+    tool_uses: list[Any],
+    *,
+    finish_rejected: bool,
+    latest_shown: str | None,
+) -> bool:
+    """True when this text is the agent talking to itself, not the student.
+
+    The case: the agent closes out with the student, calls finish_check,
+    and the server rejects it on a bookkeeping rule (e.g. the verified
+    tier's understanding-check gate). The agent's next response re-files
+    its verdict and comments on its own correction — "the student did
+    answer the twist, recording that and finalizing". The student already
+    has the agent's closing, so that text isn't for them. All four
+    conditions, each read off state rather than wording:
+
+    - a finish_check was rejected earlier this turn — the agent already
+      tried to finish, so it considered its words to the student done;
+    - the student's screen ends on an agent message with no `?` (the
+      question guard's test) — nothing is awaiting their answer, so this
+      text isn't a replacement for a question-rejected message;
+    - the response also makes tool calls — a text-only response hands the
+      floor back to the student, so it's always for them;
+    - the text itself has no `?` — a probe the agent asks after the
+      rejection must reach the student.
+    """
+    return (
+        finish_rejected
+        and latest_shown is not None
+        and "?" not in latest_shown
+        and bool(tool_uses)
+        and "?" not in text_reply
+    )
+
+
+def _reveal_notes_if_still_open(
+    check: IntegrityCheckSubmission,
+    notes: list[IntegrityConversationTurn],
 ) -> None:
+    """Show this turn's notes to the student if the check didn't finish.
+
+    Hiding post-rejection text assumes the agent is wrapping up. If the
+    turn ends with the check still open (another rejection, the loop
+    cap, a failed call), the agent evidently wasn't done talking: a
+    hidden note may be an instruction the student needs, and the model
+    believes it was said. Show it, so the student's screen and the
+    model's history agree.
+    """
+    if check.status == STATUS_COMPLETE:
+        return
+    for note in notes:
+        note.role = ROLE_AGENT
+
+
+async def _append_agent_text(
+    check_id: uuid.UUID,
+    text: str,
+    db: AsyncSession,
+    *,
+    role: str = ROLE_AGENT,
+) -> IntegrityConversationTurn:
     ordinal = await _next_ordinal(check_id, db)
-    db.add(IntegrityConversationTurn(
+    turn = IntegrityConversationTurn(
         integrity_check_submission_id=check_id,
         ordinal=ordinal,
-        role=ROLE_AGENT,
+        role=role,
         content=text,
-    ))
+    )
+    db.add(turn)
     await db.flush()
+    return turn
 
 
 async def _record_tool_call(
@@ -2738,10 +2834,11 @@ def _build_agent_messages(
     i = 0
     while i < len(turns):
         t = turns[i]
-        if t.role == ROLE_AGENT:
+        if t.role in (ROLE_AGENT, ROLE_AGENT_NOTE):
             # Agent text turn — may be followed by tool_call turns
             # that the agent emitted in the same model response. Group
-            # them into a single assistant message.
+            # them into a single assistant message. A note is the
+            # model's own words too, so it goes back verbatim.
             content_blocks: list[dict[str, Any]] = [
                 {"type": "text", "text": t.content},
             ]

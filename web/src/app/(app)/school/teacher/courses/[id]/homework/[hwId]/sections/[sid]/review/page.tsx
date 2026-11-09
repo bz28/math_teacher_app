@@ -6851,13 +6851,14 @@ function ConversationModal({
     return out;
   }, [integrity.activity_summary?.notable_turns]);
 
-  // Tool calls and tool results are AI internals — filter before render
-  // so the teacher sees only natural-language turns. Turn count in the
-  // header reflects the visible count, not the raw transcript length.
+  // Tool calls, tool results and agent notes (AI text the student never
+  // saw) are AI internals — filter before render so the teacher sees the
+  // conversation the student had. Turn count in the header reflects the
+  // visible count, not the raw transcript length.
   const visibleTurns = useMemo(
     () =>
       integrity.transcript.filter(
-        (t) => t.role !== "tool_call" && t.role !== "tool_result",
+        (t) => t.role === "agent" || t.role === "student",
       ),
     [integrity.transcript],
   );
