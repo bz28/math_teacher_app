@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -29,7 +29,6 @@ from api.core.constants import MAX_RUBRIC_FIELD_CHARS
 
 MAX_CLASS_RULES = 30
 MAX_RULE_CHARS = 300
-RULE_SOURCES = ("settings", "suggestion")
 CREDIT_FIELDS = ("full_credit", "partial_credit")
 
 
@@ -50,9 +49,6 @@ class ClassRubricRule(BaseModel):
     # points (api/core/homework_points.py), not percent. None = the
     # teacher didn't say; the grader sizes it like a small slip.
     points: int | None = Field(default=None, ge=0, le=100)
-    source: Literal["settings", "suggestion"] = "settings"
-    # Where a suggested rule came from ("HW 5"), for the settings list.
-    source_label: str | None = Field(default=None, max_length=300)
     added_at: str | None = None
 
     @field_validator("text")
@@ -80,7 +76,7 @@ class ClassRubric(BaseModel):
         An emptied list is still stored (not None) so its revision
         survives: a stale editor must still be told the rules moved on."""
         known = {
-            r.get("id"): r for r in (previous or {}).get("rules", [])
+            r.get("id"): r for r in (previous or {}).get("rules") or []
             if isinstance(r, dict)
         }
         now = datetime.now(UTC).isoformat()
@@ -96,10 +92,6 @@ class ClassRubric(BaseModel):
                 "id": rule.id if prior else new_rule_id(),
                 "text": rule.text,
                 "points": rule.points,
-                "source": prior.get("source", rule.source) if prior else rule.source,
-                "source_label": (
-                    prior.get("source_label") if prior else rule.source_label
-                ),
                 "added_at": prior.get("added_at") if prior else now,
             })
         return {**credit_guidance(previous), "rules": rules, "rev": rubric_revision(previous) + 1}
@@ -140,7 +132,7 @@ def rubric_revision(course_rubric: dict[str, Any] | None) -> int:
 def class_rules(course_rubric: dict[str, Any] | None) -> list[dict[str, Any]]:
     """The stored rules, tolerating a null rubric."""
     return [
-        r for r in (course_rubric or {}).get("rules", [])
+        r for r in (course_rubric or {}).get("rules") or []
         if isinstance(r, dict) and r.get("id") and r.get("text")
     ]
 

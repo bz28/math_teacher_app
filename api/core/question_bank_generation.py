@@ -29,7 +29,7 @@ from api.core.document_vision import (
     fetch_source_documents,
 )
 from api.core.drawing_requirement import combine_requires_drawing
-from api.core.geometry import figure_point_names, render_figure_or_none
+from api.core.geometry import FigureSpecError, figure_point_names, render_figure, render_figure_or_none
 from api.core.image_utils import to_content_block
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
 from api.core.llm_schemas import GENERATE_QUESTIONS_SCHEMA, REGENERATE_QA_SCHEMA
@@ -154,6 +154,33 @@ def _resolve_figure(
         logger.warning("figure_spec dropped: problem names %s, which the figure doesn't draw", sorted(missing))
         return None, None
     return raw_spec, svg
+
+
+_CANT_DRAW = "The diagram tool can't draw this setup yet — it can draw one triangle, circle, or polygon."
+
+
+def _figure_drop_reason(raw_spec: dict[str, Any], text: str) -> str:
+    """Why `_resolve_figure` dropped `raw_spec` (or `_render_step_figures`,
+    with text ""), as a sentence a teacher can read. Re-checks rather than
+    threading a reason out of the render path: a drop is rare, rendering
+    is cheap, and every other caller only wants (spec, svg)."""
+    try:
+        render_figure(raw_spec)
+    except FigureSpecError as e:
+        # dsl.PolygonFigure's own wording — the rejection teachers hit by
+        # asking for a labeled diagonal (prod, 2026-11-01).
+        if "(a diagonal)" in str(e):
+            return "The diagram tool can't label a polygon's diagonals yet."
+        return _CANT_DRAW
+    except Exception:
+        return _CANT_DRAW
+    missing = _named_points(text) - {_canon_point(n) for n in figure_point_names(raw_spec)}
+    if not missing:
+        return _CANT_DRAW
+    return (
+        "The diagram tool can draw one triangle, circle, or polygon, and this problem "
+        f"also needs point{'s' if len(missing) > 1 else ''} {', '.join(sorted(missing))}."
+    )
 
 
 # A problem that points at a figure: "in the figure below", "the right

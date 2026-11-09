@@ -6,7 +6,7 @@ import type { ClassRubricRule } from "./api.ts";
 import { effectiveRubric, normalizeRubric, rubricChanged } from "./rubric.ts";
 
 const rule = (id: string, text: string, points: number | null = 5): ClassRubricRule => ({
-  id, text, points, source: "settings", source_label: null, added_at: null,
+  id, text, points, added_at: null,
 });
 
 describe("normalizeRubric", () => {

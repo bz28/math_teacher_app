@@ -346,11 +346,20 @@ async def chat_with_bank_item(
     # clicks Accept. Without pre-rendering, the preview reads
     # figure_svg=None (since the proposal carries raw figure_spec)
     # and the diagram only appears post-accept — confusing UX.
-    from api.core.question_bank_generation import _render_step_figures, _resolve_figure
+    from api.core.question_bank_generation import (
+        _figure_drop_reason,
+        _render_step_figures,
+        _resolve_figure,
+    )
 
     reply = str(result.get("reply") or "").strip()
     proposal_raw = result.get("proposal")
     proposal: dict[str, Any] | None = None
+    # Figures the model emitted that didn't survive rendering. Its reply
+    # was written before that ("I've added the diagram"), so without a
+    # note the teacher reads a promise and sees nothing (prod, 2026-11-01).
+    figure_drop: str | None = None
+    step_drops: list[str] = []
     if isinstance(proposal_raw, dict):
         steps_raw = proposal_raw.get("solution_steps")
         # Filter to well-formed steps. Required: title (str) +
@@ -378,13 +387,21 @@ async def chat_with_bank_item(
             # display them; accept_chat_proposal re-runs the same
             # path to write the final state.
             cleaned_steps = _render_step_figures(tmp) if tmp else None
+            # _render_step_figures keeps every (dict) step, in order.
+            step_drops = [
+                f"I couldn't draw the diagram for step {i}. "
+                f"{_figure_drop_reason(raw['figure_spec'], '')}"
+                for i, (raw, out) in enumerate(zip(tmp, cleaned_steps or []), start=1)
+                if "figure_spec" in raw and "figure_svg" not in out
+            ]
 
         # Top-level question figure: pass through + pre-render so the
         # preview UI shows the diagram alongside the question text.
         top_spec_raw = proposal_raw.get("figure_spec")
-        top_figure_spec, top_figure_svg = _resolve_figure(
-            top_spec_raw, proposal_raw.get("question") or item.question,
-        )
+        top_text = proposal_raw.get("question") or item.question
+        top_figure_spec, top_figure_svg = _resolve_figure(top_spec_raw, top_text)
+        if isinstance(top_spec_raw, dict) and top_figure_svg is None:
+            figure_drop = f"I couldn't draw the diagram. {_figure_drop_reason(top_spec_raw, top_text)}"
 
         proposal = {
             "question": proposal_raw.get("question") if proposal_raw.get("question") else None,
@@ -441,6 +458,16 @@ async def chat_with_bank_item(
                 "correct, the solution steps and final answer below were "
                 "re-derived independently rather than written by hand."
             )
+            step_drops = []  # the chat's steps (and their figures) were replaced
+
+    if figure_drop and not proposal:
+        # The figure was the whole edit: the reply describes a change that
+        # isn't there, so say what actually happened instead.
+        reply = f"{figure_drop} Nothing was changed."
+    elif figure_drop or step_drops:
+        notes = [f"{figure_drop} This proposal doesn't include one."] if figure_drop else []
+        notes += [f"{d} That step is shown without one." for d in step_drops]
+        reply = "\n\n".join(filter(None, [reply, *notes]))
 
     ai_msg: dict[str, Any] = {
         "role": "ai",

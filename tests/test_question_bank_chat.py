@@ -10,6 +10,7 @@ state-machine logic lives that we want to lock down.
 """
 
 import uuid
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -257,3 +258,134 @@ class TestQuestionRewriteReSolve:
         assert ai_msg["proposal"]["solution_steps"][0]["description"] == "concise version"
         # Reply is left as-is (no question rewrite happened).
         assert ai_msg["text"] == "Made step 1 more concise."
+
+
+class TestDroppedFigureIsReported:
+    """The model writes its reply ("I've added the diagram") before its
+    figure_spec is rendered. When the spec is dropped — the renderer rejects
+    it, or it leaves out a point the problem names — the teacher must be
+    told, not shown a promise with nothing behind it (prod, 2026-11-01 and
+    2026-11-05). Shapes below are the real prod failures."""
+
+    # Pentagon W,X,M,Y,Z with a label on WM — a diagonal, which polygon
+    # side_labels can't annotate.
+    DIAGONAL_SPEC = {
+        "type": "geometry", "shape": "polygon",
+        "vertex_names": ["W", "X", "M", "Y", "Z"],
+        "vertex_positions": [[0, 3], [0, 0], [2, 0], [4, 0], [4, 3]],
+        "side_labels": {"WM": "10"},
+    }
+    # Renders fine, but the proof names S too — the second triangle
+    # squeezed out of the one triangle the DSL can draw.
+    TRIANGLE_QRT = {
+        "type": "geometry", "shape": "triangle", "vertices": ["Q", "R", "T"],
+        "side_lengths": {"QR": 5, "RT": 6, "QT": 4}, "angle_labels": {"R": "1", "T": "2"},
+    }
+    PROOF = (
+        r"Given: $\angle QRT \cong \angle SRT$, $\angle RQT \cong \angle RST$. "
+        r"Prove: $\overline{QT} \cong \overline{ST}$"
+    )
+
+    def _item(self, question: str) -> MagicMock:
+        item = MagicMock()
+        item.chat_messages = []
+        item.source_doc_ids = []
+        item.unit_id = None
+        item.course_id = uuid.uuid4()
+        item.question = question
+        item.solution_steps = None
+        item.final_answer = None
+        item.generation_prompt = None
+        return item
+
+    async def _chat(
+        self, monkeypatch: pytest.MonkeyPatch, question: str, result: dict[str, object],
+    ) -> dict[str, Any]:
+        monkeypatch.setattr(qbc, "fetch_source_documents", AsyncMock(return_value=[]))
+        monkeypatch.setattr(qbc, "call_claude_json", AsyncMock(return_value=result))
+        course = MagicMock()
+        course.subject = "math"
+        course.name = "Geometry"
+        db = MagicMock()
+        db.commit = AsyncMock()
+        return await chat_with_bank_item(
+            db, self._item(question), course,
+            teacher_message="can you provide the drawing?", user_id=uuid.uuid4(),
+        )
+
+    async def test_renderer_rejection_keeps_other_fields_and_says_why(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ai_msg = await self._chat(monkeypatch, "Find WM in pentagon WXMYZ.", {
+            "reply": "I've added a diagram with WM labeled.",
+            "proposal": {"final_answer": "$10$", "figure_spec": self.DIAGONAL_SPEC},
+        })
+
+        proposal = ai_msg["proposal"]
+        assert proposal["final_answer"] == "$10$"
+        assert proposal["figure_spec"] is None and proposal["figure_svg"] is None
+        assert ai_msg["text"] == (
+            "I've added a diagram with WM labeled.\n\n"
+            "I couldn't draw the diagram. The diagram tool can't label a "
+            "polygon's diagonals yet. This proposal doesn't include one."
+        )
+
+    async def test_figure_only_edit_dropped_for_missing_point(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ai_msg = await self._chat(monkeypatch, self.PROOF, {
+            "reply": "I've labeled angle 1 and angle 2 on the diagram.",
+            "proposal": {"figure_spec": self.TRIANGLE_QRT},
+        })
+
+        assert "proposal" not in ai_msg
+        assert ai_msg["text"] == (
+            "I couldn't draw the diagram. The diagram tool can draw one triangle, "
+            "circle, or polygon, and this problem also needs point S. Nothing was changed."
+        )
+
+    async def test_question_rewrite_reports_its_dropped_figure(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The rewrite path swaps the chat's reply for a canned one — the
+        # drop note must survive that swap.
+        monkeypatch.setattr(assignment_generation, "generate_solutions", AsyncMock(return_value=[
+            {"question_text": self.PROOF, "steps": [], "final_answer": "Proved."},
+        ]))
+        ai_msg = await self._chat(monkeypatch, "Old question.", {
+            "reply": "Rewrote it with a diagram.",
+            "proposal": {"question": self.PROOF, "figure_spec": self.TRIANGLE_QRT},
+        })
+
+        assert ai_msg["proposal"]["question"] == self.PROOF
+        assert ai_msg["text"].startswith("I've rewritten the problem.")
+        assert ai_msg["text"].endswith("also needs point S. This proposal doesn't include one.")
+
+    async def test_dropped_step_figure_is_reported(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ai_msg = await self._chat(monkeypatch, "Find WM in pentagon WXMYZ.", {
+            "reply": "Added a diagram to step 2.",
+            "proposal": {"solution_steps": [
+                {"title": "Setup", "description": "Name the sides."},
+                {"title": "Diagonal", "description": "WM = 10", "figure_spec": self.DIAGONAL_SPEC},
+            ]},
+        })
+
+        steps = ai_msg["proposal"]["solution_steps"]
+        assert "figure_spec" not in steps[1] and "figure_svg" not in steps[1]
+        assert ai_msg["text"].endswith(
+            "I couldn't draw the diagram for step 2. The diagram tool can't label a "
+            "polygon's diagonals yet. That step is shown without one."
+        )
+
+    async def test_valid_figure_leaves_reply_alone(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        ai_msg = await self._chat(monkeypatch, r"Find $m\angle R$ in $\triangle QRT$.", {
+            "reply": "I've added the diagram.",
+            "proposal": {"figure_spec": self.TRIANGLE_QRT},
+        })
+
+        assert ai_msg["proposal"]["figure_svg"]
+        assert ai_msg["text"] == "I've added the diagram."
