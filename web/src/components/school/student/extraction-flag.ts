@@ -70,3 +70,16 @@ export function answerPreview(
   if (!fa) return null;
   return (fa.answer_plain ?? "").trim() || (fa.answer_latex ?? "").trim() || null;
 }
+
+/** A problem's tile text: its first answer actually read. Uses the same
+ *  test as `hasEditableLines`, so a problem that counts as fixable always
+ *  gets a tile — even when an earlier answer slot came back empty. */
+export function firstAnswerPreview(
+  fas: readonly ({ answer_latex?: string | null; answer_plain?: string | null } | null | undefined)[],
+): string | null {
+  for (const fa of fas) {
+    const text = answerPreview(fa);
+    if (text !== null) return text;
+  }
+  return null;
+}

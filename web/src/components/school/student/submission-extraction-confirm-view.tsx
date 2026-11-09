@@ -22,7 +22,7 @@ import { useBlobUrl } from "@/hooks/use-blob-url";
 import { Modal } from "@/components/ui/modal";
 import { useDeviceType } from "./use-device-type";
 import {
-  answerPreview,
+  firstAnswerPreview,
   FLAG_NOTE_MAX,
   FLAG_NOTE_STARTERS,
   flagNoteReady,
@@ -746,7 +746,7 @@ export function SubmissionExtractionConfirmView({
             >
               {groups.map((g, i) => {
                 if (g.position === null) return null;
-                const answer = answerPreview(g.finalAnswers[0]);
+                const answer = firstAnswerPreview(g.finalAnswers);
                 if (g.steps.length === 0 && answer === null) return null;
                 return (
                   <li key={g.position}>

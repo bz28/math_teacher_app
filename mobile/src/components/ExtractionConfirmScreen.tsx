@@ -264,7 +264,10 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
   const sourceFiles = state.files ?? [];
   // Only positioned groups render editable fields; with none, "Just a few
   // lines" would lead nowhere, so the step opens straight on the note.
-  const canFixLines = groups.some((g) => g.position != null && (g.steps.length > 0 || g.finalAnswer));
+  // Same test the tiles use, so the "which problem" step never opens empty.
+  const canFixLines = groups.some(
+    (g) => g.position != null && (g.steps.length > 0 || answerPreview(g.finalAnswer) != null),
+  );
   const editCount = Object.keys(edits).length;
   const fieldStyle = [styles.editField, fixMode && styles.editFieldFix];
   return (

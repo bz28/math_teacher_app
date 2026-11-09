@@ -201,6 +201,23 @@ describe("ExtractionConfirmScreen", () => {
     expect(screen.queryByText("Which problem looks wrong?")).toBeNull();
   });
 
+  it("an answer slot that came back empty isn't a line to fix", async () => {
+    // The "which problem" step would open with no tiles at all.
+    mockedApi.getSubmission.mockResolvedValue({
+      ...SUBMISSION,
+      extraction: {
+        steps: [],
+        final_answers: [{ problem_position: 1, answer_latex: "", answer_plain: "" }],
+        confidence: 0.3,
+      },
+    } as never);
+    render(<ExtractionConfirmScreen assignmentId="a" onDone={jest.fn()} onIntegrityCheck={jest.fn()} />);
+
+    fireEvent.press(await waitForText("Something looks wrong"));
+    expect(await waitForText("What's wrong with the reading?")).toBeTruthy();
+    expect(screen.queryByText("Which problem looks wrong?")).toBeNull();
+  });
+
   it("shows a source-photo strip of the submitted pages to compare against", async () => {
     mockedApi.getSubmission.mockResolvedValue({
       ...SUBMISSION,
