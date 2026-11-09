@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.image_utils import (
     crop_region_for_vision,
+    pdf_pages_as_images,
     preprocess_image_for_vision,
     to_content_block,
 )
@@ -265,20 +266,36 @@ async def extract_student_work_from_pages(
         raw = f.get("data", "")
         recorded_media = f.get("media_type", "image/jpeg")
         base64_data, media_type = _strip_data_url_prefix(raw, recorded_media)
-        # EXIF-orient + downscale phone photos before Vision sees them;
-        # PDFs/non-images pass through untouched.
-        base64_data = preprocess_image_for_vision(base64_data, media_type)
+        # EXIF-orient + downscale phone photos before Vision sees them.
+        parts = [(preprocess_image_for_vision(base64_data, media_type), media_type)]
+        if media_type == "application/pdf":
+            # Sent as a document, a PDF page is rasterized by the API at a
+            # fixed ~1.2 MP, so a photo printed to PDF reached the reader
+            # far smaller than the photo itself. Its pages go as images we
+            # render, cut to the work (`pdf_pages_as_images`). A PDF we
+            # can't render in full (unreadable, past the page cap, a page
+            # that fails) still goes as a document: never fewer pages than
+            # before. A typed PDF's text layer isn't sent — its rendered
+            # text reads as well.
+            rendered = await asyncio.to_thread(_pdf_pages_for_vision, base64_data)
+            if rendered:
+                parts = [(page, "image/jpeg") for page in rendered]
+            else:
+                logger.warning("extract: PDF file %d not rendered in full, sent as a document", page_number)
         # Label every page before its image. Without this, asking the
         # model for a `page_index` would be asking it to count ordinal
         # image positions with nothing to count against — the blocks are
         # otherwise indistinguishable. With it, attribution is reading
         # back a label it was just handed, which is what makes the field
-        # worth trusting enough to render.
-        content.append({
-            "type": "text",
-            "text": f"--- Page {page_number} of {len(files)} ---",
-        })
-        content.append(to_content_block(media_type, base64_data))
+        # worth trusting enough to render. A PDF's pages are parts of its
+        # file's one page number, as `graph_grading.page_images` has them.
+        for part, (data, part_media_type) in enumerate(parts, start=1):
+            of_parts = f", part {part} of {len(parts)}" if len(parts) > 1 else ""
+            content.append({
+                "type": "text",
+                "text": f"--- Page {page_number} of {len(files)}{of_parts} ---",
+            })
+            content.append(to_content_block(part_media_type, data))
     content.append({
         "type": "text",
         "text": briefing + instruction if briefing else instruction,
@@ -339,6 +356,15 @@ async def extract_student_work_from_pages(
         },
     )
     return result
+
+
+def _pdf_pages_for_vision(data_base64: str) -> list[str]:
+    """A PDF's pages as the reader gets them: rendered and cut to the work,
+    then downscaled like a photo. CPU-bound — run it off the event loop."""
+    return [
+        preprocess_image_for_vision(page, "image/jpeg")
+        for page in pdf_pages_as_images(data_base64, complete=True)
+    ]
 
 
 _VERIFY_PROMPT = (

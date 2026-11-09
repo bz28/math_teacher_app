@@ -1,6 +1,7 @@
 """Shared image / file validation utilities."""
 
 import base64
+import ctypes
 import io
 import logging
 import threading
@@ -346,38 +347,170 @@ _PDF_MAX_PAGES = 30
 _PDF_LOCK = threading.Lock()
 
 
-def pdf_pages_as_images(data_base64: str) -> list[str]:
-    """Each page of a PDF as a base64 JPEG, in order, so a drawing on a
-    PDF upload can be cropped like one on a photo. The reader sees the
-    whole PDF under one page number, so these are that page's images.
-    Empty when the PDF can't be read. pdfium isn't thread-safe, so
-    renders take `_PDF_LOCK` (callers run this off the event loop)."""
+def pdf_pages_as_images(data_base64: str, *, complete: bool = False) -> list[str]:
+    """Each page of a PDF as a base64 JPEG, in order, cut to the page's
+    content (`_page_view`). These are what the reader reads — all under
+    the file's one page number — and what a drawing is cropped from, so
+    a drawing's bbox means the same thing to both.
+    Empty when the PDF can't be read. Otherwise a PDF past
+    `_PDF_MAX_PAGES`, or one with a page that won't render, gives the
+    pages it could — or, with `complete`, nothing: the reader then sends
+    the PDF itself rather than silently lose a page of work.
+    pdfium isn't thread-safe, so renders take `_PDF_LOCK` (callers run
+    this off the event loop)."""
     import pypdfium2 as pdfium  # imported here: only PDF uploads need it
+    import pypdfium2.raw as pdfium_c
 
     with _PDF_LOCK:
-        return _render_pdf(pdfium, data_base64)
+        return _render_pdf(pdfium, pdfium_c, data_base64, complete=complete)
 
 
-def _render_pdf(pdfium: Any, data_base64: str) -> list[str]:
+# Browser print chrome (the date, title, URL and page number Chrome,
+# Firefox and Gmail print) sits in this outer sliver of a page's height.
+# A student's own typed header or page number sits further in (Google
+# Docs puts one half an inch down), so it is kept.
+_PDF_CHROME_BAND = 0.03
+# A white shape covering this much of the page is its paper: Google Docs
+# and browser prints paint one under everything.
+_PDF_PAPER_COVERAGE = 0.95
+# Room around the content so a stroke at its edge isn't shaved off.
+_PDF_CROP_PAD = 6.0
+
+
+def _page_view(page: Any, pdfium_c: Any) -> tuple[tuple[float, float, float, float], float]:
+    """How to render one PDF page for a vision call: what to cut off it
+    (pdfium's `crop` — left, bottom, right, top points of the page as
+    displayed, after /Rotate) and at what scale.
+
+    Sent whole, a PDF page is rasterized by the API at a fixed ~1.2 MP
+    whatever it holds, and a phone photo printed to PDF fills only part
+    of it: Google Docs and browser prints set it on a Letter sheet with
+    margins (~60% of the page), Gmail adds a header and footer. The work
+    then reaches the reader far smaller than the same photo uploaded on
+    its own (prod, Nov 2026: a 4096 px collage printed from Gmail read
+    3π/4 as 3π/2). So the render is cut to the page's content — every
+    object except chrome text and the paper — at the reader's render
+    size; a page that is only pictures goes no finer than the densest
+    picture's own pixels. Any doubt renders the whole page."""
+    width, height = page.get_width(), page.get_height()
+    whole = ((0.0, 0.0, 0.0, 0.0), _PDF_RENDER_LONG_EDGE / max(width, height, 1))
+    try:
+        # The box pdfium displays (crop ∩ media, inherited ones included) —
+        # `get_cropbox` misses a box set on the parent pages node.
+        cl, cb, cr, ct = page.get_bbox()
+        band = _PDF_CHROME_BAND * (ct - cb)
+        box: list[float] | None = None
+        only_pictures = True
+        px_per_pt = 0.0
+        # Annotations (ink a student added in an iPad app without
+        # flattening) are rendered but aren't page objects: their rects
+        # count as content. Links draw nothing.
+        for rect in _annotation_rects(page, pdfium_c):
+            left, bottom, right, top = max(rect[0], cl), max(rect[1], cb), min(rect[2], cr), min(rect[3], ct)
+            if right > left and top > bottom:
+                box = _union(box, (left, bottom, right, top))
+                only_pictures = False
+        # Top level only: a nested object's bounds are in its form's space.
+        for obj in page.get_objects(max_depth=0):
+            ol, ob, orr, ot = obj.get_bounds()
+            left, bottom, right, top = max(ol, cl), max(ob, cb), min(orr, cr), min(ot, ct)
+            if right <= left or top <= bottom:
+                continue  # off the page
+            if obj.type == pdfium_c.FPDF_PAGEOBJ_TEXT and (bottom >= ct - band or top <= cb + band):
+                continue  # print chrome
+            if obj.type == pdfium_c.FPDF_PAGEOBJ_PATH and _is_paper(
+                obj, pdfium_c, (right - left) * (top - bottom), (cr - cl) * (ct - cb)
+            ):
+                continue
+            box = _union(box, (left, bottom, right, top))
+            if obj.type == pdfium_c.FPDF_PAGEOBJ_IMAGE:
+                px_w, px_h = obj.get_px_size()
+                px_per_pt = max(px_per_pt, max(px_w, px_h) / max(orr - ol, ot - ob, 1e-6))
+            else:
+                only_pictures = False
+        if box is None:
+            return whole
+        left, bottom = max(cl, box[0] - _PDF_CROP_PAD), max(cb, box[1] - _PDF_CROP_PAD)
+        right, top = min(cr, box[2] + _PDF_CROP_PAD), min(ct, box[3] + _PDF_CROP_PAD)
+        if right - left < 1 or top - bottom < 1:
+            return whole
+        # Cut from each side of the unrotated page; /Rotate turns the
+        # page clockwise, so each side moves one place per quarter turn.
+        cut = (left - cl, bottom - cb, cr - right, ct - top)
+        turns = (page.get_rotation() // 90) % 4
+        shown = tuple(cut[(i + turns) % 4] for i in range(4))
+        scale = _PDF_RENDER_LONG_EDGE / max(right - left, top - bottom, 1)
+        if only_pictures and px_per_pt > 0:
+            scale = min(scale, px_per_pt)
+        return (shown[0], shown[1], shown[2], shown[3]), scale
+    except Exception:  # noqa: BLE001 — a page we can't measure is sent whole
+        logger.warning("pdf view: couldn't measure a page, rendering it whole", exc_info=True)
+        return whole
+
+
+def _union(box: list[float] | None, rect: tuple[float, float, float, float]) -> list[float]:
+    if box is None:
+        return list(rect)
+    return [min(box[0], rect[0]), min(box[1], rect[1]), max(box[2], rect[2]), max(box[3], rect[3])]
+
+
+def _annotation_rects(page: Any, pdfium_c: Any) -> list[tuple[float, float, float, float]]:
+    out: list[tuple[float, float, float, float]] = []
+    for i in range(pdfium_c.FPDFPage_GetAnnotCount(page.raw)):
+        annot = pdfium_c.FPDFPage_GetAnnot(page.raw, i)
+        if not annot:
+            continue
+        try:
+            rect = pdfium_c.FS_RECTF()
+            if pdfium_c.FPDFAnnot_GetSubtype(annot) != pdfium_c.FPDF_ANNOT_LINK and pdfium_c.FPDFAnnot_GetRect(
+                annot, rect
+            ):
+                out.append((rect.left, min(rect.bottom, rect.top), rect.right, max(rect.bottom, rect.top)))
+        finally:
+            pdfium_c.FPDFPage_CloseAnnot(annot)
+    return out
+
+
+def _is_paper(obj: Any, pdfium_c: Any, area: float, page_area: float) -> bool:
+    """A white, unstroked shape covering the page: a frame drawn round
+    the page is kept."""
+    if area < _PDF_PAPER_COVERAGE * page_area:
+        return False
+    mode, stroke = ctypes.c_int(), ctypes.c_int()
+    if not pdfium_c.FPDFPath_GetDrawMode(obj.raw, mode, stroke) or stroke.value:
+        return False
+    r, g, b, a = (ctypes.c_uint() for _ in range(4))
+    if not pdfium_c.FPDFPageObj_GetFillColor(obj.raw, r, g, b, a):
+        return False
+    return (r.value, g.value, b.value) == (255, 255, 255)
+
+
+def _render_pdf(pdfium: Any, pdfium_c: Any, data_base64: str, *, complete: bool) -> list[str]:
     try:
         pdf = pdfium.PdfDocument(base64.b64decode(data_base64))
     except Exception:  # noqa: BLE001 — an unreadable PDF has no pages to crop
         logger.warning("pdf render: unreadable PDF, no pages")
         return []
-    if len(pdf) > _PDF_MAX_PAGES:
-        logger.warning("pdf render: %d pages, rendering the first %d", len(pdf), _PDF_MAX_PAGES)
+    pages = len(pdf)
+    if pages > _PDF_MAX_PAGES:
+        if complete:
+            logger.warning("pdf render: %d pages, past the %d cap: not rendered", pages, _PDF_MAX_PAGES)
+            pdf.close()
+            return []
+        logger.warning("pdf render: %d pages, rendering the first %d", pages, _PDF_MAX_PAGES)
     out: list[str] = []
     try:
         for i in range(min(len(pdf), _PDF_MAX_PAGES)):
             page = pdf[i]
-            width, height = page.get_size()
-            scale = _PDF_RENDER_LONG_EDGE / max(width, height, 1)
-            img = page.render(scale=scale).to_pil().convert("RGB")
+            crop, scale = _page_view(page, pdfium_c)
+            img = page.render(scale=scale, crop=crop).to_pil().convert("RGB")
             buf = io.BytesIO()
             img.save(buf, format="JPEG", quality=90)
             out.append(base64.b64encode(buf.getvalue()).decode("ascii"))
-    except Exception:  # noqa: BLE001 — keep the pages that rendered
-        logger.warning("pdf render: stopped after %d of %d pages", len(out), len(pdf), exc_info=True)
+    except Exception:  # noqa: BLE001 — keep the pages that rendered, unless all are needed
+        logger.warning("pdf render: stopped after %d of %d pages", len(out), pages, exc_info=True)
+        if complete:
+            out = []
     finally:
         pdf.close()
     return out
@@ -396,9 +529,9 @@ def pdf_scan_long_edges(data_base64: str) -> list[int | None]:
     page was made from — the same number `image_long_edge` gives for a
     photo uploaded on its own — or None for a page that isn't a scan.
 
-    Measured from the embedded picture's own pixels, not a render:
-    `pdf_pages_as_images` scales every page to the same size, so a
-    320×240 photo saved as a PDF renders big but just as unreadable.
+    Measured from the embedded picture's own pixels, not a render: a
+    render's size says nothing about the ink's — a 320×240 photo saved as
+    a PDF can render big and be just as unreadable.
     Empty when the PDF can't be read."""
     import pypdfium2 as pdfium
     import pypdfium2.raw as pdfium_c
