@@ -2792,16 +2792,22 @@ async def get_retake_original_files(
     db: AsyncSession = Depends(get_db),
 ) -> TeacherRetakeOriginalFiles:
     """The photos a student's retake replaced — opened from the review
-    page's "View original photos". Same ownership rule as the detail.
-    404 when the submission wasn't retaken."""
+    page's "View original photos". Ownership is checked first, the same
+    rule as the detail, so another teacher can't tell from the status
+    whether a submission was retaken. 404 when it wasn't."""
     row = (await db.execute(
-        select(Submission.assignment_id, Submission.retake_original["files"])
-        .where(Submission.id == submission_id, Submission.retaken_at.is_not(None))
+        select(Submission.assignment_id, Submission.retaken_at)
+        .where(Submission.id == submission_id)
     )).one_or_none()
     if row is None:
-        raise HTTPException(status_code=404, detail="No retake on this submission")
+        raise HTTPException(status_code=404, detail="Submission not found")
     await get_teacher_assignment(db, row[0], current_user.user_id)
-    return TeacherRetakeOriginalFiles(files=row[1] or [])
+    if row[1] is None:
+        raise HTTPException(status_code=404, detail="No retake on this submission")
+    files = (await db.execute(
+        select(Submission.retake_original["files"]).where(Submission.id == submission_id)
+    )).scalar_one_or_none()
+    return TeacherRetakeOriginalFiles(files=files or [])
 
 
 @router.get("/submissions/{submission_id}")

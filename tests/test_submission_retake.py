@@ -517,3 +517,43 @@ async def test_the_teacher_sees_the_retake_and_the_original(
     r = await client.get(f"/v1/teacher/submissions/{sid}", headers=_auth(world["teacher_token"]))
     assert r.status_code == 200, r.text
     assert r.json()["retake_original"]["file_count"] == 0
+
+
+async def test_another_teacher_cant_see_the_originals_or_whether_there_are_any(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """Ownership is checked before "was it retaken", so a teacher outside
+    the class gets the same 403 either way — the status can't leak it."""
+    from api.core.auth import create_access_token, hash_password
+    from api.models.user import User
+
+    async with get_session_factory()() as s:
+        school_id = (await s.execute(
+            select(User.school_id).where(User.id == world["teacher_id"])
+        )).scalar_one()
+        other = User(
+            email=f"other_teacher_{uuid.uuid4().hex[:6]}@t.com", name="Other",
+            password_hash=hash_password("x"), grade_level=12, role="teacher",
+            school_id=school_id,
+        )
+        s.add(other)
+        await s.commit()
+        other_token = create_access_token(str(other.id), "teacher")
+
+    sid = await _submit_and_flag(client, world)
+    url = f"/v1/teacher/submissions/{sid}/retake-original-files"
+    r = await client.get(url, headers=_auth(other_token))
+    assert r.status_code == 403, r.text  # not retaken: still 403, not 404
+    assert (await _retake(client, world, sid)).status_code == 200
+    r = await client.get(url, headers=_auth(other_token))
+    assert r.status_code == 403, r.text
+    # The owning teacher still gets them.
+    r = await client.get(url, headers=_auth(world["teacher_token"]))
+    assert r.status_code == 200, r.text
+    # And an unknown submission is a plain 404.
+    r = await client.get(
+        f"/v1/teacher/submissions/{uuid.uuid4()}/retake-original-files",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 404
+

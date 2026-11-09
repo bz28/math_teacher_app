@@ -19996,7 +19996,7 @@
     },
     "/v1/teacher/submissions/{submission_id}/retake-original-files": {
       "get": {
-        "description": "The photos a student's retake replaced \u2014 opened from the review\npage's \"View original photos\". Same ownership rule as the detail.\n404 when the submission wasn't retaken.",
+        "description": "The photos a student's retake replaced \u2014 opened from the review\npage's \"View original photos\". Ownership is checked first, the same\nrule as the detail, so another teacher can't tell from the status\nwhether a submission was retaken. 404 when it wasn't.",
         "operationId": "get_retake_original_files_v1_teacher_submissions__submission_id__retake_original_files_get",
         "parameters": [
           {

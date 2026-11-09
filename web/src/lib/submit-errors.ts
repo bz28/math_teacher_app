@@ -107,18 +107,6 @@ export const SUBMIT_FALLBACK_ERROR =
  *  400 strings is "Invalid base64 data", which means nothing to a
  *  student; the replacements below say what to do instead.
  */
-/** A retake refused because the turn-in moved on — the teacher started
- *  grading it, an understanding check opened, or it was already retaken.
- *  Not submit's "already turned in": true, but no help here. */
-export const RETAKE_CLOSED_ERROR =
-  "These photos can't be replaced anymore — your teacher may have started grading them. Choose “Keep my first photos” to see where things stand.";
-
-/** The retake endpoint shares submit's file rules (400/413) and gates
- *  (401/403/404); only its 409 means something different. */
-export function retakeErrorMessage(status: number): string {
-  return status === 409 ? RETAKE_CLOSED_ERROR : submitErrorMessage(status);
-}
-
 export function submitErrorMessage(status: number): string {
   switch (status) {
     case 400:
@@ -136,4 +124,16 @@ export function submitErrorMessage(status: number): string {
     default:
       return SUBMIT_FALLBACK_ERROR;
   }
+}
+
+/** A retake refused because the turn-in moved on — the teacher started
+ *  grading it, an understanding check opened, or it was already retaken.
+ *  Not submit's "already turned in": true, but no help here. */
+export const RETAKE_CLOSED_ERROR =
+  "These photos can't be replaced anymore — your teacher may have started grading them. Choose “Keep my first photos” to see where things stand.";
+
+/** The retake endpoint shares submit's file rules (400/413) and gates
+ *  (401/403/404); only its 409 means something different. */
+export function retakeErrorMessage(status: number): string {
+  return status === 409 ? RETAKE_CLOSED_ERROR : submitErrorMessage(status);
 }

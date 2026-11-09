@@ -4298,8 +4298,9 @@ export interface paths {
         /**
          * Get Retake Original Files
          * @description The photos a student's retake replaced — opened from the review
-         *     page's "View original photos". Same ownership rule as the detail.
-         *     404 when the submission wasn't retaken.
+         *     page's "View original photos". Ownership is checked first, the same
+         *     rule as the detail, so another teacher can't tell from the status
+         *     whether a submission was retaken. 404 when it wasn't.
          */
         get: operations["get_retake_original_files_v1_teacher_submissions__submission_id__retake_original_files_get"];
         put?: never;
