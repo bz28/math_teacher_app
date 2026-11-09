@@ -3662,8 +3662,32 @@ function SubmissionDetailPanel({
   // the same one the header strip and pinned rail use — instead of each
   // row growing its own modal.
   const [galleryPage, setGalleryPage] = useState<number | null>(null);
-  // The photos a student's retake replaced, opened from the retake callout.
+  // The photos a student's retake replaced, opened from the retake
+  // callout. Fetched on first open (not with the detail, which reloads
+  // often) and kept per submission so reopening is instant.
   const [originalPage, setOriginalPage] = useState<number | null>(null);
+  const [originals, setOriginals] = useState<
+    { sid: string; files: SubmissionFile[] } | null
+  >(null);
+  const [originalsState, setOriginalsState] = useState<
+    { sid: string; status: "loading" | "error" } | null
+  >(null);
+  const openOriginals = useCallback(async () => {
+    const sid = detail.submission_id;
+    if (originals?.sid === sid) {
+      setOriginalPage(0);
+      return;
+    }
+    setOriginalsState({ sid, status: "loading" });
+    try {
+      const { files } = await teacher.retakeOriginalFiles(sid);
+      setOriginals({ sid, files });
+      setOriginalsState(null);
+      setOriginalPage(0);
+    } catch {
+      setOriginalsState({ sid, status: "error" });
+    }
+  }, [detail.submission_id, originals]);
   const onOpenWork = useCallback(() => setGalleryPage(0), []);
   // Live DOM handles to each problem row, indexed by position in
   // detail.problems, so keyboard nav can move real focus.
@@ -4370,7 +4394,12 @@ function SubmissionDetailPanel({
         <RetakeCallout
           retakenAt={detail.retaken_at}
           original={detail.retake_original}
-          onViewOriginal={() => setOriginalPage(0)}
+          onViewOriginal={openOriginals}
+          state={
+            originalsState?.sid === detail.submission_id
+              ? originalsState.status
+              : null
+          }
         />
       )}
 
@@ -4593,7 +4622,9 @@ function SubmissionDetailPanel({
         onClose={() => setGalleryPage(null)}
       />
       <WorkGalleryModal
-        files={detail.retake_original?.files ?? []}
+        files={
+          originals?.sid === detail.submission_id ? originals.files : []
+        }
         studentName={detail.student_name}
         note="first photos"
         openAt={originalPage}
@@ -4614,12 +4645,15 @@ function RetakeCallout({
   retakenAt,
   original,
   onViewOriginal,
+  state,
 }: {
   retakenAt: string;
   original: NonNullable<TeacherSubmissionDetail["retake_original"]>;
   onViewOriginal: () => void;
+  /** Fetching the original photos, or that fetch failed. */
+  state: "loading" | "error" | null;
 }) {
-  const pages = original.files?.length ?? 0;
+  const pages = original.file_count;
   return (
     <div
       className="rounded-[--radius-xl] border border-primary/25 bg-primary-bg/50 p-3"
@@ -4658,13 +4692,23 @@ function RetakeCallout({
           )}
         </div>
         {pages > 0 && (
-          <button
-            type="button"
-            onClick={onViewOriginal}
-            className="shrink-0 rounded-[--radius-md] border border-primary/30 bg-surface px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:border-primary/60 hover:bg-primary/10"
-          >
-            View original photos ({pages})
-          </button>
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <button
+              type="button"
+              onClick={onViewOriginal}
+              disabled={state === "loading"}
+              className="rounded-[--radius-md] border border-primary/30 bg-surface px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:border-primary/60 hover:bg-primary/10 disabled:opacity-60"
+            >
+              {state === "loading"
+                ? "Opening original photos…"
+                : `View original photos (${pages})`}
+            </button>
+            {state === "error" && (
+              <p role="alert" className="text-[11px] text-error">
+                Couldn&apos;t load them. Try again.
+              </p>
+            )}
+          </div>
         )}
       </div>
     </div>

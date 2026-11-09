@@ -2686,9 +2686,14 @@ async def retake_submission(
         "is_late": sub.is_late,
     }
     previous_file_count = len(sub.files or [])
-    # Conditional on the state `_retake_block` just approved, so a
-    # double tap, or a confirm racing in from another tab, can't retake
-    # twice or retake a reading that was confirmed meanwhile.
+    # Conditional on every rule `_retake_block` approved, re-checked in
+    # the same statement — validating the photos above can take seconds.
+    # So a double tap, a confirm racing in from another tab, a teacher's
+    # grade saved meanwhile, or an understanding check that started,
+    # each leaves the row untouched (409) instead of moving that work
+    # onto photos it wasn't made from.
+    from api.core.grading_queue import has_any_grade_clause
+
     result = await db.execute(
         update(Submission)
         .where(
@@ -2696,6 +2701,12 @@ async def retake_submission(
             Submission.extraction_flagged_at.is_not(None),
             Submission.extraction_confirmed_at.is_(None),
             Submission.retaken_at.is_(None),
+            ~select(SubmissionGrade.id)
+            .where(SubmissionGrade.submission_id == submission_id, has_any_grade_clause())
+            .exists(),
+            ~select(IntegrityCheckSubmission.id)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+            .exists(),
         )
         .values(
             files=validated_files,

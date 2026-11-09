@@ -2137,6 +2137,12 @@ export const teacher = {
   submissionDetail(submissionId: string) {
     return apiFetch<TeacherSubmissionDetail>(`/teacher/submissions/${submissionId}`);
   },
+  /** The photos a student's retake replaced, for "View original photos". */
+  retakeOriginalFiles(submissionId: string) {
+    return apiFetch<{ files: SubmissionFile[] }>(
+      `/teacher/submissions/${submissionId}/retake-original-files`,
+    );
+  },
   integrityDetail(submissionId: string) {
     return apiFetch<TeacherIntegrityDetail>(`/teacher/integrity/submissions/${submissionId}`);
   },
@@ -2403,7 +2409,9 @@ export interface TeacherSubmissionDetail {
    *  one it replaced. Null when there was no retake. */
   retaken_at: string | null;
   retake_original: {
-    files: SubmissionFile[] | null;
+    /** Pages in the replaced turn-in. The photos themselves load on
+     *  demand — `teacher.retakeOriginalFiles`. */
+    file_count: number;
     submitted_at: string | null;
     is_late: boolean;
     extraction_flagged_at: string | null;

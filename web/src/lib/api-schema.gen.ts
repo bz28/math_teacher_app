@@ -4288,6 +4288,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/teacher/submissions/{submission_id}/retake-original-files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Retake Original Files
+         * @description The photos a student's retake replaced — opened from the review
+         *     page's "View original photos". Same ownership rule as the detail.
+         *     404 when the submission wasn't retaken.
+         */
+        get: operations["get_retake_original_files_v1_teacher_submissions__submission_id__retake_original_files_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teacher/submissions/{submission_id}/unmark-reviewed": {
         parameters: {
             query?: never;
@@ -6457,19 +6479,23 @@ export interface components {
         /**
          * TeacherRetakeOriginal
          * @description The turn-in a student's retake replaced — what the teacher needs to
-         *     see it was the same work: the photos, when they came in, and what the
-         *     student said was wrong with that reading. The original reading itself
-         *     stays on the row for audit but isn't rendered.
+         *     see it was the same work: how many pages, when they came in, and what
+         *     the student said was wrong with that reading. The photos themselves
+         *     are fetched only when she opens them (`GET /submissions/{id}/
+         *     retake-original-files`), so every detail load doesn't carry a second
+         *     set of pages. The original reading stays on the row for audit but
+         *     isn't rendered.
          */
         TeacherRetakeOriginal: {
             /** Extraction Flag Note */
             extraction_flag_note?: string | null;
             /** Extraction Flagged At */
             extraction_flagged_at?: string | null;
-            /** Files */
-            files?: {
-                [key: string]: string;
-            }[] | null;
+            /**
+             * File Count
+             * @default 0
+             */
+            file_count: number;
             /**
              * Is Late
              * @default false
@@ -6477,6 +6503,13 @@ export interface components {
             is_late: boolean;
             /** Submitted At */
             submitted_at?: string | null;
+        };
+        /** TeacherRetakeOriginalFiles */
+        TeacherRetakeOriginalFiles: {
+            /** Files */
+            files: {
+                [key: string]: string;
+            }[];
         };
         /** TeacherSubmissionDetail */
         TeacherSubmissionDetail: {
@@ -14343,6 +14376,37 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_retake_original_files_v1_teacher_submissions__submission_id__retake_original_files_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeacherRetakeOriginalFiles"];
                 };
             };
             /** @description Validation Error */

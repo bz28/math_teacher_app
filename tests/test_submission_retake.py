@@ -24,6 +24,7 @@ from api.models.assignment import Submission, SubmissionGrade
 from api.models.integrity_check import IntegrityCheckSubmission
 from api.routes.school_student_practice import drain_integrity_background_tasks
 from tests.conftest import PAGE_PNG
+from tests.test_student_activity_events import _assert_meta_contract
 
 
 def _auth(token: str) -> dict[str, str]:
@@ -135,6 +136,7 @@ async def test_retake_replaces_the_photos_reads_them_again_and_keeps_the_origina
         [meta] = (await s.execute(text(
             "SELECT action_metadata FROM activity_log WHERE action = 'submission.retake'"
         ))).scalars().all()
+    _assert_meta_contract(meta)
     assert meta["file_count"] == 2
     assert meta["previous_file_count"] == 1
     assert meta["page_orientations"] == ["rotated", "upright"]
@@ -224,11 +226,163 @@ async def test_not_once_the_teacher_has_started_grading(
 async def test_not_once_an_understanding_check_exists(
     client: AsyncClient, world: dict[str, Any],
 ) -> None:
+    """Backstop: a flagged reading never starts a check, so this row is
+    hand-inserted. The real path is the next test."""
     sid = await _submit_and_flag(client, world)
     async with get_session_factory()() as s:
         s.add(IntegrityCheckSubmission(submission_id=uuid.UUID(sid), status="awaiting_student"))
         await s.commit()
     assert (await _retake(client, world, sid)).status_code == 409
+
+
+async def test_not_after_a_real_confirm_started_the_understanding_check(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """The real way a check comes to exist: the student confirms the
+    reading, the check opens. Those photos are now the ones the student
+    is explaining — no retake, and none offered."""
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={"files": [PAGE_PNG]},
+    )
+    await drain_integrity_background_tasks()
+    sid = r.json()["submission_id"]
+    r = await client.post(
+        f"/v1/school/student/submissions/{sid}/confirm-extraction",
+        headers=_auth(world["student_token"]),
+    )
+    await drain_integrity_background_tasks()
+    assert r.status_code == 200, r.text
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission.id)
+            .where(IntegrityCheckSubmission.submission_id == uuid.UUID(sid))
+        )).scalar_one_or_none()
+    assert check is not None, "confirm should have opened the understanding check"
+    assert await _can_retake(client, world) is False
+    assert (await _retake(client, world, sid)).status_code == 409
+    assert (await _row(sid)).retaken_at is None
+
+
+# ── Races: the state changes while the new photos are being validated ──
+#
+# `_retake_block` approves the retake before the photos are validated,
+# which can take seconds on a large upload. The write itself re-checks
+# every rule, so whatever lands in that window wins and the retake gets
+# a 409 with the row untouched.
+
+
+def _during_validation(monkeypatch: Any, side_effect: Any) -> None:
+    """Run `side_effect` while the retake is validating its photos."""
+    import api.routes.school_student_practice as route
+
+    real = route._validated_upload_files
+
+    async def validating(body: Any) -> Any:
+        files = await real(body)
+        await side_effect()
+        return files
+
+    monkeypatch.setattr(route, "_validated_upload_files", validating)
+
+
+async def _assert_untouched(sid: str) -> None:
+    row = await _row(sid)
+    assert row.extraction_flagged_at is not None
+    assert row.retaken_at is None
+    assert row.retake_original is None
+    assert len(row.files or []) == 1
+
+
+async def test_a_grade_saved_while_validating_wins(
+    client: AsyncClient, world: dict[str, Any], monkeypatch: Any,
+) -> None:
+    sid = await _submit_and_flag(client, world)
+
+    async def teacher_grades() -> None:
+        async with get_session_factory()() as s:
+            s.add(SubmissionGrade(
+                submission_id=uuid.UUID(sid),
+                breakdown=[{"problem_id": "x", "score_status": "full", "percent": 100}],
+                final_score=100,
+            ))
+            await s.commit()
+
+    _during_validation(monkeypatch, teacher_grades)
+    r = await _retake(client, world, sid)
+    assert r.status_code == 409, r.text
+    await _assert_untouched(sid)
+
+
+async def test_a_note_saved_while_validating_doesnt_block(
+    client: AsyncClient, world: dict[str, Any], monkeypatch: Any,
+) -> None:
+    """The guard matches `has_any_grade`, not "a grade row exists"."""
+    sid = await _submit_and_flag(client, world)
+
+    async def teacher_notes() -> None:
+        async with get_session_factory()() as s:
+            s.add(SubmissionGrade(submission_id=uuid.UUID(sid), teacher_notes="looking",
+                                  breakdown=[]))
+            await s.commit()
+
+    _during_validation(monkeypatch, teacher_notes)
+    assert (await _retake(client, world, sid)).status_code == 200
+
+
+async def test_an_understanding_check_opened_while_validating_wins(
+    client: AsyncClient, world: dict[str, Any], monkeypatch: Any,
+) -> None:
+    sid = await _submit_and_flag(client, world)
+
+    async def check_opens() -> None:
+        async with get_session_factory()() as s:
+            s.add(IntegrityCheckSubmission(submission_id=uuid.UUID(sid), status="awaiting_student"))
+            await s.commit()
+
+    _during_validation(monkeypatch, check_opens)
+    assert (await _retake(client, world, sid)).status_code == 409
+    await _assert_untouched(sid)
+
+
+async def test_a_confirm_racing_a_retake_cant_also_win(
+    client: AsyncClient, world: dict[str, Any], monkeypatch: Any,
+) -> None:
+    """A confirm from another tab, landing mid-retake, is refused: the
+    reading is still flagged, and flag and confirm are exclusive (a DB
+    check constraint). The retake then goes through on its own."""
+    sid = await _submit_and_flag(client, world)
+    confirm_status: list[int] = []
+
+    async def other_tab_confirms() -> None:
+        r = await client.post(
+            f"/v1/school/student/submissions/{sid}/confirm-extraction",
+            headers=_auth(world["student_token"]),
+        )
+        confirm_status.append(r.status_code)
+
+    _during_validation(monkeypatch, other_tab_confirms)
+    assert (await _retake(client, world, sid)).status_code == 200
+    assert confirm_status == [409]
+    row = await _row(sid)
+    assert row.extraction_confirmed_at is None
+    assert row.retaken_at is not None
+
+
+async def test_two_retakes_at_once_only_one_lands(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """A double tap, or two devices: both pass `_retake_block`, only one
+    write matches, and the original kept is the real first turn-in."""
+    import asyncio
+
+    sid = await _submit_and_flag(client, world)
+    before = await _row(sid)
+    r1, r2 = await asyncio.gather(_retake(client, world, sid), _retake(client, world, sid))
+    assert sorted([r1.status_code, r2.status_code]) == [200, 409]
+    after = await _row(sid)
+    assert (after.retake_original or {})["files"] == before.files
 
 
 async def test_held_to_submits_file_rules(client: AsyncClient, world: dict[str, Any]) -> None:
@@ -326,6 +480,9 @@ async def test_the_teacher_sees_the_retake_and_the_original(
     r = await client.get(f"/v1/teacher/submissions/{sid}", headers=_auth(world["teacher_token"]))
     assert r.json()["retaken_at"] is None
     assert r.json()["retake_original"] is None
+    originals_url = f"/v1/teacher/submissions/{sid}/retake-original-files"
+    r = await client.get(originals_url, headers=_auth(world["teacher_token"]))
+    assert r.status_code == 404
 
     assert (await _retake(client, world, sid)).status_code == 200
     r = await client.get(f"/v1/teacher/submissions/{sid}", headers=_auth(world["teacher_token"]))
@@ -334,10 +491,29 @@ async def test_the_teacher_sees_the_retake_and_the_original(
     assert body["retaken_at"] is not None
     assert len(body["files"]) == 2
     original = body["retake_original"]
-    assert len(original["files"]) == 1
-    assert original["files"][0]["data"] == PAGE_PNG
+    # The detail carries the callout's facts, not a second set of pages —
+    # it's re-fetched often; the photos load when she opens them.
+    assert original["file_count"] == 1
+    assert "files" not in original
     assert original["extraction_flag_note"] == "Page 1 was sideways"
     assert original["extraction_flagged_at"] is not None
     assert original["submitted_at"] is not None
     # The new reading is not flagged.
     assert body["extraction_flagged_at"] is None
+
+    r = await client.get(originals_url, headers=_auth(world["teacher_token"]))
+    assert r.status_code == 200, r.text
+    assert [f["data"] for f in r.json()["files"]] == [PAGE_PNG]
+    # A student can't read them through the teacher route.
+    r = await client.get(originals_url, headers=_auth(world["student_token"]))
+    assert r.status_code in (401, 403)
+
+    # A snapshot whose files came out JSON null still loads: 0 pages, no 500.
+    async with get_session_factory()() as s:
+        await s.execute(text(
+            "UPDATE submissions SET retake_original = CAST(:o AS json) WHERE id = :id"
+        ), {"o": '{"files": null, "is_late": false}', "id": sid})
+        await s.commit()
+    r = await client.get(f"/v1/teacher/submissions/{sid}", headers=_auth(world["teacher_token"]))
+    assert r.status_code == 200, r.text
+    assert r.json()["retake_original"]["file_count"] == 0

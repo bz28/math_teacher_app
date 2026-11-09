@@ -20,6 +20,7 @@ import {
   UNREADABLE_FILE_ERROR,
   type UploadMediaType,
   sniffUploadType,
+  retakeErrorMessage,
   submitErrorMessage,
 } from "@/lib/submit-errors";
 import {
@@ -140,15 +141,11 @@ const UNCHECKED = {
  * two days, took it for a login problem, signed in four times in three
  * minutes, and never turned the work in.
  */
-/** A retake refused because the turn-in moved on (the teacher started
- *  grading it, or it was already retaken) — not "already turned in",
- *  which is submit's 409 and true but no help here. */
-const RETAKE_CLOSED_ERROR =
-  "These photos can't be replaced anymore — your teacher may have started grading them. Choose “Keep my first photos” to see where things stand.";
-
-function friendlySubmitError(err: unknown): string {
+function friendlySubmitError(err: unknown, retake: boolean): string {
   if (err instanceof NetworkError) return err.message;
-  if (err instanceof ApiError) return submitErrorMessage(err.status);
+  if (err instanceof ApiError) {
+    return retake ? retakeErrorMessage(err.status) : submitErrorMessage(err.status);
+  }
   return SUBMIT_FALLBACK_ERROR;
 }
 
@@ -441,11 +438,7 @@ export function SubmissionPanel({
       // Never surface a raw exception message to a student. Staged
       // files stay put (we don't clear them) so a retry is one tap
       // away once they've read the friendly line.
-      setError(
-        retake && err instanceof ApiError && err.status === 409
-          ? RETAKE_CLOSED_ERROR
-          : friendlySubmitError(err),
-      );
+      setError(friendlySubmitError(err, !!retake));
       setConfirming(false);
     } finally {
       setSubmitting(false);

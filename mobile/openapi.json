@@ -5307,7 +5307,7 @@
         "type": "object"
       },
       "TeacherRetakeOriginal": {
-        "description": "The turn-in a student's retake replaced \u2014 what the teacher needs to\nsee it was the same work: the photos, when they came in, and what the\nstudent said was wrong with that reading. The original reading itself\nstays on the row for audit but isn't rendered.",
+        "description": "The turn-in a student's retake replaced \u2014 what the teacher needs to\nsee it was the same work: how many pages, when they came in, and what\nthe student said was wrong with that reading. The photos themselves\nare fetched only when she opens them (`GET /submissions/{id}/\nretake-original-files`), so every detail load doesn't carry a second\nset of pages. The original reading stays on the row for audit but\nisn't rendered.",
         "properties": {
           "extraction_flag_note": {
             "anyOf": [
@@ -5332,22 +5332,10 @@
             ],
             "title": "Extraction Flagged At"
           },
-          "files": {
-            "anyOf": [
-              {
-                "items": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "type": "object"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Files"
+          "file_count": {
+            "default": 0,
+            "title": "File Count",
+            "type": "integer"
           },
           "is_late": {
             "default": false,
@@ -5368,6 +5356,25 @@
           }
         },
         "title": "TeacherRetakeOriginal",
+        "type": "object"
+      },
+      "TeacherRetakeOriginalFiles": {
+        "properties": {
+          "files": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Files",
+            "type": "array"
+          }
+        },
+        "required": [
+          "files"
+        ],
+        "title": "TeacherRetakeOriginalFiles",
         "type": "object"
       },
       "TeacherSubmissionDetail": {
@@ -19982,6 +19989,55 @@
           }
         ],
         "summary": "Regrade Submission",
+        "tags": [
+          "teacher"
+        ]
+      }
+    },
+    "/v1/teacher/submissions/{submission_id}/retake-original-files": {
+      "get": {
+        "description": "The photos a student's retake replaced \u2014 opened from the review\npage's \"View original photos\". Same ownership rule as the detail.\n404 when the submission wasn't retaken.",
+        "operationId": "get_retake_original_files_v1_teacher_submissions__submission_id__retake_original_files_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "submission_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Submission Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeacherRetakeOriginalFiles"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Retake Original Files",
         "tags": [
           "teacher"
         ]

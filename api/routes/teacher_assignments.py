@@ -2692,11 +2692,14 @@ class TeacherSubmissionDetailProblem(BaseModel):
 
 class TeacherRetakeOriginal(BaseModel):
     """The turn-in a student's retake replaced — what the teacher needs to
-    see it was the same work: the photos, when they came in, and what the
-    student said was wrong with that reading. The original reading itself
-    stays on the row for audit but isn't rendered."""
+    see it was the same work: how many pages, when they came in, and what
+    the student said was wrong with that reading. The photos themselves
+    are fetched only when she opens them (`GET /submissions/{id}/
+    retake-original-files`), so every detail load doesn't carry a second
+    set of pages. The original reading stays on the row for audit but
+    isn't rendered."""
 
-    files: list[dict[str, str]] | None = None
+    file_count: int = 0
     submitted_at: datetime | None = None
     is_late: bool = False
     extraction_flagged_at: datetime | None = None
@@ -2778,6 +2781,29 @@ class TeacherSubmissionDetail(BaseModel):
     reviewed_at: datetime | None = None
 
 
+class TeacherRetakeOriginalFiles(BaseModel):
+    files: list[dict[str, str]]
+
+
+@router.get("/submissions/{submission_id}/retake-original-files")
+async def get_retake_original_files(
+    submission_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> TeacherRetakeOriginalFiles:
+    """The photos a student's retake replaced — opened from the review
+    page's "View original photos". Same ownership rule as the detail.
+    404 when the submission wasn't retaken."""
+    row = (await db.execute(
+        select(Submission.assignment_id, Submission.retake_original["files"])
+        .where(Submission.id == submission_id, Submission.retaken_at.is_not(None))
+    )).one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="No retake on this submission")
+    await get_teacher_assignment(db, row[0], current_user.user_id)
+    return TeacherRetakeOriginalFiles(files=row[1] or [])
+
+
 @router.get("/submissions/{submission_id}")
 async def get_submission_detail(
     submission_id: uuid.UUID,
@@ -2818,19 +2844,32 @@ async def get_submission_detail(
         select(SubmissionGrade).where(SubmissionGrade.submission_id == sub.id)
     )).scalar_one_or_none()
 
-    # Deferred on the model (it can hold a second set of pages), so it is
-    # read explicitly, and only for the rare row that has one.
+    # The callout's facts only, picked out of the JSON in SQL, so the
+    # original pages never leave the database on a detail load (they can
+    # be megabytes, and the review page re-fetches detail often).
     retake_original: TeacherRetakeOriginal | None = None
     if sub.retaken_at is not None:
-        raw_original = (await db.execute(
-            select(Submission.retake_original).where(Submission.id == sub.id)
-        )).scalar_one_or_none() or {}
+        ro = Submission.retake_original
+        facts = (await db.execute(
+            select(
+                # json_array_length raises on a non-array (JSON null).
+                case(
+                    (func.json_typeof(ro["files"]) == "array",
+                     func.json_array_length(ro["files"])),
+                    else_=0,
+                ),
+                ro["submitted_at"].as_string(),
+                ro["is_late"].as_boolean(),
+                ro["extraction_flagged_at"].as_string(),
+                ro["extraction_flag_note"].as_string(),
+            ).where(Submission.id == sub.id)
+        )).one()
         retake_original = TeacherRetakeOriginal(
-            files=raw_original.get("files"),
-            submitted_at=raw_original.get("submitted_at"),
-            is_late=bool(raw_original.get("is_late")),
-            extraction_flagged_at=raw_original.get("extraction_flagged_at"),
-            extraction_flag_note=raw_original.get("extraction_flag_note"),
+            file_count=facts[0],
+            submitted_at=facts[1],
+            is_late=bool(facts[2]),
+            extraction_flagged_at=facts[3],
+            extraction_flag_note=facts[4],
         )
 
     # Build a lookup of AI-extracted student answers by problem_id.

@@ -46,7 +46,7 @@ _ALLOWED_META_KEYS = {
     "is_preview", "assignment_id", "section_id", "file_count", "is_late",
     "corrections_count", "bank_item_id", "mode", "context", "flagged",
     "anchor_bank_item_id", "step_index", "turn_index", "has_note",
-    "page_orientations",
+    "page_orientations", "previous_file_count",
 }
 
 
