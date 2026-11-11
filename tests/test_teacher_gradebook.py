@@ -148,7 +148,7 @@ async def test_gradebook_grid_columns_and_cells(client: AsyncClient) -> None:
 
     ava = students["Ava Brooks"]["cells"]
     assert ava[w["hw"]["A"]] | {"published_at": None, "submission_id": None} == {
-        "state": "published", "score": 80.0, "is_late": True, "ai_score": 70.0,
+        "state": "published", "score": 80.0, "late_penalty": 0.0, "is_late": True, "ai_score": 70.0,
         "edited_since_publish": False, "published_at": None, "submission_id": None,
     }
     assert ava[w["hw"]["B"]]["state"] == "turned_in"

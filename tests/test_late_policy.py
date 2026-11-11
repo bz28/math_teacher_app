@@ -32,7 +32,9 @@ from api.core.late_policy import (
     set_final_score,
 )
 from api.database import get_session_factory
-from api.models.assignment import Assignment, Submission, SubmissionGrade
+from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
+from api.models.course import CourseTeacher
+from api.models.section_enrollment import SectionEnrollment
 from tests.conftest import PAGE_PNG
 from tests.conftest import auth_headers as _auth
 from tests.test_teacher_review_checkpoint import _seed_hw
@@ -312,6 +314,13 @@ async def test_publish_carries_the_penalty_to_the_student_and_gradebook(client: 
         hw = await s.get(Assignment, world["assignment_id"])
         assert sub is not None and hw is not None
         course_id, section_id = hw.course_id, sub.section_id
+        # The review seed has no roster; give the gradebook one.
+        s.add_all([
+            CourseTeacher(course_id=course_id, teacher_id=hw.teacher_id, role="owner"),
+            AssignmentSection(assignment_id=hw.id, section_id=section_id, published_at=datetime.now(UTC)),
+            SectionEnrollment(section_id=section_id, course_id=course_id, student_id=sub.student_id),
+        ])
+        await s.commit()
     book = (await client.get(
         f"/v1/teacher/courses/{course_id}/sections/{section_id}/gradebook", headers=headers,
     )).json()
