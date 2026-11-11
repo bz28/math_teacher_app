@@ -53,6 +53,8 @@ GRADING_STATUS_SKIPPED_TOO_LONG = "skipped_too_long"
 # 3.2k–4.1k tokens and overran the old 4096 cap. 16384 fits ~55 problems.
 # Output streams at ≈69 tokens/s, so a full 16k response takes ~4 min —
 # the timeout has to cover that, not the 90 s default.
+# Opus thinks first, and the thinking counts toward the cap: over 60 real
+# homeworks it wrote 3.2k tokens on average, 5.3k at most, at ≈115 tokens/s.
 _GRADING_MAX_TOKENS = 16384
 _GRADING_TIMEOUT_S = 300.0
 
@@ -769,26 +771,69 @@ async def grade_submission_with_ai(
     # thinks, so there's no temperature 0: the same work can come back a
     # few points apart on a regrade. The stored grade is what keeps a
     # re-opened review stable.
-    result = await call_claude_json(
-        system,
-        user_message,
-        LLMMode.AI_GRADING,
-        tool_schema=AI_GRADING_SCHEMA,
-        model=MODEL_OPUS,
-        max_tokens=_GRADING_MAX_TOKENS,
-        timeout=_GRADING_TIMEOUT_S,
-        # One attempt here: the SDK already retries transient API errors
-        # (twice), and the grading queue retries the whole job. A third
-        # layer multiplied a stalled API into 3 × 3 × 300 s ≈ 45 min — past
-        # the queue's stale window, which then started a duplicate grader.
-        max_retries=1,
-        user_id=user_id,
-        submission_id=submission_id,
-        call_metadata={"phase": "ai_grading"},
-    )
+    #
+    # Asked once more when the answer skips a problem the student worked
+    # on. An ungraded problem is stamped a zero ("No gradeable work
+    # found"), so a skipped one wrongly zeroes real work. Opus did it once
+    # in 60 whole-homework calls (1 grade back for 8 problems); Sonnet 4.6
+    # never did in 207 prod submissions. Not an API retry — an outage
+    # still costs one attempt here.
+    for attempt in (1, 2):
+        result = await call_claude_json(
+            system,
+            user_message,
+            LLMMode.AI_GRADING,
+            tool_schema=AI_GRADING_SCHEMA,
+            model=MODEL_OPUS,
+            max_tokens=_GRADING_MAX_TOKENS,
+            timeout=_GRADING_TIMEOUT_S,
+            # One attempt here: the SDK already retries transient API errors
+            # (twice), and the grading queue retries the whole job. A third
+            # layer multiplied a stalled API into 3 × 3 × 300 s ≈ 45 min — past
+            # the queue's stale window, which then started a duplicate grader.
+            max_retries=1,
+            user_id=user_id,
+            submission_id=submission_id,
+            call_metadata={"phase": "ai_grading", "attempt": attempt},
+        )
+        skipped = _skipped_worked_problems(result, extraction, problems)
+        if not skipped:
+            break
+        logger.warning(
+            "AI grading skipped problems %s that have student work "
+            "(submission %s, attempt %d)", skipped, submission_id, attempt,
+        )
     _cap_confidence_for_unconfirmed_drawings(result, extraction, problems)
     _name_rules_in_text(result, (rubric or {}).get("rules") or [])
     return result
+
+
+def _skipped_worked_problems(
+    result: dict[str, Any], extraction: dict[str, Any], problems: list[dict[str, Any]],
+) -> list[int]:
+    """Positions the student wrote or drew something for that came back
+    with no grade. A problem with no work is legitimately left out — it
+    is reconciled to a zero downstream."""
+    graded = {
+        g.get("problem_position") for g in result.get("grades") or [] if isinstance(g, dict)
+    }
+    def written(key: str, *text: str) -> set[Any]:
+        return {
+            item.get("problem_position")
+            for item in extraction.get(key) or []
+            if isinstance(item, dict) and any(str(item.get(f) or "").strip() for f in text)
+        }
+
+    worked = written("steps", "latex", "plain_english") | written(
+        "final_answers", "answer_latex", "answer_plain",
+    ) | {
+        # A visual_work entry can record that nothing was drawn.
+        v.get("problem_position") for v in extraction.get("visual_work") or []
+        if isinstance(v, dict) and v.get("present", True) is not False
+    }
+    return sorted(
+        p["position"] for p in problems if p["position"] in worked - graded
+    )
 
 
 def _literal(words: str) -> Callable[[re.Match[str]], str]:

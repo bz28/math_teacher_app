@@ -276,3 +276,58 @@ async def test_grader_calls_opus_without_temperature_or_thinking(
     assert seen["model"] == MODEL_OPUS
     assert seen["tool_schema"] is AI_GRADING_SCHEMA
     assert "temperature" not in seen and "thinking_budget" not in seen
+
+
+def _work(*positions: int) -> dict[str, Any]:
+    return {
+        "steps": [{"step_num": 1, "problem_position": p, "latex": "x=2", "plain_english": ""}
+                  for p in positions],
+        "final_answers": [], "confidence": 0.9,
+    }
+
+
+_PROBLEMS = [{"position": p, "question": "Solve.", "final_answer": "2"} for p in (1, 2, 3)]
+
+
+def _grader(*answers: list[int]) -> tuple[Any, list[dict[str, Any]]]:
+    calls: list[dict[str, Any]] = []
+    queue = list(answers)
+
+    async def fake_call(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        calls.append(kwargs)
+        return {"grades": [{"problem_position": p, "score_status": "full"} for p in queue.pop(0)]}
+    return fake_call, calls
+
+
+async def test_grader_reasks_once_when_it_skips_a_problem_with_work(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake, calls = _grader([1], [1, 2, 3])
+    monkeypatch.setattr(grading_ai, "call_claude_json", fake)
+    result = await grading_ai.grade_submission_with_ai(_work(1, 2, 3), _PROBLEMS, None)
+    assert [g["problem_position"] for g in result["grades"]] == [1, 2, 3]
+    assert [c["call_metadata"]["attempt"] for c in calls] == [1, 2]
+
+
+async def test_grader_does_not_reask_for_a_problem_with_no_work(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Problem 3 is blank: an empty step and a "nothing drawn" entry aren't work.
+    extraction = _work(1, 2)
+    extraction["steps"].append(
+        {"step_num": 2, "problem_position": 3, "latex": " ", "plain_english": ""},
+    )
+    extraction["visual_work"] = [{"problem_position": 3, "present": False}]
+    fake, calls = _grader([1, 2])
+    monkeypatch.setattr(grading_ai, "call_claude_json", fake)
+    await grading_ai.grade_submission_with_ai(extraction, _PROBLEMS, None)
+    assert len(calls) == 1
+
+
+async def test_grader_reasks_at_most_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake, calls = _grader([1], [1, 2])
+    monkeypatch.setattr(grading_ai, "call_claude_json", fake)
+    result = await grading_ai.grade_submission_with_ai(_work(1, 2, 3), _PROBLEMS, None)
+    assert len(calls) == 2
+    # The second answer stands; the still-skipped problem is reconciled downstream.
+    assert [g["problem_position"] for g in result["grades"]] == [1, 2]
