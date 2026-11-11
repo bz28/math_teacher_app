@@ -13,8 +13,11 @@
   this policy or moves the due date earlier after it came in.
 
 The due date that counts is the student's *effective* one (`effective_due_at`
-and friends): the class due date. A homework with no due date is never late
-and never closes.
+and friends): their personal due date when the teacher reopened the
+homework for them (`StudentDueDate`), else the class due date. A personal
+date is an extension — work turned in before it is on time, and a turn-in
+already in is re-priced against it. A homework with no due date that
+applies is never late and never closes.
 
 The penalty is applied in exactly one place, `set_final_score`, which every
 writer of `SubmissionGrade.final_score` goes through. `final_score` is the
@@ -39,7 +42,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only
 
-from api.models.assignment import Assignment, Submission, SubmissionGrade
+from api.models.assignment import Assignment, StudentDueDate, Submission, SubmissionGrade
 
 LATE_POLICY_NONE = "none"
 LATE_POLICY_PENALTY_PER_DAY = "penalty_per_day"
@@ -66,7 +69,17 @@ async def effective_due_dates(
     db: AsyncSession, assignment: Assignment, student_ids: Iterable[uuid.UUID],
 ) -> dict[uuid.UUID, datetime | None]:
     """`effective_due_at` for several students on one homework."""
-    return dict.fromkeys(student_ids, assignment.due_at)
+    ids = set(student_ids)
+    due: dict[uuid.UUID, datetime | None] = dict.fromkeys(ids, assignment.due_at)
+    if ids:
+        rows = await db.execute(
+            select(StudentDueDate.student_id, StudentDueDate.due_at).where(
+                StudentDueDate.assignment_id == assignment.id,
+                StudentDueDate.student_id.in_(ids),
+            )
+        )
+        due.update({sid: at for sid, at in rows.all()})
+    return due
 
 
 async def student_due_dates(
@@ -74,7 +87,16 @@ async def student_due_dates(
 ) -> dict[uuid.UUID, datetime | None]:
     """`effective_due_at` for one student across several homeworks, keyed
     by assignment id."""
-    return {a.id: a.due_at for a in assignments}
+    due: dict[uuid.UUID, datetime | None] = {a.id: a.due_at for a in assignments}
+    if due:
+        rows = await db.execute(
+            select(StudentDueDate.assignment_id, StudentDueDate.due_at).where(
+                StudentDueDate.student_id == student_id,
+                StudentDueDate.assignment_id.in_(list(due)),
+            )
+        )
+        due.update({aid: at for aid, at in rows.all()})
+    return due
 
 
 # ── The rule ──
