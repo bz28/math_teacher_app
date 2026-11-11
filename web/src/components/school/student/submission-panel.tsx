@@ -25,6 +25,7 @@ import {
 import {
   boundedPageCheck,
   onlySomePagesSideways,
+  orientationReport,
   pdfTooSmallError,
   sidewaysHint,
   sidewaysPrompt,
@@ -96,6 +97,9 @@ interface StagedFile {
   upright: boolean;
   /** The page check hasn't answered yet; turn-in waits for it. */
   checking: boolean;
+  /** The page check answered in time. False after a failure or timeout,
+   *  which holds nothing — reported at turn-in as "unchecked". */
+  checked: boolean;
 }
 
 /** The fields every new row starts with. */
@@ -105,6 +109,7 @@ const UNCHECKED = {
   sidewaysPages: [] as number[],
   upright: false,
   checking: false,
+  checked: false,
 };
 
 /**
@@ -324,7 +329,9 @@ export function SubmissionPanel({
         }
       : {};
     setStagedFiles((prev) =>
-      prev.map((f) => (f.id === id ? { ...f, ...update, checking: false } : f)),
+      prev.map((f) =>
+        f.id === id ? { ...f, ...update, checking: false, checked: res !== null } : f,
+      ),
     );
   }
 
@@ -398,6 +405,7 @@ export function SubmissionPanel({
       const resp = await schoolStudent.submitHomework(assignmentId, {
         files: valid.map((f) => f.base64),
         rotations: valid.map((f) => f.rotation),
+        orientations: valid.map((f) => orientationReport(f, f.checked)),
       });
       onSubmitted(resp);
     } catch (err) {

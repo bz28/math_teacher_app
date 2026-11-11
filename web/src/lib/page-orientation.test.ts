@@ -6,6 +6,7 @@ import {
   boundedPageCheck,
   CHECK_HOLD_MS,
   onlySomePagesSideways,
+  orientationReport,
   parsePageCheck,
   pdfTooSmallError,
   sidewaysHint,
@@ -89,4 +90,28 @@ test("a check that runs long, fails, or answers junk holds nothing", async () =>
     { pageCount: 3, sidewaysPages: [2], tooSmallPages: [], preview: "P" },
   );
   assert.equal(CHECK_HOLD_MS, 20_000);
+});
+
+test("each file reports how it got past the sideways hold", () => {
+  const upright = photo({ sidewaysPages: [] });
+  assert.equal(orientationReport(upright, true), "upright");
+  // The check missed it but the student turned it anyway: still the
+  // check's "upright" — rotations are reported separately.
+  assert.equal(orientationReport({ ...upright, rotation: 90 }, true), "upright");
+  assert.equal(orientationReport(photo({ rotation: 90 }), true), "rotated");
+  assert.equal(orientationReport(photo({ rotation: 270 }), true), "rotated");
+  assert.equal(orientationReport(photo({ upright: true }), true), "student_says_upright");
+  // A half turn leaves it sideways; only the override got it through.
+  assert.equal(
+    orientationReport(photo({ rotation: 180, upright: true }), true),
+    "student_says_upright",
+  );
+  // Some PDF pages sideways: no rotate button, the override is the way.
+  assert.equal(
+    orientationReport({ pageCount: 3, sidewaysPages: [2], rotation: 0, upright: true }, true),
+    "student_says_upright",
+  );
+  // The check timed out or failed: nothing was held, whatever the state.
+  assert.equal(orientationReport(upright, false), "unchecked");
+  assert.equal(orientationReport(photo({ upright: true }), false), "unchecked");
 });

@@ -46,6 +46,7 @@ _ALLOWED_META_KEYS = {
     "is_preview", "assignment_id", "section_id", "file_count", "is_late",
     "corrections_count", "bank_item_id", "mode", "context", "flagged",
     "anchor_bank_item_id", "step_index", "turn_index", "has_note",
+    "page_orientations",
 }
 
 
@@ -183,9 +184,10 @@ def _assert_meta_contract(meta: dict[str, Any] | None) -> None:
     unknown = set(meta) - _ALLOWED_META_KEYS
     assert not unknown, f"unvetted metadata keys (student content?): {sorted(unknown)}"
     for key, value in meta.items():
-        if isinstance(value, str):
-            # Every legitimate string here is a UUID or a short enum code.
-            assert len(value) <= 64, f"{key} looks like prose, not an id: {value[:80]!r}"
+        for item in value if isinstance(value, list) else [value]:
+            if isinstance(item, str):
+                # Every legitimate string here is a UUID or a short enum code.
+                assert len(item) <= 64, f"{key} looks like prose, not an id: {item[:80]!r}"
 
 
 @pytest.mark.asyncio
@@ -208,6 +210,69 @@ async def test_submission_create_is_logged_with_a_resolved_school(
     assert str(row["target_id"]) == submission_id
     assert row["action_metadata"]["file_count"] == 1
     assert row["action_metadata"]["is_late"] is False
+    _assert_meta_contract(row["action_metadata"])
+
+
+@pytest.mark.asyncio
+async def test_submission_create_records_how_each_page_passed_the_sideways_check(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Orientation is enforced on the client only, so this row is the one
+    place a student overruling the check ("It's already upright") or a
+    check that timed out shows up at all."""
+    await _attach_school(world)
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json={
+            "files": [PAGE_PNG] * 4,
+            "rotations": [0, 90, 0, 0],
+            "orientations": ["upright", "rotated", "student_says_upright", "unchecked"],
+        },
+    )
+    assert r.status_code == 200, r.text
+
+    [row] = await _rows("submission.create")
+    assert row["action_metadata"]["page_orientations"] == [
+        "upright", "rotated", "student_says_upright", "unchecked",
+    ]
+    _assert_meta_contract(row["action_metadata"])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("orientations", "logged"),
+    [
+        # Older app builds send nothing: nothing is claimed.
+        (None, None),
+        # Misaligned with the files: can't say which page was which.
+        (["upright"], None),
+        # A value this server doesn't know (a newer client) is counted,
+        # never stored verbatim — client text doesn't enter this table.
+        (["upright", "x" * 500], ["upright", "other"]),
+    ],
+)
+async def test_page_orientations_never_block_a_turn_in(
+    client: AsyncClient,
+    world: dict[str, Any],
+    orientations: list[str] | None,
+    logged: list[str] | None,
+) -> None:
+    """Audit data only: a missing, misaligned or unknown report still
+    turns the work in."""
+    await _attach_school(world)
+    body: dict[str, Any] = {"files": [PAGE_PNG, PAGE_PNG]}
+    if orientations is not None:
+        body["orientations"] = orientations
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=_auth(world["student_token"]),
+        json=body,
+    )
+    assert r.status_code == 200, r.text
+
+    [row] = await _rows("submission.create")
+    assert row["action_metadata"].get("page_orientations") == logged
     _assert_meta_contract(row["action_metadata"])
 
 

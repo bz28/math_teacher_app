@@ -528,6 +528,14 @@ class SubmitHomeworkRequest(BaseModel):
     # student turned it, so the AI reads it upright. Omitted = no turns
     # (older app builds don't send it).
     rotations: list[int] | None = None
+    # What the upload screen's sideways check concluded about each page,
+    # parallel to `files` — see PAGE_ORIENTATIONS. Audit only: it goes
+    # into the `submission.create` activity row and changes nothing about
+    # how the work is stored or read. Deliberately unvalidated beyond
+    # being strings — telemetry must never be the reason a turn-in is
+    # refused — and normalized by `_orientation_report`. Omitted by older
+    # app builds.
+    orientations: list[str] | None = None
 
     @field_validator("files")
     @classmethod
@@ -550,6 +558,31 @@ class SubmitHomeworkRequest(BaseModel):
         if self.rotations is not None and len(self.rotations) != len(self.files):
             raise ValueError("rotations must have one entry per file")
         return self
+
+
+# What the upload screen knew about a page's orientation at turn-in.
+# Orientation is enforced on the client only (see check_page_orientation),
+# so the two ways past the sideways hold leave no trace server-side unless
+# the client reports them:
+#   upright               the check read it upright
+#   rotated               the check read it sideways; the student turned it
+#   student_says_upright  the check read it sideways; the student overruled
+#                         it with "It's already upright"
+#   unchecked             the check failed or timed out, so nothing was held
+PAGE_ORIENTATIONS = frozenset({"upright", "rotated", "student_says_upright", "unchecked"})
+
+
+def _orientation_report(raw: list[str] | None, file_count: int) -> list[str] | None:
+    """Normalize the client's per-page orientation list for the activity
+    log. None when the client didn't send one (older builds) or sent one
+    that doesn't line up with the files — a misaligned list can't say
+    which page was which, and rejecting the submit over audit data would
+    be worse than losing it. An unrecognized value (a newer client) is
+    kept as "other" so the row still counts it without storing arbitrary
+    client text."""
+    if raw is None or len(raw) != file_count:
+        return None
+    return [v if v in PAGE_ORIENTATIONS else "other" for v in raw]
 
 
 class PageOrientationRequest(BaseModel):
@@ -2241,14 +2274,21 @@ async def submit_homework(
     # back. So the audit write goes after the spawn, and its own failure
     # can cost nothing but the log line.
     try:
+        metadata: dict[str, Any] = {
+            "assignment_id": str(assignment_id),
+            "section_id": str(section_id),
+            "file_count": len(validated_files),
+            "is_late": is_late,
+        }
+        # Which pages got past the sideways hold, and how — the only
+        # server-side record of an "It's already upright" or a check that
+        # timed out. Absent when the client didn't report it.
+        orientations = _orientation_report(body.orientations, len(validated_files))
+        if orientations is not None:
+            metadata["page_orientations"] = orientations
         await record_student_activity(
             db, user, "submission.create", "submission", submission.id,
-            {
-                "assignment_id": str(assignment_id),
-                "section_id": str(section_id),
-                "file_count": len(validated_files),
-                "is_late": is_late,
-            },
+            metadata,
             school_id=await _school_id_for(db, course_id=assignment.course_id),
         )
         await db.commit()

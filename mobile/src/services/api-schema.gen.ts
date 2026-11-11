@@ -6241,6 +6241,8 @@ export interface components {
         SubmitHomeworkRequest: {
             /** Files */
             files: string[];
+            /** Orientations */
+            orientations?: string[] | null;
             /** Rotations */
             rotations?: number[] | null;
         };

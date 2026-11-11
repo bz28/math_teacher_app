@@ -86,6 +86,31 @@ export function stillSideways(f: OrientationState): boolean {
   return !f.upright && f.sidewaysPages.length > 0 && f.rotation % 180 === 0;
 }
 
+/** How a file got past the sideways hold, sent with the submit for the
+ *  activity log (`PAGE_ORIENTATIONS` in api/routes/school_student_practice.py).
+ *  The hold lives only on the client, so without this the server can't
+ *  tell a page the check passed from one the student overruled, or one
+ *  the check never answered for. */
+export type OrientationReport =
+  | "upright"
+  | "rotated"
+  | "student_says_upright"
+  | "unchecked";
+
+/** `checked`: the page check answered in time. A failed or timed-out
+ *  check holds nothing, so the file reports "unchecked". */
+export function orientationReport(
+  f: OrientationState,
+  checked: boolean,
+): OrientationReport {
+  if (!checked) return "unchecked";
+  if (f.sidewaysPages.length === 0) return "upright";
+  if (f.rotation % 180 !== 0) return "rotated";
+  // Read as sideways and not cleared by a turn — the only way it reaches
+  // turn-in is the student's "It's already upright".
+  return "student_says_upright";
+}
+
 /** The line shown on a sideways file. */
 export function sidewaysPrompt(f: OrientationState): string {
   if (f.pageCount <= 1) {

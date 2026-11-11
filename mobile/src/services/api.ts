@@ -444,15 +444,18 @@ export function uploadTimeoutFor(bodyBytes: number): number {
 
 /** Submit photos of handwritten work. Timeout scales with payload size. */
 /** `rotations`: clockwise quarter turns per file, parallel to `files` —
- *  the server stores each page the way the student turned it. */
+ *  the server stores each page the way the student turned it.
+ *  `orientations`: how each file got past the sideways check, parallel to
+ *  `files` — audit only, logged on the submission. */
 export const submitHomework = (
   assignmentId: string,
   files: string[],
   rotations?: number[],
+  orientations?: string[],
 ) =>
   apiPost<{ submission_id: string; submitted_at: string; is_late: boolean }>(
     `/school/student/homework/${assignmentId}/submit`,
-    { files, rotations },
+    { files, rotations, orientations },
     uploadTimeoutFor(files.reduce((n, f) => n + f.length, 0)),
   );
 
