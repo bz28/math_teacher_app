@@ -2353,8 +2353,10 @@ class FlagExtractionBody(BaseModel):
     """Optional body for flag-extraction. Both fields are optional and an
     absent body is still a valid flag (older clients send none).
 
-    note: the student's short answer to "What did it get wrong?". Blank
-      or whitespace-only is stored as null.
+    note: the student's short answer to "What's wrong with the reading?".
+      Current web and app builds require one before they flag; it stays
+      optional here so a flag from an older build still lands. Blank or
+      whitespace-only is stored as null.
     edits: lines the student fixed before deciding to send it to the
       teacher anyway. Same key format and validation as confirm-time
       edits; stored on `extraction_edits` so the teacher review page
@@ -2393,7 +2395,7 @@ async def confirm_extraction(
 
     This is the single choke-point that gates grading on student
     confirmation. Called from "Confirm — this is my work" on the
-    confirm screen; "Something looks wrong" → "Most of it is wrong" calls /flag-extraction
+    confirm screen; "Something looks wrong" → "The whole reading is wrong" calls /flag-extraction
     instead, which stamps extraction_flagged_at and deliberately does
     NOT spawn grading.
     """
@@ -2475,7 +2477,7 @@ async def flag_extraction_submission(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """Student said most of the reading is wrong ("Something looks wrong"
-    → "Most of it is wrong") on the confirm screen.
+    → "The whole reading is wrong") on the confirm screen.
 
     Stamps `extraction_flagged_at` and sends the submission straight
     to the teacher — does NOT spawn integrity or AI grading, and the

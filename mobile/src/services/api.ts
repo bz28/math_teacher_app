@@ -501,7 +501,7 @@ export const confirmExtraction = (submissionId: string, edits?: Record<string, s
 /** Max length of the flag note — the server's `_MAX_FLAG_NOTE_LEN`. */
 export const FLAG_NOTE_MAX = 500;
 
-/** "Most of it is wrong" — routes the submission to manual teacher grading.
+/** "The whole reading is wrong" — routes the submission to manual teacher grading.
  *  The optional note ("what did it get wrong?") and any lines the student
  *  fixed first go to the teacher; neither is ever graded. */
 export const flagExtraction = (

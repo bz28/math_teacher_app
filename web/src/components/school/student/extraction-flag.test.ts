@@ -2,7 +2,14 @@
 // Runs on plain Node (>=22.6) via native TS type-stripping.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { hasEditableLines } from "./extraction-flag.ts";
+import {
+  answerPreview,
+  firstAnswerPreview,
+  FLAG_NOTE_STARTERS,
+  flagNoteReady,
+  hasEditableLines,
+  withStarter,
+} from "./extraction-flag.ts";
 
 test("a positioned step is editable", () => {
   assert.equal(
@@ -46,4 +53,49 @@ test("an empty final answer isn't rendered, so it isn't editable", () => {
 
 test("nothing read at all", () => {
   assert.equal(hasEditableLines({ steps: [], final_answers: [] }), false);
+});
+
+test("the whole-reading note needs a real pointer", () => {
+  assert.equal(flagNoteReady(""), false);
+  assert.equal(flagNoteReady("   "), false);
+  assert.equal(flagNoteReady("no"), false);
+  assert.equal(flagNoteReady("P9 is 65"), true);
+});
+
+test("a starter fills, appends, and never repeats", () => {
+  assert.equal(withStarter("", "Most lines are wrong"), "Most lines are wrong");
+  assert.equal(withStarter("  ", "Most lines are wrong"), "Most lines are wrong");
+  assert.equal(
+    withStarter("Problem 3 is off", "Most lines are wrong"),
+    "Problem 3 is off. Most lines are wrong",
+  );
+  assert.equal(
+    withStarter("Problem 3 is off!", "Most lines are wrong"),
+    "Problem 3 is off! Most lines are wrong",
+  );
+  assert.equal(
+    withStarter("Most lines are wrong", "Most lines are wrong"),
+    "Most lines are wrong",
+  );
+  for (const s of FLAG_NOTE_STARTERS) assert.ok(flagNoteReady(s));
+});
+
+test("a tile previews the answer we read, plain text first", () => {
+  assert.equal(answerPreview({ answer_plain: "63", answer_latex: "63" }), "63");
+  assert.equal(answerPreview({ answer_plain: " ", answer_latex: "\\frac{1}{2}" }), "\\frac{1}{2}");
+  assert.equal(answerPreview({ answer_plain: null, answer_latex: null }), null);
+  assert.equal(answerPreview(undefined), null);
+});
+
+test("a problem fixable only by a later answer still gets a tile", () => {
+  // No steps, first answer slot empty, second one read: hasEditableLines
+  // counts it as fixable, so the tile must show it rather than vanish.
+  const fas = [
+    { problem_position: 4, answer_plain: "", answer_latex: "" },
+    { problem_position: 4, answer_plain: "x = 21", answer_latex: "x = 21" },
+  ];
+  assert.equal(hasEditableLines({ steps: [], final_answers: fas }), true);
+  assert.equal(firstAnswerPreview(fas), "x = 21");
+  assert.equal(firstAnswerPreview([]), null);
+  assert.equal(firstAnswerPreview([{ answer_plain: " ", answer_latex: null }]), null);
 });

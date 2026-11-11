@@ -21,7 +21,14 @@ import {
 import { useBlobUrl } from "@/hooks/use-blob-url";
 import { Modal } from "@/components/ui/modal";
 import { useDeviceType } from "./use-device-type";
-import { FLAG_NOTE_MAX, hasEditableLines } from "./extraction-flag";
+import {
+  firstAnswerPreview,
+  FLAG_NOTE_MAX,
+  FLAG_NOTE_STARTERS,
+  flagNoteReady,
+  hasEditableLines,
+  withStarter,
+} from "./extraction-flag";
 
 interface Props {
   submissionId: string;
@@ -39,7 +46,7 @@ interface Props {
   /** Student confirmed the reader got it right (with optional edits
    *  applied). Parent transitions to the chat / submitted view. */
   onContinue: () => void;
-  /** Student said most of the reading is wrong ("Most of it is wrong").
+  /** Student said the whole reading is wrong ("The whole reading is wrong").
    *  We fire the flag endpoint here and hand control back to the
    *  parent, which transitions onward — the flag is a signal for the
    *  teacher, not a gate. `detailsDropped` is true when the student
@@ -240,7 +247,7 @@ function EditableRow({
       // "wipe my edit" gesture — drop it so the original Vision read
       // stands again. On a never-edited row it's a no-op (we don't
       // surface deletion of original Vision rows here; a reading that
-      // wrong is what "Something looks wrong" → "Most of it" is for).
+      // wrong is what "Something looks wrong" → "The whole reading is wrong" is for).
       if (isEdited) onClearEdit(editKey);
       return;
     }
@@ -375,12 +382,18 @@ export function SubmissionExtractionConfirmView({
   //              ride along so the teacher sees where the misread is.
   //
   // "Something looks wrong" doesn't flag straight away: it first asks
-  // how much is wrong. Most misreads are a line or two the student can
-  // fix themselves (prod: 25 flags with zero edits, 36 confirms with
-  // edits), and a fix keeps the AI grade + the chat. "Most of it" goes
-  // to the note step, then flags.
-  const [flagStep, setFlagStep] = useState<"choose" | "note" | null>(null);
+  // which problem looks wrong, and picking one drops the student onto
+  // that problem's lines to fix. Most misreads are a line or two (prod:
+  // 25 flags with zero edits, 36 confirms with edits) — the incident
+  // behind this step was one ambiguous digit, sent to the teacher whole
+  // because "Most of it is wrong?" was one tap away and fixing it wasn't
+  // pointed at. Each tile shows the answer we read, so the misread is
+  // spotted without paging through. "The whole reading is wrong" stays a
+  // real path — to the note step, which now needs a note, then flags.
+  const [flagStep, setFlagStep] = useState<"which" | "note" | null>(null);
   const [fixMode, setFixMode] = useState(false);
+  // The problem the student picked as wrong; names it in the fix hint.
+  const [fixTarget, setFixTarget] = useState<number | null>(null);
   const [note, setNote] = useState("");
   const flagTitleId = useId();
   const problemsRef = useRef<HTMLDivElement>(null);
@@ -397,6 +410,7 @@ export function SubmissionExtractionConfirmView({
     prevFlagStep.current = flagStep;
   }, [flagStep]);
   const canFixLines = useMemo(() => hasEditableLines(extraction), [extraction]);
+  const noteReady = flagNoteReady(note);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Sparse map of student corrections keyed by step / final-answer
@@ -508,19 +522,22 @@ export function SubmissionExtractionConfirmView({
     // "your fixes go too" line and is sent with the flag.
     commitPending();
     setError(null);
-    setFlagStep(canFixLines ? "choose" : "note");
+    setFlagStep(canFixLines ? "which" : "note");
   }
 
-  function startFixing() {
+  function startFixing(index: number) {
     setFlagStep(null);
     setFixMode(true);
+    setFixTarget(groups[index]?.position ?? null);
     setError(null);
+    goTo(index);
     // The flag button sits below the problems; bring the lines (and
     // the hint above them) back into view.
     problemsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   async function handleFlag() {
+    if (!noteReady) return;
     setSubmitting(true);
     setError(null);
     // Whether this request carried anything for the teacher. If the
@@ -589,7 +606,13 @@ export function SubmissionExtractionConfirmView({
       ) : (
         <div
           ref={problemsRef}
-          className="mt-6 grid scroll-mt-4 gap-4 md:grid-cols-[180px_1fr]"
+          // minmax(0, …), not the implicit auto track: a grid item's
+          // minimum width is its content's, and the horizontal page strip's
+          // content is every thumbnail side by side. With a few pages the
+          // column grew past a phone's width and pushed every line's
+          // pencil and the Next button off-screen — the student could see
+          // the misread but not reach the control to fix it.
+          className="mt-6 grid scroll-mt-4 grid-cols-[minmax(0,1fr)] gap-4 md:grid-cols-[180px_minmax(0,1fr)]"
         >
           {/* Persistent file strip — vertical on desktop, horizontal
               scroll on mobile. Every page stays visible so the student
@@ -613,11 +636,13 @@ export function SubmissionExtractionConfirmView({
                 </span>
                 <p className="text-sm leading-relaxed text-text-primary">
                   <span className="font-semibold">
-                    Tap a line to fix it, then confirm.
+                    {fixTarget !== null && activeGroup?.position === fixTarget
+                      ? `Tap the line on Problem ${fixTarget} that's wrong, fix it, then confirm.`
+                      : "Tap a line to fix it, then confirm."}
                   </span>
                   {totalProblems > 1 && (
                     <span className="text-text-secondary">
-                      {" "}Use Next to check your other problems too.
+                      {" "}Anything else off? Use Next to check.
                     </span>
                   )}
                 </p>
@@ -697,7 +722,7 @@ export function SubmissionExtractionConfirmView({
         labelledById={flagTitleId}
         className="w-full max-w-md bg-surface p-5 sm:p-6"
       >
-        {flagStep === "choose" ? (
+        {flagStep === "which" ? (
           <div>
             <h2
               id={flagTitleId}
@@ -705,46 +730,58 @@ export function SubmissionExtractionConfirmView({
               tabIndex={-1}
               className="font-serif text-2xl leading-tight text-text-primary focus:outline-none"
             >
-              How much did we get wrong?
+              Which problem looks wrong?
             </h2>
             <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">
-              If it&rsquo;s only a few lines, fixing them yourself is quickest.
+              Tap it and fix the line yourself. Under each number is the
+              answer we read.
             </p>
-            {/* Fixing it yourself is the path we steer toward: one
-                prominent card. Sending it to the teacher stays a real,
-                always-visible button — a student whose work truly was
-                misread must be able to find it — just quieter. */}
-            <button
-              type="button"
-              onClick={startFixing}
-              className="mt-5 flex w-full items-center gap-3.5 rounded-[--radius-md] border-2 border-primary bg-primary-bg p-4 text-left transition-colors hover:bg-primary-bg/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+            {/* One decision: which problem. Fixing it here is the path we
+                steer toward, so the tiles are the step. The whole-reading
+                flag stays a real, always-visible button below — a student
+                whose work truly was misread must find it — just quieter. */}
+            <ul
+              aria-label="Problems"
+              className="mt-5 grid max-h-[46vh] grid-cols-3 gap-2 overflow-y-auto p-0.5 sm:grid-cols-4"
             >
-              <span
-                aria-hidden
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-white"
-              >
-                <PencilIcon className="h-[18px] w-[18px]" />
-              </span>
-              <span className="min-w-0">
-                <span className="block text-base font-bold text-text-primary">
-                  Just a few lines
-                </span>
-                <span className="mt-0.5 block text-sm text-text-secondary">
-                  I&rsquo;ll fix them myself, then confirm.
-                </span>
-              </span>
-            </button>
-            <div className="mt-3 flex flex-col items-center">
+              {groups.map((g, i) => {
+                if (g.position === null) return null;
+                const answer = firstAnswerPreview(g.finalAnswers);
+                if (g.steps.length === 0 && answer === null) return null;
+                return (
+                  <li key={g.position}>
+                    <button
+                      type="button"
+                      onClick={() => startFixing(i)}
+                      aria-label={
+                        answer
+                          ? `Problem ${g.position}, we read ${answer}. Fix it.`
+                          : `Problem ${g.position}. Fix it.`
+                      }
+                      className="flex min-h-[72px] w-full flex-col items-center justify-center gap-1 rounded-[--radius-md] border border-border bg-surface px-1.5 py-2 transition-colors hover:border-primary hover:bg-primary-bg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:bg-primary-bg"
+                    >
+                      <span className="font-serif text-2xl leading-none text-text-primary">
+                        {g.position}
+                      </span>
+                      <span
+                        className={`block max-w-full truncate text-xs tabular-nums ${
+                          answer ? "text-text-secondary" : "italic text-text-muted"
+                        }`}
+                      >
+                        {answer ?? "no answer"}
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="mt-4 flex flex-col items-center">
               <button
                 type="button"
                 onClick={() => setFlagStep("note")}
-                aria-label="Most of it is wrong? Send it to my teacher to grade from my photos."
-                className="inline-flex min-h-[44px] items-center rounded-[--radius-sm] px-3 text-sm text-text-secondary transition-colors hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                className="inline-flex min-h-[44px] items-center rounded-[--radius-sm] px-3 text-sm font-semibold text-text-secondary underline decoration-border underline-offset-[3px] transition-colors hover:text-text-primary hover:decoration-text-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
               >
-                Most of it is wrong?&nbsp;
-                <span className="font-semibold text-primary underline underline-offset-2">
-                  Send it to my teacher
-                </span>
+                The whole reading is wrong
               </button>
               <button
                 type="button"
@@ -763,17 +800,28 @@ export function SubmissionExtractionConfirmView({
               tabIndex={-1}
               className="font-serif text-2xl leading-tight text-text-primary focus:outline-none"
             >
-              Send it to your teacher
+              What&rsquo;s wrong with the reading?
             </h2>
             <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">
-              Your teacher will grade this homework from your photos instead.
+              Your teacher will grade this homework from your photos instead,
+              so tell them where to look.
             </p>
-            <label
-              htmlFor={`${flagTitleId}-note`}
-              className="mt-5 block text-sm font-semibold text-text-primary"
-            >
-              What did it get wrong?{" "}
-              <span className="font-normal text-text-muted">(optional)</span>
+            {/* One-tap starters: a kid on a phone shouldn't have to type
+                from nothing, and each is a real pointer for the teacher. */}
+            <div className="mt-4 flex flex-wrap gap-1.5">
+              {FLAG_NOTE_STARTERS.map((starter) => (
+                <button
+                  key={starter}
+                  type="button"
+                  onClick={() => setNote((n) => withStarter(n, starter))}
+                  className="min-h-[36px] rounded-full border border-border bg-surface px-3 text-xs font-medium text-text-secondary transition-colors hover:border-primary hover:text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  {starter}
+                </button>
+              ))}
+            </div>
+            <label htmlFor={`${flagTitleId}-note`} className="sr-only">
+              What&rsquo;s wrong with the reading?
             </label>
             <textarea
               id={`${flagTitleId}-note`}
@@ -781,8 +829,9 @@ export function SubmissionExtractionConfirmView({
               onChange={(e) => setNote(e.target.value)}
               maxLength={FLAG_NOTE_MAX}
               rows={3}
-              placeholder="For example: it read my 7s as 1s on problem 3"
-              className="mt-1.5 block w-full rounded-[--radius-sm] border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none"
+              aria-required
+              placeholder="Or say it in your own words, like: it read my 7s as 1s"
+              className="mt-2 block w-full rounded-[--radius-sm] border border-border bg-surface px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-primary focus:outline-none"
             />
             <div className="mt-1 flex items-start justify-between gap-3 text-xs text-text-muted">
               <span>
@@ -800,7 +849,7 @@ export function SubmissionExtractionConfirmView({
             <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button
                 type="button"
-                onClick={() => (canFixLines ? setFlagStep("choose") : setFlagStep(null))}
+                onClick={() => (canFixLines ? setFlagStep("which") : setFlagStep(null))}
                 disabled={submitting}
                 className="min-h-[44px] rounded-[--radius-sm] border border-border px-4 text-sm font-medium text-text-secondary hover:border-text-muted disabled:opacity-50"
               >
@@ -809,7 +858,7 @@ export function SubmissionExtractionConfirmView({
               <button
                 type="button"
                 onClick={handleFlag}
-                disabled={submitting}
+                disabled={submitting || !noteReady}
                 className="min-h-[44px] rounded-[--radius-sm] bg-primary px-5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-primary-dark disabled:opacity-50"
               >
                 {submitting ? "Sending…" : "Send to my teacher"}

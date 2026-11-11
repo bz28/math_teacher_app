@@ -100,21 +100,20 @@ describe("ExtractionConfirmScreen", () => {
     expect(mockedApi.confirmExtraction).toHaveBeenCalledWith("sub-1", { "1:final": "5" });
   });
 
-  it("'Just a few lines' opens fix mode instead of flagging, then confirms as usual", async () => {
+  it("picking the problem that looks wrong opens fix mode on it instead of flagging", async () => {
     mockedApi.getSubmission.mockResolvedValue(SUBMISSION as never);
     mockedApi.confirmExtraction.mockResolvedValue({ status: "ok", already_confirmed: false } as never);
     render(<ExtractionConfirmScreen assignmentId="a" onDone={jest.fn()} onIntegrityCheck={jest.fn()} />);
 
     fireEvent.press(await waitForText("Something looks wrong"));
-    expect(await waitForText("How much did we get wrong?")).toBeTruthy();
+    expect(await waitForText("Which problem looks wrong?")).toBeTruthy();
     // Sending it to the teacher is quieter but always there, as a real button.
-    expect(
-      screen.getByLabelText("Most of it is wrong? Send it to my teacher to grade from my photos."),
-    ).toBeTruthy();
-    fireEvent.press(screen.getByText("Just a few lines"));
+    expect(screen.getByLabelText("The whole reading is wrong")).toBeTruthy();
+    // Each tile carries the answer we read, so the misread is spotted here.
+    fireEvent.press(screen.getByLabelText("Problem 1, we read 2. Fix it."));
 
-    expect(await waitForText("Tap a line to fix it, then confirm.")).toBeTruthy();
-    expect(screen.queryByText("How much did we get wrong?")).toBeNull();
+    expect(await waitForText("Fix the line on Problem 1 that's wrong, then confirm.")).toBeTruthy();
+    expect(screen.queryByText("Which problem looks wrong?")).toBeNull();
     expect(mockedApi.flagExtraction).not.toHaveBeenCalled();
 
     fireEvent.changeText(screen.getByDisplayValue("x equals 2"), "x equals 3");
@@ -124,7 +123,7 @@ describe("ExtractionConfirmScreen", () => {
     expect(mockedApi.confirmExtraction).toHaveBeenCalledWith("sub-1", { "1:1": "x equals 3" });
   });
 
-  it("'Most of it is wrong' sends the note and any edits with the flag", async () => {
+  it("'The whole reading is wrong' needs a note, then sends it and any edits with the flag", async () => {
     mockedApi.getSubmission.mockResolvedValue(SUBMISSION as never);
     mockedApi.flagExtraction.mockResolvedValue({ status: "ok", already_flagged: false } as never);
     const onDone = jest.fn();
@@ -134,15 +133,25 @@ describe("ExtractionConfirmScreen", () => {
     fireEvent.changeText(screen.getByDisplayValue("x equals 2"), "x equals 3");
     await flush();
     fireEvent.press(screen.getByText("Something looks wrong"));
-    fireEvent.press(await waitForText(/^Most of it is wrong\?/));
+    fireEvent.press(await waitForText("The whole reading is wrong"));
     expect(await waitForText("The line you fixed will go too.")).toBeTruthy();
-    fireEvent.changeText(screen.getByLabelText("What did it get wrong? (optional)"), "it read my 7s as 1s");
+    // No note yet: the teacher would get no pointer, so nothing is sent.
+    fireEvent.press(screen.getByText("Send to my teacher"));
+    await flush();
+    expect(mockedApi.flagExtraction).not.toHaveBeenCalled();
+    // A starter fills it in one tap; the student can add to it.
+    fireEvent.press(screen.getByLabelText("Most lines are wrong"));
+    await flush();
+    fireEvent.changeText(
+      screen.getByLabelText("What's wrong with the reading?"),
+      "Most lines are wrong. it read my 7s as 1s",
+    );
     await flush();
     fireEvent.press(screen.getByText("Send to my teacher"));
     await flush();
 
     expect(mockedApi.flagExtraction).toHaveBeenCalledWith("sub-1", {
-      note: "it read my 7s as 1s",
+      note: "Most lines are wrong. it read my 7s as 1s",
       edits: { "1:1": "x equals 3" },
     });
     expect(mockedApi.confirmExtraction).not.toHaveBeenCalled();
@@ -172,7 +181,8 @@ describe("ExtractionConfirmScreen", () => {
     render(<ExtractionConfirmScreen assignmentId="a" onDone={onDone} onIntegrityCheck={jest.fn()} />);
 
     fireEvent.press(await waitForText("Something looks wrong"));
-    fireEvent.press(await waitForText(/^Most of it is wrong\?/));
+    fireEvent.press(await waitForText("The whole reading is wrong"));
+    fireEvent.press(await waitForText("My photos are hard to read"));
     fireEvent.press(await waitForText("Send to my teacher"));
 
     expect(await waitForText("Couldn't send it to your teacher. Try again.")).toBeTruthy();
@@ -187,8 +197,25 @@ describe("ExtractionConfirmScreen", () => {
     render(<ExtractionConfirmScreen assignmentId="a" onDone={jest.fn()} onIntegrityCheck={jest.fn()} />);
 
     fireEvent.press(await waitForText("Something looks wrong"));
-    expect(await waitForText("Send it to your teacher")).toBeTruthy();
-    expect(screen.queryByText("Just a few lines")).toBeNull();
+    expect(await waitForText("What's wrong with the reading?")).toBeTruthy();
+    expect(screen.queryByText("Which problem looks wrong?")).toBeNull();
+  });
+
+  it("an answer slot that came back empty isn't a line to fix", async () => {
+    // The "which problem" step would open with no tiles at all.
+    mockedApi.getSubmission.mockResolvedValue({
+      ...SUBMISSION,
+      extraction: {
+        steps: [],
+        final_answers: [{ problem_position: 1, answer_latex: "", answer_plain: "" }],
+        confidence: 0.3,
+      },
+    } as never);
+    render(<ExtractionConfirmScreen assignmentId="a" onDone={jest.fn()} onIntegrityCheck={jest.fn()} />);
+
+    fireEvent.press(await waitForText("Something looks wrong"));
+    expect(await waitForText("What's wrong with the reading?")).toBeTruthy();
+    expect(screen.queryByText("Which problem looks wrong?")).toBeNull();
   });
 
   it("shows a source-photo strip of the submitted pages to compare against", async () => {
