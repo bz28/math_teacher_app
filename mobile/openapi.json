@@ -4630,6 +4630,11 @@
             "title": "Ai Grading Enabled",
             "type": "boolean"
           },
+          "can_retake": {
+            "default": false,
+            "title": "Can Retake",
+            "type": "boolean"
+          },
           "extraction": {
             "anyOf": [
               {
@@ -5301,6 +5306,77 @@
         "title": "TeacherIntegrityProblemRow",
         "type": "object"
       },
+      "TeacherRetakeOriginal": {
+        "description": "The turn-in a student's retake replaced \u2014 what the teacher needs to\nsee it was the same work: how many pages, when they came in, and what\nthe student said was wrong with that reading. The photos themselves\nare fetched only when she opens them (`GET /submissions/{id}/\nretake-original-files`), so every detail load doesn't carry a second\nset of pages. The original reading stays on the row for audit but\nisn't rendered.",
+        "properties": {
+          "extraction_flag_note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extraction Flag Note"
+          },
+          "extraction_flagged_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extraction Flagged At"
+          },
+          "file_count": {
+            "default": 0,
+            "title": "File Count",
+            "type": "integer"
+          },
+          "is_late": {
+            "default": false,
+            "title": "Is Late",
+            "type": "boolean"
+          },
+          "submitted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted At"
+          }
+        },
+        "title": "TeacherRetakeOriginal",
+        "type": "object"
+      },
+      "TeacherRetakeOriginalFiles": {
+        "properties": {
+          "files": {
+            "items": {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "title": "Files",
+            "type": "array"
+          }
+        },
+        "required": [
+          "files"
+        ],
+        "title": "TeacherRetakeOriginalFiles",
+        "type": "object"
+      },
       "TeacherSubmissionDetail": {
         "properties": {
           "ai_breakdown": {
@@ -5478,6 +5554,28 @@
             },
             "title": "Problems",
             "type": "array"
+          },
+          "retake_original": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TeacherRetakeOriginal"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "retaken_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Retaken At"
           },
           "reviewed_at": {
             "anyOf": [
@@ -14329,6 +14427,65 @@
         ]
       }
     },
+    "/v1/school/student/submissions/{submission_id}/retake": {
+      "post": {
+        "description": "Replace the photos of a flagged, ungraded turn-in and read them again.\n\nFor the student who sent the reading to their teacher because the\nphotos were the problem \u2014 sideways, blurry, a page missing. Allowed\nonce, under `_retake_block`'s rules, while the homework still takes\nturn-ins. The new photos go through exactly submit's validation\n(`_validated_upload_files`), and the reading is spawned the same way.\nThe submission then walks the normal path again: the student checks\nthe new reading, confirms or flags it.\n\nNothing is destroyed: the turn-in it replaces \u2014 files, reading, edits,\nflag and note, original submitted_at and is_late \u2014 is kept on\n`retake_original` and shown to the teacher.\n\nLateness follows submit's rule \u2014 work is late when it was turned in\nafter the due date \u2014 and a retake can't launder it: the new photos\nare late if they arrive past due, and a late original stays late.\n\nRejects: 404 / 403 (not found / not yours, or the homework no longer\ntakes turn-ins), 409 when a retake isn't allowed (with why), and\nsubmit's 400 / 413 for the files themselves.",
+        "operationId": "retake_submission_v1_school_student_submissions__submission_id__retake_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "submission_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Submission Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitHomeworkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubmitHomeworkResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Retake Submission",
+        "tags": [
+          "school-student"
+        ]
+      }
+    },
     "/v1/session": {
       "post": {
         "description": "Start a new tutoring session for a problem.",
@@ -19832,6 +19989,55 @@
           }
         ],
         "summary": "Regrade Submission",
+        "tags": [
+          "teacher"
+        ]
+      }
+    },
+    "/v1/teacher/submissions/{submission_id}/retake-original-files": {
+      "get": {
+        "description": "The photos a student's retake replaced \u2014 opened from the review\npage's \"View original photos\". Ownership is checked first, the same\nrule as the detail, so another teacher can't tell from the status\nwhether a submission was retaken. 404 when it wasn't.",
+        "operationId": "get_retake_original_files_v1_teacher_submissions__submission_id__retake_original_files_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "submission_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Submission Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TeacherRetakeOriginalFiles"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Retake Original Files",
         "tags": [
           "teacher"
         ]

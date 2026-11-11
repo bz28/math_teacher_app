@@ -41,6 +41,9 @@ interface Props {
   onDone: () => void;
   /** After confirming when integrity is enabled, open the explain-your-work chat. */
   onIntegrityCheck: (submissionId: string) => void;
+  /** The student flagged the reading and may retake their photos (the
+   *  server's `can_retake`): open the upload screen in retake mode. */
+  onRetake?: () => void;
 }
 
 /**
@@ -51,7 +54,7 @@ interface Props {
  * neither integrity nor AI grading, there's nothing to confirm — we just
  * acknowledge the submission.
  */
-export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck }: Props) {
+export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck, onRetake }: Props) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const [state, setState] = useState<SubmissionState | null>(null);
@@ -220,6 +223,16 @@ export function ExtractionConfirmScreen({ assignmentId, onDone, onIntegrityCheck
             : "You're all set — check back for your grade."}
         </Text>
         <Button label="Done" onPress={onDone} />
+        {state.extraction_flagged_at && state.can_retake && onRetake ? (
+          <View style={styles.retakeOffer}>
+            <Text style={styles.retakeTitle}>Were your photos the problem?</Text>
+            <Text style={styles.bodyText}>
+              If a page was sideways, blurry or missing, take new photos and we'll read them again.
+              Your teacher still sees your first ones.
+            </Text>
+            <Button label="Retake photos" variant="secondary" onPress={onRetake} />
+          </View>
+        ) : null}
       </Centered>
     );
   }
@@ -710,4 +723,13 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     marginTop: spacing.sm,
   },
   bodyText: { ...typography.body, color: colors.textSecondary, textAlign: "center", fontSize: 14 },
+  retakeOffer: {
+    alignSelf: "stretch",
+    marginTop: spacing.xl,
+    paddingTop: spacing.xl,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderLight,
+    gap: spacing.md,
+  },
+  retakeTitle: { ...typography.displaySerifItalic, fontSize: 20, lineHeight: 24, color: colors.text, textAlign: "center" },
 });

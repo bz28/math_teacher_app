@@ -69,6 +69,9 @@ function AppRoot() {
   const [subject, setSubject] = useState("math");
   const [reviewSessionId, setReviewSessionId] = useState<string | null>(null);
   const [activeHomeworkId, setActiveHomeworkId] = useState<string | null>(null);
+  // The flagged screen's "Retake photos" opens the homework straight into
+  // retaking; cleared once the new photos are sent.
+  const [homeworkRetake, setHomeworkRetake] = useState(false);
   // Where the homework screen returns to on back — the tab the student opened
   // it from (school-home for a pending assignment, grades for a graded one).
   const [homeworkReturn, setHomeworkReturn] = useState<Screen>("school-home");
@@ -232,6 +235,7 @@ function AppRoot() {
           onJoinClass={() => setScreen("join-class")}
           onOpenAssignment={(id) => {
             setActiveHomeworkId(id);
+            setHomeworkRetake(false);
             setHomeworkReturn("school-home");
             setScreen("homework");
           }}
@@ -242,6 +246,7 @@ function AppRoot() {
         <GradesScreen
           onOpenGrade={(id) => {
             setActiveHomeworkId(id);
+            setHomeworkRetake(false);
             setHomeworkReturn("grades");
             setScreen("homework");
           }}
@@ -332,8 +337,15 @@ function AppRoot() {
         <ErrorBoundary onReset={() => setScreen(homeworkReturn)}>
           <HomeworkScreen
             assignmentId={activeHomeworkId}
-            onBack={() => setScreen(homeworkReturn)}
-            onSubmitted={() => setScreen("extraction-confirm")}
+            onBack={() => {
+              setHomeworkRetake(false);
+              setScreen(homeworkReturn);
+            }}
+            onSubmitted={() => {
+              setHomeworkRetake(false);
+              setScreen("extraction-confirm");
+            }}
+            startRetake={homeworkRetake}
             onConfirmReading={() => setScreen("extraction-confirm")}
             onFinishCheck={(submissionId) => {
               setActiveSubmissionId(submissionId);
@@ -351,6 +363,10 @@ function AppRoot() {
           <ExtractionConfirmScreen
             assignmentId={activeHomeworkId}
             onDone={() => setScreen("school-home")}
+            onRetake={() => {
+              setHomeworkRetake(true);
+              setScreen("homework");
+            }}
             onIntegrityCheck={(submissionId) => {
               setActiveSubmissionId(submissionId);
               setScreen("integrity-chat");

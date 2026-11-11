@@ -173,6 +173,20 @@ class Submission(Base):
     # they left it blank, and on every flag from before notes existed. Any
     # lines they fixed before flagging land on `extraction_edits` as usual.
     extraction_flag_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # A student who flagged the reading may replace their photos once,
+    # before anything is graded, for a fresh reading (POST
+    # /submissions/{id}/retake). `retaken_at` is when; null = never.
+    retaken_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+    # The turn-in a retake replaced — its files, reading, edits, flag,
+    # note, submitted_at and is_late — kept so the teacher can still see
+    # the original. Deferred: it can carry a second set of base64 pages,
+    # and nothing but the teacher's submission detail reads it (load it
+    # with `undefer` or an explicit column select).
+    retake_original: Mapped[dict[str, Any] | None] = mapped_column(
+        JSON, nullable=True, deferred=True,
+    )
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     is_late: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 

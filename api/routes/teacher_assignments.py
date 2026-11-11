@@ -2690,6 +2690,22 @@ class TeacherSubmissionDetailProblem(BaseModel):
     graph: TeacherGraphCheck | None = None
 
 
+class TeacherRetakeOriginal(BaseModel):
+    """The turn-in a student's retake replaced — what the teacher needs to
+    see it was the same work: how many pages, when they came in, and what
+    the student said was wrong with that reading. The photos themselves
+    are fetched only when she opens them (`GET /submissions/{id}/
+    retake-original-files`), so every detail load doesn't carry a second
+    set of pages. The original reading stays on the row for audit but
+    isn't rendered."""
+
+    file_count: int = 0
+    submitted_at: datetime | None = None
+    is_late: bool = False
+    extraction_flagged_at: datetime | None = None
+    extraction_flag_note: str | None = None
+
+
 class TeacherSubmissionDetail(BaseModel):
     submission_id: str
     assignment_id: str
@@ -2732,6 +2748,11 @@ class TeacherSubmissionDetail(BaseModel):
     # rows marked `edited` below. Lets the flagged callout say "they
     # fixed 2 lines first" without the client re-counting every bucket.
     extraction_edit_count: int = 0
+    # Set when the student flagged the first reading and replaced their
+    # photos for a fresh one. Everything above describes the NEW turn-in;
+    # the one it replaced is in `retake_original`.
+    retaken_at: datetime | None = None
+    retake_original: TeacherRetakeOriginal | None = None
     # Current grading state. None when the teacher hasn't touched this
     # submission yet. `breakdown` + `final_score` are teacher-draft
     # until `grade_published_at` is set, at which point the student
@@ -2758,6 +2779,35 @@ class TeacherSubmissionDetail(BaseModel):
     # not yet approved, or a partial hand grade. Drives the review-state marker + the
     # publish dialog's trust disclosure.
     reviewed_at: datetime | None = None
+
+
+class TeacherRetakeOriginalFiles(BaseModel):
+    files: list[dict[str, str]]
+
+
+@router.get("/submissions/{submission_id}/retake-original-files")
+async def get_retake_original_files(
+    submission_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> TeacherRetakeOriginalFiles:
+    """The photos a student's retake replaced — opened from the review
+    page's "View original photos". Ownership is checked first, the same
+    rule as the detail, so another teacher can't tell from the status
+    whether a submission was retaken. 404 when it wasn't."""
+    row = (await db.execute(
+        select(Submission.assignment_id, Submission.retaken_at)
+        .where(Submission.id == submission_id)
+    )).one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    await get_teacher_assignment(db, row[0], current_user.user_id)
+    if row[1] is None:
+        raise HTTPException(status_code=404, detail="No retake on this submission")
+    files = (await db.execute(
+        select(Submission.retake_original["files"]).where(Submission.id == submission_id)
+    )).scalar_one_or_none()
+    return TeacherRetakeOriginalFiles(files=files or [])
 
 
 @router.get("/submissions/{submission_id}")
@@ -2799,6 +2849,34 @@ async def get_submission_detail(
     grade = (await db.execute(
         select(SubmissionGrade).where(SubmissionGrade.submission_id == sub.id)
     )).scalar_one_or_none()
+
+    # The callout's facts only, picked out of the JSON in SQL, so the
+    # original pages never leave the database on a detail load (they can
+    # be megabytes, and the review page re-fetches detail often).
+    retake_original: TeacherRetakeOriginal | None = None
+    if sub.retaken_at is not None:
+        ro = Submission.retake_original
+        facts = (await db.execute(
+            select(
+                # json_array_length raises on a non-array (JSON null).
+                case(
+                    (func.json_typeof(ro["files"]) == "array",
+                     func.json_array_length(ro["files"])),
+                    else_=0,
+                ),
+                ro["submitted_at"].as_string(),
+                ro["is_late"].as_boolean(),
+                ro["extraction_flagged_at"].as_string(),
+                ro["extraction_flag_note"].as_string(),
+            ).where(Submission.id == sub.id)
+        )).one()
+        retake_original = TeacherRetakeOriginal(
+            file_count=facts[0],
+            submitted_at=facts[1],
+            is_late=bool(facts[2]),
+            extraction_flagged_at=facts[3],
+            extraction_flag_note=facts[4],
+        )
 
     # Build a lookup of AI-extracted student answers by problem_id.
     # The AI grading step writes `student_answer` into each breakdown
@@ -3227,6 +3305,8 @@ async def get_submission_detail(
         extraction_flagged_at=sub.extraction_flagged_at,
         extraction_flag_note=sub.extraction_flag_note,
         extraction_edit_count=len(sub.extraction_edits or {}),
+        retaken_at=sub.retaken_at,
+        retake_original=retake_original,
         submission_id=str(sub.id),
         assignment_id=str(assignment.id),
         assignment_title=assignment.title,

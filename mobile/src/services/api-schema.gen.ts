@@ -2489,6 +2489,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/school/student/submissions/{submission_id}/retake": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retake Submission
+         * @description Replace the photos of a flagged, ungraded turn-in and read them again.
+         *
+         *     For the student who sent the reading to their teacher because the
+         *     photos were the problem — sideways, blurry, a page missing. Allowed
+         *     once, under `_retake_block`'s rules, while the homework still takes
+         *     turn-ins. The new photos go through exactly submit's validation
+         *     (`_validated_upload_files`), and the reading is spawned the same way.
+         *     The submission then walks the normal path again: the student checks
+         *     the new reading, confirms or flags it.
+         *
+         *     Nothing is destroyed: the turn-in it replaces — files, reading, edits,
+         *     flag and note, original submitted_at and is_late — is kept on
+         *     `retake_original` and shown to the teacher.
+         *
+         *     Lateness follows submit's rule — work is late when it was turned in
+         *     after the due date — and a retake can't launder it: the new photos
+         *     are late if they arrive past due, and a late original stays late.
+         *
+         *     Rejects: 404 / 403 (not found / not yours, or the homework no longer
+         *     takes turn-ins), 409 when a retake isn't allowed (with why), and
+         *     submit's 400 / 413 for the files themselves.
+         */
+        post: operations["retake_submission_v1_school_student_submissions__submission_id__retake_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/session": {
         parameters: {
             query?: never;
@@ -4242,6 +4282,29 @@ export interface paths {
          *     for a full Vision read on every regrade to paper over.
          */
         post: operations["regrade_submission_v1_teacher_submissions__submission_id__regrade_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/teacher/submissions/{submission_id}/retake-original-files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Retake Original Files
+         * @description The photos a student's retake replaced — opened from the review
+         *     page's "View original photos". Ownership is checked first, the same
+         *     rule as the detail, so another teacher can't tell from the status
+         *     whether a submission was retaken. 404 when it wasn't.
+         */
+        get: operations["get_retake_original_files_v1_teacher_submissions__submission_id__retake_original_files_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -6203,6 +6266,11 @@ export interface components {
         StudentSubmissionDetail: {
             /** Ai Grading Enabled */
             ai_grading_enabled: boolean;
+            /**
+             * Can Retake
+             * @default false
+             */
+            can_retake: boolean;
             extraction: components["schemas"]["ExtractionOut"] | null;
             /** Extraction Confirmed At */
             extraction_confirmed_at: string | null;
@@ -6409,6 +6477,41 @@ export interface components {
             /** Teacher Dismissed */
             teacher_dismissed: boolean;
         };
+        /**
+         * TeacherRetakeOriginal
+         * @description The turn-in a student's retake replaced — what the teacher needs to
+         *     see it was the same work: how many pages, when they came in, and what
+         *     the student said was wrong with that reading. The photos themselves
+         *     are fetched only when she opens them (`GET /submissions/{id}/
+         *     retake-original-files`), so every detail load doesn't carry a second
+         *     set of pages. The original reading stays on the row for audit but
+         *     isn't rendered.
+         */
+        TeacherRetakeOriginal: {
+            /** Extraction Flag Note */
+            extraction_flag_note?: string | null;
+            /** Extraction Flagged At */
+            extraction_flagged_at?: string | null;
+            /**
+             * File Count
+             * @default 0
+             */
+            file_count: number;
+            /**
+             * Is Late
+             * @default false
+             */
+            is_late: boolean;
+            /** Submitted At */
+            submitted_at?: string | null;
+        };
+        /** TeacherRetakeOriginalFiles */
+        TeacherRetakeOriginalFiles: {
+            /** Files */
+            files: {
+                [key: string]: string;
+            }[];
+        };
         /** TeacherSubmissionDetail */
         TeacherSubmissionDetail: {
             /** Ai Breakdown */
@@ -6467,6 +6570,9 @@ export interface components {
             other_work: components["schemas"]["TeacherSubmissionStep"][];
             /** Problems */
             problems: components["schemas"]["TeacherSubmissionDetailProblem"][];
+            retake_original?: components["schemas"]["TeacherRetakeOriginal"] | null;
+            /** Retaken At */
+            retaken_at?: string | null;
             /** Reviewed At */
             reviewed_at?: string | null;
             /** Student Email */
@@ -10987,6 +11093,41 @@ export interface operations {
             };
         };
     };
+    retake_submission_v1_school_student_submissions__submission_id__retake_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubmitHomeworkRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubmitHomeworkResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_v1_session_post: {
         parameters: {
             query?: never;
@@ -14236,6 +14377,37 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_retake_original_files_v1_teacher_submissions__submission_id__retake_original_files_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeacherRetakeOriginalFiles"];
                 };
             };
             /** @description Validation Error */

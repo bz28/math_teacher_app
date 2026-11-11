@@ -24,6 +24,7 @@ function sub(over: Partial<StudentSubmission>): StudentSubmission {
     extraction_flagged_at: null,
     integrity_check_enabled: true,
     ai_grading_enabled: true,
+    can_retake: false,
     ...over,
   };
 }

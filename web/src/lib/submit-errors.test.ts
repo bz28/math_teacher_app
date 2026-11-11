@@ -18,8 +18,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  RETAKE_CLOSED_ERROR,
   SUBMIT_FALLBACK_ERROR,
   UNREADABLE_FILE_ERROR,
+  retakeErrorMessage,
   sniffUploadType,
   submitErrorMessage,
 } from "./submit-errors.ts";
@@ -103,4 +105,17 @@ test("a message never tells a student to retry something that cannot succeed", (
 test("an unexpected status still gets a friendly line, not a blank", () => {
   assert.equal(submitErrorMessage(500), SUBMIT_FALLBACK_ERROR);
   assert.equal(submitErrorMessage(418), SUBMIT_FALLBACK_ERROR);
+});
+
+test("a refused retake says the photos can't be replaced, not 'already turned in'", () => {
+  const msg = retakeErrorMessage(409);
+  assert.equal(msg, RETAKE_CLOSED_ERROR);
+  assert.notEqual(msg, submitErrorMessage(409));
+  assert.match(msg, /Keep my first photos/);
+});
+
+test("a retake shares submit's messages for everything else", () => {
+  for (const status of [400, 401, 403, 404, 413, 500]) {
+    assert.equal(retakeErrorMessage(status), submitErrorMessage(status), String(status));
+  }
 });

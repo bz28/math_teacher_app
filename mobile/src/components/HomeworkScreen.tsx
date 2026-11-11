@@ -15,6 +15,7 @@ import {
   checkPageOrientation,
   getHomework,
   getSubmission,
+  retakeSubmission,
   submitHomework,
   type HomeworkDetail,
   type HomeworkGradeBreakdown,
@@ -49,6 +50,9 @@ interface Props {
   onConfirmReading: () => void;
   /** Back into an open understanding check ("Save & exit" lands home). */
   onFinishCheck: (submissionId: string) => void;
+  /** Open straight into retaking the photos (from the flagged screen's
+   *  "Retake photos"). Only takes effect if the server allows a retake. */
+  startRetake?: boolean;
 }
 
 /** A staged page the student hasn't turned in yet. */
@@ -88,6 +92,7 @@ export function HomeworkScreen({
   onSubmitted,
   onConfirmReading,
   onFinishCheck,
+  startRetake = false,
 }: Props) {
   const colors = useColors();
   const styles = useMemo(() => makeStyles(colors), [colors]);
@@ -102,6 +107,11 @@ export function HomeworkScreen({
   // The pages already turned in (for the submitted-state gallery).
   const [submittedFiles, setSubmittedFiles] = useState<SubmissionFile[]>([]);
   const [zoomFile, setZoomFile] = useState<SubmissionFile | null>(null);
+  // The student flagged the reading and may replace their photos once
+  // (server's `can_retake`); `retaking` swaps the turned-in view for the
+  // upload block in retake mode.
+  const [canRetake, setCanRetake] = useState(false);
+  const [retaking, setRetaking] = useState(startRetake);
 
   const load = useCallback(
     async (isRefresh = false) => {
@@ -116,6 +126,7 @@ export function HomeworkScreen({
           try {
             const sub = await getSubmission(assignmentId);
             setSubmittedFiles(sub.files ?? []);
+            setCanRetake(!!sub.can_retake);
           } catch {
             /* leave gallery empty */
           }
@@ -135,6 +146,7 @@ export function HomeworkScreen({
   }, [load]);
 
   const isLate = hw?.due_at ? new Date(hw.due_at).getTime() < Date.now() : false;
+  const isRetake = retaking && canRetake;
   const atCap = files.length >= MAX_FILES;
 
   const stage = (base64: string, kind: StagedFile["kind"], name?: string) => {
@@ -231,12 +243,14 @@ export function HomeworkScreen({
     setSubmitError(null);
     setSubmitting(true);
     try {
-      await submitHomework(
-        assignmentId,
-        files.map((f) => f.base64),
-        files.map((f) => f.rotation),
-        files.map((f) => orientationReport(f, f.checked)),
-      );
+      const pages = files.map((f) => f.base64);
+      const rotations = files.map((f) => f.rotation);
+      const orientations = files.map((f) => orientationReport(f, f.checked));
+      if (isRetake && hw?.submission_id) {
+        await retakeSubmission(hw.submission_id, pages, rotations, orientations);
+      } else {
+        await submitHomework(assignmentId, pages, rotations, orientations);
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onSubmitted();
     } catch (e) {
@@ -290,7 +304,7 @@ export function HomeworkScreen({
             <ProblemBlock key={p.bank_item_id} problem={p} colors={colors} styles={styles} />
           ))}
 
-          {hw.submitted ? (
+          {hw.submitted && !isRetake ? (
             <>
               {hw.next_step && hw.submission_id ? (
                 <NextStepCard
@@ -311,12 +325,26 @@ export function HomeworkScreen({
                 styles={styles}
                 colors={colors}
               />
+              {canRetake && (
+                <View style={styles.nextStepCard}>
+                  <Text style={styles.statusTitle}>Were your photos the problem?</Text>
+                  <Text style={styles.nextStepHint}>
+                    If a page was sideways, blurry or missing, take new photos and we'll read them
+                    again. Your teacher still sees your first ones.
+                  </Text>
+                  <Button label="Retake photos" variant="secondary" onPress={() => setRetaking(true)} />
+                </View>
+              )}
             </>
           ) : (
             <View style={styles.submitBlock}>
-              <Text style={styles.submitLabel}>Turn in your work</Text>
+              <Text style={styles.submitLabel}>
+                {isRetake ? "Retake your photos" : "Turn in your work"}
+              </Text>
               <Text style={styles.submitHint}>
-                Add clear photos or a PDF of your completed work — up to {MAX_FILES} files.
+                {isRetake
+                  ? "Add every page again, upright, in a bright spot. We'll read them fresh for you to check. Your teacher still sees your first photos, and you can only retake once."
+                  : `Add clear photos or a PDF of your completed work — up to ${MAX_FILES} files.`}
               </Text>
               <View style={styles.tipRow}>
                 <Ionicons name="refresh" size={14} color={colors.primary} />
@@ -435,17 +463,20 @@ export function HomeworkScreen({
                   <View style={styles.confirmCard}>
                     <View style={styles.confirmHeader}>
                       <Ionicons name="lock-closed-outline" size={18} color={colors.primary} />
-                      <Text style={styles.confirmTitle}>Ready to turn it in?</Text>
+                      <Text style={styles.confirmTitle}>
+                        {isRetake ? "Ready to send your new photos?" : "Ready to turn it in?"}
+                      </Text>
                     </View>
                     <Text style={styles.confirmBody}>
-                      Your teacher will see exactly {turnInCount} — nothing else. Once you turn it
-                      in you won't be able to change it, so take one last look if you'd like.
+                      {isRetake
+                        ? `These ${turnInCount} replace your first photos, and this is your one retake — so check every page is here and upright.`
+                        : `Your teacher will see exactly ${turnInCount} — nothing else. Once you turn it in you won't be able to change it, so take one last look if you'd like.`}
                     </Text>
                     {sidewaysPages.length > 0 && (
                       <Text style={styles.sidewaysText}>{sidewaysHint(sidewaysPages)}</Text>
                     )}
                     <Button
-                      label={isLate ? "Turn it in (late)" : "Turn it in"}
+                      label={isRetake ? (isLate ? "Send new photos (late)" : "Send new photos") : isLate ? "Turn it in (late)" : "Turn it in"}
                       onPress={submit}
                       loading={submitting}
                       disabled={blocked}
@@ -471,6 +502,18 @@ export function HomeworkScreen({
                     />
                   </>
                 ))}
+              {isRetake && (
+                <Button
+                  label="Keep my first photos"
+                  variant="ghost"
+                  onPress={() => {
+                    setRetaking(false);
+                    setFiles([]);
+                    setConfirming(false);
+                  }}
+                  disabled={submitting}
+                />
+              )}
             </View>
           )}
         </ScrollView>

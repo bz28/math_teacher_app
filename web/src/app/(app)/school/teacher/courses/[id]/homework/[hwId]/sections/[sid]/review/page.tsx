@@ -3662,6 +3662,32 @@ function SubmissionDetailPanel({
   // the same one the header strip and pinned rail use — instead of each
   // row growing its own modal.
   const [galleryPage, setGalleryPage] = useState<number | null>(null);
+  // The photos a student's retake replaced, opened from the retake
+  // callout. Fetched on first open (not with the detail, which reloads
+  // often) and kept per submission so reopening is instant.
+  const [originalPage, setOriginalPage] = useState<number | null>(null);
+  const [originals, setOriginals] = useState<
+    { sid: string; files: SubmissionFile[] } | null
+  >(null);
+  const [originalsState, setOriginalsState] = useState<
+    { sid: string; status: "loading" | "error" } | null
+  >(null);
+  const openOriginals = useCallback(async () => {
+    const sid = detail.submission_id;
+    if (originals?.sid === sid) {
+      setOriginalPage(0);
+      return;
+    }
+    setOriginalsState({ sid, status: "loading" });
+    try {
+      const { files } = await teacher.retakeOriginalFiles(sid);
+      setOriginals({ sid, files });
+      setOriginalsState(null);
+      setOriginalPage(0);
+    } catch {
+      setOriginalsState({ sid, status: "error" });
+    }
+  }, [detail.submission_id, originals]);
   const onOpenWork = useCallback(() => setGalleryPage(0), []);
   // Live DOM handles to each problem row, indexed by position in
   // detail.problems, so keyboard nav can move real focus.
@@ -4356,6 +4382,27 @@ function SubmissionDetailPanel({
         </div>
       )}
 
+      {/* Retake callout — the student flagged the first reading and
+          replaced their photos for a fresh one, before anything was
+          graded. Everything on this page is the NEW turn-in; the photos
+          it replaced stay one click away, with what the student said was
+          wrong with that reading. Calm primary tint, not red: a retake is
+          the student fixing their own photos, not a problem — but the
+          teacher should know the work she's grading isn't the first
+          thing that came in. */}
+      {detail.retaken_at && detail.retake_original && (
+        <RetakeCallout
+          retakenAt={detail.retaken_at}
+          original={detail.retake_original}
+          onViewOriginal={openOriginals}
+          state={
+            originalsState?.sid === detail.submission_id
+              ? originalsState.status
+              : null
+          }
+        />
+      )}
+
       {/* Integrity verdict — the #1 trust signal. First full content
           block so the teacher sees the verdict before they start
           grading. Hides when HW had integrity disabled / no check. */}
@@ -4574,6 +4621,96 @@ function SubmissionDetailPanel({
         openAt={galleryPage}
         onClose={() => setGalleryPage(null)}
       />
+      <WorkGalleryModal
+        files={
+          originals?.sid === detail.submission_id ? originals.files : []
+        }
+        studentName={detail.student_name}
+        note="first photos"
+        openAt={originalPage}
+        onClose={() => setOriginalPage(null)}
+      />
+    </div>
+  );
+}
+
+const RETAKE_TIME: Intl.DateTimeFormatOptions = {
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+};
+
+function RetakeCallout({
+  retakenAt,
+  original,
+  onViewOriginal,
+  state,
+}: {
+  retakenAt: string;
+  original: NonNullable<TeacherSubmissionDetail["retake_original"]>;
+  onViewOriginal: () => void;
+  /** Fetching the original photos, or that fetch failed. */
+  state: "loading" | "error" | null;
+}) {
+  const pages = original.file_count;
+  return (
+    <div
+      className="rounded-[--radius-xl] border border-primary/25 bg-primary-bg/50 p-3"
+      role="status"
+    >
+      <div className="flex flex-wrap items-start gap-3">
+        <span
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-white"
+          aria-hidden
+        >
+          ↻
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-text-primary">
+            Student retook their photos
+          </p>
+          <p className="mt-1.5 text-xs leading-relaxed text-text-secondary">
+            They sent the first reading to you as misread
+            {original.submitted_at
+              ? ` (turned in ${new Date(original.submitted_at).toLocaleString(undefined, RETAKE_TIME)}${original.is_late ? ", late" : ""})`
+              : ""}
+            , then replaced the photos on{" "}
+            {new Date(retakenAt).toLocaleString(undefined, RETAKE_TIME)}, before
+            anything was graded. This page shows the new photos and their
+            reading.
+          </p>
+          {original.extraction_flag_note && (
+            <figure className="mt-2.5 border-l-2 border-primary/40 pl-3">
+              <figcaption className="text-[11px] font-semibold text-text-muted">
+                What they said was wrong the first time
+              </figcaption>
+              <blockquote className="mt-0.5 whitespace-pre-line break-words text-sm text-text-primary">
+                &ldquo;{original.extraction_flag_note}&rdquo;
+              </blockquote>
+            </figure>
+          )}
+        </div>
+        {pages > 0 && (
+          <div className="flex shrink-0 flex-col items-end gap-1">
+            <button
+              type="button"
+              onClick={onViewOriginal}
+              disabled={state === "loading"}
+              className="rounded-[--radius-md] border border-primary/30 bg-surface px-3 py-1.5 text-xs font-semibold text-primary transition-colors hover:border-primary/60 hover:bg-primary/10 disabled:opacity-60"
+            >
+              {state === "loading"
+                ? "Opening original photos…"
+                : `View original photos (${pages})`}
+            </button>
+            {state === "error" && (
+              <p role="alert" className="text-[11px] text-error">
+                Couldn&apos;t load them. Try again.
+              </p>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

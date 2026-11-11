@@ -215,6 +215,92 @@ async def _confirm_reading_flow(
     return FlowResult(name, title, not issues, issues)
 
 
+async def _retake_photos_flow(
+    browser: HarnessBrowser, web_base: str, api_base: str, seed: Seed,
+) -> FlowResult:
+    """Student who flagged a reading retakes their photos. On the flagged
+    screen: "Retake photos" opens the upload panel in retake mode, "Keep my
+    first photos" backs out to the flagged screen, and a real upload through
+    "Send new photos" replaces the turn-in. A browser flow because the bugs
+    worth catching are routing ones (no way back out; the offer surviving a
+    closed retake). Pass/fail on the end state comes from the API, which is
+    deterministic. The seeded homework is AI-graded, so the retake spawns a
+    fresh reading; the flow asserts only on the retake itself (flag cleared,
+    no second retake offered), never on that reading."""
+    import shutil
+    import tempfile
+    from pathlib import Path
+
+    name, title = "retake_photos", "Student retakes the photos of a flagged reading"
+    issues: list[str] = []
+    assignment_id, token, refresh = await seed_confirmable_submission(
+        seed, page_b64=_PAGE_PNG_B64, integrity_check_enabled=False,
+    )
+    base = api_base.rstrip("/")
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_S) as client:
+        sub_url = f"{base}/school/student/homework/{assignment_id}/submission"
+        sid = (await client.get(sub_url, headers=_auth(token))).json()["submission_id"]
+        flagged = await client.post(
+            f"{base}/school/student/submissions/{sid}/flag-extraction",
+            json={"note": "My photos are hard to read"}, headers=_auth(token),
+        )
+        if flagged.status_code != 200:
+            issues.append(f"flagging the seeded reading returned {flagged.status_code}")
+            return FlowResult(name, title, False, issues)
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix="harness_retake_"))
+    page_file = tmp_dir / "page.png"
+    page_file.write_bytes(base64.b64decode(_PAGE_PNG_B64))
+    try:
+        issue = await _drive_retake(browser, web_base, seed.course_id, assignment_id,
+                                    token, refresh, str(page_file))
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+    if issue:
+        return FlowResult(name, title, False, [issue])
+
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_S) as client:
+        body = (await client.get(sub_url, headers=_auth(token))).json()
+    if body.get("extraction_flagged_at") is not None:
+        issues.append("after 'Send new photos' the turn-in was still flagged — the retake didn't land")
+    if body.get("can_retake"):
+        issues.append("a second retake is still offered after the one allowed retake")
+    return FlowResult(name, title, not issues, issues)
+
+
+async def _drive_retake(
+    browser: HarnessBrowser, web_base: str, course_id: str, assignment_id: str,
+    token: str, refresh: str, page_file: str,
+) -> str | None:
+    """The browser half of `_retake_photos_flow`: the first broken step, or None."""
+    async with browser.authed_page(token, refresh) as page:
+        await page.goto(
+            f"{web_base.rstrip('/')}/school/student/courses/{course_id}"
+            f"/homework/{assignment_id}",
+            wait_until="domcontentloaded", timeout=_TIMEOUT_MS,
+        )
+        retake = page.get_by_role("button", name="Retake photos")
+        try:
+            await retake.click(timeout=_TIMEOUT_MS)
+            await page.get_by_text("Retake your photos").wait_for(timeout=_TIMEOUT_MS)
+        except PlaywrightTimeoutError:
+            return "a flagged, ungraded reading never offered a working 'Retake photos'"
+        try:
+            await page.get_by_role("button", name="Keep my first photos").click(timeout=_TIMEOUT_MS)
+            await retake.wait_for(timeout=_TIMEOUT_MS)
+        except PlaywrightTimeoutError:
+            return "'Keep my first photos' didn't lead back to the flagged screen"
+        try:
+            await retake.click(timeout=_TIMEOUT_MS)
+            await page.locator("input[type=file]").first.set_input_files(page_file)
+            await page.get_by_role("button", name="Review new photos").click(timeout=_TIMEOUT_MS)
+            await page.get_by_role("button", name="Send new photos").click(timeout=_TIMEOUT_MS)
+            await page.get_by_text("Retake your photos").wait_for(state="detached", timeout=_TIMEOUT_MS)
+        except PlaywrightTimeoutError:
+            return "uploading a new page and pressing 'Send new photos' never left the retake panel"
+    return None
+
+
 # ── API-layer journeys (see module docstring for why these aren't browser
 # flows). Each hits the same endpoints the web app calls, with seeded tokens,
 # and asserts on a deterministic response. A wrong status/body is a real
@@ -418,6 +504,7 @@ async def _workshop_steps_flow(
 # multi-page entry — a real build + a per-scan cost decision, not a quick add.)
 _FLOWS = (
     _login_flow, _logout_flow, _student_insights_flow, _confirm_reading_flow,
+    _retake_photos_flow,
     _join_class_flow, _submit_homework_flow, _grade_publish_flow,
     _workshop_steps_flow,
 )

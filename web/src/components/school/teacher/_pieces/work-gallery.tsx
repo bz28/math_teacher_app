@@ -39,11 +39,15 @@ function pageLabel(file: SubmissionFile, index: number): string {
 export function WorkGalleryModal({
   files,
   studentName,
+  note,
   openAt,
   onClose,
 }: {
   files: SubmissionFile[];
   studentName: string;
+  /** Which set of photos this is, when it isn't the current one
+   *  (e.g. "first photos" for a retake's originals). */
+  note?: string;
   /** Page index to open on, or null to stay closed. */
   openAt: number | null;
   onClose: () => void;
@@ -65,6 +69,7 @@ export function WorkGalleryModal({
       key={openAt}
       files={files}
       studentName={studentName}
+      note={note}
       initialIndex={openAt}
       onClose={onClose}
     />
@@ -74,11 +79,13 @@ export function WorkGalleryModal({
 function GalleryBody({
   files,
   studentName,
+  note,
   initialIndex,
   onClose,
 }: {
   files: SubmissionFile[];
   studentName: string;
+  note?: string;
   initialIndex: number;
   onClose: () => void;
 }) {
@@ -112,11 +119,12 @@ function GalleryBody({
       open
       onClose={onClose}
       className="max-h-[90vh] w-full max-w-5xl overflow-y-auto bg-surface p-3"
-      label={`${studentName}'s work`}
+      label={`${studentName}'s ${note ?? "work"}`}
     >
       <div className="flex items-center justify-between gap-2 pb-2">
         <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
           {studentName}&apos;s {label}
+          {note ? ` — ${note}` : ""}
         </p>
         <button
           type="button"

@@ -29,7 +29,8 @@ from collections import Counter
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, select, update
+from sqlalchemy import ColumnElement, CursorResult, String, and_, or_, select, update
+from sqlalchemy import cast as sql_cast
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -235,6 +236,30 @@ def has_any_grade(grade: SubmissionGrade | None) -> bool:
         grade.published_final_score is not None,
         bool(grade.published_breakdown),
     ))
+
+
+def _json_has_content(col: Any) -> ColumnElement[bool]:
+    # Python's `bool()` on a JSON value: SQL NULL, JSON null and an empty
+    # list or object are all falsy.
+    return and_(col.is_not(None), sql_cast(col, String).notin_(["null", "[]", "{}"]))
+
+
+def has_any_grade_clause() -> ColumnElement[bool]:
+    """`has_any_grade` as a SQL condition on `SubmissionGrade`, for a
+    guarded write that must not land once any grade data exists. Same
+    fields, same truthiness — `tests/test_grading_queue_has_any_grade.py`
+    pins the two together."""
+    return or_(
+        SubmissionGrade.final_score.is_not(None),
+        SubmissionGrade.ai_score.is_not(None),
+        _json_has_content(SubmissionGrade.ai_breakdown),
+        SubmissionGrade.teacher_score.is_not(None),
+        _json_has_content(SubmissionGrade.breakdown),
+        SubmissionGrade.graded_at.is_not(None),
+        SubmissionGrade.reviewed_at.is_not(None),
+        SubmissionGrade.published_final_score.is_not(None),
+        _json_has_content(SubmissionGrade.published_breakdown),
+    )
 
 
 def ai_grade_block(

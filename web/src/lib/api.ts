@@ -2137,6 +2137,12 @@ export const teacher = {
   submissionDetail(submissionId: string) {
     return apiFetch<TeacherSubmissionDetail>(`/teacher/submissions/${submissionId}`);
   },
+  /** The photos a student's retake replaced, for "View original photos". */
+  retakeOriginalFiles(submissionId: string) {
+    return apiFetch<{ files: SubmissionFile[] }>(
+      `/teacher/submissions/${submissionId}/retake-original-files`,
+    );
+  },
   integrityDetail(submissionId: string) {
     return apiFetch<TeacherIntegrityDetail>(`/teacher/integrity/submissions/${submissionId}`);
   },
@@ -2398,6 +2404,19 @@ export interface TeacherSubmissionDetail {
    *  `edited`). On a flagged reading, these are the fixes they made
    *  before sending it to the teacher. */
   extraction_edit_count: number;
+  /** The student flagged the first reading and retook their photos.
+   *  Everything else here is the NEW turn-in; `retake_original` is the
+   *  one it replaced. Null when there was no retake. */
+  retaken_at: string | null;
+  retake_original: {
+    /** Pages in the replaced turn-in. The photos themselves load on
+     *  demand — `teacher.retakeOriginalFiles`. */
+    file_count: number;
+    submitted_at: string | null;
+    is_late: boolean;
+    extraction_flagged_at: string | null;
+    extraction_flag_note: string | null;
+  } | null;
   breakdown: GradeBreakdownEntry[] | null;
   ai_breakdown: AiGradeEntry[] | null;
   final_score: number | null;
@@ -2760,6 +2779,9 @@ export interface StudentSubmission {
    *  populate `extraction`. */
   integrity_check_enabled: boolean;
   ai_grading_enabled: boolean;
+  /** The student flagged the reading and may still replace their photos,
+   *  once, for a fresh one — see `retakeSubmission`. */
+  can_retake: boolean;
 }
 
 export interface SubmitHomeworkResponse {
@@ -3043,6 +3065,20 @@ export const schoolStudent = {
         ? { method: "POST", body: JSON.stringify({ note, edits }) }
         : { method: "POST" },
     );
+  },
+  /** Replace the photos of a flagged, ungraded turn-in for a fresh
+   *  reading — once. Same body and validation as `submitHomework`; the
+   *  original photos are kept for the teacher. */
+  retakeSubmission(
+    submissionId: string,
+    body: { files: string[]; rotations?: number[]; orientations?: string[] },
+  ) {
+    const json = JSON.stringify(body);
+    return apiFetch<SubmitHomeworkResponse>(`/school/student/submissions/${submissionId}/retake`, {
+      method: "POST",
+      body: json,
+      timeout: uploadTimeoutFor(json.length),
+    });
   },
   // ── Learn-mode chat + Practice→Learn pivot ──
   stepChat(
