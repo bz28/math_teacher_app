@@ -149,3 +149,31 @@ function listPages(pages: number[]): string {
     ? `${pages[0]} and ${pages[1]}`
     : `${pages.slice(0, -1).join(", ")} and ${pages[pages.length - 1]}`;
 }
+
+/** What the turn-in count needs from each file being turned in. */
+export interface TurnInFile {
+  pdf: boolean;
+  pageCount: number;
+  /** The page check answered. Until it does — and for good if it fails —
+   *  a PDF's `pageCount` is the placeholder 1, not its real count. */
+  checked: boolean;
+}
+
+/** How much work the teacher will get, for the turn-in confirmation:
+ *  the pages across every file, a photo being one ("6 pages"). While any
+ *  PDF's page count isn't known — its check hasn't answered, or it
+ *  answered 0 for a PDF it couldn't open — it counts files instead
+ *  ("2 files") rather than show a page count that may be wrong. */
+export function turnInCountLabel(files: TurnInFile[]): string {
+  if (files.some((f) => f.pdf && (!f.checked || f.pageCount < 1))) {
+    return plural(files.length, "file");
+  }
+  return plural(
+    files.reduce((n, f) => n + (f.pdf ? f.pageCount : 1), 0),
+    "page",
+  );
+}
+
+function plural(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? "" : "s"}`;
+}

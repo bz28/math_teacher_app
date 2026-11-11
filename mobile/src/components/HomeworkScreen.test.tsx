@@ -222,7 +222,9 @@ describe("HomeworkScreen sideways pages", () => {
 
       await fireEvent.press(screen.getByLabelText("Rotate page a quarter turn clockwise"));
       expect(screen.queryByText(/is sideways/)).toBeNull();
-      await fireEvent.press(reviewButton());
+      // One file, two pages: the count is the PDF's pages.
+      await fireEvent.press(screen.getByText("Review & turn in 2 pages"));
+      expect(screen.getByText(/Your teacher will see exactly 2 pages/)).toBeTruthy();
       await fireEvent.press(screen.getByText("Turn it in"));
       expect(mockedApi.submitHomework).toHaveBeenCalledWith("hw1", ["PDF_B64"], [90], ["rotated"]);
     });

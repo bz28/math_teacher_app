@@ -12,6 +12,7 @@ import {
   sidewaysHint,
   sidewaysPrompt,
   stillSideways,
+  turnInCountLabel,
   type OrientationState,
 } from "./page-orientation.ts";
 
@@ -114,4 +115,24 @@ test("each file reports how it got past the sideways hold", () => {
   // The check timed out or failed: nothing was held, whatever the state.
   assert.equal(orientationReport(upright, false), "unchecked");
   assert.equal(orientationReport(photo({ upright: true }), false), "unchecked");
+});
+
+test("turn-in counts pages across files, not files", () => {
+  const img = { pdf: false, pageCount: 1, checked: true };
+  const pdf6 = { pdf: true, pageCount: 6, checked: true };
+  assert.equal(turnInCountLabel([pdf6]), "6 pages");
+  assert.equal(turnInCountLabel([img]), "1 page");
+  assert.equal(turnInCountLabel([img, pdf6, img]), "8 pages");
+  assert.equal(turnInCountLabel([{ ...pdf6, pageCount: 1 }]), "1 page");
+  // A photo is one page whether or not its check answered.
+  assert.equal(turnInCountLabel([{ ...img, checked: false }, img]), "2 pages");
+});
+
+test("turn-in never guesses a PDF's pages before the check knows them", () => {
+  const unknownPdf = { pdf: true, pageCount: 1, checked: false };
+  const img = { pdf: false, pageCount: 1, checked: true };
+  assert.equal(turnInCountLabel([unknownPdf]), "1 file");
+  assert.equal(turnInCountLabel([unknownPdf, img]), "2 files");
+  // The check answered 0 pages: it couldn't open the PDF.
+  assert.equal(turnInCountLabel([{ ...unknownPdf, checked: true, pageCount: 0 }]), "1 file");
 });
