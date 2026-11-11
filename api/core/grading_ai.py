@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.class_rubric import effective_rubric
 from api.core.homework_points import assignment_points, weighted_percent
 from api.core.llm_client import (
-    MODEL_REASON,
+    MODEL_OPUS,
     LLMMode,
     OutputTruncatedError,
     call_claude_json,
@@ -53,6 +53,8 @@ GRADING_STATUS_SKIPPED_TOO_LONG = "skipped_too_long"
 # 3.2k–4.1k tokens and overran the old 4096 cap. 16384 fits ~55 problems.
 # Output streams at ≈69 tokens/s, so a full 16k response takes ~4 min —
 # the timeout has to cover that, not the 90 s default.
+# Opus thinks first, and the thinking counts toward the cap: over 60 real
+# homeworks it wrote 3.2k tokens on average, 5.3k at most, at ≈115 tokens/s.
 _GRADING_MAX_TOKENS = 16384
 _GRADING_TIMEOUT_S = 300.0
 
@@ -730,7 +732,6 @@ async def grade_submission_with_ai(
     *,
     user_id: str | None = None,
     submission_id: str | None = None,
-    reproducible: bool = True,
 ) -> dict[str, Any]:
     """Grade a submission using the already-extracted student work.
 
@@ -746,11 +747,6 @@ async def grade_submission_with_ai(
             class rules it applies (`class_rubric.effective_rubric`). Optional.
         user_id: For cost-tracking attribution.
         submission_id: For LLM-call log correlation across the pipeline.
-        reproducible: When True (default, and the production path), grade at
-            temperature 0 with NO extended thinking so the same submission
-            yields the same grade every run. When False, use the legacy
-            temperature-1 + extended-thinking config — kept only so the
-            grading-quality harness can A/B the two configs.
 
     Returns:
         {"grades": [{problem_position, student_answer, score_status,
@@ -771,42 +767,87 @@ async def grade_submission_with_ai(
     system = _build_system_prompt(rubric, problems)
     user_message = _build_user_message(extraction, problems)
 
-    # Reproducible grading (default): temperature 0 yields a deterministic
-    # grade for a given submission, so a teacher who re-opens a review sees a
-    # stable verdict. Extended thinking forces temperature 1.0, so determinism
-    # requires dropping it. The legacy config (reproducible=False) keeps the
-    # 2048-token thinking budget + temp-1 sampling — it let the model reason
-    # through partial-credit calls privately, at the cost of run-to-run drift.
-    # The grading harness measures whether dropping it costs accuracy.
-    if reproducible:
-        thinking_budget: int | None = None
-        temperature: float | None = 0.0
-    else:
-        thinking_budget = 2048
-        temperature = None  # API defaults to 1.0 under extended thinking
+    # Opus, for the reason in `api.config` (llm_model_opus). It always
+    # thinks, so there's no temperature 0: the same work can come back a
+    # few points apart on a regrade. The stored grade is what keeps a
+    # re-opened review stable.
+    #
+    # Asked once more when the answer skips a problem the student worked
+    # on. An ungraded problem is stamped a zero ("No gradeable work
+    # found"), so a skipped one wrongly zeroes real work. Opus did it once
+    # in 60 whole-homework calls (1 grade back for 8 problems); Sonnet 4.6
+    # never did in 207 prod submissions. Not an API retry — an outage
+    # still costs one attempt here — and the second answer replaces the
+    # first only if it skips fewer problems.
+    async def grade(attempt: int) -> dict[str, Any]:
+        return await call_claude_json(
+            system,
+            user_message,
+            LLMMode.AI_GRADING,
+            tool_schema=AI_GRADING_SCHEMA,
+            model=MODEL_OPUS,
+            max_tokens=_GRADING_MAX_TOKENS,
+            timeout=_GRADING_TIMEOUT_S,
+            # One attempt here: the SDK already retries transient API errors
+            # (twice), and the grading queue retries the whole job. A third
+            # layer multiplied a stalled API into 3 × 3 × 300 s ≈ 45 min — past
+            # the queue's stale window, which then started a duplicate grader.
+            max_retries=1,
+            user_id=user_id,
+            submission_id=submission_id,
+            call_metadata={"phase": "ai_grading", "attempt": attempt},
+        )
 
-    result = await call_claude_json(
-        system,
-        user_message,
-        LLMMode.AI_GRADING,
-        tool_schema=AI_GRADING_SCHEMA,
-        model=MODEL_REASON,
-        max_tokens=_GRADING_MAX_TOKENS,
-        timeout=_GRADING_TIMEOUT_S,
-        # One attempt here: the SDK already retries transient API errors
-        # (twice), and the grading queue retries the whole job. A third
-        # layer multiplied a stalled API into 3 × 3 × 300 s ≈ 45 min — past
-        # the queue's stale window, which then started a duplicate grader.
-        max_retries=1,
-        thinking_budget=thinking_budget,
-        temperature=temperature,
-        user_id=user_id,
-        submission_id=submission_id,
-        call_metadata={"phase": "ai_grading"},
-    )
+    result = await grade(1)
+    skipped = _skipped_worked_problems(result, extraction, problems)
+    if skipped:
+        logger.warning(
+            "AI grading skipped problems %s that have student work (submission %s); "
+            "asking again", skipped, submission_id,
+        )
+        try:
+            again = await grade(2)
+        except Exception:  # the first answer still grades most of the work
+            logger.exception("AI grading re-ask failed (submission %s)", submission_id)
+        else:
+            if len(_skipped_worked_problems(again, extraction, problems)) < len(skipped):
+                result = again
     _cap_confidence_for_unconfirmed_drawings(result, extraction, problems)
     _name_rules_in_text(result, (rubric or {}).get("rules") or [])
     return result
+
+
+def _skipped_worked_problems(
+    result: dict[str, Any], extraction: dict[str, Any], problems: list[dict[str, Any]],
+) -> list[int]:
+    """Positions the grader was shown work for that came back with no
+    grade. A problem with no work is legitimately left out — it is
+    reconciled to a zero downstream."""
+    graded = {
+        g.get("problem_position") for g in result.get("grades") or [] if isinstance(g, dict)
+    }
+
+    def written(key: str, *text: str) -> set[Any]:
+        return {
+            item.get("problem_position")
+            for item in extraction.get(key) or []
+            if isinstance(item, dict) and any(str(item.get(f) or "").strip() for f in text)
+        }
+
+    drawn = {
+        # A visual_work entry can record that nothing was drawn.
+        v.get("problem_position") for v in extraction.get("visual_work") or []
+        if isinstance(v, dict) and v.get("present", True) is not False
+    }
+    worked = written("steps", "latex", "plain_english") | written(
+        "final_answers", "answer_latex", "answer_plain",
+    )
+    return sorted(
+        p["position"] for p in problems
+        if p["position"] not in graded
+        # The grader sees a drawing only where the question requires one.
+        and (p["position"] in worked or (p.get("requires_drawing") and p["position"] in drawn))
+    )
 
 
 def _literal(words: str) -> Callable[[re.Match[str]], str]:

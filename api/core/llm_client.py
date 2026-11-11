@@ -91,8 +91,10 @@ MODEL_CLASSIFY = MODEL_HAIKU
 MODEL_REASON = MODEL_SONNET
 MODEL_OPUS = settings.llm_model_opus
 
-# Models that always think. They reject `temperature` and a forced tool
-# choice, so they get tool_choice "auto" and are told to answer with the tool.
+# Models that always think. They reject `temperature`, a thinking budget and
+# a forced tool choice. `call_claude_json` asks them for JSON through
+# structured outputs instead of a tool; `call_claude_vision` still uses
+# tool_choice "auto" and tells them to answer with the tool.
 _ALWAYS_THINKS = {MODEL_OPUS}
 
 # Pricing per token (USD)
@@ -452,6 +454,22 @@ def _with_transcript_cache(
     return [*messages[:-1], {**last, "content": blocks}]
 
 
+def _strict_json_schema(schema: Any) -> Any:
+    """`schema` with `additionalProperties: false` on every object, which
+    structured outputs requires. A schema that sets it to anything else is
+    left as is, so the API rejects it loudly instead of the contract
+    loosening silently. (The SDK's `transform_schema` would do this, but it
+    can't take the `["string", "null"]` type unions our schemas use.)"""
+    if isinstance(schema, dict):
+        out = {k: _strict_json_schema(v) for k, v in schema.items()}
+        if out.get("type") == "object":
+            out.setdefault("additionalProperties", False)
+        return out
+    if isinstance(schema, list):
+        return [_strict_json_schema(x) for x in schema]
+    return schema
+
+
 def _to_tool_params(schema: ToolSchema) -> tuple[list[ToolParam], ToolChoiceToolParam]:
     """Convert a ToolSchema dict to typed SDK params."""
     tool: ToolParam = {
@@ -597,9 +615,19 @@ async def call_claude_json(
         timeout: Per-request timeout in seconds. Raise it alongside a large
             max_tokens — output streams at roughly 70 tokens/s.
 
+    A model that always thinks (`_ALWAYS_THINKS`) can't be forced to call a
+    tool, so it is asked for the same JSON through structured outputs: the
+    tool's input schema becomes the response format, and the answer comes
+    back as schema-valid JSON text. It takes neither `temperature` nor
+    `thinking_budget` — passing either raises ValueError — and its thinking
+    tokens count toward `max_tokens`. With no temperature 0 its truncations
+    are retried like any sampled call's, so set `max_retries` to what one
+    more truncated answer is worth.
+
     Raises:
         OutputTruncatedError: the response stopped at max_tokens. Not
-            retried — the same request truncates the same way.
+            retried at temperature 0 — the same request truncates the
+            same way.
     """
     if not _circuit.allow_request():
         raise PlatformStopError("Circuit breaker is open — Claude API temporarily unavailable")
@@ -609,19 +637,34 @@ async def call_claude_json(
     client = get_client()
     last_error: Exception | None = None
     tools, tool_choice_default = _to_tool_params(tool_schema)
-    thinking_kwargs, effective_tool_choice = _build_thinking_kwargs(
-        thinking_budget, max_tokens, tool_choice_default
-    )
-    if temperature is not None:
-        # Extended thinking requires temperature 1.0; the API rejects any
-        # other value alongside a thinking block. Guard it here so a caller
-        # asking for temp-0 reproducibility can't silently get thinking's 1.0.
-        if thinking_budget is not None and temperature != 1.0:
-            raise ValueError(
-                "extended thinking forces temperature 1.0; pass thinking_budget="
-                "None to use a custom temperature"
-            )
-        thinking_kwargs["temperature"] = temperature
+    structured = use_model in _ALWAYS_THINKS
+    request_kwargs: dict[str, Any]
+    if structured:
+        # Raise rather than drop: temperature 0 is a request for a
+        # reproducible answer, which this model can't give.
+        if temperature is not None or thinking_budget is not None:
+            raise ValueError(f"{use_model} takes neither temperature nor thinking_budget")
+        request_kwargs = {"output_config": {"format": {
+            "type": "json_schema",
+            "schema": _strict_json_schema(tool_schema["input_schema"]),
+        }}}
+    else:
+        thinking_kwargs, effective_tool_choice = _build_thinking_kwargs(
+            thinking_budget, max_tokens, tool_choice_default
+        )
+        if temperature is not None:
+            # Extended thinking requires temperature 1.0; the API rejects any
+            # other value alongside a thinking block. Guard it here so a caller
+            # asking for temp-0 reproducibility can't silently get thinking's 1.0.
+            if thinking_budget is not None and temperature != 1.0:
+                raise ValueError(
+                    "extended thinking forces temperature 1.0; pass thinking_budget="
+                    "None to use a custom temperature"
+                )
+            thinking_kwargs["temperature"] = temperature
+        request_kwargs = {
+            "tools": tools, "tool_choice": effective_tool_choice, **thinking_kwargs,
+        }
 
     for attempt in range(max_retries):
         start = time.monotonic()
@@ -631,18 +674,19 @@ async def call_claude_json(
                 max_tokens=max_tokens,
                 system=_system_with_cache(_with_safety(system_prompt)),
                 messages=[{"role": "user", "content": user_message}],
-                tools=tools,
-                tool_choice=effective_tool_choice,
                 timeout=timeout,
-                **thinking_kwargs,
+                **request_kwargs,
             )
             latency_ms = round((time.monotonic() - start) * 1000, 2)
 
             # When forcing tool use, the expected stop_reason is "tool_use".
             # "end_turn" can also occur if the model naturally finishes after
-            # invoking the tool. "max_tokens" means truncation — the tool
-            # input is incomplete, and handled below without a retry.
-            if response.stop_reason in ("tool_use", "end_turn"):
+            # invoking the tool, and is how a structured-output answer ends.
+            # "max_tokens" means truncation — the JSON is incomplete, and
+            # handled below without a retry.
+            if structured and response.stop_reason == "end_turn":
+                result, resp_text = _extract_json_text(response, tool_schema)
+            elif not structured and response.stop_reason in ("tool_use", "end_turn"):
                 result, resp_text = _extract_tool_result(response, tool_schema)
             elif response.stop_reason == "max_tokens":
                 raise OutputTruncatedError(
@@ -650,9 +694,10 @@ async def call_claude_json(
                     f"({response.usage.output_tokens} output tokens)"
                 )
             else:
+                expected = "'end_turn'" if structured else "'tool_use' or 'end_turn'"
                 raise ValueError(
                     f"Unexpected stop_reason '{response.stop_reason}' "
-                    f"(expected 'tool_use' or 'end_turn', may be truncated at {max_tokens} tokens)"
+                    f"(expected {expected}, may be truncated at {max_tokens} tokens)"
                 )
 
             cache_read, cache_write = _usage_cache_tokens(response.usage)
@@ -741,6 +786,28 @@ def _extract_tool_result(
                 result = _normalize_arrays(result, schema)
             return result, json.dumps(result, ensure_ascii=False)
     raise ValueError("No tool_use block in response")
+
+
+def _extract_json_text(
+    response: anthropic.types.Message,
+    schema: ToolSchema,
+) -> tuple[dict[str, object], str]:
+    """Parse a structured-output response: its text is one JSON object
+    matching the tool's input schema (thinking blocks are skipped). Text
+    that isn't a JSON object raises ValueError, which `call_claude_json`
+    treats like a missing tool call — a bad response, retried.
+
+    Returns (parsed_dict, text_for_logging).
+    """
+    text = "".join(b.text for b in response.content if b.type == "text")
+    try:
+        result = json.loads(text)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Structured output is not valid JSON: {e}") from e
+    if not isinstance(result, dict):
+        raise ValueError(f"Structured output is a {type(result).__name__}, not an object")
+    result = _normalize_arrays(result, schema)
+    return result, json.dumps(result, ensure_ascii=False)
 
 
 # Control chars that are NEVER legitimate inside solution/extraction JSON, so
