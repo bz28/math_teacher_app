@@ -216,6 +216,10 @@ export default function HomeworkPage() {
           <SubmissionPanel
             assignmentId={hw.assignment_id}
             dueAt={hw.due_at}
+            latePolicy={hw.late_policy}
+            // A retake replaces work already in, which closing never
+            // refuses; reload anyway if the API ever says closed.
+            onClosed={() => loadAll(hw.assignment_id)}
             retake={{
               submissionId,
               // Reload on the way out: a retake refused meanwhile (the

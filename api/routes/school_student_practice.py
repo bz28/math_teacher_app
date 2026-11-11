@@ -2762,7 +2762,10 @@ async def retake_submission(
     validated_files = await _validated_upload_files(body)
 
     now = datetime.now(UTC)
-    is_late = sub.is_late or bool(assignment.due_at and now > assignment.due_at)
+    # Measured against the student's effective due date, like submit
+    # and the late policy (late_policy.effective_due_at).
+    due_at = await effective_due_at(db, assignment, user.id)
+    is_late = sub.is_late or days_late(now, due_at) > 0
     original = {
         "files": sub.files,
         "extraction": sub.extraction,
