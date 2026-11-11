@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.class_rubric import effective_rubric
 from api.core.homework_points import assignment_points, weighted_percent
 from api.core.llm_client import (
-    MODEL_REASON,
+    MODEL_OPUS,
     LLMMode,
     OutputTruncatedError,
     call_claude_json,
@@ -730,7 +730,6 @@ async def grade_submission_with_ai(
     *,
     user_id: str | None = None,
     submission_id: str | None = None,
-    reproducible: bool = True,
 ) -> dict[str, Any]:
     """Grade a submission using the already-extracted student work.
 
@@ -746,11 +745,6 @@ async def grade_submission_with_ai(
             class rules it applies (`class_rubric.effective_rubric`). Optional.
         user_id: For cost-tracking attribution.
         submission_id: For LLM-call log correlation across the pipeline.
-        reproducible: When True (default, and the production path), grade at
-            temperature 0 with NO extended thinking so the same submission
-            yields the same grade every run. When False, use the legacy
-            temperature-1 + extended-thinking config — kept only so the
-            grading-quality harness can A/B the two configs.
 
     Returns:
         {"grades": [{problem_position, student_answer, score_status,
@@ -771,26 +765,16 @@ async def grade_submission_with_ai(
     system = _build_system_prompt(rubric, problems)
     user_message = _build_user_message(extraction, problems)
 
-    # Reproducible grading (default): temperature 0 yields a deterministic
-    # grade for a given submission, so a teacher who re-opens a review sees a
-    # stable verdict. Extended thinking forces temperature 1.0, so determinism
-    # requires dropping it. The legacy config (reproducible=False) keeps the
-    # 2048-token thinking budget + temp-1 sampling — it let the model reason
-    # through partial-credit calls privately, at the cost of run-to-run drift.
-    # The grading harness measures whether dropping it costs accuracy.
-    if reproducible:
-        thinking_budget: int | None = None
-        temperature: float | None = 0.0
-    else:
-        thinking_budget = 2048
-        temperature = None  # API defaults to 1.0 under extended thinking
-
+    # Opus, for the reason in `api.config` (llm_model_opus). It always
+    # thinks, so there's no temperature 0: the same work can come back a
+    # few points apart on a regrade. The stored grade is what keeps a
+    # re-opened review stable.
     result = await call_claude_json(
         system,
         user_message,
         LLMMode.AI_GRADING,
         tool_schema=AI_GRADING_SCHEMA,
-        model=MODEL_REASON,
+        model=MODEL_OPUS,
         max_tokens=_GRADING_MAX_TOKENS,
         timeout=_GRADING_TIMEOUT_S,
         # One attempt here: the SDK already retries transient API errors
@@ -798,8 +782,6 @@ async def grade_submission_with_ai(
         # layer multiplied a stalled API into 3 × 3 × 300 s ≈ 45 min — past
         # the queue's stale window, which then started a duplicate grader.
         max_retries=1,
-        thinking_budget=thinking_budget,
-        temperature=temperature,
         user_id=user_id,
         submission_id=submission_id,
         call_metadata={"phase": "ai_grading"},

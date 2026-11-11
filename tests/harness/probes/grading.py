@@ -553,8 +553,8 @@ GOLDEN_CASES: list[GradingCase] = [
         name="f4-elimination-required-substitution-used",
         category="f",
         # No percent band: teachers differ on how much a wrong-but-valid
-        # algebraic method costs (the grader settles on a small deduction
-        # at temp 0). What must hold is that it is NOT full and the
+        # algebraic method costs (the grader settles on a small
+        # deduction). What must hold is that it is NOT full and the
         # method miss is itemized so the teacher sees it.
         extra={"requires_deduction_mentioning": "method"},
         problems=_prob(
@@ -941,20 +941,15 @@ GOLDEN_CASES: list[GradingCase] = [
 ]
 
 
-async def grade_case(
-    case: GradingCase, *, reproducible: bool = True,
-) -> tuple[str | None, dict[str, Any]]:
+async def grade_case(case: GradingCase) -> tuple[str | None, dict[str, Any]]:
     """Grade one golden case and return (score_status, raw_result).
 
-    Thin wrapper over `grade_submission_with_ai` so both the probe and the
-    out-of-band A/B + determinism measurement grade the identical labeled set.
-    `reproducible` toggles the grading config (temp-0 no-thinking vs the legacy
-    temp-1 + thinking) — the measurement runs both; the probe uses the default
-    (reproducible) config, which is what production ships.
+    Thin wrapper over `grade_submission_with_ai`, so anything that measures
+    the grader grades the identical labeled set the probe does.
     """
     result = await grade_submission_with_ai(
         case.extraction, [{**p, "points": _PROBLEM_POINTS} for p in case.problems],
-        case.extra.get("rubric"), reproducible=reproducible,
+        case.extra.get("rubric"),
     )
     grades = result.get("grades", [])
     status = grades[0].get("score_status") if grades else None
@@ -999,13 +994,13 @@ class GradingProbe(Probe):
     async def generate(
         self, ctx: HarnessContext, constraint: str | None = None,
     ) -> list[GeneratedItem]:
-        """Grade every golden case (default reproducible config) and return one
-        GeneratedItem per case, tagged with the expected label + the grader's
+        """Grade every golden case and return one GeneratedItem per case,
+        tagged with the expected label + the grader's
         actual score_status so deterministic_checks can compare them. Ignores
         ctx: grading is a pure function, no app endpoint or browser needed."""
         out: list[GeneratedItem] = []
         for case in GOLDEN_CASES:
-            status, result = await grade_case(case, reproducible=True)
+            status, result = await grade_case(case)
             # Run the model grades through the real persistence path
             # (_build_breakdown) so the deterministic checks see the
             # PERSISTED breakdown — including the step_ref range clamp —

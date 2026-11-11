@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     # Reads students' handwriting. On 50 of the hardest real problems,
     # checked blind against the photos, it made 2 reading errors to
     # Sonnet 4.6's 30.
+    # Also grades. Told that the answer key's theorem isn't required,
+    # Sonnet 4.6 gave an SSA proof labelled SAS full credit in 4 of 6 runs;
+    # Opus gave it partial credit every time, and full credit to valid
+    # alternatives (Triangle Sum, AAS), 6 of 6 runs on each case.
     llm_model_opus: str = "claude-opus-5-5"
 
     # Cost Alerting
