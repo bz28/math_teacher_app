@@ -12,8 +12,12 @@ import { NEXT_STEP_COPY } from "./next-step";
  */
 export function DashboardAssignmentRow({
   assignment,
+  closed = false,
 }: {
   assignment: DashboardAssignment;
+  /** Closed by the late policy: nothing left to do, so a plain
+   *  "Closed" in place of a red "overdue by…" pill. */
+  closed?: boolean;
 }) {
   return (
     <Link
@@ -44,6 +48,10 @@ export function DashboardAssignmentRow({
       {assignment.next_step ? (
         <span className="hidden shrink-0 rounded-full bg-primary-bg px-2.5 py-0.5 text-xs font-semibold text-primary group-hover:bg-primary group-hover:text-white sm:inline">
           {NEXT_STEP_COPY[assignment.next_step].label}
+        </span>
+      ) : closed ? (
+        <span className="inline-flex shrink-0 items-center rounded-full bg-bg-subtle px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
+          Closed
         </span>
       ) : (
         <UrgencyPill dueAt={assignment.due_at} />

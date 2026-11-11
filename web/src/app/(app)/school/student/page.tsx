@@ -168,7 +168,7 @@ export default function SchoolStudentDashboard() {
     );
   }
 
-  const { first_name, due_this_week, overdue, in_review, recently_graded } = data;
+  const { first_name, due_this_week, overdue, closed, in_review, recently_graded } = data;
   const dueCount = due_this_week.length + overdue.length;
   // Turned in, one step left (confirm the reading / finish the check).
   // Its own card above Due: it's the quickest thing on the page to finish.
@@ -232,6 +232,17 @@ export default function SchoolStudentDashboard() {
             {dueCount === 0 && (
               <EmptyRow text="You're all caught up — nothing due this week." />
             )}
+            {/* Closed at the due date and never turned in. Kept in view
+                (not silently dropped) but quiet and last: there's
+                nothing to do here except ask the teacher. */}
+            {closed.length > 0 && (
+              <div className="border-y border-border-light/60 bg-bg-subtle/60 px-5 py-2 text-[11px] font-semibold text-text-muted">
+                Closed without a turn-in ({closed.length})
+              </div>
+            )}
+            {closed.map((a) => (
+              <DashboardAssignmentRow key={`closed-${a.assignment_id}`} assignment={a} closed />
+            ))}
           </DashboardCard>
         </div>
 

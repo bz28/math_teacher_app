@@ -59,10 +59,29 @@ interface AssignmentProblem {
   difficulty: string;
 }
 
-const LATE_POLICY_OPTIONS: { value: string; label: string }[] = [
-  { value: "none", label: "Accept any time, no penalty" },
-  { value: "penalty_per_day", label: "−10% per day after due" },
-  { value: "no_credit", label: "Closed after due date" },
+// What each late policy does (api/core/late_policy.py). The hint is
+// shown under the picker for the selected one, so the label stays short.
+const LATE_POLICY_OPTIONS: { value: string; label: string; hint: string }[] = [
+  {
+    value: "none",
+    label: "Accept any time, no penalty",
+    hint: "Late work is accepted and marked late. Nothing comes off the score.",
+  },
+  {
+    value: "penalty_per_day",
+    label: "−10% per day late",
+    hint:
+      "Late work takes 10% off the score for each day late, and any part of a day counts: " +
+      "85% turned in a day late is 75%. It shows as its own line on each grade, and you can " +
+      "waive it per student.",
+  },
+  {
+    value: "no_credit",
+    label: "Closed after due date",
+    hint:
+      "Students can't turn it in after the due date. Anything that came in after it scores 0. " +
+      "Without a due date it never closes.",
+  },
 ];
 
 // Inline-editable fields with their own SaveState — a saving units
@@ -1581,6 +1600,7 @@ function ConfigBlock({
       {hw.type !== "practice" && (
         <Field
           label="Late policy"
+          hint={LATE_POLICY_OPTIONS.find((o) => o.value === hw.late_policy)?.hint}
           saveState={saveStates.latePolicy}
           saveError={saveErrors.latePolicy}
         >

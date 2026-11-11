@@ -6,6 +6,7 @@ import type { GradebookAssignment, GradebookCell, GradebookStudent } from "./api
 import {
   averageBreakdown,
   changedFromAi,
+  scoreGiven,
   sectionAverage,
   shown,
   sortRows,
@@ -15,9 +16,10 @@ const A: GradebookAssignment[] = ["h1", "h2", "h3", "h4"].map((id) => ({
   id, title: id, due_at: null, avg_percent: null, counted_count: 0, total_points: 100,
 }));
 
-function published(score: number, ai: number | null = score): GradebookCell {
+function published(score: number, ai: number | null = score, latePenalty = 0): GradebookCell {
   return {
-    state: "published", submission_id: "x", score, published_at: "2026-09-01T00:00:00Z",
+    state: "published", submission_id: "x", score, late_penalty: latePenalty,
+    published_at: "2026-09-01T00:00:00Z",
     is_late: false, ai_score: ai, edited_since_publish: false,
   };
 }
@@ -68,6 +70,15 @@ test("the changed-from-AI dot agrees with the rounded numbers on the hover card"
   assert.equal(changedFromAi(published(85, 84.5) as P), false);
   // Card reads "AI suggested 85% · you gave 84%" — dot.
   assert.equal(changedFromAi(published(84.4, 84.6) as P), true);
+});
+
+test("a late penalty alone isn't a change from the AI", () => {
+  type P = Extract<GradebookCell, { state: "published" }>;
+  // AI said 85, she approved it, the policy took 20 off: published 65.
+  assert.equal(changedFromAi(published(65, 85, 20) as P), false);
+  assert.equal(scoreGiven(published(65, 85, 20) as P), 85);
+  // She also moved it: 80 given, 60 after the penalty.
+  assert.equal(changedFromAi(published(60, 85, 20) as P), true);
 });
 
 test("sorting by a homework puts students without a score last, both directions", () => {
