@@ -331,3 +331,31 @@ async def test_grader_reasks_at_most_once(monkeypatch: pytest.MonkeyPatch) -> No
     assert len(calls) == 2
     # The second answer stands; the still-skipped problem is reconciled downstream.
     assert [g["problem_position"] for g in result["grades"]] == [1, 2]
+
+
+async def test_a_worse_second_answer_does_not_replace_the_first(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake, _calls = _grader([1, 2], [1])
+    monkeypatch.setattr(grading_ai, "call_claude_json", fake)
+    result = await grading_ai.grade_submission_with_ai(_work(1, 2, 3), _PROBLEMS, None)
+    assert [g["problem_position"] for g in result["grades"]] == [1, 2]
+
+
+@pytest.mark.parametrize("error", [RuntimeError("API down"), OutputTruncatedError("cut")])
+async def test_a_failed_reask_keeps_the_first_answer(
+    monkeypatch: pytest.MonkeyPatch, error: Exception,
+) -> None:
+    calls = 0
+
+    async def fake_call(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise error
+        return {"grades": [{"problem_position": 1, "score_status": "full"}]}
+
+    monkeypatch.setattr(grading_ai, "call_claude_json", fake_call)
+    result = await grading_ai.grade_submission_with_ai(_work(1, 2), _PROBLEMS[:2], None)
+    assert calls == 2
+    assert [g["problem_position"] for g in result["grades"]] == [1]

@@ -777,9 +777,10 @@ async def grade_submission_with_ai(
     # found"), so a skipped one wrongly zeroes real work. Opus did it once
     # in 60 whole-homework calls (1 grade back for 8 problems); Sonnet 4.6
     # never did in 207 prod submissions. Not an API retry — an outage
-    # still costs one attempt here.
-    for attempt in (1, 2):
-        result = await call_claude_json(
+    # still costs one attempt here — and the second answer replaces the
+    # first only if it skips fewer problems.
+    async def grade(attempt: int) -> dict[str, Any]:
+        return await call_claude_json(
             system,
             user_message,
             LLMMode.AI_GRADING,
@@ -796,13 +797,21 @@ async def grade_submission_with_ai(
             submission_id=submission_id,
             call_metadata={"phase": "ai_grading", "attempt": attempt},
         )
-        skipped = _skipped_worked_problems(result, extraction, problems)
-        if not skipped:
-            break
+
+    result = await grade(1)
+    skipped = _skipped_worked_problems(result, extraction, problems)
+    if skipped:
         logger.warning(
-            "AI grading skipped problems %s that have student work "
-            "(submission %s, attempt %d)", skipped, submission_id, attempt,
+            "AI grading skipped problems %s that have student work (submission %s); "
+            "asking again", skipped, submission_id,
         )
+        try:
+            again = await grade(2)
+        except Exception:  # the first answer still grades most of the work
+            logger.exception("AI grading re-ask failed (submission %s)", submission_id)
+        else:
+            if len(_skipped_worked_problems(again, extraction, problems)) < len(skipped):
+                result = again
     _cap_confidence_for_unconfirmed_drawings(result, extraction, problems)
     _name_rules_in_text(result, (rubric or {}).get("rules") or [])
     return result
