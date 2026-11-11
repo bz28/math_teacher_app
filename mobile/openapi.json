@@ -4156,11 +4156,6 @@
             "title": "Late Penalty",
             "type": "number"
           },
-          "late_penalty_percent": {
-            "default": 0.0,
-            "title": "Late Penalty Percent",
-            "type": "number"
-          },
           "late_policy": {
             "enum": [
               "none",

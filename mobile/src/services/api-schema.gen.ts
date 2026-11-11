@@ -6131,11 +6131,6 @@ export interface components {
             /** Late Penalty */
             late_penalty: number;
             /**
-             * Late Penalty Percent
-             * @default 0
-             */
-            late_penalty_percent: number;
-            /**
              * Late Policy
              * @enum {string}
              */

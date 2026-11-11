@@ -526,10 +526,10 @@ class StudentHomeworkDetail(BaseModel):
     submitted_at: datetime | None = None
     final_score: float | None = None
     # Points the late policy took off the published score (already out of
-    # final_score), and that as a percent of the score before it (10 per
-    # started day late). 0 when none was taken.
+    # final_score; 10% of the score per started day late). 0 when none was
+    # taken. Rounded like final_score, so the two add back to the score
+    # before the penalty.
     late_penalty: float
-    late_penalty_percent: float = 0.0
     grade_published_at: datetime | None = None
     breakdown: list[StudentProblemFeedback] | None = None
     # What's left for the student on turned-in work: "confirm_reading"
@@ -1851,7 +1851,6 @@ async def homework_detail(
     # payload.
     final_score: float | None = None
     late_penalty = 0.0
-    late_penalty_percent = 0.0
     grade_published_at: datetime | None = None
     breakdown_out: list[StudentProblemFeedback] | None = None
     if sub is not None:
@@ -1886,9 +1885,7 @@ async def homework_detail(
                 if grade.published_final_score is not None
                 else None
             )
-            late_penalty = grade.published_late_penalty
-            before = (grade.published_final_score or 0.0) + late_penalty
-            late_penalty_percent = round(late_penalty / before * 100, 1) if before > 0 else 0.0
+            late_penalty = round(grade.published_late_penalty, 1)
             grade_published_at = grade.grade_published_at
             if grade.published_breakdown:
                 breakdown_out = []
@@ -1925,7 +1922,6 @@ async def homework_detail(
         submitted_at=sub.submitted_at if sub is not None else None,
         final_score=final_score,
         late_penalty=late_penalty,
-        late_penalty_percent=late_penalty_percent,
         grade_published_at=grade_published_at,
         breakdown=breakdown_out,
         next_step=(

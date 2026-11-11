@@ -372,8 +372,7 @@ async def test_the_student_sees_the_published_penalty(client: AsyncClient, world
         await s.commit()
     detail = (await client.get(f"/v1/school/student/homework/{aid}", headers=_auth(world["student_token"]))).json()
     assert (detail["final_score"], detail["late_penalty"], detail["late_policy"]) == (68.0, 17.0, "penalty_per_day")
-    # 17 off 85 is 20% of the score: what the student's line says.
-    assert detail["late_penalty_percent"] == 20.0
+
 
 
 # ── no_credit closes the homework to new turn-ins ────────────────────

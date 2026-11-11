@@ -655,8 +655,7 @@ function SubmittedStatus({
           {hw.late_penalty > 0 && (
             <Text style={styles.latePenaltyText}>
               {oneDecimal(hw.final_score! + hw.late_penalty)}% for the work, then −
-              {oneDecimal(hw.late_penalty)}% for turning it in late (
-              {oneDecimal(hw.late_penalty_percent)}% of the score, 10% per day late)
+              {oneDecimal(hw.late_penalty)}% for turning it in late (10% of your score per day late)
             </Text>
           )}
           {breakdownRows.map((b) => (

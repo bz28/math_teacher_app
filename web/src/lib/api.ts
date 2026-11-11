@@ -2789,10 +2789,8 @@ export interface StudentHomeworkDetail {
   /** Percent 0-100, or null if no grade published yet. */
   final_score: number | null;
   /** Points the late policy took off the published score (already out
-   *  of final_score), and that as a percent of the score before it
-   *  (10 per started day late). 0 when none. */
+   *  of final_score; 10% of the score per started day late). 0 when none. */
   late_penalty: number;
-  late_penalty_percent: number;
   /** ISO timestamp — null until teacher publishes. */
   grade_published_at: string | null;
   /** Per-problem published-grade rows; null before publish. Uses the

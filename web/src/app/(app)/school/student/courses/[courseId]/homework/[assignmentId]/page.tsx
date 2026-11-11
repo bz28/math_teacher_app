@@ -327,7 +327,6 @@ export default function HomeworkPage() {
         <GradedSummaryCard
           finalScore={hw.final_score}
           latePenalty={hw.late_penalty}
-          latePenaltyPercent={hw.late_penalty_percent}
           breakdown={hw.breakdown}
           missedOnly={missedOnly}
           onMissedOnlyChange={setMissedOnly}
@@ -588,7 +587,6 @@ const GRADE_TONE: Record<
 function GradedSummaryCard({
   finalScore,
   latePenalty,
-  latePenaltyPercent,
   breakdown,
   missedOnly,
   onMissedOnlyChange,
@@ -596,8 +594,6 @@ function GradedSummaryCard({
   finalScore: number | null;
   /** Points the late policy took off finalScore; 0 when none. */
   latePenalty: number;
-  /** That as a percent of the score before it (10 per day late). */
-  latePenaltyPercent: number;
   breakdown: StudentProblemFeedback[];
   missedOnly: boolean;
   onMissedOnlyChange: (next: boolean) => void;
@@ -656,10 +652,10 @@ function GradedSummaryCard({
               earned and what lateness cost. */}
           {latePenalty > 0 && finalScore !== null && (
             <p className="mt-1 text-sm text-text-secondary">
-              {latePenaltyLine(finalScore, latePenalty, latePenaltyPercent).work}
+              {latePenaltyLine(finalScore, latePenalty).work}
               {", then "}
               <span className="font-semibold text-warning-dark">
-                {latePenaltyLine(finalScore, latePenalty, latePenaltyPercent).late}
+                {latePenaltyLine(finalScore, latePenalty).late}
               </span>
             </p>
           )}

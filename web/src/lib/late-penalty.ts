@@ -8,18 +8,14 @@ export function oneDecimal(value: number): string {
 }
 
 /** The line in two parts: what the work earned, and what lateness took —
- *  the amount and the percent of the score it was. 85% a day late reads
- *  "85% for the work" / "−8.5% for turning it in late (10% of the score,
- *  10% per day late)". */
+ *  the amount it came to, and the rule. 85% a day late reads "85% for the
+ *  work" / "−8.5% for turning it in late (10% of your score per day late)". */
 export function latePenaltyLine(
   finalScore: number,
   latePenalty: number,
-  percent: number,
 ): { work: string; late: string } {
   return {
     work: `${oneDecimal(finalScore + latePenalty)}% for the work`,
-    late:
-      `−${oneDecimal(latePenalty)}% for turning it in late ` +
-      `(${oneDecimal(percent)}% of the score, 10% per day late)`,
+    late: `−${oneDecimal(latePenalty)}% for turning it in late (10% of your score per day late)`,
   };
 }
