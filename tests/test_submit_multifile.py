@@ -190,7 +190,7 @@ async def test_page_orientation_check(
         )
         assert r.status_code == 200, r.text
         assert r.json() == {
-            "sideways": expected, "page_count": 1,
+            "sideways": expected, "page_count": 1, "total_pages": 1,
             "sideways_pages": [1] if expected else [],
             "too_small_pages": [], "preview": None,
         }
@@ -221,6 +221,7 @@ async def test_page_orientation_check_reads_every_pdf_page(
     body = r.json()
     assert body["sideways"] is True
     assert body["page_count"] == 3
+    assert body["total_pages"] == 3
     assert body["sideways_pages"] == [2]
     assert body["too_small_pages"] == [3]
     assert body["preview"]
@@ -232,6 +233,7 @@ async def test_page_orientation_check_reads_every_pdf_page(
     )
     assert r.status_code == 200, r.text
     assert r.json()["page_count"] == 0
+    assert r.json()["total_pages"] == 0
     assert r.json()["sideways"] is False
 
 

@@ -30,6 +30,7 @@ import {
   sidewaysHint,
   sidewaysPrompt,
   stillSideways,
+  turnInCountLabel,
 } from "@/lib/page-orientation";
 import { fileToBase64, formatFileSize } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -88,8 +89,11 @@ interface StagedFile {
    *  server stores the page turned this way, so the preview here is
    *  exactly what the teacher and the AI reader get. */
   rotation: number;
-  /** Pages in the file: 1 for a photo, one per page for a PDF. */
+  /** Pages the check covered: 1 for a photo, one per page for a PDF up
+   *  to the check's cap. What `sidewaysPages` is about. */
   pageCount: number;
+  /** Every page in the file — what the teacher gets. */
+  totalPages: number;
   /** Pages (1-based, within the file) the server's free pixel check
    *  reads as sideways, as sent. While any still is, turn-in is held. */
   sidewaysPages: number[];
@@ -106,6 +110,7 @@ interface StagedFile {
 const UNCHECKED = {
   rotation: 0,
   pageCount: 1,
+  totalPages: 1,
   sidewaysPages: [] as number[],
   upright: false,
   checking: false,
@@ -158,7 +163,16 @@ export function SubmissionPanel({
 
   const reduceMotion = useReducedMotion();
   const isLate = dueAt ? new Date(dueAt) < new Date() : false;
-  const validCount = stagedFiles.filter((f) => !f.error && f.base64).length;
+  const validFiles = stagedFiles.filter((f) => !f.error && f.base64);
+  const validCount = validFiles.length;
+  // Pages, not files: one 6-page PDF is "6 pages" of work.
+  const turnInCount = turnInCountLabel(
+    validFiles.map((f) => ({
+      pdf: f.mediaType === "application/pdf",
+      totalPages: f.totalPages,
+      checked: f.checked,
+    })),
+  );
   // Files the check still reads as sideways, by their turn-in page
   // number. Turn-in waits until there are none.
   const sidewaysPages = stagedFiles
@@ -323,6 +337,7 @@ export function SubmissionPanel({
     const update: Partial<StagedFile> = res
       ? {
           pageCount: pdf ? res.pageCount : 1,
+          totalPages: pdf ? res.totalPages : 1,
           sidewaysPages: res.sidewaysPages,
           ...(res.preview ? { previewUrl: `data:image/jpeg;base64,${res.preview}` } : {}),
           ...(res.tooSmallPages.length > 0 ? { error: pdfTooSmallError(res.tooSmallPages) } : {}),
@@ -575,7 +590,7 @@ export function SubmissionPanel({
                   <p className="text-xs text-text-muted">
                     {formatFileSize(f.size)}
                     {f.mediaType === "application/pdf" ? " · PDF" : ""}
-                    {f.pageCount > 1 ? ` · ${f.pageCount} pages` : ""}
+                    {f.totalPages > 1 ? ` · ${f.totalPages} pages` : ""}
                   </p>
                   {f.error && (
                     <p className="mt-0.5 text-xs font-medium text-error">
@@ -660,7 +675,7 @@ export function SubmissionPanel({
         {stagedFiles.length > 0 && (
           <div className="flex items-center justify-between pt-0.5">
             <p className="text-xs font-medium text-text-muted">
-              {stagedFiles.length} of {MAX_FILES}
+              {stagedFiles.length} of {MAX_FILES} files
             </p>
             {validCount > 1 && (
               <p className="text-xs text-text-muted">
@@ -696,7 +711,7 @@ export function SubmissionPanel({
                 <p className="mt-1.5 text-sm leading-relaxed text-text-secondary">
                   Your teacher will see exactly{" "}
                   <span className="font-semibold text-text-primary">
-                    {validCount} {validCount === 1 ? "page" : "pages"}
+                    {turnInCount}
                   </span>{" "}
                   of work — nothing else. Once you turn it in you won&apos;t be
                   able to change it, so take one last look if you&apos;d like.

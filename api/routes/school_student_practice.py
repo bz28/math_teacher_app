@@ -594,9 +594,13 @@ class PageOrientationRequest(BaseModel):
 class PageOrientationResponse(BaseModel):
     # Any page reads as sideways. The one field older app builds read.
     sideways: bool
-    # Pages in the file: 1 for a photo, one per page for a PDF (0 when
-    # the PDF can't be read, which the checks then say nothing about).
+    # Pages the checks below cover: 1 for a photo, one per page for a
+    # PDF up to the check's cap (0 when the PDF can't be read, which the
+    # checks then say nothing about).
     page_count: int
+    # Every page in the file, which is what the teacher gets. Past the
+    # check's cap a PDF has more pages than `page_count`.
+    total_pages: int
     # 1-based pages within this file that read as sideways.
     sideways_pages: list[int]
     # PDF pages under the size floor, which turn-in will refuse. Photos
@@ -2091,6 +2095,7 @@ async def check_page_orientation(
     return PageOrientationResponse(
         sideways=sideways,
         page_count=1,
+        total_pages=1,
         sideways_pages=[1] if sideways else [],
         too_small_pages=[],
         preview=None,

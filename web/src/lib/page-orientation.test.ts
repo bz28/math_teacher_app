@@ -12,6 +12,7 @@ import {
   sidewaysHint,
   sidewaysPrompt,
   stillSideways,
+  turnInCountLabel,
   type OrientationState,
 } from "./page-orientation.ts";
 
@@ -68,9 +69,15 @@ test("hints and size errors name the pages", () => {
 test("an older API's answer (no arrays) holds nothing and never throws", () => {
   // Partial deploy: new web, old API. It answers photos with only a boolean.
   assert.deepEqual(parsePageCheck({ sideways: false }), {
-    pageCount: 1, sidewaysPages: [], tooSmallPages: [], preview: null,
+    pageCount: 1, totalPages: 1, sidewaysPages: [], tooSmallPages: [], preview: null,
   });
   assert.deepEqual(parsePageCheck({ sideways: true }).sidewaysPages, [1]);
+  // No `total_pages` yet: the checked pages are the best count there is.
+  assert.equal(parsePageCheck({ page_count: 4 }).totalPages, 4);
+  // A PDF past the check's cap: every page, not just the checked ones.
+  const capped = parsePageCheck({ page_count: 30, total_pages: 40 });
+  assert.equal(capped.pageCount, 30);
+  assert.equal(capped.totalPages, 40);
   for (const junk of [null, undefined, "x", 3, [], { sideways_pages: "2", too_small_pages: null }]) {
     const r = parsePageCheck(junk);
     assert.deepEqual(r.sidewaysPages, []);
@@ -87,7 +94,7 @@ test("a check that runs long, fails, or answers junk holds nothing", async () =>
       () => Promise.resolve({ page_count: 3, sideways_pages: [2], too_small_pages: [], preview: "P" }),
       1000,
     ),
-    { pageCount: 3, sidewaysPages: [2], tooSmallPages: [], preview: "P" },
+    { pageCount: 3, totalPages: 3, sidewaysPages: [2], tooSmallPages: [], preview: "P" },
   );
   assert.equal(CHECK_HOLD_MS, 20_000);
 });
@@ -114,4 +121,26 @@ test("each file reports how it got past the sideways hold", () => {
   // The check timed out or failed: nothing was held, whatever the state.
   assert.equal(orientationReport(upright, false), "unchecked");
   assert.equal(orientationReport(photo({ upright: true }), false), "unchecked");
+});
+
+test("turn-in counts pages across files, not files", () => {
+  const img = { pdf: false, totalPages: 1, checked: true };
+  const pdf6 = { pdf: true, totalPages: 6, checked: true };
+  assert.equal(turnInCountLabel([pdf6]), "6 pages");
+  assert.equal(turnInCountLabel([img]), "1 page");
+  assert.equal(turnInCountLabel([img, pdf6, img]), "8 pages");
+  assert.equal(turnInCountLabel([{ ...pdf6, totalPages: 1 }]), "1 page");
+  // Past the check's page cap: every page the teacher gets.
+  assert.equal(turnInCountLabel([{ ...pdf6, totalPages: 40 }]), "40 pages");
+  // A photo is one page whether or not its check answered.
+  assert.equal(turnInCountLabel([{ ...img, checked: false }, img]), "2 pages");
+});
+
+test("turn-in never guesses a PDF's pages before the check knows them", () => {
+  const unknownPdf = { pdf: true, totalPages: 1, checked: false };
+  const img = { pdf: false, totalPages: 1, checked: true };
+  assert.equal(turnInCountLabel([unknownPdf]), "1 file");
+  assert.equal(turnInCountLabel([unknownPdf, img]), "2 files");
+  // The check answered 0 pages: it couldn't open the PDF.
+  assert.equal(turnInCountLabel([{ ...unknownPdf, checked: true, totalPages: 0 }]), "1 file");
 });

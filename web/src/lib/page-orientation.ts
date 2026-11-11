@@ -26,7 +26,11 @@ export const CHECK_HOLD_MS = 20_000;
 
 /** What the upload screen takes from the page check. */
 export interface PageCheck {
+  /** Pages the check covered — what `sidewaysPages` is about. */
   pageCount: number;
+  /** Every page in the file, which the teacher gets. A PDF past the
+   *  check's page cap has more than `pageCount`. */
+  totalPages: number;
   sidewaysPages: number[];
   tooSmallPages: number[];
   preview: string | null;
@@ -35,15 +39,19 @@ export interface PageCheck {
 /** Read a page-check response defensively — every field may be missing
  *  or malformed (an older API is still live while a new client deploys),
  *  and a bad answer must hold nothing rather than crash the screen. An
- *  older API answers a photo with only `sideways: boolean`. */
+ *  older API answers a photo with only `sideways: boolean`, and sends no
+ *  `total_pages` (its count is then the checked pages). */
 export function parsePageCheck(res: unknown): PageCheck {
   const r = (res !== null && typeof res === "object" ? res : {}) as Record<string, unknown>;
   const pages = (v: unknown): number[] =>
     Array.isArray(v) ? v.filter((n): n is number => Number.isInteger(n) && n > 0) : [];
-  const count = r.page_count;
+  const count = (v: unknown, fallback: number): number =>
+    Number.isInteger(v) && (v as number) >= 0 ? (v as number) : fallback;
+  const pageCount = count(r.page_count, 1);
   const sidewaysPages = pages(r.sideways_pages);
   return {
-    pageCount: Number.isInteger(count) && (count as number) >= 0 ? (count as number) : 1,
+    pageCount,
+    totalPages: count(r.total_pages, pageCount),
     sidewaysPages:
       sidewaysPages.length === 0 && r.sideways === true && !("sideways_pages" in r)
         ? [1]
@@ -148,4 +156,33 @@ function listPages(pages: number[]): string {
   return pages.length === 2
     ? `${pages[0]} and ${pages[1]}`
     : `${pages.slice(0, -1).join(", ")} and ${pages[pages.length - 1]}`;
+}
+
+/** What the turn-in count needs from each file being turned in. */
+export interface TurnInFile {
+  pdf: boolean;
+  /** Every page in the file (`PageCheck.totalPages`). */
+  totalPages: number;
+  /** The page check answered. Until it does — and for good if it fails —
+   *  a PDF's `totalPages` is the placeholder 1, not its real count. */
+  checked: boolean;
+}
+
+/** How much work the teacher will get, for the turn-in confirmation:
+ *  the pages across every file, a photo being one ("6 pages"). While any
+ *  PDF's page count isn't known — its check hasn't answered, or it
+ *  answered 0 for a PDF it couldn't open — it counts files instead
+ *  ("2 files") rather than show a page count that may be wrong. */
+export function turnInCountLabel(files: TurnInFile[]): string {
+  if (files.some((f) => f.pdf && (!f.checked || f.totalPages < 1))) {
+    return plural(files.length, "file");
+  }
+  return plural(
+    files.reduce((n, f) => n + (f.pdf ? f.totalPages : 1), 0),
+    "page",
+  );
+}
+
+function plural(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }

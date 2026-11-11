@@ -617,7 +617,11 @@ def pdf_page_checks(data_base64: str) -> dict[str, Any]:
     One open of the PDF under `_PDF_LOCK`, rendering each page at the
     sideways check's own resolution (not the reader's 2400 px), so the
     lock grading shares is held briefly. A page that fails to render
-    still counts but is never flagged; an unreadable PDF has no pages."""
+    still counts but is never flagged; an unreadable PDF has no pages.
+
+    Only the first `_PDF_MAX_PAGES` are checked: `page_count` is how many
+    were, and every per-page answer is about those. `total_pages` is
+    every page in the PDF — the teacher and the reader get it whole."""
     import pypdfium2 as pdfium
     import pypdfium2.raw as pdfium_c
 
@@ -627,9 +631,13 @@ def pdf_page_checks(data_base64: str) -> dict[str, Any]:
         try:
             pdf = pdfium.PdfDocument(base64.b64decode(data_base64))
         except Exception:  # noqa: BLE001 — an unreadable PDF has no pages to check
-            return {"page_count": 0, "sideways_pages": [], "too_small_pages": [], "preview": None}
+            return {
+                "page_count": 0, "total_pages": 0,
+                "sideways_pages": [], "too_small_pages": [], "preview": None,
+            }
+        total_pages = len(pdf)
         try:
-            for i in range(min(len(pdf), _PDF_MAX_PAGES)):
+            for i in range(min(total_pages, _PDF_MAX_PAGES)):
                 render: Image.Image | None = None
                 edge: int | None = None
                 try:
@@ -656,6 +664,7 @@ def pdf_page_checks(data_base64: str) -> dict[str, Any]:
         preview = base64.b64encode(buf.getvalue()).decode("ascii")
     return {
         "page_count": len(renders),
+        "total_pages": total_pages,
         "sideways_pages": sideways,
         "too_small_pages": [
             i + 1 for i, edge in enumerate(edges) if edge is not None and edge < MIN_PAGE_LONG_EDGE

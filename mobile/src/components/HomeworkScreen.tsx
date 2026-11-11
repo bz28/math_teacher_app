@@ -31,6 +31,7 @@ import {
   sidewaysHint,
   sidewaysPrompt,
   stillSideways,
+  turnInCountLabel,
 } from "../utils/pageOrientation";
 import { scoreColor } from "../utils/scoreColor";
 import { NEXT_STEP_COPY } from "../utils/nextStep";
@@ -60,8 +61,11 @@ interface StagedFile {
   /** Clockwise quarter turns the student applied (0/90/180/270). The
    *  server stores the page turned this way. */
   rotation: number;
-  /** Pages in the file: 1 for a photo, one per page for a PDF. */
+  /** Pages the check covered: 1 for a photo, one per page for a PDF up
+   *  to the check's cap. What `sidewaysPages` is about. */
   pageCount: number;
+  /** Every page in the file — what the teacher gets. */
+  totalPages: number;
   /** Pages (1-based, within the file) the server's free pixel check reads
    *  as sideways, as sent. While any still is, turn-in is held. */
   sidewaysPages: number[];
@@ -138,7 +142,7 @@ export function HomeworkScreen({
     const id = newId();
     setFiles((f) => [
       ...f,
-      { id, base64, kind, name, rotation: 0, pageCount: 1, sidewaysPages: [], upright: false, checking: true, checked: false },
+      { id, base64, kind, name, rotation: 0, pageCount: 1, totalPages: 1, sidewaysPages: [], upright: false, checking: true, checked: false },
     ]);
     void checkPages(id, base64, kind);
   };
@@ -164,6 +168,7 @@ export function HomeworkScreen({
     const update: Partial<StagedFile> = res
       ? {
           pageCount: kind === "pdf" ? res.pageCount : 1,
+          totalPages: kind === "pdf" ? res.totalPages : 1,
           sidewaysPages: res.sidewaysPages,
           preview: res.preview ?? undefined,
         }
@@ -189,6 +194,10 @@ export function HomeworkScreen({
   const sidewaysPages = files.flatMap((f, i) => (stillSideways(f) ? [i + 1] : []));
   const checking = files.some((f) => f.checking);
   const blocked = checking || sidewaysPages.length > 0;
+  // Pages, not files: one 6-page PDF is "6 pages" of work.
+  const turnInCount = turnInCountLabel(
+    files.map((f) => ({ pdf: f.kind === "pdf", totalPages: f.totalPages, checked: f.checked })),
+  );
 
   const addPhoto = async () => {
     const base64 = await captureWorkImage();
@@ -209,7 +218,7 @@ export function HomeworkScreen({
 
   const chooseAdd = () => {
     if (atCap || submitting) return;
-    Alert.alert("Add your work", "Photos or a PDF — up to 10 pages.", [
+    Alert.alert("Add your work", `Photos or a PDF — up to ${MAX_FILES} files.`, [
       { text: "Take a photo", onPress: addPhoto },
       { text: "Choose from library", onPress: addFromLibrary },
       { text: "Attach a PDF", onPress: addPdf },
@@ -307,7 +316,7 @@ export function HomeworkScreen({
             <View style={styles.submitBlock}>
               <Text style={styles.submitLabel}>Turn in your work</Text>
               <Text style={styles.submitHint}>
-                Add clear photos or a PDF of your completed work — up to {MAX_FILES} pages.
+                Add clear photos or a PDF of your completed work — up to {MAX_FILES} files.
               </Text>
               <View style={styles.tipRow}>
                 <Ionicons name="refresh" size={14} color={colors.primary} />
@@ -412,7 +421,7 @@ export function HomeworkScreen({
                   disabled={submitting}
                 />
               )}
-              {atCap && <Text style={styles.capHint}>That's the max of {MAX_FILES} pages.</Text>}
+              {atCap && <Text style={styles.capHint}>That's the max of {MAX_FILES} files.</Text>}
 
               {submitError && (
                 <View style={styles.errorRow}>
@@ -429,8 +438,7 @@ export function HomeworkScreen({
                       <Text style={styles.confirmTitle}>Ready to turn it in?</Text>
                     </View>
                     <Text style={styles.confirmBody}>
-                      Your teacher will see exactly {files.length}{" "}
-                      {files.length === 1 ? "page" : "pages"} — nothing else. Once you turn it
+                      Your teacher will see exactly {turnInCount} — nothing else. Once you turn it
                       in you won't be able to change it, so take one last look if you'd like.
                     </Text>
                     {sidewaysPages.length > 0 && (
@@ -457,7 +465,7 @@ export function HomeworkScreen({
                       </Text>
                     )}
                     <Button
-                      label={`Review & turn in ${files.length} ${files.length === 1 ? "page" : "pages"}`}
+                      label={`Review & turn in ${turnInCount}`}
                       onPress={() => setConfirming(true)}
                       disabled={blocked}
                     />
