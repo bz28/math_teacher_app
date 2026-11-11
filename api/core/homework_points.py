@@ -21,7 +21,9 @@ from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
+from api.core.late_policy import effective_due_dates, set_final_score, submission_penalty
 from api.models.assignment import Assignment, Submission, SubmissionGrade
 from api.services.bank import problem_ids_in_content
 
@@ -75,25 +77,29 @@ def weighted_percent(
 
 async def rescore_assignment(db: AsyncSession, assignment: Assignment) -> None:
     """Re-weigh every saved grade on `assignment` after its points
-    changed. Per-problem grades don't move; `final_score` and the AI's
-    `ai_score` are re-added from them. A score that moved gets a fresh
-    `graded_at`, so a published grade reads as changed-since-publishing
-    and reaches the student only when the teacher republishes."""
+    changed. Per-problem grades don't move; `final_score` (less any late
+    penalty, late_policy) and the AI's `ai_score` are re-added from them.
+    A score that moved gets a fresh `graded_at`, so a published grade
+    reads as changed-since-publishing and reaches the student only when
+    the teacher republishes."""
     points = assignment_points(assignment)
-    grades = (await db.execute(
-        select(SubmissionGrade)
+    rows = (await db.execute(
+        select(SubmissionGrade, Submission)
         .join(Submission, Submission.id == SubmissionGrade.submission_id)
+        .options(load_only(Submission.id, Submission.student_id, Submission.submitted_at))
         .where(Submission.assignment_id == assignment.id)
         .with_for_update(of=SubmissionGrade)
-    )).scalars().all()
+    )).all()
+    due = await effective_due_dates(db, assignment, {sub.student_id for _, sub in rows})
     now = datetime.now(UTC)
-    for g in grades:
+    for g, sub in rows:
         if g.breakdown:
-            score = weighted_percent(((e["problem_id"], e["percent"]) for e in g.breakdown), points)
-            if (score is None) != (g.final_score is None) or (
-                score is not None and g.final_score is not None and abs(score - g.final_score) > 1e-6
+            before = g.final_score
+            raw = weighted_percent(((e["problem_id"], e["percent"]) for e in g.breakdown), points)
+            set_final_score(g, raw, submission_penalty(assignment, sub, due[sub.student_id]))
+            if (before is None) != (g.final_score is None) or (
+                before is not None and g.final_score is not None and abs(before - g.final_score) > 1e-6
             ):
-                g.final_score = score
                 g.graded_at = now
         ai_percents = (g.ai_breakdown or {}).get("problem_percents")
         if ai_percents:

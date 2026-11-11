@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.class_rubric import effective_rubric
 from api.core.homework_points import assignment_points, weighted_percent
+from api.core.late_policy import late_penalty_for, set_final_score
 from api.core.llm_client import (
     MODEL_OPUS,
     LLMMode,
@@ -1353,7 +1354,7 @@ async def run_ai_grading_for_submission(
     - ai_score: points earned over points possible
     - rubric_snapshot: the rubric this run applied, for drift detection
     - breakdown: actionable grades (same shape the teacher writes to)
-    - final_score: same as ai_score until teacher overrides
+    - final_score: ai_score less any late penalty, until teacher overrides
 
     Default (pipeline path): if a teacher has already manually graded
     (reviewed_by set), only ai_breakdown/ai_score/rubric_snapshot are
@@ -1536,7 +1537,12 @@ async def run_ai_grading_for_submission(
     if force or (grade.reviewed_by is None and grade.final_score is None):
         grade.breakdown = breakdown
         grade.graph_checks = graph_checks
-        grade.final_score = ai_score
+        # The AI's score, less the late policy's penalty (late_policy).
+        # Re-read the due date and policy under the row lock: `assignment`
+        # was loaded before the model call, and a change committed since
+        # re-priced every graded row but skipped this still-ungraded one.
+        await db.refresh(assignment, attribute_names=["due_at", "late_policy"])
+        set_final_score(grade, ai_score, await late_penalty_for(db, assignment, sub))
         grade.graded_at = datetime.now(UTC)
         # A real grade now exists — clear any stale skip marker (e.g. a
         # teacher-forced regrade of a previously skipped-unreadable or

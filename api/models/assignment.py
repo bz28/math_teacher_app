@@ -225,6 +225,19 @@ class SubmissionGrade(Base):
     # after publish stay as drafts until the teacher republishes.
     # `graded_at > grade_published_at` flags the dirty state.
     published_final_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Percentage points the late policy took off `final_score` (see
+    # api/core/late_policy.py): the score before it is final_score +
+    # late_penalty. 0 when on time, waived, or the policy takes nothing.
+    # `published_late_penalty` is its publish-time snapshot, beside
+    # published_final_score.
+    late_penalty: Mapped[float] = mapped_column(Float, nullable=False, default=0.0, server_default="0")
+    published_late_penalty: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.0, server_default="0",
+    )
+    # The teacher waived the late penalty for this student's turn-in.
+    late_penalty_waived: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false",
+    )
     published_breakdown: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
     published_teacher_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     # Frozen copy of the Assignment.rubric the AI grader actually applied
