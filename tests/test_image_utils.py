@@ -661,7 +661,8 @@ class TestPdfPagesAsImages:
         buf = io.BytesIO()
         photo.save(buf)
         pages = [_image(p) for p in pdf_pages_as_images(_b64(buf.getvalue()))]
-        assert pages[0].height < 2100 and max(pages[1].size) == 2400
+        # pdfium truncates scale × points, so a page can land a pixel short.
+        assert pages[0].height < 2100 and abs(max(pages[1].size) - 2400) <= 2
 
 
 def raw_pdf(content: str, *, pages_node: str = "", page: str = "", extra: tuple[str, ...] = ()) -> str:
