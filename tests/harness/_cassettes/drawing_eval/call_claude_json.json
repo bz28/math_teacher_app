@@ -1,109 +1,45 @@
 {
-  "14175b87eec65c2ad4f1f6f0454f5868": {
-    "meta": {
-      "mode": "ai_grading",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 2x - 1 \u2014 Labeled '1.', student wrote ",
-      "recorded_at": 1793648629.970484
-    },
-    "response": {
-      "grades": [
-        {
-          "confidence": 0.75,
-          "deductions": [
-            {
-              "points_off": 10,
-              "reason": "Required drawing present but incomplete \u2014 intersection point not labeled on the graph (Partial credit: present but incomplete drawing)",
-              "rule_id": null,
-              "step_ref": null
-            }
-          ],
-          "percent": 90,
-          "problem_position": 1,
-          "reasoning": "The student's final answer (2, 3) matches the answer key exactly. A drawing is required, and the student did graph both lines (one with positive slope, one with negative slope) that intersect in the first quadrant \u2014 consistent with the correct solution. However, the intersection point is not labeled on the graph, which is a minor incompleteness in the required drawing (the rubric notes 'the intersection not marked' as a smaller deduction than a missing drawing). The two lines are correctly plotted and the correct ordered pair is stated, so this is nearly full credit with a small deduction for the unlabeled intersection.",
-          "score_status": "partial",
-          "student_answer": "(2, 3)",
-          "student_feedback": "Great job graphing both lines correctly and identifying the intersection as (2, 3)! Next time, mark and label the intersection point directly on your graph to make your solution complete."
-        }
-      ]
-    }
-  },
-  "1901e2eed2616fca55d553ee5da7012c": {
-    "meta": {
-      "mode": "ai_grading",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 2x - 1 \u2014 Labeled '1.', student wrote ",
-      "recorded_at": 1793648621.917829
-    },
-    "response": {
-      "grades": [
-        {
-          "confidence": 0.75,
-          "deductions": [
-            {
-              "points_off": 10,
-              "reason": "Required drawing incomplete \u2014 intersection point not labeled on the graph",
-              "rule_id": null,
-              "step_ref": null
-            },
-            {
-              "points_off": 5,
-              "reason": "Required drawing incomplete \u2014 axes lack numerical labels, making the graph unverifiable",
-              "rule_id": null,
-              "step_ref": null
-            }
-          ],
-          "percent": 85,
-          "problem_position": 1,
-          "reasoning": "The student's final answer (2, 3) matches the answer key exactly. A graph is required, and the student drew two lines intersecting in the first quadrant consistent with y = 2x \u2212 1 and y = \u2212x + 5. However, the intersection point is not labeled on the graph, which is a minor incompleteness in the required drawing (the rubric treats a present-but-incomplete drawing as a smaller deduction than a missing one). The axes also lack numerical labels, making the graph harder to verify precisely. Given these minor drawing deficiencies, a small deduction is warranted rather than full credit.",
-          "score_status": "partial",
-          "student_answer": "(2, 3)",
-          "student_feedback": "Great job finding the correct answer (2, 3) and drawing both lines! To earn full credit, make sure to label the axes with numbers and mark the intersection point on your graph so it's clear where the solution is."
-        }
-      ]
-    }
-  },
-  "78f05404f75ec9175521db72988cb161": {
+  "0d34481b121e091a948da9418bd2b6c0": {
     "meta": {
       "mode": "ai_grading",
       "model": "claude-sonnet-4-6",
       "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 2x - 1 \u2014 Labeled '1.', wrote the firs",
-      "recorded_at": 1793648599.223395
+      "recorded_at": 1794418389.328716
     },
     "response": {
       "grades": [
         {
-          "confidence": 0.75,
+          "confidence": 0.82,
           "deductions": [
             {
-              "points_off": 35,
-              "reason": "Required method missing \u2014 problem requires solving by graphing, but student solved algebraically (substitution). Partial credit: right answer, required method not used.",
+              "points_off": 30,
+              "reason": "Required graphing method not used \u2014 student solved algebraically (substitution) instead of graphing both lines.",
               "rule_id": null,
-              "step_ref": 3
+              "step_ref": null
             },
             {
-              "points_off": 15,
-              "reason": "Required drawing incomplete \u2014 only one of two lines plotted; no second line, no marked intersection point, no labels on the graph.",
+              "points_off": 20,
+              "reason": "Required drawing incomplete \u2014 only one of two lines plotted; second line and intersection point both missing from the graph.",
               "rule_id": null,
               "step_ref": null
             }
           ],
           "percent": 50,
           "problem_position": 1,
-          "reasoning": "The student's final answer (2, 3) is correct and matches the answer key. However, the problem explicitly requires solving by graphing, and the drawing shows only one of the two lines plotted \u2014 the second line, the intersection point, and any labels are all missing. The student actually solved the system algebraically (substitution), not graphically. Per the rubric, a correct answer reached by a different method than required is 'right answer, required method missing' partial credit (~50%), and the drawing is present but substantially incomplete (only one line of two, no intersection marked), which is a smaller deduction than a fully missing drawing. Combining the wrong method (algebraic instead of graphical) with an incomplete graph, ~50% is appropriate.",
+          "reasoning": "The student's final answer (2, 3) matches the key, but the problem requires solving by graphing (drawing required). The student solved algebraically (substitution) rather than graphically. The drawing is incomplete: only one of the two required lines is plotted, the second line is missing, and the intersection point is not marked. Under the 'right answer, required method missing/incomplete' partial-credit anchor, the correct answer with a substantially incomplete drawing (one line missing, no intersection marked) warrants around 50-75%; given that one line is present but the second is entirely absent and the intersection is unmarked, ~50% is appropriate.",
           "score_status": "partial",
           "student_answer": "$(2, 3)$",
-          "student_feedback": "Your answer of (2, 3) is correct! However, this problem asks you to solve by graphing \u2014 you need to plot both lines on the coordinate plane, mark where they intersect, and identify that point as your solution. You only drew one line and solved algebraically instead, so make sure to graph both equations and show the intersection next time."
+          "student_feedback": "You found the correct answer, (2, 3), but this problem asks you to solve by graphing \u2014 that means both lines need to be drawn on the coordinate plane and the intersection point marked. Only one line appears on your graph, and the solution point isn't labeled. Next time, plot both equations and circle or label where they cross to earn full credit."
         }
       ]
     }
   },
-  "87800f7ff31d2a9ed7110a323159b947": {
+  "55461a88bddac064c809e9ec43255766": {
     "meta": {
       "mode": "ai_grading",
       "model": "claude-sonnet-4-6",
       "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: 2x - 3 > 5 \u2014 Wrote the inequality 2x - 3 ",
-      "recorded_at": 1793648637.577131
+      "recorded_at": 1794418414.975053
     },
     "response": {
       "grades": [
@@ -120,37 +56,95 @@
       ]
     }
   },
-  "fd758e0ac0dd49c3888d385fede748a4": {
+  "57c3c0385da9b9b1a215aad9b6858b25": {
     "meta": {
       "mode": "ai_grading",
       "model": "claude-sonnet-4-6",
-      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 2x - 1 \u2014 Labeled '1.', wrote the firs",
-      "recorded_at": 1793648611.641977
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 2x - 1 \u2014 Labeled '1.', student wrote ",
+      "recorded_at": 1794418408.177865
     },
     "response": {
       "grades": [
         {
-          "confidence": 0.82,
+          "confidence": 0.8,
           "deductions": [
             {
-              "points_off": 35,
-              "reason": "Required graphing method not used \u2014 student solved algebraically (substitution) instead of by graphing; the problem explicitly requires solving by graphing.",
-              "rule_id": null,
-              "step_ref": 3
-            },
-            {
-              "points_off": 15,
-              "reason": "Required drawing incomplete \u2014 only one of two lines plotted, second line missing, and no intersection point marked on the graph.",
+              "points_off": 10,
+              "reason": "Required drawing present but incomplete \u2014 intersection point not labeled on the graph (rubric: present but incomplete drawing, smaller deduction).",
               "rule_id": null,
               "step_ref": null
             }
           ],
-          "percent": 50,
+          "percent": 90,
           "problem_position": 1,
-          "reasoning": "The student's final answer (2, 3) matches the answer key exactly. However, the problem explicitly requires solving by graphing, and the drawing is substantially incomplete: only one of the two required lines is plotted, the second line is missing entirely, and no intersection point is marked. Per the 'required drawing present but incomplete' partial-credit anchor, this is a meaningful deduction \u2014 the graph is missing the second line and the marked solution, which are the core graphical elements. The student instead solved algebraically (substitution), which is the wrong method for this problem. Per the rubric, 'right answer, required method missing' is partial credit (~50%), and the drawing being present but incomplete (one of two lines, no intersection marked) is a smaller deduction than fully missing \u2014 but combined with the algebraic solution standing in for the graphing method, this sits around 50%.",
+          "reasoning": "The student's final answer (2, 3) matches the answer key exactly. A drawing is required; the student drew two lines on a coordinate grid that intersect in the first quadrant, consistent with the correct solution. However, the intersection point is not labeled on the graph, which is a minor incompleteness in the required drawing (the rubric notes 'the intersection not marked' as a smaller deduction than a missing drawing). The two lines are correctly plotted (one rising, one falling), satisfying most of the drawing requirement.",
           "score_status": "partial",
           "student_answer": "$(2, 3)$",
-          "student_feedback": "You found the correct answer (2, 3), but this problem asks you to solve by graphing \u2014 that means both lines need to be drawn on the coordinate plane and the intersection point marked as your solution. Your graph only shows one line and no intersection, and you solved algebraically instead. Make sure to graph both equations and identify where they cross."
+          "student_feedback": "Great job finding the correct solution (2, 3) and graphing both lines! Next time, be sure to mark and label the intersection point on your graph \u2014 that's the key part of solving by graphing."
+        }
+      ]
+    }
+  },
+  "bb18d8e9082d55e95d617de8bb76e0f1": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 2x - 1 \u2014 Labeled '1.', student wrote ",
+      "recorded_at": 1794418400.7063942
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.75,
+          "deductions": [
+            {
+              "points_off": 10,
+              "reason": "Axes have no numerical labels/scale \u2014 required drawing incomplete",
+              "rule_id": null,
+              "step_ref": null
+            },
+            {
+              "points_off": 10,
+              "reason": "Intersection point not marked or labeled on the graph \u2014 required drawing incomplete",
+              "rule_id": null,
+              "step_ref": null
+            }
+          ],
+          "percent": 80,
+          "problem_position": 1,
+          "reasoning": "The student correctly identifies the solution (2, 3), which matches the answer key. A graph is present with two lines plotted that intersect in the first quadrant, consistent with the correct solution. However, the intersection point is not labeled on the graph, and the axes have no numbers/scale \u2014 these are minor drawing incompleteness issues. The required drawing is present but incomplete (unlabeled axes and unmarked intersection), so full credit is not quite warranted; this falls under 'required drawing present but incomplete' partial credit (~75-85%). The final answer is correct and the graph shows both lines crossing in the right region, but the missing axis labels and unmarked intersection point are notable omissions.",
+          "score_status": "partial",
+          "student_answer": "$(2, 3)$",
+          "student_feedback": "Your final answer is correct and you did graph both lines! To earn full credit, make sure to label the axes with numbers (a scale) and mark the intersection point on the graph \u2014 the problem asks you to solve by graphing, so showing that labeled intersection is key."
+        }
+      ]
+    }
+  },
+  "bdbc8baee7de33888f286cde3e0793ee": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 2x - 1 \u2014 Labeled '1.', wrote the firs",
+      "recorded_at": 1794418378.596073
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.8,
+          "deductions": [
+            {
+              "points_off": 25,
+              "reason": "Required drawing incomplete \u2014 only one of two lines plotted, no second line drawn, and intersection point not marked; problem requires solving by graphing (Partial credit: present but incomplete drawing/method).",
+              "rule_id": null,
+              "step_ref": null
+            }
+          ],
+          "percent": 75,
+          "problem_position": 1,
+          "reasoning": "The student's final answer (2, 3) matches the key. However, this problem requires solving by graphing (drawing required: yes). The student solved algebraically (substitution) and the graph is incomplete \u2014 only one of the two required lines is drawn, the second line is missing, and the intersection point is not marked. Per the rubric, a required drawing that is present but incomplete is a smaller deduction than a missing one; here the drawing is substantially incomplete (one of two lines, no intersection marked), which is closer to 'present but incomplete' (~75%) than fully missing (~50%). The algebraic method also substitutes for the graphing method, which was required \u2014 'right answer, required method missing/incomplete' partial credit applies.",
+          "score_status": "partial",
+          "student_answer": "$(2, 3)$",
+          "student_feedback": "Your algebra is correct and you found the right answer, (2, 3)! However, this problem asks you to solve by graphing \u2014 you need to plot both lines on the coordinate plane and mark the intersection point as your solution. Only one line appears on your graph, and the intersection isn't labeled, so make sure to draw both lines and identify where they cross."
         }
       ]
     }
