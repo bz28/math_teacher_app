@@ -2228,8 +2228,9 @@ export interface paths {
         /**
          * Submit Homework
          * @description Insert a submission for this student/HW. One-shot — resubmission
-         *     is not allowed in v1; a second call returns 409. Soft-locks late
-         *     submissions (sets is_late=true, doesn't reject).
+         *     is not allowed in v1; a second call returns 409. A late turn-in is
+         *     accepted and marked late, unless the homework's late policy closes it
+         *     at the due date (`no_credit`), which refuses it with a 403.
          */
         post: operations["submit_homework_v1_school_student_homework__assignment_id__submit_post"];
         delete?: never;
@@ -4201,6 +4202,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/teacher/submissions/{submission_id}/late-penalty": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Late Penalty Waived
+         * @description Waive (or restore) the late penalty on one student's turn-in. The
+         *     score follows at once; like any edit, a published grade reaches the
+         *     student when the teacher republishes. The review stamp is left alone:
+         *     waiving is her own call on a grade, not a reason to approve it again.
+         */
+        post: operations["set_late_penalty_waived_v1_teacher_submissions__submission_id__late_penalty_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teacher/submissions/{submission_id}/mark-reviewed": {
         parameters: {
             query?: never;
@@ -4662,8 +4686,9 @@ export interface components {
             /**
              * Late Policy
              * @default none
+             * @enum {string}
              */
-            late_policy: string;
+            late_policy: "none" | "penalty_per_day" | "no_credit";
             rubric?: components["schemas"]["AssignmentRubric"] | null;
             /** Source Type */
             source_type?: string | null;
@@ -5501,6 +5526,11 @@ export interface components {
             /** Join Code */
             join_code: string;
         };
+        /** LatePenaltyRequest */
+        LatePenaltyRequest: {
+            /** Waived */
+            waived: boolean;
+        };
         /** LearnThisRequest */
         LearnThisRequest: {
             /** Assignment Id */
@@ -6057,6 +6087,8 @@ export interface components {
         };
         /** StudentDashboardResponse */
         StudentDashboardResponse: {
+            /** Closed */
+            closed: components["schemas"]["DashboardAssignment"][];
             /** Due This Week */
             due_this_week: components["schemas"]["DashboardAssignment"][];
             /** First Name */
@@ -6079,6 +6111,8 @@ export interface components {
             assignment_id: string;
             /** Breakdown */
             breakdown?: components["schemas"]["StudentProblemFeedback"][] | null;
+            /** Closed */
+            closed: boolean;
             /** Course Id */
             course_id: string;
             /** Course Name */
@@ -6093,6 +6127,13 @@ export interface components {
             final_score?: number | null;
             /** Grade Published At */
             grade_published_at?: string | null;
+            /** Late Penalty */
+            late_penalty: number;
+            /**
+             * Late Policy
+             * @enum {string}
+             */
+            late_policy: "none" | "penalty_per_day" | "no_credit";
             /** Next Step */
             next_step?: ("confirm_reading" | "finish_check") | null;
             /** Problems */
@@ -6139,6 +6180,8 @@ export interface components {
         StudentHomeworkSummary: {
             /** Assignment Id */
             assignment_id: string;
+            /** Closed */
+            closed: boolean;
             /** Due At */
             due_at: string | null;
             /** Next Step */
@@ -6529,10 +6572,17 @@ export interface components {
                 [key: string]: unknown;
             }[] | null;
             /**
+             * Days Late
+             * @default 0
+             */
+            days_late: number;
+            /**
              * Drawings Inventoried
              * @default false
              */
             drawings_inventoried: boolean;
+            /** Due At */
+            due_at?: string | null;
             /** Extraction Confidence */
             extraction_confidence?: number | null;
             /** Extraction Confirmed At */
@@ -6559,6 +6609,16 @@ export interface components {
             /** Is Late */
             is_late: boolean;
             /**
+             * Late Penalty
+             * @default 0
+             */
+            late_penalty: number;
+            /**
+             * Late Penalty Waived
+             * @default false
+             */
+            late_penalty_waived: boolean;
+            /**
              * Other Drawings
              * @default []
              */
@@ -6568,6 +6628,11 @@ export interface components {
              * @default []
              */
             other_work: components["schemas"]["TeacherSubmissionStep"][];
+            /**
+             * Policy Late Penalty
+             * @default 0
+             */
+            policy_late_penalty: number;
             /** Problems */
             problems: components["schemas"]["TeacherSubmissionDetailProblem"][];
             retake_original?: components["schemas"]["TeacherRetakeOriginal"] | null;
@@ -6859,7 +6924,7 @@ export interface components {
             /** Due At */
             due_at?: string | null;
             /** Late Policy */
-            late_policy?: string | null;
+            late_policy?: ("none" | "penalty_per_day" | "no_credit") | null;
             /** Problem Points */
             problem_points?: {
                 [key: string]: number;
@@ -14299,6 +14364,43 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["GraphItemVerdictRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_late_penalty_waived_v1_teacher_submissions__submission_id__late_penalty_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LatePenaltyRequest"];
             };
         };
         responses: {

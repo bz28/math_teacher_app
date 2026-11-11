@@ -393,6 +393,7 @@ async def student_submissions(
             Course.subject,
             SubmissionGrade.ai_score,
             SubmissionGrade.final_score,
+            SubmissionGrade.late_penalty,
             SubmissionGrade.ai_grading_status,
             SubmissionGrade.reviewed_at,
             IntegrityCheckSubmission.status.label("integrity_status"),
@@ -462,10 +463,12 @@ async def student_submissions(
         # teacher graded by hand with no AI attempt has a final_score
         # and no ai_score, and calling that a disagreement would invent
         # a defect out of the AI never having run.
+        # Compared before any late penalty: lateness is the policy's
+        # call, not a disagreement with the AI's grade.
         overridden = (
             r.ai_score is not None
             and r.final_score is not None
-            and r.ai_score != r.final_score
+            and r.ai_score != r.final_score + (r.late_penalty or 0.0)
         )
         return {
             "id": str(r.id),

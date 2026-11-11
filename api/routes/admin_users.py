@@ -1185,7 +1185,9 @@ async def teacher_submissions(
         ).where(
             SubmissionGrade.final_score.isnot(None),
             SubmissionGrade.ai_score.isnot(None),
-            SubmissionGrade.final_score != SubmissionGrade.ai_score,
+            # The teacher's score before any late penalty: lateness is the
+            # policy's call, not a disagreement with the AI's grade.
+            SubmissionGrade.final_score + SubmissionGrade.late_penalty != SubmissionGrade.ai_score,
         )
 
     total = (await db.execute(
@@ -1221,6 +1223,7 @@ async def teacher_submissions(
             Assignment.type.label("assignment_type"),
             SubmissionGrade.ai_score,
             SubmissionGrade.final_score,
+            SubmissionGrade.late_penalty,
             SubmissionGrade.ai_grading_status,
             SubmissionGrade.reviewed_at,
             SubmissionGrade.grade_published_at,
@@ -1248,10 +1251,14 @@ async def teacher_submissions(
         # "Overridden" needs BOTH scores: a submission the teacher graded
         # by hand with no AI attempt has a final_score and no ai_score,
         # and calling that a disagreement would invent a defect.
+        # Compared before any late penalty, as in the filter above.
+        teacher_score = (
+            r.final_score + (r.late_penalty or 0.0) if r.final_score is not None else None
+        )
         overridden = (
             r.ai_score is not None
-            and r.final_score is not None
-            and r.ai_score != r.final_score
+            and teacher_score is not None
+            and r.ai_score != teacher_score
         )
         return {
             "id": str(r.id),
@@ -1265,7 +1272,8 @@ async def teacher_submissions(
             "final_score": r.final_score,
             "overridden": overridden,
             "score_delta": (
-                round(r.final_score - r.ai_score, 2) if overridden else None
+                round(teacher_score - r.ai_score, 2)
+                if overridden and teacher_score is not None and r.ai_score is not None else None
             ),
             "ai_grading_status": r.ai_grading_status,
             "reviewed_at": r.reviewed_at.isoformat() if r.reviewed_at else None,
