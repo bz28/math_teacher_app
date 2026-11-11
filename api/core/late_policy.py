@@ -21,7 +21,8 @@ writer of `SubmissionGrade.final_score` goes through. `final_score` is the
 score after the penalty — what the gradebook, averages, exports and the
 student see — and `late_penalty` holds the points it took off (85 × 20% =
 17), so the score before it is always `final_score + late_penalty`. The
-policy's rate, as a percent of the score, is `penalty_percent`. Publishing snapshots both.
+policy's rate, as a percent of the score, is `penalty_percent`.
+Publishing snapshots both.
 The teacher can waive it per student (`late_penalty_waived`); the penalty
 is a visible line on the review page she approves, never a silent cut.
 """
