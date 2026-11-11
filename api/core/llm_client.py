@@ -620,7 +620,9 @@ async def call_claude_json(
     tool's input schema becomes the response format, and the answer comes
     back as schema-valid JSON text. It takes neither `temperature` nor
     `thinking_budget` — passing either raises ValueError — and its thinking
-    tokens count toward `max_tokens`.
+    tokens count toward `max_tokens`. With no temperature 0 its truncations
+    are retried like any sampled call's, so set `max_retries` to what one
+    more truncated answer is worth.
 
     Raises:
         OutputTruncatedError: the response stopped at max_tokens. Not

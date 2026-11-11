@@ -820,12 +820,13 @@ async def grade_submission_with_ai(
 def _skipped_worked_problems(
     result: dict[str, Any], extraction: dict[str, Any], problems: list[dict[str, Any]],
 ) -> list[int]:
-    """Positions the student wrote or drew something for that came back
-    with no grade. A problem with no work is legitimately left out — it
-    is reconciled to a zero downstream."""
+    """Positions the grader was shown work for that came back with no
+    grade. A problem with no work is legitimately left out — it is
+    reconciled to a zero downstream."""
     graded = {
         g.get("problem_position") for g in result.get("grades") or [] if isinstance(g, dict)
     }
+
     def written(key: str, *text: str) -> set[Any]:
         return {
             item.get("problem_position")
@@ -833,15 +834,19 @@ def _skipped_worked_problems(
             if isinstance(item, dict) and any(str(item.get(f) or "").strip() for f in text)
         }
 
-    worked = written("steps", "latex", "plain_english") | written(
-        "final_answers", "answer_latex", "answer_plain",
-    ) | {
+    drawn = {
         # A visual_work entry can record that nothing was drawn.
         v.get("problem_position") for v in extraction.get("visual_work") or []
         if isinstance(v, dict) and v.get("present", True) is not False
     }
+    worked = written("steps", "latex", "plain_english") | written(
+        "final_answers", "answer_latex", "answer_plain",
+    )
     return sorted(
-        p["position"] for p in problems if p["position"] in worked - graded
+        p["position"] for p in problems
+        if p["position"] not in graded
+        # The grader sees a drawing only where the question requires one.
+        and (p["position"] in worked or (p.get("requires_drawing") and p["position"] in drawn))
     )
 
 

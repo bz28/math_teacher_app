@@ -324,6 +324,27 @@ async def test_grader_does_not_reask_for_a_problem_with_no_work(
     assert len(calls) == 1
 
 
+async def test_a_drawing_counts_as_work_only_where_one_is_required(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The grader is shown drawings only on requires_drawing problems, so a
+    # doodle on problem 2 can't be graded and mustn't trigger a re-ask.
+    extraction = _work(1)
+    extraction["visual_work"] = [
+        {"problem_position": 2, "present": True}, {"problem_position": 3, "present": True},
+    ]
+    problems = [*_PROBLEMS[:2], {**_PROBLEMS[2], "requires_drawing": True}]
+    fake, calls = _grader([1, 2], [1, 2, 3])
+    monkeypatch.setattr(grading_ai, "call_claude_json", fake)
+    await grading_ai.grade_submission_with_ai(extraction, problems, None)
+    assert len(calls) == 2  # problem 3's required drawing went ungraded
+
+    fake, calls = _grader([1])
+    monkeypatch.setattr(grading_ai, "call_claude_json", fake)
+    await grading_ai.grade_submission_with_ai(extraction, _PROBLEMS, None)
+    assert len(calls) == 1  # no problem requires a drawing
+
+
 async def test_grader_reasks_at_most_once(monkeypatch: pytest.MonkeyPatch) -> None:
     fake, calls = _grader([1], [1, 2])
     monkeypatch.setattr(grading_ai, "call_claude_json", fake)

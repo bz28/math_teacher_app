@@ -81,8 +81,9 @@ MAX_ATTEMPTS = 3
 # `started_at`), not when its batch was claimed, so this must exceed ONE
 # grade's worst case: a stalled API costs the grading call 3 SDK attempts
 # × its 300 s timeout ≈ 15 min (grading_ai._GRADING_TIMEOUT_S), plus SDK
-# backoff. 20 clears that and still recovers quickly after a restart.
-STALE_RUNNING_MINUTES = 20
+# backoff — and a grade can make that call twice, when the first answer
+# skips a problem the student worked on. 35 clears both.
+STALE_RUNNING_MINUTES = 35
 
 
 class GradingJob(Base):
