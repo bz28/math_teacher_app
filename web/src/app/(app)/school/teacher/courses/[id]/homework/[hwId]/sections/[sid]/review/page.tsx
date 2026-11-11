@@ -1700,7 +1700,7 @@ function HomeworkSectionReview({
         final_score: res.final_score,
         grade_dirty: res.grade_dirty,
         days_late: res.days_late,
-        policy_late_penalty: res.policy_late_penalty,
+        late_penalty_percent: res.late_penalty_percent,
         late_penalty: res.late_penalty,
         late_penalty_waived: res.late_penalty_waived,
       };
@@ -3232,8 +3232,8 @@ function StudentRow({
         {sub?.is_late && (
           <span className="ml-1 shrink-0 font-semibold text-[color:var(--color-error)]">
             · {lateLabel(sub.days_late)}
-            {sub.late_penalty > 0 && ` −${formatPenalty(sub.late_penalty)}%`}
-            {sub.late_penalty_waived && sub.policy_late_penalty > 0 && (
+            {sub.late_penalty > 0 && ` −${formatPercent(sub.late_penalty_percent)}%`}
+            {sub.late_penalty_waived && sub.late_penalty_percent > 0 && (
               <span className="font-normal text-text-muted"> (waived)</span>
             )}
           </span>
@@ -3394,15 +3394,17 @@ function lateLabel(days: number): string {
   return `${days} ${days === 1 ? "day" : "days"} late`;
 }
 
-/** Penalty points for display: whole numbers as-is, else one decimal. */
-function formatPenalty(points: number): string {
-  return Number.isInteger(points) ? String(points) : points.toFixed(1);
+/** A percent for the penalty line: whole numbers as-is, else one
+ *  decimal — 10% off 85% is 76.5%, and rounding it would hide the cut. */
+function formatPercent(value: number): string {
+  const r = Math.round(value * 10) / 10;
+  return Number.isInteger(r) ? String(r) : r.toFixed(1);
 }
 
 /**
  * The late policy's cut on this turn-in, as its own line under the
- * score: how late, what the policy takes, what the score was before it,
- * and the control to waive it for this student. Never folded silently
+ * score: how late, the percent of the score the policy takes, the score
+ * before and after it, and the control to waive it for this student. Never folded silently
  * into the number — she approves the score with the cut in view.
  */
 function LatePenaltyLine({
@@ -3427,15 +3429,15 @@ function LatePenaltyLine({
         }
       >
         {lateLabel(detail.days_late).replace(/^./, (c) => c.toUpperCase())}: −
-        {formatPenalty(detail.policy_late_penalty)}%
+        {formatPercent(detail.late_penalty_percent)}% of the score
       </span>
       {waived ? (
         <span className="text-text-muted">Waived for this student</span>
       ) : before !== null ? (
         <span className="text-text-muted">
-          {Math.round(before)}% before the penalty →{" "}
+          {formatPercent(before)}% before the penalty →{" "}
           <span className="font-semibold text-text-primary">
-            {Math.round(detail.final_score!)}%
+            {formatPercent(detail.final_score!)}%
           </span>
         </span>
       ) : (
@@ -4138,7 +4140,7 @@ function SubmissionDetailPanel({
               hour: "numeric",
               minute: "2-digit",
             })}
-            {detail.is_late && detail.policy_late_penalty === 0 && (
+            {detail.is_late && detail.late_penalty_percent === 0 && (
               <span className="ml-1.5 font-semibold text-[color:var(--color-error)]">
                 · {lateLabel(detail.days_late)}
               </span>
@@ -4197,7 +4199,7 @@ function SubmissionDetailPanel({
               <span className="text-text-muted">Not graded yet</span>
             )}
           </p>
-          {detail.policy_late_penalty > 0 && (
+          {detail.late_penalty_percent > 0 && (
             <LatePenaltyLine
               detail={detail}
               busy={waivingLate}

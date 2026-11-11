@@ -1870,7 +1870,7 @@ export const teacher = {
       grade_dirty: boolean;
       due_at: string | null;
       days_late: number;
-      policy_late_penalty: number;
+      late_penalty_percent: number;
       late_penalty: number;
       late_penalty_waived: boolean;
     }>(`/teacher/submissions/${submissionId}/late-penalty`, {
@@ -2235,12 +2235,13 @@ export interface TeacherSubmissionRow {
   submitted_at: string | null;
   is_late: boolean;
   /** Lateness against this student's due date: how many started days
-   *  late, what the homework's late policy takes off for that
-   *  (percentage points), what the live grade actually had taken off
-   *  (0 when waived or ungraded), and whether the teacher waived it. */
+   *  late, the percent of the score the homework's late policy takes off
+   *  for that (10 per day under penalty_per_day), the points the live
+   *  grade actually had taken off (0 when waived or ungraded), and
+   *  whether the teacher waived it. */
   due_at: string | null;
   days_late: number;
-  policy_late_penalty: number;
+  late_penalty_percent: number;
   late_penalty: number;
   late_penalty_waived: boolean;
   ai_score: number | null;
@@ -2407,12 +2408,13 @@ export interface TeacherSubmissionDetail {
   submitted_at: string;
   is_late: boolean;
   /** Lateness against this student's due date: how many started days
-   *  late, what the homework's late policy takes off for that
-   *  (percentage points), what the live grade actually had taken off
-   *  (0 when waived or ungraded), and whether the teacher waived it. */
+   *  late, the percent of the score the homework's late policy takes off
+   *  for that (10 per day under penalty_per_day), the points the live
+   *  grade actually had taken off (0 when waived or ungraded), and
+   *  whether the teacher waived it. */
   due_at: string | null;
   days_late: number;
-  policy_late_penalty: number;
+  late_penalty_percent: number;
   late_penalty: number;
   late_penalty_waived: boolean;
   /** All files the student submitted, in upload order. Null only on
@@ -2786,9 +2788,11 @@ export interface StudentHomeworkDetail {
   submitted_at: string | null;
   /** Percent 0-100, or null if no grade published yet. */
   final_score: number | null;
-  /** Percentage points the late policy took off the published score
-   *  (already out of final_score). 0 when none. */
+  /** Points the late policy took off the published score (already out
+   *  of final_score), and that as a percent of the score before it
+   *  (10 per started day late). 0 when none. */
   late_penalty: number;
+  late_penalty_percent: number;
   /** ISO timestamp — null until teacher publishes. */
   grade_published_at: string | null;
   /** Per-problem published-grade rows; null before publish. Uses the

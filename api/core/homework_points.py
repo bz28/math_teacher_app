@@ -23,7 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only
 
-from api.core.late_policy import effective_due_dates, set_final_score, submission_penalty
+from api.core.late_policy import effective_due_dates, set_final_score, submission_penalty_percent
 from api.models.assignment import Assignment, Submission, SubmissionGrade
 from api.services.bank import problem_ids_in_content
 
@@ -96,7 +96,7 @@ async def rescore_assignment(db: AsyncSession, assignment: Assignment) -> None:
         if g.breakdown:
             before = g.final_score
             raw = weighted_percent(((e["problem_id"], e["percent"]) for e in g.breakdown), points)
-            set_final_score(g, raw, submission_penalty(assignment, sub, due[sub.student_id]))
+            set_final_score(g, raw, submission_penalty_percent(assignment, sub, due[sub.student_id]))
             if (before is None) != (g.final_score is None) or (
                 before is not None and g.final_score is not None and abs(before - g.final_score) > 1e-6
             ):

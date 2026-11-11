@@ -44,12 +44,12 @@ from api.core.late_policy import (
     LatePolicy,
     effective_due_at,
     effective_due_dates,
-    late_penalty_for,
+    late_penalty_percent_for,
     lateness_out,
     refresh_lateness,
     score_before_penalty,
     set_final_score,
-    submission_penalty,
+    submission_penalty_percent,
 )
 from api.core.question_bank_generation import schedule_generation_job
 from api.database import get_db
@@ -1899,7 +1899,7 @@ async def grade_submission(
         if normalized:
             set_final_score(grade, weighted_percent(
                 ((e["problem_id"], e["percent"]) for e in normalized), assignment_points(assignment),
-            ), await late_penalty_for(db, assignment, sub))
+            ), await late_penalty_percent_for(db, assignment, sub))
             grade.graded_at = now
             # `reviewed_at` means "a teacher stands behind this grade". The
             # explicit Approve step (POST /mark-reviewed) exists so the
@@ -2067,7 +2067,7 @@ async def set_late_penalty_waived(
         if grade.final_score is not None:
             before = grade.final_score
             set_final_score(
-                grade, score_before_penalty(grade), submission_penalty(assignment, sub, due_at),
+                grade, score_before_penalty(grade), submission_penalty_percent(assignment, sub, due_at),
             )
             if abs(grade.final_score - before) > 1e-6:
                 grade.graded_at = datetime.now(UTC)
@@ -2127,7 +2127,7 @@ async def set_graph_item_verdict(
     grade.graph_checks = {**(grade.graph_checks or {}), body.problem_id: stored}
     set_final_score(grade, weighted_percent(
         ((e["problem_id"], e["percent"]) for e in breakdown), assignment_points(assignment),
-    ), await late_penalty_for(db, assignment, sub))
+    ), await late_penalty_percent_for(db, assignment, sub))
     grade.graded_at = datetime.now(UTC)
     await record_activity(
         db, current_user, "grade.graph_item", "submission", sub.id,
@@ -2796,12 +2796,13 @@ class TeacherSubmissionDetail(BaseModel):
     submitted_at: datetime
     is_late: bool
     # Lateness against this student's effective due date (late_policy):
-    # how late, what the homework's policy takes off for that, what the
+    # how late, the percent of the score the homework's policy takes off
+    # for that (10 per started day under penalty_per_day), the points the
     # live grade actually had taken off (0 when waived, ungraded, or a
     # score already at 0), and whether the teacher waived it.
     due_at: datetime | None = None
     days_late: int = 0
-    policy_late_penalty: float = 0.0
+    late_penalty_percent: float = 0.0
     late_penalty: float = 0.0
     late_penalty_waived: bool = False
     # List of {data, media_type} the student submitted — multi-page

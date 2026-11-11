@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { latePenaltyLine } from "@/lib/late-penalty";
 import {
   schoolStudent,
   ApiError,
@@ -322,6 +323,7 @@ export default function HomeworkPage() {
         <GradedSummaryCard
           finalScore={hw.final_score}
           latePenalty={hw.late_penalty}
+          latePenaltyPercent={hw.late_penalty_percent}
           breakdown={hw.breakdown}
           missedOnly={missedOnly}
           onMissedOnlyChange={setMissedOnly}
@@ -582,6 +584,7 @@ const GRADE_TONE: Record<
 function GradedSummaryCard({
   finalScore,
   latePenalty,
+  latePenaltyPercent,
   breakdown,
   missedOnly,
   onMissedOnlyChange,
@@ -589,6 +592,8 @@ function GradedSummaryCard({
   finalScore: number | null;
   /** Points the late policy took off finalScore; 0 when none. */
   latePenalty: number;
+  /** That as a percent of the score before it (10 per day late). */
+  latePenaltyPercent: number;
   breakdown: StudentProblemFeedback[];
   missedOnly: boolean;
   onMissedOnlyChange: (next: boolean) => void;
@@ -647,9 +652,10 @@ function GradedSummaryCard({
               earned and what lateness cost. */}
           {latePenalty > 0 && finalScore !== null && (
             <p className="mt-1 text-sm text-text-secondary">
-              {Math.round(finalScore + latePenalty)}% for the work, then{" "}
+              {latePenaltyLine(finalScore, latePenalty, latePenaltyPercent).work}
+              {", then "}
               <span className="font-semibold text-warning-dark">
-                −{Math.round(latePenalty)}% for turning it in late
+                {latePenaltyLine(finalScore, latePenalty, latePenaltyPercent).late}
               </span>
             </p>
           )}

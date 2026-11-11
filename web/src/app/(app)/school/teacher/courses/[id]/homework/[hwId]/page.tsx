@@ -72,15 +72,15 @@ const LATE_POLICY_OPTIONS: { value: string; label: string; hint: string }[] = [
     label: "−10% per day late",
     hint:
       "Late work takes 10% off the score for each day late, and any part of a day counts: " +
-      "85% turned in a day late is 75%. It shows as its own line on each grade, and you can " +
+      "85% turned in a day late is 76.5%, and it takes all of it at 10 days. It shows as its own line on each grade, and you can " +
       "waive it per student.",
   },
   {
     value: "no_credit",
     label: "Closed after due date",
     hint:
-      "Students can't turn it in after the due date. Anything that came in after it scores 0. " +
-      "Without a due date it never closes.",
+      "Students can't turn it in after the due date. Work already turned in keeps its grade — " +
+      "late work is marked late, never zeroed. Without a due date it never closes.",
   },
 ];
 

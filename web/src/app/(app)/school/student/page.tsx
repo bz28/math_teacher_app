@@ -232,17 +232,6 @@ export default function SchoolStudentDashboard() {
             {dueCount === 0 && (
               <EmptyRow text="You're all caught up — nothing due this week." />
             )}
-            {/* Closed at the due date and never turned in. Kept in view
-                (not silently dropped) but quiet and last: there's
-                nothing to do here except ask the teacher. */}
-            {closed.length > 0 && (
-              <div className="border-y border-border-light/60 bg-bg-subtle/60 px-5 py-2 text-[11px] font-semibold text-text-muted">
-                Closed without a turn-in ({closed.length})
-              </div>
-            )}
-            {closed.map((a) => (
-              <DashboardAssignmentRow key={`closed-${a.assignment_id}`} assignment={a} closed />
-            ))}
           </DashboardCard>
         </div>
 
@@ -283,6 +272,19 @@ export default function SchoolStudentDashboard() {
             )}
           </DashboardCard>
         </div>
+
+        {/* Closed at the due date and never turned in: missed, not to
+            do. Its own quiet card after the graded work, so the student
+            still sees it without it sitting in the pile that's due. */}
+        {closed.length > 0 && (
+          <div className="dashboard-card-enter" style={{ animationDelay: "200ms" }}>
+            <DashboardCard title="Missed" count={closed.length}>
+              {closed.map((a) => (
+                <DashboardAssignmentRow key={`closed-${a.assignment_id}`} assignment={a} closed />
+              ))}
+            </DashboardCard>
+          </div>
+        )}
       </div>
     </div>
   );

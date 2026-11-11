@@ -25,6 +25,7 @@ import {
 import {
   averageBreakdown,
   changedFromAi,
+  lateRate,
   scoreGiven,
   sectionAverage,
   shown,
@@ -445,7 +446,7 @@ function cellLines(
       ? `Graded by hand: ${shown(scoreGiven(cell))}%`
       : `AI suggested ${shown(cell.ai_score)}% · you gave ${shown(scoreGiven(cell))}%`,
     ...(cell.late_penalty > 0
-      ? [`−${shown(cell.late_penalty)}% for turning it in late: ${shown(cell.score)}%`]
+      ? [`Late: −${shown(lateRate(cell))}% of the score, ${shown(scoreGiven(cell))}% → ${shown(cell.score)}%`]
       : []),
   ];
   if (cell.edited_since_publish) lines.push("Edited since publishing; students still see this score");

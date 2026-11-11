@@ -33,7 +33,7 @@ from typing import Any
 
 from api.core.auth import create_access_token, create_refresh_token, hash_password
 from api.core.homework_points import assignment_points, weighted_percent
-from api.core.late_policy import set_final_score, submission_penalty
+from api.core.late_policy import set_final_score, submission_penalty_percent
 from api.database import get_session_factory
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
 from api.models.course import Course, CourseTeacher
@@ -159,7 +159,7 @@ async def seed() -> dict[str, Any]:
                 reviewed_at=now, reviewed_by=teacher.id, late_penalty_waived=False,
             )
             raw = weighted_percent(((e["problem_id"], e["percent"]) for e in breakdown), assignment_points(hw))
-            set_final_score(g, raw, submission_penalty(hw, sub, hw.due_at))
+            set_final_score(g, raw, submission_penalty_percent(hw, sub, hw.due_at))
             if publish:
                 g.published_final_score = g.final_score
                 g.published_late_penalty = g.late_penalty
@@ -169,11 +169,15 @@ async def seed() -> dict[str, Any]:
             return sub
 
         alex, sam, jordan, riley = students
-        # Per-day policy: Alex two days late (−20), Sam on time, Jordan
-        # late and published (the student's view of the line).
+        # Per-day policy (10% of the score per day): Alex two days late
+        # (83.3% → 66.7%), Sam on time, Jordan a day late and published —
+        # 85% → 76.5%, the student's view of the line.
         await turn_in(penalty_hw, alex, timedelta(days=1, hours=4), [100, 100, 50], publish=False)
         await turn_in(penalty_hw, sam, -timedelta(hours=2), [100, 50, 100], publish=False)
-        await turn_in(penalty_hw, jordan, timedelta(hours=5), [100, 100, 100], publish=True)
+        await turn_in(penalty_hw, jordan, timedelta(hours=5), [100, 100, 55], publish=True)
+        # Closed: Sam's work came in late before it closed (the due date
+        # moved earlier). It keeps its grade — marked late, never zeroed.
+        await turn_in(closed_hw, sam, timedelta(hours=2), [100, 50, 100], publish=True)
         # `none`: Alex on time, Sam three days late — no penalty either way.
         await turn_in(none_hw, alex, -timedelta(hours=1), [100, 100, 0], publish=True)
         await turn_in(none_hw, sam, timedelta(days=2, hours=1), [100, 50, 100], publish=True)
@@ -250,7 +254,7 @@ async def main() -> int:
         async with browser.authed_page(st["access"], st["refresh"]) as page:
             await page.set_viewport_size(DESKTOP)
             await page.goto(f"{WEB_BASE}/school/student", wait_until="networkidle", timeout=60000)
-            await page.get_by_text("Closed without a turn-in").wait_for(timeout=30000)
+            await page.get_by_text("Missed", exact=True).wait_for(timeout=30000)
             # First visit offers the product tour; decline it.
             skip = page.get_by_role("button", name="Skip for now")
             if await skip.count():
@@ -269,6 +273,11 @@ async def main() -> int:
                           "for turning it in late", bottom=False)
         # Teacher: the penalty line and waiver.
         await _teacher_review(browser, w, "penalty_hw", "alex", "teacher-penalty", waive=True)
+        # Teacher: late work on a closed homework keeps its grade.
+        await _teacher_review(browser, w, "closed_hw", "sam", "teacher-closed-late-kept")
+        # Student: that grade, unzeroed.
+        await _student_hw(browser, w, "sam", "closed_hw", "student-closed-late-kept", DESKTOP,
+                          "Graded", bottom=False)
         async with browser.authed_page(w["teacher_access"], w["teacher_refresh"]) as page:
             await page.set_viewport_size({"width": 1440, "height": 1000})
             await page.goto(f"{WEB_BASE}/school/teacher/courses/{w['course_id']}/homework/{w['penalty_hw']}",
@@ -294,7 +303,7 @@ async def main() -> int:
             await _shot(page, "blast-gradebook")
             # Hover Jordan's published late grade: "you gave" is her score
             # before the penalty, and the cut is its own line.
-            cell = page.locator('a[aria-label*="for turning it in late"]').first
+            cell = page.locator('a[aria-label*="Late: −"]').first
             await cell.hover(timeout=30000)
             await page.wait_for_timeout(700)
             await _shot(page, "gradebook-penalty-hover")

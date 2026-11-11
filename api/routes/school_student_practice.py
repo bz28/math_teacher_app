@@ -525,9 +525,11 @@ class StudentHomeworkDetail(BaseModel):
     # edit work never leaks.
     submitted_at: datetime | None = None
     final_score: float | None = None
-    # Percentage points the late policy took off the published score
-    # (already out of final_score). 0 when none was taken.
+    # Points the late policy took off the published score (already out of
+    # final_score), and that as a percent of the score before it (10 per
+    # started day late). 0 when none was taken.
     late_penalty: float
+    late_penalty_percent: float = 0.0
     grade_published_at: datetime | None = None
     breakdown: list[StudentProblemFeedback] | None = None
     # What's left for the student on turned-in work: "confirm_reading"
@@ -1311,6 +1313,17 @@ async def list_homework(
     next_steps = await _next_steps(db, list(submission_by_aid.values()))
     due = await student_due_dates(db, user.id, rows)
     now = datetime.now(UTC)
+    # A teacher's preview is never closed: she checks the homework as a
+    # student would, whatever its policy and due date.
+    closed_ids = {
+        a.id for a in rows
+        if not user.is_preview and a.id not in submission_by_aid
+        and is_closed(a.late_policy, due[a.id], now)
+    }
+    # Closed and never turned in sorts last: it's missed, not to do, so it
+    # stays in view without sitting among the work still open. `sorted` is
+    # stable, so each group keeps the due-date order.
+    rows = sorted(rows, key=lambda a: a.id in closed_ids)
 
     return [
         StudentHomeworkSummary(
@@ -1320,7 +1333,7 @@ async def list_homework(
             due_at=due[a.id],
             problem_count=len(problem_ids_in_content(a.content)),
             status="submitted" if a.id in submission_by_aid else "not_started",
-            closed=a.id not in submission_by_aid and is_closed(a.late_policy, due[a.id], now),
+            closed=a.id in closed_ids,
             next_step=(
                 next_steps.get(submission_by_aid[a.id])
                 if a.id in submission_by_aid else None
@@ -1583,7 +1596,7 @@ async def get_dashboard(
         # policy shut it at the due date. HWs with no due date go into
         # Due (sorted last, nullslast) so students can still see them;
         # they're never "overdue" without a deadline, and never close.
-        if is_closed(a.late_policy, due_at, now):
+        if not user.is_preview and is_closed(a.late_policy, due_at, now):
             closed.append(DashboardAssignment(
                 assignment_id=str(a.id),
                 title=a.title,
@@ -1838,6 +1851,7 @@ async def homework_detail(
     # payload.
     final_score: float | None = None
     late_penalty = 0.0
+    late_penalty_percent = 0.0
     grade_published_at: datetime | None = None
     breakdown_out: list[StudentProblemFeedback] | None = None
     if sub is not None:
@@ -1873,6 +1887,8 @@ async def homework_detail(
                 else None
             )
             late_penalty = grade.published_late_penalty
+            before = (grade.published_final_score or 0.0) + late_penalty
+            late_penalty_percent = round(late_penalty / before * 100, 1) if before > 0 else 0.0
             grade_published_at = grade.grade_published_at
             if grade.published_breakdown:
                 breakdown_out = []
@@ -1895,7 +1911,10 @@ async def homework_detail(
         type=assignment.type,
         due_at=due_at,
         late_policy=assignment.late_policy,
-        closed=sub is None and is_closed(assignment.late_policy, due_at, datetime.now(UTC)),
+        closed=(
+            sub is None and not user.is_preview
+            and is_closed(assignment.late_policy, due_at, datetime.now(UTC))
+        ),
         course_id=str(course.id),
         course_name=course.name,
         course_subject=course.subject,
@@ -1906,6 +1925,7 @@ async def homework_detail(
         submitted_at=sub.submitted_at if sub is not None else None,
         final_score=final_score,
         late_penalty=late_penalty,
+        late_penalty_percent=late_penalty_percent,
         grade_published_at=grade_published_at,
         breakdown=breakdown_out,
         next_step=(
@@ -2255,7 +2275,8 @@ async def submit_homework(
     """Insert a submission for this student/HW. One-shot — resubmission
     is not allowed in v1; a second call returns 409. A late turn-in is
     accepted and marked late, unless the homework's late policy closes it
-    at the due date (`no_credit`), which refuses it with a 403.
+    at the due date (`no_credit`), which refuses it with a 403 — except for
+    a teacher's preview, which always goes through.
     """
     assignment = await _load_assignment_for_student(db, assignment_id, user)
     # One instant for "when was this turned in": the closed check, is_late
@@ -2275,7 +2296,7 @@ async def submit_homework(
         raise HTTPException(status_code=409, detail="Already submitted")
     # After the one-shot check, so work already in reads as "already
     # submitted", not "closed"; before the preview's rehearsal is cleared.
-    if is_closed(assignment.late_policy, due_at, now):
+    if not user.is_preview and is_closed(assignment.late_policy, due_at, now):
         raise HTTPException(status_code=403, detail=HOMEWORK_CLOSED_DETAIL)
     if existing is not None:
         # A teacher's preview is a rehearsal, not a turn-in. One-shot

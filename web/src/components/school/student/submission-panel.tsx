@@ -71,7 +71,7 @@ interface Props {
 const PAST_DUE_COPY: Record<Exclude<LatePolicy, "no_credit">, string> = {
   none: "This homework is past due. You can still turn it in, and it will be marked late so your teacher knows.",
   penalty_per_day:
-    "This homework is past due. You can still turn it in, but each day late takes 10% off your score: 85% a day late counts as 75%.",
+    "This homework is past due. You can still turn it in, but each day late takes 10% off your score: 85% a day late counts as 76.5%.",
 };
 
 /**

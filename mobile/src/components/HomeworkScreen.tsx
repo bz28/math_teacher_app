@@ -97,6 +97,12 @@ function formatClosedAt(iso: string): string {
   });
 }
 
+/** One decimal, never rounded away: 10% off 85% is 76.5%. */
+function oneDecimal(v: number): string {
+  const r = Math.round(v * 10) / 10;
+  return Number.isInteger(r) ? String(r) : r.toFixed(1);
+}
+
 export function HomeworkScreen({
   assignmentId,
   onBack,
@@ -384,7 +390,7 @@ export function HomeworkScreen({
                   <Ionicons name="alert-circle-outline" size={16} color={colors.warningDark} />
                   <Text style={styles.lateText}>
                     {hw.late_policy === "penalty_per_day"
-                      ? "This is past due. You can still turn it in, but each day late takes 10% off your score: 85% a day late counts as 75%."
+                      ? "This is past due. You can still turn it in, but each day late takes 10% off your score: 85% a day late counts as 76.5%."
                       : "This is past due. You can still turn it in — it'll be marked late so your teacher knows."}
                   </Text>
                 </View>
@@ -648,8 +654,9 @@ function SubmittedStatus({
           </View>
           {hw.late_penalty > 0 && (
             <Text style={styles.latePenaltyText}>
-              {Math.round(hw.final_score! + hw.late_penalty)}% for the work, then −
-              {Math.round(hw.late_penalty)}% for turning it in late
+              {oneDecimal(hw.final_score! + hw.late_penalty)}% for the work, then −
+              {oneDecimal(hw.late_penalty)}% for turning it in late (
+              {oneDecimal(hw.late_penalty_percent)}% of the score, 10% per day late)
             </Text>
           )}
           {breakdownRows.map((b) => (

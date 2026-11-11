@@ -47,6 +47,7 @@ const GRADED = {
   late_policy: "none",
   closed: false,
   late_penalty: 0,
+  late_penalty_percent: 0,
   submitted: true,
   grade_published_at: "2026-06-01T00:00:00Z",
   final_score: 73,
@@ -139,10 +140,15 @@ describe("HomeworkScreen late policy", () => {
   });
 
   it("shows the late penalty as its own line on the grade", async () => {
-    mockedApi.getHomework.mockResolvedValue({ ...GRADED, final_score: 53, late_penalty: 20 } as never);
+    // 85% one day late: 10% of the score, 8.5 off — the half shows.
+    mockedApi.getHomework.mockResolvedValue({
+      ...GRADED, final_score: 76.5, late_penalty: 8.5, late_penalty_percent: 10,
+    } as never);
     render(<HomeworkScreen {...PROPS} />);
 
-    expect(await waitForText(/73% for the work, then −20% for turning it in late/)).toBeTruthy();
+    expect(
+      await waitForText(/85% for the work, then −8\.5% for turning it in late \(10% of the score, 10% per day late\)/),
+    ).toBeTruthy();
   });
 });
 

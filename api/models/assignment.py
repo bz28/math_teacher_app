@@ -225,7 +225,8 @@ class SubmissionGrade(Base):
     # after publish stay as drafts until the teacher republishes.
     # `graded_at > grade_published_at` flags the dirty state.
     published_final_score: Mapped[float | None] = mapped_column(Float, nullable=True)
-    # Percentage points the late policy took off `final_score` (see
+    # Points the late policy took off `final_score` — a percent of the
+    # score, 10 per started day late, so 8.5 off an 85 (see
     # api/core/late_policy.py): the score before it is final_score +
     # late_penalty. 0 when on time, waived, or the policy takes nothing.
     # `published_late_penalty` is its publish-time snapshot, beside

@@ -113,11 +113,11 @@ export function SchoolHomeScreen({ onJoinClass, onOpenAssignment }: Props) {
               <Section title="One more step" items={data!.in_review.filter((a) => a.next_step)} colors={colors} styles={styles} step onOpen={onOpenAssignment} />
               <Section title="Overdue" tone="error" items={data!.overdue} colors={colors} styles={styles} onOpen={onOpenAssignment} />
               <Section title="Due this week" items={data!.due_this_week} colors={colors} styles={styles} onOpen={onOpenAssignment} />
-              {/* Closed at the due date without a turn-in: kept in view,
-                  but quiet — there's nothing left to do but ask. */}
-              <Section title="Closed without a turn-in" items={data!.closed} colors={colors} styles={styles} closed onOpen={onOpenAssignment} />
               <Section title="In review" items={data!.in_review.filter((a) => !a.next_step)} colors={colors} styles={styles} muted onOpen={onOpenAssignment} />
               <GradedSection items={data!.recently_graded} colors={colors} styles={styles} onOpen={onOpenAssignment} />
+              {/* Closed at the due date without a turn-in: missed, not to
+                  do — last and quiet, so it's seen without nagging. */}
+              <Section title="Missed" items={data!.closed} colors={colors} styles={styles} closed onOpen={onOpenAssignment} />
             </>
           )}
         </ScrollView>

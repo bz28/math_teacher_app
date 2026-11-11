@@ -2230,7 +2230,8 @@ export interface paths {
          * @description Insert a submission for this student/HW. One-shot — resubmission
          *     is not allowed in v1; a second call returns 409. A late turn-in is
          *     accepted and marked late, unless the homework's late policy closes it
-         *     at the due date (`no_credit`), which refuses it with a 403.
+         *     at the due date (`no_credit`), which refuses it with a 403 — except for
+         *     a teacher's preview, which always goes through.
          */
         post: operations["submit_homework_v1_school_student_homework__assignment_id__submit_post"];
         delete?: never;
@@ -6130,6 +6131,11 @@ export interface components {
             /** Late Penalty */
             late_penalty: number;
             /**
+             * Late Penalty Percent
+             * @default 0
+             */
+            late_penalty_percent: number;
+            /**
              * Late Policy
              * @enum {string}
              */
@@ -6614,6 +6620,11 @@ export interface components {
              */
             late_penalty: number;
             /**
+             * Late Penalty Percent
+             * @default 0
+             */
+            late_penalty_percent: number;
+            /**
              * Late Penalty Waived
              * @default false
              */
@@ -6628,11 +6639,6 @@ export interface components {
              * @default []
              */
             other_work: components["schemas"]["TeacherSubmissionStep"][];
-            /**
-             * Policy Late Penalty
-             * @default 0
-             */
-            policy_late_penalty: number;
             /** Problems */
             problems: components["schemas"]["TeacherSubmissionDetailProblem"][];
             retake_original?: components["schemas"]["TeacherRetakeOriginal"] | null;
