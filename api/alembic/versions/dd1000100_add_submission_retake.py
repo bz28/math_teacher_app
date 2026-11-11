@@ -1,12 +1,7 @@
 """add submissions.retaken_at + submissions.retake_original
 
-!!! MUST REBASE AFTER #973 MERGES: set down_revision = "dd1000099" !!!
-#973 (dd1000099_step_ref_per_problem) also chains onto dc1000098 and
-merges first. Until this is re-pointed at it, alembic sees two heads
-and `test_alembic_has_a_single_head` fails.
-
 Revision ID: dd1000100
-Revises: dc1000098
+Revises: dd1000099
 Create Date: 2026-11-07 00:00:00.000000
 
 A student who flagged the reading of their homework ("The whole reading
@@ -29,9 +24,6 @@ One retake per submission, so one snapshot column is enough to keep
 the original; a history table would only earn its keep if retakes were
 repeatable.
 
-Chains onto dc1000098, main's head when this was written (see the
-rebase note at the top).
-
 Downgrade drops both columns — including `retake_original`, the only
 copy of a retaken turn-in's first photos. Don't downgrade past this on
 a database with real retakes without exporting them first.
@@ -43,7 +35,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "dd1000100"
-down_revision: str | None = "dc1000098"
+down_revision: str | None = "dd1000099"
 branch_labels = None
 depends_on = None
 
