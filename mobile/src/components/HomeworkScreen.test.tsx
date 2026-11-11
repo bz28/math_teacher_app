@@ -120,6 +120,7 @@ describe("HomeworkScreen sideways pages", () => {
   const checkResult = (over: Partial<Awaited<ReturnType<typeof api.checkPageOrientation>>> = {}) => ({
     sideways: false,
     page_count: 1,
+    total_pages: over.page_count ?? 1,
     sideways_pages: [] as number[],
     too_small_pages: [] as number[],
     preview: null,
@@ -227,6 +228,24 @@ describe("HomeworkScreen sideways pages", () => {
       expect(screen.getByText(/Your teacher will see exactly 2 pages/)).toBeTruthy();
       await fireEvent.press(screen.getByText("Turn it in"));
       expect(mockedApi.submitHomework).toHaveBeenCalledWith("hw1", ["PDF_B64"], [90], ["rotated"]);
+    });
+
+    it("counts every page of a PDF past the check's page cap", async () => {
+      mockedApi.checkPageOrientation.mockResolvedValue(
+        checkResult({ page_count: 30, total_pages: 40, preview: "PREVIEW_B64" }),
+      );
+      await addPhoto();
+      await fireEvent.press(await waitForText("Review & turn in 40 pages"));
+      expect(screen.getByText(/Your teacher will see exactly 40 pages/)).toBeTruthy();
+    });
+
+    it("counts files, not a guessed page count, when the check fails", async () => {
+      mockedApi.checkPageOrientation.mockRejectedValue(new Error("offline"));
+      await addPhoto();
+      await fireEvent.press(await waitForText("Review & turn in 1 file"));
+      expect(screen.getByText(/Your teacher will see exactly 1 file —/)).toBeTruthy();
+      await fireEvent.press(screen.getByText("Turn it in"));
+      expect(mockedApi.submitHomework).toHaveBeenCalledWith("hw1", ["PDF_B64"], [0], ["unchecked"]);
     });
 
     it("offers no rotate when only some pages are sideways", async () => {

@@ -61,8 +61,11 @@ interface StagedFile {
   /** Clockwise quarter turns the student applied (0/90/180/270). The
    *  server stores the page turned this way. */
   rotation: number;
-  /** Pages in the file: 1 for a photo, one per page for a PDF. */
+  /** Pages the check covered: 1 for a photo, one per page for a PDF up
+   *  to the check's cap. What `sidewaysPages` is about. */
   pageCount: number;
+  /** Every page in the file — what the teacher gets. */
+  totalPages: number;
   /** Pages (1-based, within the file) the server's free pixel check reads
    *  as sideways, as sent. While any still is, turn-in is held. */
   sidewaysPages: number[];
@@ -139,7 +142,7 @@ export function HomeworkScreen({
     const id = newId();
     setFiles((f) => [
       ...f,
-      { id, base64, kind, name, rotation: 0, pageCount: 1, sidewaysPages: [], upright: false, checking: true, checked: false },
+      { id, base64, kind, name, rotation: 0, pageCount: 1, totalPages: 1, sidewaysPages: [], upright: false, checking: true, checked: false },
     ]);
     void checkPages(id, base64, kind);
   };
@@ -165,6 +168,7 @@ export function HomeworkScreen({
     const update: Partial<StagedFile> = res
       ? {
           pageCount: kind === "pdf" ? res.pageCount : 1,
+          totalPages: kind === "pdf" ? res.totalPages : 1,
           sidewaysPages: res.sidewaysPages,
           preview: res.preview ?? undefined,
         }
@@ -192,7 +196,7 @@ export function HomeworkScreen({
   const blocked = checking || sidewaysPages.length > 0;
   // Pages, not files: one 6-page PDF is "6 pages" of work.
   const turnInCount = turnInCountLabel(
-    files.map((f) => ({ pdf: f.kind === "pdf", pageCount: f.pageCount, checked: f.checked })),
+    files.map((f) => ({ pdf: f.kind === "pdf", totalPages: f.totalPages, checked: f.checked })),
   );
 
   const addPhoto = async () => {

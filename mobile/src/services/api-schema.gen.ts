@@ -5564,6 +5564,8 @@ export interface components {
             sideways_pages: number[];
             /** Too Small Pages */
             too_small_pages: number[];
+            /** Total Pages */
+            total_pages: number;
         };
         /**
          * PasteEvent

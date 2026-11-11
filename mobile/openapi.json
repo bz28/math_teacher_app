@@ -2943,11 +2943,16 @@
             },
             "title": "Too Small Pages",
             "type": "array"
+          },
+          "total_pages": {
+            "title": "Total Pages",
+            "type": "integer"
           }
         },
         "required": [
           "sideways",
           "page_count",
+          "total_pages",
           "sideways_pages",
           "too_small_pages",
           "preview"

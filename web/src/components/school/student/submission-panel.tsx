@@ -89,8 +89,11 @@ interface StagedFile {
    *  server stores the page turned this way, so the preview here is
    *  exactly what the teacher and the AI reader get. */
   rotation: number;
-  /** Pages in the file: 1 for a photo, one per page for a PDF. */
+  /** Pages the check covered: 1 for a photo, one per page for a PDF up
+   *  to the check's cap. What `sidewaysPages` is about. */
   pageCount: number;
+  /** Every page in the file — what the teacher gets. */
+  totalPages: number;
   /** Pages (1-based, within the file) the server's free pixel check
    *  reads as sideways, as sent. While any still is, turn-in is held. */
   sidewaysPages: number[];
@@ -107,6 +110,7 @@ interface StagedFile {
 const UNCHECKED = {
   rotation: 0,
   pageCount: 1,
+  totalPages: 1,
   sidewaysPages: [] as number[],
   upright: false,
   checking: false,
@@ -165,7 +169,7 @@ export function SubmissionPanel({
   const turnInCount = turnInCountLabel(
     validFiles.map((f) => ({
       pdf: f.mediaType === "application/pdf",
-      pageCount: f.pageCount,
+      totalPages: f.totalPages,
       checked: f.checked,
     })),
   );
@@ -333,6 +337,7 @@ export function SubmissionPanel({
     const update: Partial<StagedFile> = res
       ? {
           pageCount: pdf ? res.pageCount : 1,
+          totalPages: pdf ? res.totalPages : 1,
           sidewaysPages: res.sidewaysPages,
           ...(res.preview ? { previewUrl: `data:image/jpeg;base64,${res.preview}` } : {}),
           ...(res.tooSmallPages.length > 0 ? { error: pdfTooSmallError(res.tooSmallPages) } : {}),
@@ -585,7 +590,7 @@ export function SubmissionPanel({
                   <p className="text-xs text-text-muted">
                     {formatFileSize(f.size)}
                     {f.mediaType === "application/pdf" ? " · PDF" : ""}
-                    {f.pageCount > 1 ? ` · ${f.pageCount} pages` : ""}
+                    {f.totalPages > 1 ? ` · ${f.totalPages} pages` : ""}
                   </p>
                   {f.error && (
                     <p className="mt-0.5 text-xs font-medium text-error">

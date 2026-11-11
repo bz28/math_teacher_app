@@ -444,6 +444,7 @@ class TestPdfPageChecks:
         page = _page_of_writing()
         checks = pdf_page_checks(pdf_of([page, page.rotate(90, expand=True)]))
         assert checks["page_count"] == 2
+        assert checks["total_pages"] == 2
         assert checks["sideways_pages"] == [2]
         assert checks["too_small_pages"] == []
         preview = Image.open(io.BytesIO(base64.b64decode(checks["preview"])))
@@ -490,8 +491,21 @@ class TestPdfPageChecks:
 
     def test_unreadable_pdf_reports_nothing(self) -> None:
         assert pdf_page_checks(_b64(_PDF_HEADER + b"pdf")) == {
-            "page_count": 0, "sideways_pages": [], "too_small_pages": [], "preview": None,
+            "page_count": 0, "total_pages": 0,
+            "sideways_pages": [], "too_small_pages": [], "preview": None,
         }
+
+    def test_a_pdf_past_the_check_cap_counts_every_page(self) -> None:
+        # The teacher gets the whole PDF, so turn-in must count all of it,
+        # while the per-page answers cover only the pages checked.
+        from api.core.image_utils import _PDF_MAX_PAGES
+
+        page = _page_of_writing().resize((300, 400))
+        pages = [page] * (_PDF_MAX_PAGES - 1) + [page.rotate(90, expand=True)] + [page] * 10
+        checks = pdf_page_checks(pdf_of(pages))
+        assert checks["total_pages"] == _PDF_MAX_PAGES + 10
+        assert checks["page_count"] == _PDF_MAX_PAGES
+        assert checks["sideways_pages"] == [_PDF_MAX_PAGES]
 
 
 # ── pdf_pages_as_images (what the reader and the drawing check see) ──
