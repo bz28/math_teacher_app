@@ -19,6 +19,21 @@ export function Navbar() {
         </Link>
 
         <div className="ml-auto flex items-center gap-3 md:gap-4">
+          {/* Where a school's second reader goes: the district page and the
+              data-safety page. Hidden on phones, where the bar only has
+              room for the two actions. */}
+          <Link
+            href="/for-districts"
+            className="hidden text-sm font-semibold text-[color:var(--color-text-secondary)] transition-colors hover:text-[color:var(--color-primary)] md:inline"
+          >
+            For districts
+          </Link>
+          <Link
+            href="/trust"
+            className="hidden text-sm font-semibold text-[color:var(--color-text-secondary)] transition-colors hover:text-[color:var(--color-primary)] md:inline"
+          >
+            Trust
+          </Link>
           <Link
             href="/login"
             className="text-sm font-semibold text-[color:var(--color-text-secondary)] transition-colors hover:text-[color:var(--color-primary)]"
