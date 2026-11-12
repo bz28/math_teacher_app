@@ -17,6 +17,7 @@ from api.core.geometry.facts import (
     Target,
     coverage_gaps,
     describe,
+    described_in_words,
     disagreements,
     to_parts,
     to_relations,
@@ -40,6 +41,9 @@ def _holds_on(fact: Fact, fig: ConstructionFigure, **reading: Any) -> bool:
 
 
 SQ = {"A": (0, 0), "B": (4, 0), "C": (4, 4), "D": (0, 4)}
+TR = {"A": (0, 0), "B": (8, 0), "C": (0, 4), "D": (8, 4), "E": (2, -2), "F": (6, 6), "G": (3, 0), "H": (5, 4)}
+TR_SWAPPED = {**TR, "C": (8, 4), "D": (0, 4)}  # each angle at H moves to the other side of EF
+TR_FLIPPED = {**TR, "E": (6, 6), "F": (2, -2)}  # EF's ends change places
 CIRCLE = [{"center": "O", "radius": 5}]
 ON5 = {"O": (0, 0), "A": (5, 0), "B": (-5, 0), "C": (0, 5), "D": (3, 4)}
 
@@ -148,6 +152,15 @@ CASES: list[tuple[Fact, dict[str, Any], ConstructionFigure, ConstructionFigure]]
      _fig({"A": (0, 0), "B": (6, 0), "C": (0, 3), "D": (6, 3), "E": (1, -1), "F": (7, -1)},
           lines=[{"name": "m", "through": ["A", "B"]}, {"name": "n", "through": ["C", "D"]},
                  {"name": "t", "through": ["E", "F"]}])),
+    # Two parallel lines AB (y = 0) and CD (y = 4) cut by EF at G and H:
+    # B and D lie on one side of EF, A and C on the other.
+    (Fact(kind="alternate_interior", items=["BGH", "CHG"]), {}, _fig(TR), _fig(TR_SWAPPED)),
+    (Fact(kind="same_side_interior", items=["BGH", "DHG"]), {}, _fig(TR), _fig(TR_SWAPPED)),
+    (Fact(kind="alternate_exterior", items=["BGE", "CHF"]), {}, _fig(TR), _fig(TR_SWAPPED)),
+    (Fact(kind="corresponding", items=["BGH", "DHF"]), {}, _fig(TR), _fig(TR_SWAPPED)),
+    # The same angles named by the far ends of EF: swapping E and F turns them from interior to exterior.
+    (Fact(kind="alternate_interior", items=["BGF", "CHE"]), {}, _fig(TR), _fig(TR_FLIPPED)),
+    (Fact(kind="alternate_exterior", items=["BGE", "CHF"]), {}, _fig(TR), _fig(TR_FLIPPED)),
 ]
 
 
@@ -438,3 +451,235 @@ def test_a_part_asked_for_by_no_name_or_already_named_asks_nothing() -> None:
     assert disagreements(base, c) == []
     # A part asked for by name still counts.
     assert disagreements(base, base.model_copy(update={"requested": [Part(kind="line", item="t")]}))
+
+
+# ── Where two angles sit around a transversal ──────────────────────────
+
+_SAME_SIDE_TEXT = ("Lines AB and CD are parallel, cut by transversal EF at G and H. ∠1 and ∠2 are same-side "
+                   "interior angles, with m∠1 = 63° and m∠2 = (2x + 3)°. Find x.")
+
+
+def _same_side_reading(*pair: Fact) -> FigureFacts:
+    return FigureFacts(points=list("ABCDEFGH"), givens=[
+        Fact(kind="parallel", items=["AB", "CD"]), Fact(kind="transversal", items=["EF", "AB", "CD"]),
+        Fact(kind="on_line", items=["AB"], point="G"), Fact(kind="on_line", items=["CD"], point="H"),
+        Fact(kind="on_line", items=["EF"], point="G"), Fact(kind="on_line", items=["EF"], point="H"),
+        Fact(kind="angle_measure", items=["1"], value=63), Fact(kind="angle_measure", items=["2"], expr="2x + 3"),
+        *pair,
+    ], find=[Target(kind="other", item="x")])
+
+
+def test_a_transversal_alone_does_not_account_for_where_two_angles_sit() -> None:
+    """A reading that leaves out 'same-side interior' let a figure with ∠2 in
+    the alternate position pass (∠2 drawn 63°, where the problem makes it
+    117°). The words now need their own fact."""
+    assert coverage_gaps(_SAME_SIDE_TEXT, _same_side_reading()) != []
+    pair = Fact(kind="same_side_interior", items=["1", "2"])
+    assert coverage_gaps(_SAME_SIDE_TEXT, _same_side_reading(pair)) == []
+    # A theorem's name is a method, not a fact about the figure.
+    for text in ("Lines AB ∥ CD. Prove ∠1 ≅ ∠2 by the Alternate Interior Angles Theorem.",
+                 "Lines AB ∥ CD. Justify with the corresponding angles postulate.",
+                 "Lines AB ∥ CD. Use the Converse of the Same-Side Interior Angles Theorem."):
+        assert not [g for g in coverage_gaps(text, FigureFacts(points=list("ABCD"), givens=[
+            Fact(kind="parallel", items=["AB", "CD"])])) if "interior" in g or "corresponding" in g], text
+
+
+def test_the_angles_must_sit_where_the_problem_says() -> None:
+    reading = _same_side_reading(Fact(kind="same_side_interior", items=["1", "2"]))
+    lines = [{"through": ["A", "B"]}, {"through": ["C", "D"]}, {"through": ["E", "F"]}]
+    right = _fig(TR, lines=lines, angle_labels={"BGH": "1", "DHG": "2"})
+    wrong = _fig(TR, lines=lines, angle_labels={"BGH": "1", "CHG": "2"})  # alternate interior instead
+    assert check_construction(right, _SAME_SIDE_TEXT, facts=reading) == []
+    issues = check_construction(wrong, _SAME_SIDE_TEXT, facts=reading)
+    assert any("∠1 and ∠2 are same-side interior angles" in i.message for i in issues), issues
+
+
+# ── Circle facts in a problem with no circle ───────────────────────────
+
+
+def test_a_circle_fact_in_a_problem_with_no_circle_is_set_aside_and_logged() -> None:
+    """Prod 6d780084: one reading turned 'share hypotenuse BC' into 'BC is a
+    diameter'. The problem names no circle, so that fact is set aside, and
+    the stored facts say so."""
+    from api.core.geometry.facts import grounded, merged
+
+    text = ("△ABC and △DBC share hypotenuse BC, with right angles at A and D respectively, and AB = DB. "
+            "Write a complete congruence statement.")
+    common = [Fact(kind="right_triangle", items=["ABC"], point="A"),
+              Fact(kind="right_triangle", items=["DBC"], point="D"),
+              Fact(kind="congruent_segments", items=["AB", "DB"])]
+    a = FigureFacts(points=list("ABCD"), triangles=["ABC", "DBC"], givens=common)
+    b = a.model_copy(update={"givens": [*common, Fact(kind="diameter", items=["BC"])]})
+    assert disagreements(a, b)
+    ga, gb = grounded(a, text), grounded(b, text)
+    assert disagreements(ga, gb) == []
+    assert gb.dropped == ["set aside from givens: BC is a diameter of the circle (the problem names no circle)"]
+    assert merged(ga, gb).dropped == gb.dropped
+    # A problem that names a circle keeps its circle facts.
+    assert grounded(b, text + " BC is a diameter of the circle.").dropped == []
+
+
+# ── Reasons the teacher reads ──────────────────────────────────────────
+
+
+def _stub_readings(monkeypatch: pytest.MonkeyPatch, a: FigureFacts, b: FigureFacts) -> None:
+    import api.core.construction_figures as cf
+
+    async def read_once(system: str, *args: Any, **kwargs: Any) -> FigureFacts:
+        return a if system == cf._FACTS_SYSTEM_A else b
+
+    monkeypatch.setattr(cf, "_read_once", read_once)
+
+
+async def _why(text: str) -> tuple[Any, list[str]]:
+    import api.core.construction_figures as cf
+
+    return await cf.read_figure_facts(text, mode="t", user_id=None)
+
+
+@pytest.mark.asyncio
+async def test_parts_described_in_words_give_that_reason(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Prod 77195d48 / 31f9bf18: both readings hold a fact about parts the
+    problem describes ("the acute angle at line m") rather than names."""
+    a = FigureFacts(points=["P"], givens=[Fact(kind="other", items=["angle bisector"], quote="the bisector meets n")])
+    b = FigureFacts(points=["P"], givens=[Fact(kind="other", items=["θ"], quote="an angle θ with line n")])
+    _stub_readings(monkeypatch, a, b)
+    facts, why = await _why("The angle bisector of the acute angle at line m meets line n at point P.")
+    assert facts is None
+    assert why == ["the problem describes its angles or shapes in words rather than naming them, "
+                   "so the figure can't be checked"]
+
+
+@pytest.mark.asyncio
+async def test_a_disagreement_says_what_about(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Prod 29be9c15: one reading said which angles are alternate interior,
+    the other left it out."""
+    base = FigureFacts(named_lines=["p", "q"], givens=[Fact(kind="parallel", items=["p", "q"])])
+    _stub_readings(monkeypatch, base, base.model_copy(update={"givens": [
+        *base.givens, Fact(kind="alternate_interior", items=[])]}))
+    _f, why = await _why("Lines p and q are parallel. A transversal forms alternate interior angles.")
+    assert why == ["two readings of the problem disagree about which angles are alternate interior, "
+                   "so the figure can't be checked"]
+    _stub_readings(monkeypatch, base, base.model_copy(update={"givens": [
+        *base.givens, Fact(kind="alternate_interior", items=["1", "2"])]}))
+    _f, why = await _why("Lines p and q are parallel. ∠1 and ∠2 are alternate interior angles.")
+    assert why == ["two readings of the problem disagree about whether ∠1 and ∠2 are alternate interior angles, "
+                   "so the figure can't be checked"]
+
+
+@pytest.mark.asyncio
+async def test_numbers_that_make_an_impossible_angle_say_so(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Prod 05b4947e: the givens solve to ∠JKL = 276°."""
+    text = (r"$\overrightarrow{KM}$ bisects $\angle JKL$, and $\overrightarrow{KN}$ bisects $\angle MKL$. "
+            r"If $m\angle JKL = 10x - 4$ and $m\angle NKL = 2x + 13$, find $m\angle JKM$.")
+    r = FigureFacts(points=list("JKLMN"), rays=["KM", "KN"], givens=[
+        Fact(kind="bisects_angle", items=["KM", "JKL"]), Fact(kind="bisects_angle", items=["KN", "MKL"]),
+        Fact(kind="angle_measure", items=["JKL"], expr="10x - 4"),
+        Fact(kind="angle_measure", items=["NKL"], expr="2x + 13"),
+    ], find=[Target(kind="angle", item="JKM")])
+    _stub_readings(monkeypatch, r, r)
+    facts, why = await _why(text)
+    assert facts is None
+    assert why == ["the problem's numbers make ∠JKL 276°, more than a straight angle; check the problem for a typo"]
+
+
+@pytest.mark.asyncio
+async def test_a_reading_cannot_write_the_log(monkeypatch: pytest.MonkeyPatch) -> None:
+    import api.core.construction_figures as cf
+
+    async def call(*args: Any, **kwargs: Any) -> dict[str, Any]:
+        return {"points": ["A"], "dropped": ["nothing to see"]}
+
+    monkeypatch.setattr(cf, "call_claude_json", call)
+    got = await cf._read_once("s", "m", mode="t", user_id=None, generation_job_id=None)
+    assert got.dropped == []
+
+
+# ── A mark showing the statement to prove is removed ───────────────────
+
+
+def test_a_mark_showing_the_statement_to_prove_is_removed_even_when_the_givens_back_it() -> None:
+    """Prod 2f44f46d: ∠ADE = 4x + 8 and ∠ABC = 6x − 12 solve to 48° each,
+    which 'backed' arcs on both; but ∠ADE ≅ ∠ABC is what the student must
+    explain. The arcs are removed and the figure is shown."""
+    from api.core.geometry.figure_check import unbacked_marks
+
+    text = ("In the figure below, DE ∥ BC, where D lies on AB and E lies on AC. The measure of ∠ADE = 4x + 8 "
+            "degrees, ∠ABC = 6x − 12 degrees, and ∠DAE = 38 degrees. Explain why ∠ADE and ∠ABC are congruent.")
+    reading = FigureFacts(points=list("ABCDE"), segments=["DE", "BC", "AB", "AC"], triangles=["ABC", "ADE"], givens=[
+        Fact(kind="parallel", items=["DE", "BC"]), Fact(kind="on_segment", items=["AB"], point="D"),
+        Fact(kind="on_segment", items=["AC"], point="E"), Fact(kind="angle_measure", items=["ADE"], expr="4x + 8"),
+        Fact(kind="angle_measure", items=["ABC"], expr="6x - 12"), Fact(kind="angle_measure", items=["DAE"], value=38),
+    ], prove=[Fact(kind="congruent_angles", items=["ADE", "ABC"])])
+    spec = {"points": {"A": (8.671, 9.629), "B": (0.0, 0.0), "C": (8.0, 0.0), "D": (4.336, 4.815), "E": (8.336, 4.815)},
+            "segments": ["AB", "AC", "BC", "DE"], "parallel_groups": [["DE", "BC"]],
+            "angle_labels": {"ABC": "6x − 12°", "ADE": "4x + 8°", "DAE": "38°"}}
+    marked = _fig(spec["points"], **{k: v for k, v in spec.items() if k != "points"}, arc_groups=[["ADE", "ABC"]])
+    assert unbacked_marks(marked, text, reading) == {"arc_groups": [0]}
+    assert check_construction(_fig(spec["points"], **{k: v for k, v in spec.items() if k != "points"}),
+                              text, facts=reading) == []
+    # The givens' own marks stay.
+    assert "parallel_groups" not in unbacked_marks(marked, text, reading)
+
+
+def test_the_arms_of_a_named_angle_pair_are_drawn() -> None:
+    reading = FigureFacts(points=list("BGHC"), givens=[Fact(kind="alternate_interior", items=["BGH", "CHG"])])
+    pts = {k: TR[k] for k in "BGHC"}
+    text = "∠BGH and ∠CHG are alternate interior angles."
+    assert check_construction(_fig(pts, segments=["GB", "GH", "HC"]), text, facts=reading) == []
+    assert check_construction(_fig(pts, segments=["GB", "GH"]), text, facts=reading) != []
+
+
+@pytest.mark.asyncio
+async def test_the_reading_step_sets_circle_facts_aside(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Prod 6d780084, through the reading step: the readings agree once the
+    made-up diameter is set aside, and the agreed facts carry the note."""
+    common = [Fact(kind="right_triangle", items=["ABC"], point="A"),
+              Fact(kind="right_triangle", items=["DBC"], point="D"),
+              Fact(kind="congruent_segments", items=["AB", "DB"])]
+    a = FigureFacts(points=list("ABCD"), triangles=["ABC", "DBC"], givens=common,
+                    prove=[Fact(kind="congruent_triangles", items=["ABC", "DBC"])])
+    b = a.model_copy(update={"givens": [*common, Fact(kind="diameter", items=["BC"])]})
+    _stub_readings(monkeypatch, a, b)
+    facts, why = await _why("△ABC and △DBC share hypotenuse BC, with right angles at A and D respectively, "
+                            "and AB = DB. Write a complete congruence statement.")
+    assert why == []
+    assert facts.dropped == ["set aside from givens: BC is a diameter of the circle (the problem names no circle)"]
+    assert all(f.kind != "diameter" for f in facts.givens)
+    # Stored as JSON with the figure, the note survives.
+    from api.core.geometry.facts import as_facts
+
+    assert as_facts(facts.model_dump()).dropped == facts.dropped
+
+
+def test_an_angle_number_with_no_angle_named_states_nothing() -> None:
+    """Adversarial pair-same-side / pair-alt-exterior: a reading wrote '∠1
+    labels ""' or '∠1 labels ∠1'. That names no angle: it must neither
+    change what ∠1 means (one reading's 'm∠1 = 63°' read as a bad name)
+    nor loop forever."""
+    pair = Fact(kind="same_side_interior", items=["1", "2"])
+    base = FigureFacts(points=list("ABCD"), givens=[pair, Fact(kind="angle_measure", items=["1"], value=63)])
+    for target in ("", "1"):
+        noted = base.model_copy(update={"givens": [Fact(kind="numbered_angle", items=["1", target]), *base.givens]})
+        assert disagreements(base, noted) == [], target
+        assert unverifiable(noted) == [] and described_in_words(noted) == []
+    named = base.model_copy(update={"givens": [Fact(kind="numbered_angle", items=["1", "ABC"]), *base.givens]})
+    assert disagreements(base, named)  # "∠1 is ∠ABC" does say something
+
+
+def test_on_says_no_more_than_midpoint_and_a_part_is_congruent_to_itself() -> None:
+    """Prod 7ef5c01b: one reading added 'M is on BC' to 'M is the midpoint
+    of BC'. Prod 6d780084 / f4ac1109: 'BC ≅ BC' and 'AC ≅ CA' state nothing
+    (a part matched with itself makes no pair)."""
+    mid = Fact(kind="midpoint", items=["BC"], point="M")
+    base = FigureFacts(points=list("ABCDM"), givens=[Fact(kind="parallel", items=["AB", "CD"]), mid])
+    on = base.model_copy(update={"givens": [*base.givens, Fact(kind="on_segment", items=["BC"], point="M")]})
+    assert disagreements(base, on) == []
+    # On another segment it is a fact of its own.
+    assert disagreements(base, base.model_copy(update={"givens": [
+        *base.givens, Fact(kind="on_segment", items=["AD"], point="M")]}))
+    for same in (["AC", "CA"], ["BC", "BC"]):
+        assert disagreements(base, base.model_copy(update={"givens": [
+            *base.givens, Fact(kind="congruent_segments", items=same)]})) == [], same
+    assert disagreements(base, base.model_copy(update={"givens": [
+        *base.givens, Fact(kind="congruent_segments", items=["AC", "BD"])]}))

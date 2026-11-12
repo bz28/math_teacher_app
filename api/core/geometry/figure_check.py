@@ -969,6 +969,8 @@ def _holds(rel: _Relation, d: _Drawing) -> bool | None:
             arms2 = [p[a2[0]], p[a2[2]]]
             # Each arm of one is opposite an arm of the other.
             return all(any(abs(_angle(x, v, y) - 180) < _TOL_ANG for y in arms2) for x in arms1)
+        if k == "anglepair":
+            return _angle_pair(d, args[0], d.resolve(args[1]), d.resolve(args[2]))
         if k == "linepar":
             n1, n2 = args
             if n1 not in d.lines or n2 not in d.lines:
@@ -1746,7 +1748,61 @@ def unbacked_marks(fig: ConstructionFigure, problem_text: str, facts: Any = None
     for i, ref in enumerate(fig.right_angles):
         if not _box_backed(d, _three(ref), parts.givens):
             out.setdefault("right_angles", []).append(i)
+    # A mark showing the statement to prove hands the student the answer,
+    # even where the givens' numbers back it (∠ADE = ∠ABC = 48° once x is
+    # solved): it goes too.
+    given_keys = {_rel_key(r) for r in parts.givens}
+    prove = [r for r in parts.prove if _rel_key(r) not in given_keys]
+    fields = ("tick_groups", "arc_groups", "parallel_groups", "right_angles")
+    for name in fields if prove else ():
+        for i, item in enumerate(getattr(fig, name)):
+            if i in out.get(name, []):
+                continue
+            alone = _Drawing(fig.model_copy(update={f: ([item] if f == name else []) for f in fields}))
+            if any(_marked(rel, alone) for rel in prove):
+                out.setdefault(name, []).append(i)
+    for name in out:
+        out[name].sort()
     return out
+
+
+def _angle_pair(d: _Drawing, kind: str, a1: tuple[str, str, str] | None,
+                a2: tuple[str, str, str] | None) -> bool | None:
+    """Where two angles sit around a transversal: the line through their
+    vertices. Each must have one arm along it; an arm pointing toward the
+    other vertex makes the angle interior, away makes it exterior; the other
+    arm says which side of the transversal it is on."""
+    if a1 is None or a2 is None:
+        return None
+    p = d.p
+    v1, v2 = p[a1[1]], p[a2[1]]
+    if _dist(v1, v2) < 1e-9 * max(d.scale, 1e-9):
+        return False
+    t = (v2[0] - v1[0], v2[1] - v1[1])
+
+    def place(a: tuple[str, str, str], v: Point, other: Point) -> tuple[bool, int] | None:
+        ends = [p[a[0]], p[a[2]]]
+        along = [e for e in ends if d.collinear(v, other, e)]
+        if len(along) != 1:
+            return None
+        arm = ends[1 - ends.index(along[0])]
+        toward = (along[0][0] - v[0]) * (other[0] - v[0]) + (along[0][1] - v[1]) * (other[1] - v[1]) > 0
+        side = t[0] * (arm[1] - v[1]) - t[1] * (arm[0] - v[0])
+        return toward, (1 if side > 0 else -1)
+
+    first, second = place(a1, v1, v2), place(a2, v2, v1)
+    if first is None or second is None:
+        return False
+    (in1, side1), (in2, side2) = first, second
+    if kind == "alternate_interior":
+        return in1 and in2 and side1 != side2
+    if kind == "alternate_exterior":
+        return not in1 and not in2 and side1 != side2
+    if kind == "same_side_interior":
+        return in1 and in2 and side1 == side2
+    if kind == "corresponding":
+        return in1 != in2 and side1 == side2
+    return None
 
 
 def _box_backed(d: _Drawing, box: tuple[str, str, str], givens: list[_Relation]) -> bool:

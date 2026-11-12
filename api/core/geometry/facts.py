@@ -33,8 +33,13 @@ FactKind = Literal[
     "congruent_triangles", "similar_triangles", "isosceles", "equilateral", "right_triangle",
     "parallelogram", "rectangle", "square", "rhombus", "trapezoid", "isosceles_trapezoid", "kite",
     "on_circle", "tangent", "chord", "diameter", "radius", "central_angle", "inscribed_angle",
-    "numbered_angle", "transversal", "other",
+    "numbered_angle", "transversal",
+    "alternate_interior", "alternate_exterior", "corresponding", "same_side_interior",
+    "other",
 ]
+# Two angles a transversal makes with two lines, by where they sit.
+PAIRS = ("alternate_interior", "alternate_exterior", "corresponding", "same_side_interior")
+CIRCLE_KINDS = ("on_circle", "tangent", "chord", "diameter", "radius", "central_angle", "inscribed_angle")
 SHAPES = ("parallelogram", "rectangle", "square", "rhombus", "trapezoid", "isosceles_trapezoid", "kite")
 
 
@@ -83,6 +88,9 @@ class FigureFacts(BaseModel):
     prove: list[Fact] = Field(default_factory=list)
     find: list[Target] = Field(default_factory=list)
     requested: list[Part] = Field(default_factory=list)
+    # Written by code, never by a reading: each fact taken out of a reading
+    # and why, so the stored facts show what was set aside.
+    dropped: list[str] = Field(default_factory=list)
 
 
 # ── Names ──────────────────────────────────────────────────────────────
@@ -144,7 +152,7 @@ def ang(s: str, facts: FigureFacts | None = None) -> Canon:
     if re.fullmatch(r"\d+", s):
         if facts is not None:
             for f in facts.givens:
-                if f.kind == "numbered_angle" and len(f.items) == 2 and f.items[0] == s:
+                if f.kind == "numbered_angle" and len(f.items) == 2 and f.items[0] == s and _labels_an_angle(f):
                     return ang(f.items[1], facts)
         return ("num", s)
     n = split_names(s)
@@ -206,8 +214,8 @@ def atoms(facts: FigureFacts) -> dict[str, set[Canon]]:
 
     return {
         "points": {p.strip() for p in facts.points if split_names(p)},
-        "givens": _implied_away(of(g for g in facts.givens if not _names_a_figure(g, facts))),
-        "prove": _implied_away(of(f for f in facts.prove if not _names_a_figure(f, facts))),
+        "givens": _implied_away(of(g for g in facts.givens if not _states_nothing(g, facts))),
+        "prove": _implied_away(of(f for f in facts.prove if not _states_nothing(f, facts))),
         # What is asked for matters to the checker only as a named angle or
         # segment (its label must not print the answer); "other" checks nothing.
         "find": {a for a in (_target_atom(t, facts) for t in facts.find) if a[0] != "other" and a[1][0] != "bad"},
@@ -235,9 +243,18 @@ def _named_parts(facts: FigureFacts) -> set[Canon]:
     return out
 
 
-def _names_a_figure(f: Fact, facts: FigureFacts) -> bool:
-    """An "other" fact that only names a listed triangle or polygon ("In
-    △ABC"): naming isn't stating, so it is no fact."""
+def _labels_an_angle(f: Fact) -> bool:
+    """A numbered_angle fact that says which named angle carries the label
+    ("∠1 is ∠ABC"), not just that there is an ∠1 ("1" → "", "1" → "1")."""
+    return len(f.items) == 2 and len(split_names(f.items[1])) in (1, 3)
+
+
+def _states_nothing(f: Fact, facts: FigureFacts) -> bool:
+    """A fact that states nothing about the figure: an "other" fact that
+    only names a listed triangle or polygon ("In △ABC"), since naming isn't
+    stating; or "∠1 is an angle" with no angle named for it."""
+    if f.kind == "numbered_angle":
+        return not _labels_an_angle(f)
     if f.kind != "other" or not f.items:
         return False
     named = {cycle(x) for x in (*facts.triangles, *facts.polygons)}
@@ -251,10 +268,14 @@ def _names_a_figure(f: Fact, facts: FigureFacts) -> bool:
 
 def _implied_away(atoms_: set[Canon]) -> set[Canon]:
     """'△ABC is isosceles' says no more than two of its sides from one corner
-    being congruent: drop it when the reading also says that."""
+    being congruent, and 'M is on BC' no more than 'M is the midpoint of BC':
+    drop each when the reading also says the stronger fact."""
     eq = {a[1] for a in atoms_ if isinstance(a, tuple) and a[0] == "eqlen"}
+    mids = {(a[1], a[2]) for a in atoms_ if isinstance(a, tuple) and a[0] == "mid"}
 
     def implied(a: Canon) -> bool:
+        if isinstance(a, tuple) and a[0] == "on":
+            return (a[1], a[2]) in mids
         if not (isinstance(a, tuple) and a[0] == "isosceles" and a[1][0] == "poly"):
             return False
         t = a[1][1]
@@ -276,11 +297,12 @@ def merged(a: FigureFacts, b: FigureFacts) -> FigureFacts:
 
     def union(x: list[Fact], y: list[Fact]) -> list[Fact]:
         have = {key(f) for f in x}
-        return [*x, *(f for f in y if key(f) not in have and not _names_a_figure(f, b))]
+        return [*x, *(f for f in y if key(f) not in have and not _states_nothing(f, b))]
 
     return a.model_copy(update={
-        "givens": [f for f in union(a.givens, b.givens) if not _names_a_figure(f, a)],
-        "prove": [f for f in union(a.prove, b.prove) if not _names_a_figure(f, a)],
+        "dropped": [*a.dropped, *(x for x in b.dropped if x not in a.dropped)],
+        "givens": [f for f in union(a.givens, b.givens) if not _states_nothing(f, a)],
+        "prove": [f for f in union(a.prove, b.prove) if not _states_nothing(f, a)],
     })
 
 
@@ -388,6 +410,8 @@ def _fact_atoms(f: Fact, facts: FigureFacts) -> set[Canon]:
         return out
     if k == "numbered_angle" and len(it) >= 2:
         return {("numbered", it[0], ang(it[1]))}
+    if k in PAIRS:
+        return {(k, frozenset((A(it[0]), A(it[1]))) if len(it) >= 2 else None)}
     if k == "transversal" and it:
         return {("transversal", lin(it[0]) if it[0] else None, frozenset(lin(x) for x in it[1:]))}
     return {("other", k, tuple(it), f.quote.strip().lower())}
@@ -447,6 +471,9 @@ def disagreements(a: FigureFacts, b: FigureFacts) -> list[str]:
 
 # Each word or symbol that states a relation, and the fact kinds that can
 # account for it.
+# A theorem's name ("the Alternate Interior Angles Theorem") names a method,
+# not a fact about the figure.
+_NOT_A_THEOREM = r"(?!(?:\s+angles?)?(?:\s+(?:theorem|postulate|converse))\b)"
 _SIGNALS: list[tuple[str, tuple[str, ...]]] = [
     (r"\\parallel|∥|\bparallel\b", ("parallel", "parallelogram", "rectangle", "square", "rhombus", "trapezoid",
                                      "isosceles_trapezoid", "transversal")),
@@ -474,8 +501,8 @@ _SIGNALS: list[tuple[str, tuple[str, ...]]] = [
     (r"\bcircles?\b|\\odot|⊙", ("on_circle", "tangent", "chord", "diameter", "radius", "central_angle",
                                 "inscribed_angle")),
     (r"\bopposite\s+rays\b", ("opposite_rays",)),
-    (r"\bvertical\s+angles\b", ("vertical_angles",)),
-    (r"\blinear\s+pair\b", ("linear_pair",)),
+    (rf"\bvertical\s+angles\b{_NOT_A_THEOREM}", ("vertical_angles",)),
+    (rf"\blinear\s+pair\b{_NOT_A_THEOREM}", ("linear_pair",)),
     (r"\bsupplementary\b", ("supplementary", "linear_pair")),
     (r"\bcomplementary\b", ("complementary",)),
     (r"\btransversals?\b", ("transversal",)),
@@ -483,8 +510,11 @@ _SIGNALS: list[tuple[str, tuple[str, ...]]] = [
                                                          "midpoint", "intersect")),
     (r"\bcollinear\b", ("collinear", "on_line", "on_segment")),
     (r"\b(?:intersect(?:s|ing)?|meets?)\b", ("intersect", "on_segment", "on_line", "transversal")),
-    (r"\balternate\s+(?:interior|exterior)\b|\bcorresponding\s+angles\b|\b(?:same[-\s]side|consecutive)\s+interior\b",
-     ("congruent_angles", "supplementary", "transversal")),
+    # Where two angles sit is its own fact: a transversal alone doesn't say it.
+    (rf"\balternate\s+interior\b{_NOT_A_THEOREM}", ("alternate_interior",)),
+    (rf"\balternate\s+exterior\b{_NOT_A_THEOREM}", ("alternate_exterior",)),
+    (rf"\bcorresponding\s+angles\b{_NOT_A_THEOREM}", ("corresponding",)),
+    (rf"\b(?:same[-\s]side|consecutive)\s+interior\b{_NOT_A_THEOREM}", ("same_side_interior",)),
     (r"\baltitudes?\b|\bmedians?\b|\bequidistant\b|\bconcentric\b|\bcircumscribed\b", ()),
 ]
 # A method, not a fact: "use the Alternate Interior Angles Theorem", "by SAS".
@@ -549,6 +579,8 @@ def unverifiable(facts: FigureFacts) -> list[str]:
     """Facts with no numeric check on the drawing."""
     out = []
     for f in [*facts.givens, *facts.prove]:
+        if _states_nothing(f, facts):
+            continue
         try:
             rels = to_relations(f, facts)
         except (ValueError, IndexError):
@@ -558,8 +590,98 @@ def unverifiable(facts: FigureFacts) -> list[str]:
     return out
 
 
+_CIRCLE_WORDS = re.compile(
+    r"\bcircles?\b|\bsemicircles?\b|\\odot|⊙|\bradi(?:us|i)\b|\bdiameters?\b|\bchords?\b|\btangen(?:t|ts|cy)\b|"
+    r"\binscribed\b|\bcircum|\barcs?\b|\\overset\s*\{?\s*\\frown|\\wideparen",
+    re.IGNORECASE,
+)
+
+
+def grounded(facts: FigureFacts, text: str) -> FigureFacts:
+    """The reading without circle facts when the text (problem and request)
+    names no circle: there is then no circle to state anything about ("share
+    hypotenuse BC" read as "BC is a diameter"). Each fact set aside is noted
+    in `dropped`, written by code."""
+    if _CIRCLE_WORDS.search(text):
+        return facts
+    out: dict[str, list[Fact]] = {"givens": [], "prove": []}
+    notes: list[str] = []
+    for section in ("givens", "prove"):
+        for f in getattr(facts, section):
+            if f.kind in CIRCLE_KINDS:
+                notes.append(f"set aside from {section}: {describe(f)} (the problem names no circle)")
+            else:
+                out[section].append(f)
+    if facts.circles:
+        notes.append("set aside: circles " + ", ".join(c or "(unnamed)" for c in facts.circles)
+                     + " (the problem names no circle)")
+    if not notes:
+        return facts
+    return facts.model_copy(update={**out, "circles": [], "dropped": [*facts.dropped, *notes]})
+
+
+def described_in_words(facts: FigureFacts) -> list[str]:
+    """Facts with no check whose parts the problem describes rather than
+    names ("the acute angle at line m", "a diagonal")."""
+    out = []
+    for f in [*facts.givens, *facts.prove]:
+        if _states_nothing(f, facts) or f.kind != "other" and to_relations_or_none(f, facts):
+            continue
+        if not any(split_names(x) for x in f.items):
+            out.append(f.quote.strip() or f.kind.replace("_", " "))
+    return out
+
+
+def to_relations_or_none(f: Fact, facts: FigureFacts) -> list[Any] | None:
+    try:
+        return to_relations(f, facts) or None
+    except (ValueError, IndexError):
+        return None
+
+
+def first_difference(a: FigureFacts, b: FigureFacts) -> str:
+    """The first given or statement to prove one reading has and the other
+    doesn't, in words written by code; "" when it is elsewhere."""
+    x, y = atoms(a), atoms(b)
+    for section in ("givens", "prove"):
+        for mine, theirs, facts in ((x, y, a), (y, x, b)):
+            for f in getattr(facts, section):
+                if _states_nothing(f, facts):
+                    continue
+                own = _closure(_fact_atoms(f, facts)) & mine[section]
+                if own - theirs[section]:
+                    return describe(f) if f.kind != "other" else ""
+    return ""
+
+
+def impossible_measures(facts: FigureFacts) -> list[str]:
+    """Angles the problem's own numbers make more than a straight angle, or
+    zero or less: no figure can show them."""
+    from api.core.geometry.figure_check import _ang_txt, solved_expressions
+
+    rels: list[Any] = []
+    for f in facts.givens:
+        rels += to_relations_or_none(f, facts) or []
+    out = []
+    for r in [*solved_expressions(rels), *(r for r in rels if r.kind == "measure")]:
+        if r.kind != "measure":
+            continue
+        v = float(r.args[1])
+        if v > 180 + 1e-6:
+            out.append(f"the problem's numbers make {_ang_txt(r.args[0])} {v:g}°, more than a straight angle; "
+                       "check the problem for a typo")
+        elif v <= 1e-6:
+            out.append(f"the problem's numbers make {_ang_txt(r.args[0])} {v:g}°, which no angle can be; "
+                       "check the problem for a typo")
+    return list(dict.fromkeys(out))
+
+
 def _a(s: str) -> str:
     return f"∠{s}"
+
+
+def _pair_words(kind: str) -> str:
+    return kind.replace("_", " ").replace("same side", "same-side")
 
 
 def _num_txt(v: float | None) -> str:
@@ -611,6 +733,11 @@ def describe(f: Fact) -> str:
         "inscribed_angle": f"{_a(first)} is inscribed in {on}{size}",
         "numbered_angle": f"{_a(first)} is {_a(rest)}",
         "transversal": f"{first or 'a transversal'} crosses {rest}",
+        **{
+            pk: (f"{' and '.join(_a(x) for x in it)} are {_pair_words(pk)} angles"
+                 if len(it) >= 2 else f"which angles are {_pair_words(pk)}")
+            for pk in PAIRS
+        },
     }
     if k in said:
         return said[k]
@@ -713,6 +840,8 @@ def to_relations(f: Fact, facts: FigureFacts) -> list[Any]:
         return [R("opp", a, b, e)]
     if k == "vertical_angles" and len(it) >= 2:
         return [R("vertical", angle(it[0]), angle(it[1]))]
+    if k in PAIRS and len(it) >= 2:
+        return [R("anglepair", k, angle(it[0]), angle(it[1]))]
     if k in ("linear_pair", "supplementary", "complementary") and len(it) >= 2:
         total = 90.0 if k == "complementary" else 180.0
         return [R("anglesum", angle(it[0]), angle(it[1]), total, k == "linear_pair")]
@@ -920,6 +1049,7 @@ def to_parts(facts: FigureFacts, text: str, extra: str = "") -> Any:
         "vertical_angles": slice(None), "linear_pair": slice(None), "supplementary": slice(None),
         "complementary": slice(None), "bisects_angle": slice(1, 2), "numbered_angle": slice(1, 2),
         "central_angle": slice(0, 1), "inscribed_angle": slice(0, 1),
+        **{pk: slice(None) for pk in PAIRS},
     }
     for f in [*facts.givens, *facts.prove]:
         for x in f.items[angle_items[f.kind]] if f.kind in angle_items else []:

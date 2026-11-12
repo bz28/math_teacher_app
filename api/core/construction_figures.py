@@ -128,7 +128,7 @@ async def redraw_figure(
     if reading is not None:
         parts.append(
             "The facts the figure is checked against:\n"
-            + json.dumps(reading.model_dump(exclude_none=True), sort_keys=True),
+            + json.dumps(reading.model_dump(exclude_none=True, exclude={"dropped"}), sort_keys=True),
         )
     parts.append(f"Your previous figure:\n{json.dumps(previous_spec, sort_keys=True)}")
     parts.append("The checker found these problems:\n- " + "\n- ".join(issues))
@@ -180,6 +180,8 @@ triangles "ABC"; polygons "ABCD" in order):
   chord / diameter / radius [s] with circle; central_angle / inscribed_angle [a] with circle (value if stated)
 - numbered_angle ["1", angle it labels] when the problem says which angle ∠1 is
 - transversal [t, l1, l2] (t "" when unnamed)
+- alternate_interior / alternate_exterior / corresponding / same_side_interior [a1, a2]: two angles
+  the problem says a transversal makes in that position (items [] when it doesn't name them)
 - other: anything else stated about the figure (say it in quote)
 Naming a figure ("In △ABC", "quadrilateral ABCD") is not a fact: list it under triangles or polygons.
 Use only the names the problem itself uses; never invent one. When it names no points ("a
@@ -218,7 +220,8 @@ async def _read_once(system: str, message: str, *, mode: str, user_id: str | Non
         system, message, mode=mode, tool_schema=FACTS_TOOL, user_id=user_id, model=MODEL_REASON,
         max_tokens=4096, temperature=0.0, generation_job_id=generation_job_id,
     )
-    return FigureFacts.model_validate(result)
+    # `dropped` is code's own log of what it set aside, never the reading's.
+    return FigureFacts.model_validate(result).model_copy(update={"dropped": []})
 
 
 async def read_figure_facts(
@@ -237,7 +240,16 @@ async def read_figure_facts(
     relation word in the text, and that each fact has a check."""
     import asyncio
 
-    from api.core.geometry.facts import coverage_gaps, disagreements, merged, unverifiable
+    from api.core.geometry.facts import (
+        coverage_gaps,
+        described_in_words,
+        disagreements,
+        first_difference,
+        grounded,
+        impossible_measures,
+        merged,
+        unverifiable,
+    )
 
     message = f"Problem:\n{problem_text}"
     if final_answer:
@@ -256,18 +268,33 @@ async def read_figure_facts(
     except Exception:
         logger.exception("figure facts reading failed")
         return None, ["the problem couldn't be read for checking"]
+    a, b = grounded(a, f"{problem_text}\n{request}"), grounded(b, f"{problem_text}\n{request}")
+    if described_in_words(a) and described_in_words(b):
+        return None, [_IN_WORDS]
     differ = disagreements(a, b)
     if differ:
         logger.warning("figure facts: the two readings differ: %s", differ)
-        return None, ["two readings of the problem disagree, so the figure can't be checked"]
+        what = first_difference(a, b)
+        about = f" about {what if what.startswith('which') else 'whether ' + what}" if what else ""
+        return None, [f"two readings of the problem disagree{about}, so the figure can't be checked"]
     gaps = coverage_gaps(problem_text, a)
     if gaps:
         return None, [f"the reading of the problem missed {g}, so the figure can't be checked" for g in gaps[:3]]
     agreed = merged(a, b)
+    if described_in_words(agreed):
+        return None, [_IN_WORDS]
     cant = unverifiable(agreed)
     if cant:
         return None, [f"the checker can't verify “{c}” yet, so it can't confirm the figure" for c in cant[:3]]
+    impossible = impossible_measures(agreed)
+    if impossible:
+        return None, impossible[:2]
     return agreed, []
+
+
+_IN_WORDS = (
+    "the problem describes its angles or shapes in words rather than naming them, so the figure can't be checked"
+)
 
 
 # ── What the teacher is told ───────────────────────────────────────────
