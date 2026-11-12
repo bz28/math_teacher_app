@@ -1,14 +1,13 @@
 "use client";
 
 import { Suspense, useEffect, useState, type FormEvent } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuthStore } from "@/stores/auth";
 import { auth as authApi } from "@/lib/api";
-import { Button, useToast } from "@/components/ui";
-import { Input, PasswordInput } from "@/components/ui/input";
-import { LogoMark } from "@/components/shared/logo-mark";
+import { useToast } from "@/components/ui";
+import { AuthShell, AUTH_CARD, AUTH_H1 } from "@/components/site/auth-shell";
+import { SiteInput, SitePasswordInput, SiteSubmit, Spinner } from "@/components/site/form";
 
 export default function LoginPage() {
   return (
@@ -135,76 +134,51 @@ function LoginPageContent() {
     setPassword("");
   }
 
-  return (
-    <div
-      className="relative flex flex-1 flex-col items-center justify-center px-6 py-12"
-      style={{
-        // Editorial signin backdrop matching the dashboard .login-page
-        // pattern: warm-paper radial atmosphere, no orbs, no blur halos.
-        backgroundImage:
-          "radial-gradient(circle at 18% 22%, var(--color-surface-alt-2) 0%, transparent 38%)," +
-          "radial-gradient(circle at 82% 78%, var(--color-primary-bg) 0%, transparent 40%)",
-      }}
-    >
-      {/* Brand — wordmark + serif-italic sub, matching the dashboard
-          and homepage brand block. No gradient logo tile. */}
-      <Link href="/" className="mb-10 flex items-center gap-2.5">
-        <LogoMark size={36} />
-        <span className="flex flex-col leading-none">
-          <span className="text-lg font-bold tracking-[-0.01em] text-text-primary">
-            Veradic AI
-          </span>
-          <span className="mt-1 font-serif italic text-[13px] text-text-muted">
-            classroom AI, teacher-controlled
-          </span>
-        </span>
-      </Link>
+  const quietLink =
+    "text-sm font-semibold text-ink-soft underline-offset-4 transition-colors hover:text-veradic hover:underline";
 
-      {/* Card — hairline on warm surface, no shadow chrome.
-          Quieter entrance: opacity + 4px rise, no spring. */}
+  return (
+    <AuthShell switchPrompt="New student?" switchLabel="Join your class" switchHref="/register">
+      {/* Quiet entrance: opacity + 4px rise, no spring. */}
       <motion.div
         initial={{ opacity: 0, y: 4 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.18, ease: "easeOut" }}
-        className="relative w-full max-w-sm rounded-[--radius-md] border border-border bg-surface p-8"
+        className={AUTH_CARD}
       >
         {checkingSession ? (
-          <div className="flex justify-center py-10" aria-label="Checking your session">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <div className="flex justify-center py-10" role="status" aria-label="Checking your session">
+            <Spinner />
           </div>
         ) : alreadySignedIn ? (
           <>
-            <h1 className="font-serif text-[28px] leading-tight tracking-[-0.01em] text-text-primary">
-              You&apos;re signed in.
-            </h1>
-            <p className="mt-2 text-sm text-text-secondary">
-              As <strong className="text-text-primary">{user.name || user.email}</strong>
+            <h1 className={AUTH_H1}>You&apos;re signed in.</h1>
+            <p className="m-0 mt-3 text-base leading-[1.5] text-ink-soft">
+              As <strong className="font-bold text-ink">{user.name || user.email}</strong>
               {user.name && <> ({user.email})</>}.
             </p>
-            <Button className="mt-6 w-full" onClick={redirectAfterLogin}>
-              Continue
-            </Button>
             <button
               type="button"
-              onClick={logout}
-              className="mt-4 block w-full text-center text-xs font-medium text-text-muted transition-colors hover:text-primary"
+              onClick={redirectAfterLogin}
+              className="mt-7 flex w-full items-center justify-center rounded-[6px] bg-veradic px-4 py-4 text-[17px] font-extrabold text-white transition-colors hover:bg-veradic-dark"
             >
+              Continue
+            </button>
+            <button type="button" onClick={logout} className={`mx-auto mt-4 block ${quietLink}`}>
               Use a different account
             </button>
           </>
         ) : pendingMfa ? (
           <>
-            <h1 className="font-serif text-[28px] leading-tight tracking-[-0.01em] text-text-primary">
-              Check your email.
-            </h1>
-            <p className="mt-2 text-sm text-text-secondary">
+            <h1 className={AUTH_H1}>Check your email.</h1>
+            <p className="m-0 mt-3 text-base leading-[1.5] text-ink-soft">
               We sent a 6-digit code to{" "}
-              <strong className="text-text-primary">{pendingMfa.email}</strong>.
+              <strong className="font-bold text-ink">{pendingMfa.email}</strong>.
               Enter it below to finish signing in. The code expires in 10 minutes.
             </p>
 
-            <form onSubmit={handleVerifyMfa} className="mt-6 space-y-4">
-              <Input
+            <form onSubmit={handleVerifyMfa} className="mt-6 space-y-5">
+              <SiteInput
                 label="Sign-in code"
                 type="text"
                 inputMode="numeric"
@@ -220,50 +194,38 @@ function LoginPageContent() {
                 required
                 autoComplete="one-time-code"
                 autoFocus
+                large
               />
 
-              <Button
-                type="submit"
-                loading={loading}
-                disabled={mfaCode.length !== 6}
-                className="w-full"
-              >
+              <SiteSubmit loading={loading} disabled={mfaCode.length !== 6}>
                 Verify and sign in
-              </Button>
+              </SiteSubmit>
 
-              <button
-                type="button"
-                onClick={handleCancelMfa}
-                className="block w-full text-center text-xs font-medium text-text-muted transition-colors hover:text-primary"
-              >
-                ← Use a different account
+              <button type="button" onClick={handleCancelMfa} className={`mx-auto block ${quietLink}`}>
+                Use a different account
               </button>
             </form>
           </>
         ) : (
           <>
-            <h1 className="font-serif text-[28px] leading-tight tracking-[-0.01em] text-text-primary">
-              Welcome back.
-            </h1>
+            <h1 className={AUTH_H1}>Welcome back.</h1>
             {signedOut ? (
               <p
                 role="status"
-                className="mt-3 rounded-[--radius-sm] bg-warning-bg px-3 py-2 text-sm text-warning-dark"
+                className="m-0 mt-4 rounded-[6px] border border-[#E9C46A] bg-[#FFF6DB] px-3.5 py-2.5 text-sm leading-[1.5] text-[#5C4300]"
               >
                 You were signed out. Sign in to go back to where you were, and
                 check that your last change saved.
               </p>
             ) : (
-              <p className="mt-2 font-serif italic text-[15px] text-text-secondary">
-                Sign in to continue.
-              </p>
+              <p className="m-0 mt-2 text-base text-ink-soft">Sign in to continue.</p>
             )}
 
-            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-              <Input
+            <form onSubmit={handleSubmit} className="mt-6 space-y-5">
+              <SiteInput
                 label="Email"
                 type="email"
-                placeholder="you@example.com"
+                placeholder="you@school.org"
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);
@@ -274,7 +236,7 @@ function LoginPageContent() {
               />
 
               <div>
-                <PasswordInput
+                <SitePasswordInput
                   label="Password"
                   placeholder="Your password"
                   value={password}
@@ -285,98 +247,88 @@ function LoginPageContent() {
                   required
                   autoComplete="current-password"
                 />
-                <div className="mt-1.5 text-right">
-                  <button
-                    type="button"
-                    className="text-xs font-medium text-text-muted transition-colors hover:text-primary"
-                    onClick={() => setShowForgot(true)}
-                  >
+                <div className="mt-2 text-right">
+                  <button type="button" className={quietLink} onClick={() => setShowForgot(true)}>
                     Forgot password?
                   </button>
                 </div>
               </div>
 
-              <Button
-                type="submit"
-                loading={loading}
-                className="w-full"
-              >
-                Sign In
-              </Button>
+              <SiteSubmit loading={loading}>Sign in</SiteSubmit>
             </form>
-
-            <div className="mt-6 border-t border-border-light pt-4 text-center">
-              <p className="text-sm text-text-secondary">
-                Don&apos;t have an account?{" "}
-                <Link
-                  href="/register"
-                  className="font-semibold text-primary hover:text-primary-dark"
-                >
-                  Get Started
-                </Link>
-              </p>
-            </div>
           </>
         )}
       </motion.div>
 
-      {/* Forgot password overlay — warm-ink scrim, hairline card. */}
+      {/* Forgot password: an ink scrim and a white card. */}
       {showForgot && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[color:var(--color-overlay)] px-6" onClick={() => setShowForgot(false)}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[rgba(29,38,51,0.55)] px-4"
+          onClick={() => setShowForgot(false)}
+        >
           <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="forgot-title"
             onClick={(e) => e.stopPropagation()}
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.14, ease: "easeOut" }}
-            className="w-full max-w-sm rounded-[--radius-md] border border-border bg-surface p-8 shadow-md"
+            className="w-full max-w-[420px] rounded-[4px] border border-hairline bg-white px-5 py-7 shadow-[0_30px_60px_-30px_rgba(29,38,51,0.6)] sm:px-8 sm:py-8"
           >
             {forgotSent ? (
               <div className="text-center">
-                <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-500/10">
-                  <svg className="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                  </svg>
-                </div>
-                <h3 className="text-lg font-bold text-text-primary">Check your email</h3>
-                <p className="mt-2 text-sm text-text-secondary">
-                  If an account exists for <strong>{forgotEmail}</strong>, we sent a password reset link.
+                <span
+                  aria-hidden="true"
+                  className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full border-2 border-veradic font-hand text-2xl text-veradic"
+                >
+                  &#10003;
+                </span>
+                <h2 id="forgot-title" className="m-0 text-[22px] font-black tracking-[-0.02em] text-ink">
+                  Check your email
+                </h2>
+                <p className="m-0 mt-2 text-[15px] leading-[1.5] text-ink-soft">
+                  If an account exists for <strong className="font-bold text-ink">{forgotEmail}</strong>, we sent a password reset link.
                 </p>
                 <button
+                  type="button"
                   onClick={() => { setShowForgot(false); setForgotSent(false); setForgotEmail(""); }}
-                  className="mt-4 text-sm font-semibold text-primary hover:text-primary-dark"
+                  className="mt-5 text-[15px] font-bold text-veradic underline underline-offset-4 hover:text-veradic-dark"
                 >
-                  Back to Login
+                  Back to sign in
                 </button>
               </div>
             ) : (
               <>
-                <h3 className="font-serif text-[22px] leading-tight tracking-[-0.01em] text-text-primary">
+                <h2 id="forgot-title" className="m-0 text-[24px] font-black leading-[1.1] tracking-[-0.02em] text-ink">
                   Reset your password
-                </h3>
-                <p className="mt-2 text-sm text-text-secondary">
+                </h2>
+                <p className="m-0 mt-2 text-[15px] leading-[1.5] text-ink-soft">
                   Enter your email and we&apos;ll send you a reset link.
                 </p>
-                <form onSubmit={handleForgotPassword} className="mt-4 space-y-4">
-                  <Input
+                <form onSubmit={handleForgotPassword} className="mt-5 space-y-5">
+                  <SiteInput
                     label="Email"
+                    id="forgot-email"
                     type="email"
-                    placeholder="you@example.com"
+                    placeholder="you@school.org"
                     value={forgotEmail}
                     onChange={(e) => setForgotEmail(e.target.value)}
                     required
                     autoComplete="email"
+                    autoFocus
                   />
                   <div className="flex gap-3">
                     <button
                       type="button"
                       onClick={() => setShowForgot(false)}
-                      className="flex-1 rounded-[--radius-sm] border border-border px-4 py-2.5 text-sm font-semibold text-text-secondary transition-colors hover:border-text-primary hover:text-text-primary"
+                      className="flex-1 rounded-[6px] border-[1.5px] border-[#8A93A0] px-4 py-3 text-[15px] font-bold text-ink transition-colors hover:border-ink"
                     >
                       Cancel
                     </button>
-                    <Button type="submit" loading={forgotLoading} className="flex-1">
-                      Send Link
-                    </Button>
+                    <div className="flex-1">
+                      <SiteSubmit loading={forgotLoading}>Send link</SiteSubmit>
+                    </div>
                   </div>
                 </form>
               </>
@@ -384,6 +336,6 @@ function LoginPageContent() {
           </motion.div>
         </div>
       )}
-    </div>
+    </AuthShell>
   );
 }
