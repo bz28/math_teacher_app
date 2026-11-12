@@ -1,79 +1,83 @@
 import type { Metadata } from "next";
 import { SubjectPage } from "@/components/landing/subject-page";
-import { calculusDemo } from "@/components/landing/demos/calculus-demo";
 import { SITE_URL } from "@/lib/seo";
 
+// The root layout's title template adds "| Veradic AI".
+const TITLE = "AI Math for Classrooms: Pre-Algebra to AP Calculus";
+const DESCRIPTION =
+  "Veradic reads every step of your students' handwritten math homework, asks them to explain their own work, and drafts grades from your class rules for you to approve.";
+
 export const metadata: Metadata = {
-  title: "AI Math Tutor for Schools: Algebra to Calculus | Veradic AI",
-  description:
-    "Veradic is the AI math tutor built for classrooms. Integrity checks, AI grading, and endless practice across algebra, geometry, calculus, and word problems.",
+  title: TITLE,
+  description: DESCRIPTION,
   keywords: [
+    "ai math for classrooms",
+    "ai math grading",
+    "math homework grading",
     "ai math tutor for schools",
-    "ai math tutor",
-    "math homework help",
-    "step by step math",
-    "algebra tutor",
-    "calculus help",
-    "ai tutor for teachers",
     "classroom math ai",
-    "chatgpt alternative math",
+    "algebra homework",
+    "calculus homework",
+    "ai for math teachers",
     "math practice problems",
-    "veradic math tutor",
+    "veradic math",
   ],
   openGraph: {
-    title: "AI Math Tutor for Schools | Veradic AI",
-    description:
-      "Integrity checks, AI grading, and endless practice across algebra, geometry, calculus, and word problems.",
+    title: `${TITLE} | Veradic AI`,
+    description: DESCRIPTION,
     url: `${SITE_URL}/subjects/math`,
   },
   twitter: {
-    title: "AI Math Tutor for Schools | Veradic AI",
-    description:
-      "Integrity checks, AI grading, and endless practice across algebra, geometry, calculus, and word problems.",
+    title: `${TITLE} | Veradic AI`,
+    description: DESCRIPTION,
   },
   alternates: {
     canonical: `${SITE_URL}/subjects/math`,
   },
 };
 
-const mathIcon = (
-  <svg
-    className="h-8 w-8"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <line x1="12" y1="2" x2="12" y2="22" />
-    <line x1="2" y1="12" x2="22" y2="12" />
-  </svg>
-);
-
-const whyReasons = [
-  "Covers the full math curriculum from middle school through AP Calculus BC. One tool, every class you teach.",
-  "Shows work the way you show work: factor, simplify, solve, verify. Not a black box that spits out a final number.",
-  "Catches the common mistakes you see every week (sign errors, missed steps, distribution errors) and walks students past them.",
-];
-
-const subjectProseBlock =
-  "Every step in Veradic's walk-through explains why the move works — not just that it does. Students see why you factor before applying the quadratic formula, why a substitution makes the integral tractable, why a proof follows the order it does. The thinking is the point.";
-
 export default function MathPage() {
   return (
     <SubjectPage
       name="Math"
       slug="math"
-      tagline="AI math tutoring, built for classrooms."
-      description="From pre-algebra through AP Calculus BC, Veradic walks every student through the thinking, so they get the answer, and they actually understand how they got there."
-      detailedDescription="Whether your students are struggling with quadratic equations, fighting their way through calculus, or trying to write their first geometry proof, Veradic meets them where they are and guides them forward, one step at a time."
-      educationalProgramDescription="AI-powered math tutoring for classrooms, covering pre-algebra, algebra, geometry, trigonometry, pre-calculus, AP Calculus, and statistics with step-by-step guidance and teacher-controlled content."
-      badgeColor="#0E5238"
-      icon={mathIcon}
-      whyReasons={whyReasons}
-      subjectProseBlock={subjectProseBlock}
-      demoData={calculusDemo}
+      kicker="Math, from pre-algebra to AP Calculus BC"
+      headline="Math homework, read one line at a time."
+      intro="Students photograph their handwritten work. Veradic asks each one about their own steps, drafts the grade from your class rules, and gives them more practice on what they missed. You approve every grade."
+      sheet={{
+        prompt: "Solve for x.",
+        lines: ["2(x − 3) = 4x + 8", "2x − 3 = 4x + 8", "−11 = 2x", "x = −5.5"],
+        circled: 1,
+        description:
+          "A student's handwritten work: 2(x − 3) = 4x + 8 becomes 2x − 3 = 4x + 8, so the 2 was multiplied by x but not by the 3. That line is circled in red. The student ends at x = −5.5.",
+      }}
+      question="The 2 is outside the brackets. Which terms inside does it multiply?"
+      courses={[
+        "Pre-algebra",
+        "Algebra I",
+        "Geometry",
+        "Algebra II",
+        "Trigonometry",
+        "Precalculus",
+        "Statistics",
+        "AP Calculus AB",
+        "AP Calculus BC",
+      ]}
+      faqs={[
+        {
+          q: "Can students just get the answer from it?",
+          a: "No. When they’re stuck it asks for the next step and explains the idea behind it. It only talks about your class’s problems, and you can read every understanding-check conversation.",
+        },
+        {
+          q: "Who decides the grade?",
+          a: "You do. Veradic drafts it from your rules, and nothing reaches a student until you approve it.",
+        },
+        {
+          q: "Do I have to write the problems?",
+          a: "No. Point Veradic at your chapter and it writes problems with full worked solutions. It checks the answers, and you review and approve them before students see any.",
+        },
+      ]}
+      programDescription="Classroom math for schools, from pre-algebra through AP Calculus BC: handwritten homework read step by step, understanding checks, grades drafted from the teacher's rules for the teacher to approve, and practice from teacher-approved problems."
     />
   );
 }

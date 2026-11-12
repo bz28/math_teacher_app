@@ -99,7 +99,7 @@ export function subjectEducationalProgramJsonLd(name: string, slug: string, desc
   return {
     "@context": "https://schema.org",
     "@type": "EducationalOccupationalProgram",
-    name: `Veradic AI ${name} Tutor`,
+    name: `Veradic ${name} for classrooms`,
     description,
     url: `${SITE_URL}/subjects/${slug}`,
     provider: {
@@ -108,12 +108,6 @@ export function subjectEducationalProgramJsonLd(name: string, slug: string, desc
       url: SITE_URL,
     },
     educationalProgramMode: "online",
-    offers: {
-      "@type": "Offer",
-      category: "Free",
-      price: "0",
-      priceCurrency: "USD",
-    },
   };
 }
 
@@ -132,7 +126,7 @@ export function subjectBreadcrumbJsonLd(name: string, slug: string) {
       {
         "@type": "ListItem",
         position: 2,
-        name: `${name} Tutor`,
+        name,
         item: `${SITE_URL}/subjects/${slug}`,
       },
     ],
