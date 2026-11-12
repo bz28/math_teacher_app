@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuthStore } from "@/stores/auth";
@@ -57,17 +57,18 @@ function LoginPageContent() {
   useEffect(() => setMounted(true), []);
 
   // The forgot-password dialog closes on Escape and hands focus back to the
-  // link that opened it.
+  // link that opened it. The opener is captured at click time: by the time an
+  // effect runs, autoFocus has already moved focus into the dialog.
+  const forgotOpener = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
     if (!showForgot) return;
-    const opener = document.activeElement as HTMLElement | null;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setShowForgot(false);
     };
     window.addEventListener("keydown", onKey);
     return () => {
       window.removeEventListener("keydown", onKey);
-      opener?.focus();
+      forgotOpener.current?.focus();
     };
   }, [showForgot]);
   const checkingSession = !mounted || (loading && !signingIn && !pendingMfa);
@@ -263,7 +264,7 @@ function LoginPageContent() {
                   autoComplete="current-password"
                 />
                 <div className="mt-2 text-right">
-                  <button type="button" className={quietLink} onClick={() => setShowForgot(true)}>
+                  <button type="button" className={quietLink} onClick={(e) => { forgotOpener.current = e.currentTarget; setShowForgot(true); }}>
                     Forgot password?
                   </button>
                 </div>
