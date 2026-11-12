@@ -86,6 +86,23 @@ interface StagedFile {
 
 const newId = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
+/** "Tue, Nov 10, 11:59 PM" in the student's own time zone. */
+function formatClosedAt(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+/** One decimal, never rounded away: 10% off 85% is 76.5%. */
+function oneDecimal(v: number): string {
+  const r = Math.round(v * 10) / 10;
+  return Number.isInteger(r) ? String(r) : r.toFixed(1);
+}
+
 export function HomeworkScreen({
   assignmentId,
   onBack,
@@ -254,7 +271,10 @@ export function HomeworkScreen({
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onSubmitted();
     } catch (e) {
-      setSubmitError(errorMessage(e));
+      const message = errorMessage(e);
+      // Closed while the screen was open: reload so it shows as closed.
+      if (message.startsWith("This homework closed")) load(true);
+      setSubmitError(message);
       setConfirming(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
@@ -336,6 +356,17 @@ export function HomeworkScreen({
                 </View>
               )}
             </>
+          ) : hw.closed && hw.due_at ? (
+            <View style={styles.closedBlock} accessibilityRole="summary">
+              <Ionicons name="lock-closed-outline" size={20} color={colors.textSecondary} />
+              <View style={styles.closedMain}>
+                <Text style={styles.submitLabel}>This homework is closed</Text>
+                <Text style={styles.submitHint}>
+                  It closed on {formatClosedAt(hw.due_at)}, so it can't be turned in anymore. If
+                  you still need to turn it in, ask your teacher to reopen it for you.
+                </Text>
+              </View>
+            </View>
           ) : (
             <View style={styles.submitBlock}>
               <Text style={styles.submitLabel}>
@@ -358,8 +389,9 @@ export function HomeworkScreen({
                 <View style={styles.lateBanner}>
                   <Ionicons name="alert-circle-outline" size={16} color={colors.warningDark} />
                   <Text style={styles.lateText}>
-                    This is past due. You can still turn it in — it'll be marked late so your
-                    teacher knows.
+                    {hw.late_policy === "penalty_per_day"
+                      ? "This is past due. You can still turn it in, but each day late takes 10% off your score: 85% a day late counts as 76.5%."
+                      : "This is past due. You can still turn it in — it'll be marked late so your teacher knows."}
                   </Text>
                 </View>
               )}
@@ -620,6 +652,12 @@ function SubmittedStatus({
               {Math.round(hw.final_score!)}%
             </Text>
           </View>
+          {hw.late_penalty > 0 && (
+            <Text style={styles.latePenaltyText}>
+              {oneDecimal(hw.final_score! + hw.late_penalty)}% for the work, then −
+              {oneDecimal(hw.late_penalty)}% for turning it in late (10% of your score per day late)
+            </Text>
+          )}
           {breakdownRows.map((b) => (
             <View key={b.problem_id} style={styles.breakdownRow}>
               <Text style={styles.breakdownLabel}>
@@ -741,6 +779,19 @@ const makeStyles = (colors: ColorPalette) => StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   lateText: { ...typography.caption, color: colors.warningDark, fontSize: 13, flex: 1, lineHeight: 18 },
+  latePenaltyText: { ...typography.caption, color: colors.warningDark, fontSize: 13, lineHeight: 18 },
+  // Stands where the upload block would be once a "Closed after due
+  // date" homework is past due: neutral, it's a state not an error.
+  closedBlock: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.md,
+    marginTop: spacing.lg,
+    padding: spacing.lg,
+    borderRadius: radii.md,
+    backgroundColor: colors.surfaceAlt,
+  },
+  closedMain: { flex: 1, gap: spacing.xs },
   thumbRow: { flexGrow: 0 },
   thumbWrap: { marginRight: spacing.sm },
   // Square so a quarter-turned page still fits whole; PDFs match.

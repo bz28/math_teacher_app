@@ -23,6 +23,7 @@ const DASHBOARD = {
     },
   ],
   overdue: [],
+  closed: [],
   in_review: [],
   recently_graded: [],
 };
@@ -66,6 +67,23 @@ describe("SchoolHomeScreen", () => {
     expect(screen.getAllByText("Needs a confirm")).toHaveLength(1);
     fireEvent.press(screen.getByLabelText("Needs a confirm"));
     expect(onOpenAssignment).toHaveBeenCalledWith("hw2");
+  });
+
+  it("lists a closed homework under Missed as Closed, not overdue or due", async () => {
+    const row = DASHBOARD.due_this_week[0];
+    mockedApi.getSchoolDashboard.mockResolvedValue({
+      ...DASHBOARD,
+      due_this_week: [],
+      closed: [{ ...row, assignment_id: "hw9", title: "Systems of Equations", due_at: "2026-11-01T23:59:00Z", is_late: true }],
+    } as never);
+    render(<SchoolHomeScreen onJoinClass={jest.fn()} onOpenAssignment={jest.fn()} />);
+
+    expect(await waitForText("Missed")).toBeTruthy();
+    expect(screen.getByText("Systems of Equations")).toBeTruthy();
+    expect(screen.getByText("Closed")).toBeTruthy();
+    expect(screen.queryByText("Overdue")).toBeNull();
+    expect(screen.queryByText("Due this week")).toBeNull();
+    expect(screen.queryByText("You're all caught up")).toBeNull();
   });
 
   it("shows the all-caught-up empty state when there's nothing due", async () => {

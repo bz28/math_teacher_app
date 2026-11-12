@@ -168,7 +168,7 @@ export default function SchoolStudentDashboard() {
     );
   }
 
-  const { first_name, due_this_week, overdue, in_review, recently_graded } = data;
+  const { first_name, due_this_week, overdue, closed, in_review, recently_graded } = data;
   const dueCount = due_this_week.length + overdue.length;
   // Turned in, one step left (confirm the reading / finish the check).
   // Its own card above Due: it's the quickest thing on the page to finish.
@@ -272,6 +272,19 @@ export default function SchoolStudentDashboard() {
             )}
           </DashboardCard>
         </div>
+
+        {/* Closed at the due date and never turned in: missed, not to
+            do. Its own quiet card after the graded work, so the student
+            still sees it without it sitting in the pile that's due. */}
+        {closed.length > 0 && (
+          <div className="dashboard-card-enter" style={{ animationDelay: "200ms" }}>
+            <DashboardCard title="Missed" count={closed.length}>
+              {closed.map((a) => (
+                <DashboardAssignmentRow key={`closed-${a.assignment_id}`} assignment={a} closed />
+              ))}
+            </DashboardCard>
+          </div>
+        )}
       </div>
     </div>
   );

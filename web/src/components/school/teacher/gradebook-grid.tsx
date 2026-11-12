@@ -25,6 +25,8 @@ import {
 import {
   averageBreakdown,
   changedFromAi,
+  lateRate,
+  scoreGiven,
   sectionAverage,
   shown,
   sortRows,
@@ -441,8 +443,11 @@ function cellLines(
       ? [`${formatPoints(earnedPoints(cell.score, assignment.total_points))}/${assignment.total_points} points`]
       : []),
     cell.ai_score === null
-      ? `Graded by hand: ${shown(cell.score)}%`
-      : `AI suggested ${shown(cell.ai_score)}% · you gave ${shown(cell.score)}%`,
+      ? `Graded by hand: ${shown(scoreGiven(cell))}%`
+      : `AI suggested ${shown(cell.ai_score)}% · you gave ${shown(scoreGiven(cell))}%`,
+    ...(cell.late_penalty > 0
+      ? [`Late: −${shown(lateRate(cell))}% of the score, ${shown(scoreGiven(cell))}% → ${shown(cell.score)}%`]
+      : []),
   ];
   if (cell.edited_since_publish) lines.push("Edited since publishing; students still see this score");
   lines.push("Open to see the work");

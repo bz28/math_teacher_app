@@ -290,6 +290,7 @@ async def get_section_gradebook(
                 SubmissionGrade.breakdown,
                 SubmissionGrade.grade_published_at,
                 SubmissionGrade.published_final_score,
+                SubmissionGrade.published_late_penalty,
                 SubmissionGrade.published_teacher_notes,
                 SubmissionGrade.published_breakdown,
             )
@@ -312,6 +313,9 @@ async def get_section_gradebook(
                 **base,
                 "state": CELL_PUBLISHED,
                 "score": r.published_final_score,
+                # Already out of `score` (late_policy); the score before
+                # it is score + late_penalty.
+                "late_penalty": r.published_late_penalty,
                 "published_at": r.grade_published_at.isoformat(),
                 "ai_score": r.ai_score,
                 "edited_since_publish": _is_grade_dirty(r),

@@ -44,6 +44,9 @@ const GRADED = {
   title: "Fractions practice",
   description: null,
   due_at: null,
+  late_policy: "none",
+  closed: false,
+  late_penalty: 0,
   submitted: true,
   grade_published_at: "2026-06-01T00:00:00Z",
   final_score: 73,
@@ -93,6 +96,58 @@ describe("HomeworkScreen graded breakdown", () => {
     expect(colorOf("100%")).toBe(colors.success); // full
     expect(colorOf("55%")).toBe(colors.textSecondary); // partial
     expect(colorOf("0%")).toBe(colors.error); // zero
+  });
+});
+
+describe("HomeworkScreen late policy", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockedApi.getSubmission.mockResolvedValue({ files: [] } as never);
+  });
+
+  it("shows a closed homework instead of the upload block", async () => {
+    mockedApi.getHomework.mockResolvedValue({
+      ...GRADED,
+      submitted: false,
+      grade_published_at: null,
+      final_score: null,
+      breakdown: null,
+      late_policy: "no_credit",
+      closed: true,
+      due_at: "2026-11-01T23:59:00Z",
+    } as never);
+    render(<HomeworkScreen {...PROPS} />);
+
+    expect(await waitForText("This homework is closed")).toBeTruthy();
+    expect(screen.getByText(/ask your teacher to reopen it/)).toBeTruthy();
+    expect(screen.queryByText("Add your work")).toBeNull();
+  });
+
+  it("warns that late work loses points under the per-day policy", async () => {
+    mockedApi.getHomework.mockResolvedValue({
+      ...GRADED,
+      submitted: false,
+      grade_published_at: null,
+      final_score: null,
+      breakdown: null,
+      late_policy: "penalty_per_day",
+      due_at: "2020-01-01T00:00:00Z",
+    } as never);
+    render(<HomeworkScreen {...PROPS} />);
+
+    expect(await waitForText(/each day late takes 10% off your score/)).toBeTruthy();
+  });
+
+  it("shows the late penalty as its own line on the grade", async () => {
+    // 85% one day late: 10% of the score, 8.5 off — the half shows.
+    mockedApi.getHomework.mockResolvedValue({
+      ...GRADED, final_score: 76.5, late_penalty: 8.5,
+    } as never);
+    render(<HomeworkScreen {...PROPS} />);
+
+    expect(
+      await waitForText(/85% for the work, then −8\.5% for turning it in late \(10% of your score per day late\)/),
+    ).toBeTruthy();
   });
 });
 

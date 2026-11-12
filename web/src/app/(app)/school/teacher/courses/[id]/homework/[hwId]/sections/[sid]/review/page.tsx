@@ -824,7 +824,7 @@ function HomeworkSectionReview({
       submissionId: string,
       patch: Pick<
         TeacherSubmissionRow,
-        "final_score" | "breakdown" | "grade_dirty" | "reviewed_at"
+        "final_score" | "late_penalty" | "breakdown" | "grade_dirty" | "reviewed_at"
       >,
     ) => {
       setRoster((prev) =>
@@ -924,6 +924,7 @@ function HomeworkSectionReview({
                 p.bank_item_id === call.problemId ? { ...p, graph: res.graph } : p,
               ),
               final_score: res.final_score,
+              late_penalty: res.late_penalty,
               grade_dirty: res.grade_dirty,
             }
           : cur,
@@ -937,6 +938,7 @@ function HomeworkSectionReview({
                     submission: {
                       ...e.submission,
                       final_score: res.final_score,
+                      late_penalty: res.late_penalty,
                       grade_dirty: res.grade_dirty,
                       ...(e.submission.breakdown ? { breakdown: merge(e.submission.breakdown) } : {}),
                       graph_items_open: res.graph_items_open,
@@ -1029,13 +1031,20 @@ function HomeworkSectionReview({
             // a save is in flight.
             applyGradeToRoster(submissionId, {
               final_score: res.final_score,
+              late_penalty: res.late_penalty,
               breakdown: toSave,
               grade_dirty: res.grade_dirty,
               reviewed_at: res.reviewed_at,
             });
             setDetail((d) =>
               d && d.submission_id === submissionId
-                ? { ...d, grade_dirty: res.grade_dirty, reviewed_at: res.reviewed_at }
+                ? {
+                    ...d,
+                    final_score: res.final_score,
+                    late_penalty: res.late_penalty,
+                    grade_dirty: res.grade_dirty,
+                    reviewed_at: res.reviewed_at,
+                  }
                 : d,
             );
           } catch (e) {
@@ -1679,6 +1688,42 @@ function HomeworkSectionReview({
     [],
   );
 
+  // Waive or restore one student's late penalty. The server re-scores
+  // and returns the lateness fields; mirror them onto the open detail
+  // and the roster row so the score and the "late" marker agree.
+  const [waivingLateId, setWaivingLateId] = useState<string | null>(null);
+  const handleLatePenaltyWaived = useCallback(async (submissionId: string, waived: boolean) => {
+    setWaivingLateId(submissionId);
+    try {
+      const res = await teacher.setLatePenaltyWaived(submissionId, waived);
+      const patch = {
+        final_score: res.final_score,
+        grade_dirty: res.grade_dirty,
+        days_late: res.days_late,
+        late_penalty_percent: res.late_penalty_percent,
+        late_penalty: res.late_penalty,
+        late_penalty_waived: res.late_penalty_waived,
+      };
+      setDetail((d) => (d && d.submission_id === submissionId ? { ...d, ...patch } : d));
+      setRoster((prev) =>
+        prev
+          ? prev.map((e) =>
+              e.submission?.id === submissionId
+                ? { ...e, submission: { ...e.submission, ...patch } }
+                : e,
+            )
+          : prev,
+      );
+    } catch (e) {
+      setSaveError({
+        forSubmissionId: submissionId,
+        message: e instanceof Error ? e.message : "Couldn't change the late penalty",
+      });
+    } finally {
+      setWaivingLateId(null);
+    }
+  }, []);
+
   // Re-run AI grading with the assignment's current rubric. Overrides
   // any manual edits (this is the teacher's explicit ask) and leaves
   // the published snapshot untouched so students keep seeing the old
@@ -1729,6 +1774,7 @@ function HomeworkSectionReview({
                       submission: {
                         ...e.submission,
                         final_score: res.final_score,
+                        late_penalty: res.late_penalty,
                         breakdown: res.breakdown,
                         rubric_snapshot: res.rubric_snapshot,
                         grade_dirty: res.grade_dirty,
@@ -1748,6 +1794,7 @@ function HomeworkSectionReview({
                 breakdown: res.breakdown,
                 ai_breakdown: res.ai_breakdown,
                 final_score: res.final_score,
+                late_penalty: res.late_penalty,
                 grade_dirty: res.grade_dirty,
                 reviewed_at: null,
               }
@@ -2028,6 +2075,10 @@ function HomeworkSectionReview({
                   void queueGraphCall(selectedEntry.submission!.id, { problemId, n, verdict })
                 }
                 graphBusy={graphBusy}
+                onLatePenaltyWaivedChange={(waived) =>
+                  void handleLatePenaltyWaived(selectedEntry.submission!.id, waived)
+                }
+                waivingLate={waivingLateId === selectedEntry.submission.id}
                 marking={markingReviewedId === selectedEntry.submission.id}
                 savingGrade={savingGradeIds.has(selectedEntry.submission.id)}
                 regrading={regradingSubmissionId === selectedEntry.submission.id}
@@ -3180,7 +3231,11 @@ function StudentRow({
         <span className="truncate">{statusLabel.text}</span>
         {sub?.is_late && (
           <span className="ml-1 shrink-0 font-semibold text-[color:var(--color-error)]">
-            · late
+            · {lateLabel(sub.days_late)}
+            {sub.late_penalty > 0 && ` −${formatPercent(sub.late_penalty_percent)}%`}
+            {sub.late_penalty_waived && sub.late_penalty_percent > 0 && (
+              <span className="font-normal text-text-muted"> (waived)</span>
+            )}
           </span>
         )}
       </div>
@@ -3333,6 +3388,73 @@ function reviewMarker(
 // on click.
 // ────────────────────────────────────────────────────────────────────
 
+/** "1 day late" / "3 days late". */
+function lateLabel(days: number): string {
+  if (days <= 0) return "late";
+  return `${days} ${days === 1 ? "day" : "days"} late`;
+}
+
+/** A percent for the penalty line: whole numbers as-is, else one
+ *  decimal — 10% off 85% is 76.5%, and rounding it would hide the cut. */
+function formatPercent(value: number): string {
+  const r = Math.round(value * 10) / 10;
+  return Number.isInteger(r) ? String(r) : r.toFixed(1);
+}
+
+/**
+ * The late policy's cut on this turn-in, as its own line under the
+ * score: how late, the percent of the score the policy takes, the score
+ * before and after it, and the control to waive it for this student. Never folded silently
+ * into the number — she approves the score with the cut in view.
+ */
+function LatePenaltyLine({
+  detail,
+  busy,
+  onWaivedChange,
+}: {
+  detail: TeacherSubmissionDetail;
+  busy: boolean;
+  onWaivedChange: (waived: boolean) => void;
+}) {
+  const waived = detail.late_penalty_waived;
+  const before =
+    detail.final_score !== null ? detail.final_score + detail.late_penalty : null;
+  return (
+    <div className="mt-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[11px]">
+      <span
+        className={
+          waived
+            ? "text-text-muted line-through decoration-text-muted/60"
+            : "font-semibold text-[color:var(--color-warning-dark)]"
+        }
+      >
+        {lateLabel(detail.days_late).replace(/^./, (c) => c.toUpperCase())}: −
+        {formatPercent(detail.late_penalty_percent)}% of the score
+      </span>
+      {waived ? (
+        <span className="text-text-muted">Waived for this student</span>
+      ) : before !== null ? (
+        <span className="text-text-muted">
+          {formatPercent(before)}% before the penalty →{" "}
+          <span className="font-semibold text-text-primary">
+            {formatPercent(detail.final_score!)}%
+          </span>
+        </span>
+      ) : (
+        <span className="text-text-muted">Comes off the score once it&rsquo;s graded</span>
+      )}
+      <button
+        type="button"
+        onClick={() => onWaivedChange(!waived)}
+        disabled={busy}
+        className="rounded-[--radius-sm] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-50"
+      >
+        {busy ? "Saving…" : waived ? "Restore penalty" : "Waive penalty"}
+      </button>
+    </div>
+  );
+}
+
 function SubmissionDetailPanel({
   detail,
   integrity,
@@ -3352,6 +3474,8 @@ function SubmissionDetailPanel({
   onUnmarkReviewed,
   onGraphVerdict,
   graphBusy,
+  onLatePenaltyWaivedChange,
+  waivingLate,
   marking,
   savingGrade,
   regrading,
@@ -3404,6 +3528,9 @@ function SubmissionDetailPanel({
   /** The graph item whose call is saving, if any. */
   /** Graph items with a call queued or saving, as `${problemId}:${n}`. */
   graphBusy: ReadonlySet<string>;
+  /** Waive (true) or restore (false) this turn-in's late penalty. */
+  onLatePenaltyWaivedChange: (waived: boolean) => void;
+  waivingLate: boolean;
   marking: boolean;
   savingGrade: boolean;
   regrading: boolean;
@@ -4013,9 +4140,9 @@ function SubmissionDetailPanel({
               hour: "numeric",
               minute: "2-digit",
             })}
-            {detail.is_late && (
+            {detail.is_late && detail.late_penalty_percent === 0 && (
               <span className="ml-1.5 font-semibold text-[color:var(--color-error)]">
-                · late
+                · {lateLabel(detail.days_late)}
               </span>
             )}
             {detail.extraction_flagged_at && (
@@ -4072,6 +4199,13 @@ function SubmissionDetailPanel({
               <span className="text-text-muted">Not graded yet</span>
             )}
           </p>
+          {detail.late_penalty_percent > 0 && (
+            <LatePenaltyLine
+              detail={detail}
+              busy={waivingLate}
+              onWaivedChange={onLatePenaltyWaivedChange}
+            />
+          )}
           {aiGradeError && (
             <p
               role="alert"

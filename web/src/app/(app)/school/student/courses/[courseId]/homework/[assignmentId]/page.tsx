@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { latePenaltyLine } from "@/lib/late-penalty";
 import {
   schoolStudent,
   ApiError,
@@ -18,6 +19,7 @@ import { PageErrorState } from "@/components/ui";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertTriangleIcon } from "@/components/ui/icons";
 import { SubmissionPanel } from "@/components/school/student/submission-panel";
+import { HomeworkClosedPanel } from "@/components/school/student/homework-closed-panel";
 import { SubmittedView } from "@/components/school/student/submitted-view";
 import { IntegrityCheckChat } from "@/components/school/student/integrity-check-chat";
 import { SubmissionExtractionConfirmView } from "@/components/school/student/submission-extraction-confirm-view";
@@ -214,6 +216,10 @@ export default function HomeworkPage() {
           <SubmissionPanel
             assignmentId={hw.assignment_id}
             dueAt={hw.due_at}
+            latePolicy={hw.late_policy}
+            // A retake replaces work already in, which closing never
+            // refuses; reload anyway if the API ever says closed.
+            onClosed={() => loadAll(hw.assignment_id)}
             retake={{
               submissionId,
               // Reload on the way out: a retake refused meanwhile (the
@@ -320,6 +326,7 @@ export default function HomeworkPage() {
       {hw.grade_published_at !== null && hw.breakdown && hw.breakdown.length > 0 && (
         <GradedSummaryCard
           finalScore={hw.final_score}
+          latePenalty={hw.late_penalty}
           breakdown={hw.breakdown}
           missedOnly={missedOnly}
           onMissedOnlyChange={setMissedOnly}
@@ -421,12 +428,16 @@ export default function HomeworkPage() {
           graded={hw.grade_published_at !== null}
           animateEntrance={justSubmitted}
         />
+      ) : !hw.submitted && hw.closed && hw.due_at ? (
+        <HomeworkClosedPanel dueAt={hw.due_at} />
       ) : !hw.submitted ? (
         <>
         {isPreview && <PreviewSubmitNote />}
         <SubmissionPanel
           assignmentId={hw.assignment_id}
           dueAt={hw.due_at}
+          latePolicy={hw.late_policy}
+          onClosed={() => loadAll(hw.assignment_id)}
           onSubmitted={async (_resp) => {
             // Mark this as a fresh submit so the SubmittedView plays its
             // celebratory entrance once (a later revisit won't).
@@ -575,11 +586,14 @@ const GRADE_TONE: Record<
  */
 function GradedSummaryCard({
   finalScore,
+  latePenalty,
   breakdown,
   missedOnly,
   onMissedOnlyChange,
 }: {
   finalScore: number | null;
+  /** Points the late policy took off finalScore; 0 when none. */
+  latePenalty: number;
   breakdown: StudentProblemFeedback[];
   missedOnly: boolean;
   onMissedOnlyChange: (next: boolean) => void;
@@ -633,6 +647,18 @@ function GradedSummaryCard({
               </>
             )}
           </p>
+          {/* The late penalty is its own line, never folded silently
+              into the number above: the student sees what the work
+              earned and what lateness cost. */}
+          {latePenalty > 0 && finalScore !== null && (
+            <p className="mt-1 text-sm text-text-secondary">
+              {latePenaltyLine(finalScore, latePenalty).work}
+              {", then "}
+              <span className="font-semibold text-warning-dark">
+                {latePenaltyLine(finalScore, latePenalty).late}
+              </span>
+            </p>
+          )}
         </div>
         {missed > 0 && (
           <button

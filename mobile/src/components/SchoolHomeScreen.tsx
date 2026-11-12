@@ -49,6 +49,7 @@ export function SchoolHomeScreen({ onJoinClass, onOpenAssignment }: Props) {
     data != null &&
     data.due_this_week.length === 0 &&
     data.overdue.length === 0 &&
+    data.closed.length === 0 &&
     data.in_review.length === 0 &&
     data.recently_graded.length === 0;
 
@@ -114,6 +115,9 @@ export function SchoolHomeScreen({ onJoinClass, onOpenAssignment }: Props) {
               <Section title="Due this week" items={data!.due_this_week} colors={colors} styles={styles} onOpen={onOpenAssignment} />
               <Section title="In review" items={data!.in_review.filter((a) => !a.next_step)} colors={colors} styles={styles} muted onOpen={onOpenAssignment} />
               <GradedSection items={data!.recently_graded} colors={colors} styles={styles} onOpen={onOpenAssignment} />
+              {/* Closed at the due date without a turn-in: missed, not to
+                  do — last and quiet, so it's seen without nagging. */}
+              <Section title="Missed" items={data!.closed} colors={colors} styles={styles} closed onOpen={onOpenAssignment} />
             </>
           )}
         </ScrollView>
@@ -130,6 +134,7 @@ function Section({
   tone,
   muted,
   step,
+  closed,
   onOpen,
 }: {
   title: string;
@@ -140,6 +145,8 @@ function Section({
   muted?: boolean;
   /** Rows carry a next_step: show the step instead of a status. */
   step?: boolean;
+  /** Closed by the late policy: "Closed" instead of a due date. */
+  closed?: boolean;
   onOpen: (assignmentId: string) => void;
 }) {
   if (items.length === 0) return null;
@@ -164,6 +171,8 @@ function Section({
             <Text style={[styles.rowStatus, styles.rowStep]}>{NEXT_STEP_COPY[a.next_step].label}</Text>
           ) : muted ? (
             <Text style={styles.rowStatus}>Submitted</Text>
+          ) : closed ? (
+            <Text style={styles.rowStatus}>Closed</Text>
           ) : (
             <Text style={[styles.rowStatus, tone === "error" && { color: colors.error }]}>
               {tone === "error" ? (a.is_late ? "Late" : "Overdue") : formatDue(a.due_at)}

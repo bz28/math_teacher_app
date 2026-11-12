@@ -1333,6 +1333,8 @@ export type GradebookCell =
       state: "published";
       submission_id: string;
       score: number;
+      /** Points the late policy took off, already out of `score`. */
+      late_penalty: number;
       published_at: string;
       is_late: boolean;
       /** The AI's original suggestion; null when graded by hand. */
@@ -1833,6 +1835,8 @@ export const teacher = {
     return apiFetch<{
       status: string;
       final_score: number | null;
+      /** What the late policy took off final_score. */
+      late_penalty: number;
       grade_published_at: string | null;
       grade_dirty: boolean;
       /** Review state after the save — authoritative, mirror it back. A
@@ -1857,6 +1861,23 @@ export const teacher = {
       { method: "POST" },
     );
   },
+  /** Waive (or restore) the late penalty on one student's turn-in.
+   *  Returns the new score and lateness fields. */
+  setLatePenaltyWaived(submissionId: string, waived: boolean) {
+    return apiFetch<{
+      status: string;
+      final_score: number | null;
+      grade_dirty: boolean;
+      due_at: string | null;
+      days_late: number;
+      late_penalty_percent: number;
+      late_penalty: number;
+      late_penalty_waived: boolean;
+    }>(`/teacher/submissions/${submissionId}/late-penalty`, {
+      method: "POST",
+      body: JSON.stringify({ waived }),
+    });
+  },
   /** The teacher's ✓ ("yes") or ✗ ("no") on a graph checklist item the
    *  drawing check couldn't decide. Returns the problem's new breakdown
    *  entry, its graph check, and the homework score. */
@@ -1867,6 +1888,7 @@ export const teacher = {
     return apiFetch<{
       status: string;
       final_score: number | null;
+      late_penalty: number;
       entry: GradeBreakdownEntry;
       graph: TeacherGraphCheck;
       grade_dirty: boolean;
@@ -1896,6 +1918,7 @@ export const teacher = {
     return apiFetch<{
       status: string;
       final_score: number | null;
+      late_penalty: number;
       ai_score: number | null;
       breakdown: GradeBreakdownEntry[] | null;
       ai_breakdown: AiGradeEntry[] | null;
@@ -2211,6 +2234,16 @@ export interface TeacherSubmissionRow {
   status: string;
   submitted_at: string | null;
   is_late: boolean;
+  /** Lateness against this student's due date: how many started days
+   *  late, the percent of the score the homework's late policy takes off
+   *  for that (10 per day under penalty_per_day), the points the live
+   *  grade actually had taken off (0 when waived or ungraded), and
+   *  whether the teacher waived it. */
+  due_at: string | null;
+  days_late: number;
+  late_penalty_percent: number;
+  late_penalty: number;
+  late_penalty_waived: boolean;
   ai_score: number | null;
   ai_breakdown: unknown;
   teacher_score: number | null;
@@ -2374,6 +2407,16 @@ export interface TeacherSubmissionDetail {
   student_email: string;
   submitted_at: string;
   is_late: boolean;
+  /** Lateness against this student's due date: how many started days
+   *  late, the percent of the score the homework's late policy takes off
+   *  for that (10 per day under penalty_per_day), the points the live
+   *  grade actually had taken off (0 when waived or ungraded), and
+   *  whether the teacher waived it. */
+  due_at: string | null;
+  days_late: number;
+  late_penalty_percent: number;
+  late_penalty: number;
+  late_penalty_waived: boolean;
   /** All files the student submitted, in upload order. Null only on
    *  rows that pre-date the multi-file column. */
   files: SubmissionFile[] | null;
@@ -2628,6 +2671,8 @@ export interface StudentHomeworkSummary {
   problem_count: number;
   /** "not_started" | "submitted". Drives the badge on the HW list. */
   status: string;
+  /** Not turned in, and the late policy closed it at the due date. */
+  closed: boolean;
   /** What's left on turned-in work: confirm the AI's reading, or finish
    *  the understanding check. Null when there's nothing to do. A nudge
    *  only — grading never waits on it. */
@@ -2678,6 +2723,9 @@ export interface StudentLinkedPracticeResponse {
   practice_assignment_id: string | null;
 }
 
+/** A homework's late policy (api/core/late_policy.py). */
+export type LatePolicy = Schemas["StudentHomeworkDetail"]["late_policy"];
+
 export interface StudentHomeworkProblem {
   bank_item_id: string;
   position: number;
@@ -2716,7 +2764,13 @@ export interface StudentHomeworkDetail {
    *  empty means nothing to show — the page hides the block. */
   description: string | null;
   type: string;
+  /** This student's due date. */
   due_at: string | null;
+  /** What turning in late costs. */
+  late_policy: LatePolicy;
+  /** Not turned in, and the late policy closed it at the due date: no
+   *  upload panel, and a turn-in would be refused. */
+  closed: boolean;
   course_id: string;
   course_name: string;
   /** Course subject ("math" | "physics" | "chemistry"). Seeds the
@@ -2734,6 +2788,9 @@ export interface StudentHomeworkDetail {
   submitted_at: string | null;
   /** Percent 0-100, or null if no grade published yet. */
   final_score: number | null;
+  /** Points the late policy took off the published score (already out
+   *  of final_score; 10% of the score per started day late). 0 when none. */
+  late_penalty: number;
   /** ISO timestamp — null until teacher publishes. */
   grade_published_at: string | null;
   /** Per-problem published-grade rows; null before publish. Uses the
@@ -2848,6 +2905,8 @@ export interface StudentDashboardResponse {
   first_name: string;
   due_this_week: DashboardAssignment[];
   overdue: DashboardAssignment[];
+  /** Never turned in, closed by the late policy at the due date. */
+  closed: DashboardAssignment[];
   in_review: DashboardAssignment[];
   recently_graded: DashboardGrade[];
 }

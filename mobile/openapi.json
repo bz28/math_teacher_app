@@ -551,6 +551,11 @@
           },
           "late_policy": {
             "default": "none",
+            "enum": [
+              "none",
+              "penalty_per_day",
+              "no_credit"
+            ],
             "title": "Late Policy",
             "type": "string"
           },
@@ -2683,6 +2688,19 @@
         "title": "JoinSectionRequest",
         "type": "object"
       },
+      "LatePenaltyRequest": {
+        "properties": {
+          "waived": {
+            "title": "Waived",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "waived"
+        ],
+        "title": "LatePenaltyRequest",
+        "type": "object"
+      },
       "LearnThisRequest": {
         "properties": {
           "assignment_id": {
@@ -3985,6 +4003,13 @@
       },
       "StudentDashboardResponse": {
         "properties": {
+          "closed": {
+            "items": {
+              "$ref": "#/components/schemas/DashboardAssignment"
+            },
+            "title": "Closed",
+            "type": "array"
+          },
           "due_this_week": {
             "items": {
               "$ref": "#/components/schemas/DashboardAssignment"
@@ -4022,6 +4047,7 @@
           "first_name",
           "due_this_week",
           "overdue",
+          "closed",
           "in_review",
           "recently_graded"
         ],
@@ -4063,6 +4089,10 @@
               }
             ],
             "title": "Breakdown"
+          },
+          "closed": {
+            "title": "Closed",
+            "type": "boolean"
           },
           "course_id": {
             "title": "Course Id",
@@ -4121,6 +4151,19 @@
               }
             ],
             "title": "Grade Published At"
+          },
+          "late_penalty": {
+            "title": "Late Penalty",
+            "type": "number"
+          },
+          "late_policy": {
+            "enum": [
+              "none",
+              "penalty_per_day",
+              "no_credit"
+            ],
+            "title": "Late Policy",
+            "type": "string"
           },
           "next_step": {
             "anyOf": [
@@ -4190,13 +4233,16 @@
           "description",
           "type",
           "due_at",
+          "late_policy",
+          "closed",
           "course_id",
           "course_name",
           "course_subject",
           "problems",
           "published",
           "submitted",
-          "submission_id"
+          "submission_id",
+          "late_penalty"
         ],
         "title": "StudentHomeworkDetail",
         "type": "object"
@@ -4264,6 +4310,10 @@
             "title": "Assignment Id",
             "type": "string"
           },
+          "closed": {
+            "title": "Closed",
+            "type": "boolean"
+          },
           "due_at": {
             "anyOf": [
               {
@@ -4314,7 +4364,8 @@
           "type",
           "due_at",
           "problem_count",
-          "status"
+          "status",
+          "closed"
         ],
         "title": "StudentHomeworkSummary",
         "type": "object"
@@ -5428,10 +5479,27 @@
             ],
             "title": "Breakdown"
           },
+          "days_late": {
+            "default": 0,
+            "title": "Days Late",
+            "type": "integer"
+          },
           "drawings_inventoried": {
             "default": false,
             "title": "Drawings Inventoried",
             "type": "boolean"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
           },
           "extraction_confidence": {
             "anyOf": [
@@ -5530,6 +5598,21 @@
           },
           "is_late": {
             "title": "Is Late",
+            "type": "boolean"
+          },
+          "late_penalty": {
+            "default": 0.0,
+            "title": "Late Penalty",
+            "type": "number"
+          },
+          "late_penalty_percent": {
+            "default": 0.0,
+            "title": "Late Penalty Percent",
+            "type": "number"
+          },
+          "late_penalty_waived": {
+            "default": false,
+            "title": "Late Penalty Waived",
             "type": "boolean"
           },
           "other_drawings": {
@@ -6210,6 +6293,11 @@
           "late_policy": {
             "anyOf": [
               {
+                "enum": [
+                  "none",
+                  "penalty_per_day",
+                  "no_credit"
+                ],
                 "type": "string"
               },
               {
@@ -13846,7 +13934,7 @@
     },
     "/v1/school/student/homework/{assignment_id}/submit": {
       "post": {
-        "description": "Insert a submission for this student/HW. One-shot \u2014 resubmission\nis not allowed in v1; a second call returns 409. Soft-locks late\nsubmissions (sets is_late=true, doesn't reject).",
+        "description": "Insert a submission for this student/HW. One-shot \u2014 resubmission\nis not allowed in v1; a second call returns 409. A late turn-in is\naccepted and marked late, unless the homework's late policy closes it\nat the due date (`no_credit`), which refuses it with a 403 \u2014 except for\na teacher's preview, which always goes through.",
         "operationId": "submit_homework_v1_school_student_homework__assignment_id__submit_post",
         "parameters": [
           {
@@ -19887,6 +19975,67 @@
           }
         ],
         "summary": "Set Graph Item Verdict",
+        "tags": [
+          "teacher"
+        ]
+      }
+    },
+    "/v1/teacher/submissions/{submission_id}/late-penalty": {
+      "post": {
+        "description": "Waive (or restore) the late penalty on one student's turn-in. The\nscore follows at once; like any edit, a published grade reaches the\nstudent when the teacher republishes. The review stamp is left alone:\nwaiving is her own call on a grade, not a reason to approve it again.",
+        "operationId": "set_late_penalty_waived_v1_teacher_submissions__submission_id__late_penalty_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "submission_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Submission Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LatePenaltyRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Set Late Penalty Waived V1 Teacher Submissions  Submission Id  Late Penalty Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Late Penalty Waived",
         "tags": [
           "teacher"
         ]

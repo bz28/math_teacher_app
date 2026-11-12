@@ -40,6 +40,17 @@ from api.core.integrity_pipeline import (
 from api.core.integrity_pipeline import (
     STATUS_SKIPPED_UNREADABLE as INTEGRITY_SKIPPED,
 )
+from api.core.late_policy import (
+    LatePolicy,
+    effective_due_at,
+    effective_due_dates,
+    late_penalty_percent_for,
+    lateness_out,
+    refresh_lateness,
+    score_before_penalty,
+    set_final_score,
+    submission_penalty_percent,
+)
 from api.core.question_bank_generation import schedule_generation_job
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user_full, require_teacher
@@ -148,7 +159,7 @@ class CreateAssignmentRequest(BaseModel):
     type: str  # homework | quiz | test | practice
     source_type: str | None = None
     due_at: str | None = None  # ISO datetime
-    late_policy: str = "none"
+    late_policy: LatePolicy = "none"
     content: dict[str, Any] | None = None
     answer_key: dict[str, Any] | None = None
     # An assignment belongs to one or more units. Required at create
@@ -206,7 +217,7 @@ class UpdateAssignmentRequest(BaseModel):
     # frontend uses clear_due_at=true for unambiguous clearing.
     due_at: str | None = None
     clear_due_at: bool = False
-    late_policy: str | None = None
+    late_policy: LatePolicy | None = None
     content: dict[str, Any] | None = None
     answer_key: dict[str, Any] | None = None
     # Reassign units. Same validation rules as create — must contain at
@@ -1069,8 +1080,13 @@ async def update_assignment(
         from api.core.grading_queue import reschedule_assignment
 
         await reschedule_assignment(db, a)
+    late_policy_changed = body.late_policy is not None and body.late_policy != a.late_policy
     if body.late_policy is not None:
         a.late_policy = body.late_policy
+    if due_at_changed or late_policy_changed:
+        # Lateness is measured against the due date and priced by the
+        # policy, so either moving re-derives it for work already in.
+        await refresh_lateness(db, a)
     if body.unit_ids is not None:
         await _validate_units_in_course(db, a.course_id, body.unit_ids)
         a.unit_ids = body.unit_ids
@@ -1638,6 +1654,7 @@ async def list_submissions(
             problem_count_by_check[cid] = (int(total), int(done or 0))
 
     now = datetime.now(UTC)
+    due_by_student = await effective_due_dates(db, a, {sub.student_id for sub, *_ in rows})
     submissions = []
     for sub, grade, student_name, student_email, is_preview, job_status in rows:
         check = check_by_sub.get(sub.id)
@@ -1691,6 +1708,8 @@ async def list_submissions(
             "status": sub.status,
             "submitted_at": sub.submitted_at.isoformat() if sub.submitted_at else None,
             "is_late": sub.is_late,
+            # How late, and what the late policy takes off for it.
+            **lateness_out(a, sub, due_by_student[sub.student_id], grade),
             "ai_score": grade.ai_score if grade else None,
             "ai_breakdown": grade.ai_breakdown if grade else None,
             "teacher_score": grade.teacher_score if grade else None,
@@ -1878,9 +1897,9 @@ async def grade_submission(
         grade.graph_checks = note_hand_edits(grade.graph_checks, grade.breakdown, normalized)
         grade.breakdown = normalized
         if normalized:
-            grade.final_score = weighted_percent(
+            set_final_score(grade, weighted_percent(
                 ((e["problem_id"], e["percent"]) for e in normalized), assignment_points(assignment),
-            )
+            ), await late_penalty_percent_for(db, assignment, sub))
             grade.graded_at = now
             # `reviewed_at` means "a teacher stands behind this grade". The
             # explicit Approve step (POST /mark-reviewed) exists so the
@@ -1918,7 +1937,7 @@ async def grade_submission(
             # grade_published_at are deliberately preserved — notes are
             # independent of the score, and a retracted-after-publish state is
             # a UX concern for the frontend to flag.
-            grade.final_score = None
+            set_final_score(grade, None, 0.0)
             grade.graded_at = None
             grade.reviewed_by = None
             grade.reviewed_at = None
@@ -1942,6 +1961,8 @@ async def grade_submission(
     return {
         "status": "ok",
         "final_score": grade.final_score,
+        # What the late policy took off final_score (late_policy).
+        "late_penalty": grade.late_penalty,
         "grade_published_at": grade.grade_published_at.isoformat() if grade.grade_published_at else None,
         "grade_dirty": _is_grade_dirty(grade),
         # Review state after this save — authoritative. A hand grade
@@ -2008,6 +2029,62 @@ async def mark_submission_reviewed(
     return {"status": "ok", "reviewed_at": now.isoformat()}
 
 
+class LatePenaltyRequest(BaseModel):
+    waived: bool
+
+
+@router.post("/submissions/{submission_id}/late-penalty")
+async def set_late_penalty_waived(
+    submission_id: uuid.UUID, body: LatePenaltyRequest,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Waive (or restore) the late penalty on one student's turn-in. The
+    score follows at once; like any edit, a published grade reaches the
+    student when the teacher republishes. The review stamp is left alone:
+    waiving is her own call on a grade, not a reason to approve it again."""
+    sub = (await db.execute(
+        select(Submission).where(Submission.id == submission_id)
+    )).scalar_one_or_none()
+    if not sub:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Submission not found")
+    assignment = await get_teacher_assignment(db, sub.assignment_id, current_user.user_id)
+    # Same upsert + row lock as PATCH /grade: she may waive before there
+    # is a grade, and the grader landing at the same moment serializes.
+    await db.execute(
+        pg_insert(SubmissionGrade)
+        .values(submission_id=sub.id)
+        .on_conflict_do_nothing(index_elements=["submission_id"])
+    )
+    grade = (await db.execute(
+        select(SubmissionGrade)
+        .where(SubmissionGrade.submission_id == sub.id)
+        .with_for_update()
+    )).scalar_one()
+    due_at = await effective_due_at(db, assignment, sub.student_id)
+    if grade.late_penalty_waived != body.waived:
+        grade.late_penalty_waived = body.waived
+        if grade.final_score is not None:
+            before = grade.final_score
+            set_final_score(
+                grade, score_before_penalty(grade), submission_penalty_percent(assignment, sub, due_at),
+            )
+            if abs(grade.final_score - before) > 1e-6:
+                grade.graded_at = datetime.now(UTC)
+        await record_activity(
+            db, current_user, "grade.late_penalty", "submission", sub.id,
+            {"assignment_id": str(sub.assignment_id), "waived": body.waived,
+             "final_score": grade.final_score},
+        )
+        await db.commit()
+    return {
+        "status": "ok",
+        "final_score": grade.final_score,
+        "grade_dirty": _is_grade_dirty(grade),
+        **lateness_out(assignment, sub, due_at, grade),
+    }
+
+
 class GraphItemVerdictRequest(BaseModel):
     problem_id: str
     n: int
@@ -2048,9 +2125,9 @@ async def set_graph_item_verdict(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
     grade.breakdown = breakdown
     grade.graph_checks = {**(grade.graph_checks or {}), body.problem_id: stored}
-    grade.final_score = weighted_percent(
+    set_final_score(grade, weighted_percent(
         ((e["problem_id"], e["percent"]) for e in breakdown), assignment_points(assignment),
-    )
+    ), await late_penalty_percent_for(db, assignment, sub))
     grade.graded_at = datetime.now(UTC)
     await record_activity(
         db, current_user, "grade.graph_item", "submission", sub.id,
@@ -2061,6 +2138,7 @@ async def set_graph_item_verdict(
     return {
         "status": "ok",
         "final_score": grade.final_score,
+        "late_penalty": grade.late_penalty,
         "entry": entry,
         "graph": _graph_out(stored),
         "grade_dirty": _is_grade_dirty(grade),
@@ -2440,6 +2518,7 @@ async def regrade_submission(
     return {
         "status": "ok",
         "final_score": grade.final_score,
+        "late_penalty": grade.late_penalty,
         "ai_score": grade.ai_score,
         "breakdown": grade.breakdown,
         "ai_breakdown": ai_breakdown_grades,
@@ -2533,6 +2612,7 @@ async def publish_grades(
     now = datetime.now(UTC)
     for g, _is_preview in rows:
         g.published_final_score = g.final_score
+        g.published_late_penalty = g.late_penalty
         g.published_breakdown = g.breakdown
         g.published_teacher_notes = g.teacher_notes
         g.grade_published_at = now
@@ -2715,6 +2795,16 @@ class TeacherSubmissionDetail(BaseModel):
     student_email: str
     submitted_at: datetime
     is_late: bool
+    # Lateness against this student's effective due date (late_policy):
+    # how late, the percent of the score the homework's policy takes off
+    # for that (10 per started day under penalty_per_day), the points the
+    # live grade actually had taken off (0 when waived, ungraded, or a
+    # score already at 0), and whether the teacher waived it.
+    due_at: datetime | None = None
+    days_late: int = 0
+    late_penalty_percent: float = 0.0
+    late_penalty: float = 0.0
+    late_penalty_waived: bool = False
     # List of {data, media_type} the student submitted — multi-page
     # support landed in PR 3. Null only on rows pre-dating the
     # multi-file column.
@@ -3315,6 +3405,7 @@ async def get_submission_detail(
         student_email=student.email,
         submitted_at=sub.submitted_at,
         is_late=sub.is_late,
+        **lateness_out(assignment, sub, await effective_due_at(db, assignment, sub.student_id), grade),
         files=sub.files,
         problems=problems,
         other_work=other_work,

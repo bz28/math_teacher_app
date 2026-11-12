@@ -58,6 +58,14 @@ from api.core.integrity_pipeline import (
     start_integrity_check,
     student_next_step,
 )
+from api.core.late_policy import (
+    HOMEWORK_CLOSED_DETAIL,
+    LatePolicy,
+    days_late,
+    effective_due_at,
+    is_closed,
+    student_due_dates,
+)
 from api.core.part_labels import is_multi_part
 from api.core.tutor import completed_chat, step_chat
 from api.database import get_db, get_session_factory
@@ -374,10 +382,14 @@ class StudentHomeworkSummary(BaseModel):
     assignment_id: str
     title: str
     type: str
+    # The student's effective due date (late_policy.effective_due_at).
     due_at: datetime | None
     problem_count: int
     # "not_started" or "submitted". Drives the badge on the HW list.
     status: str
+    # Not turned in, and the late policy closed it at the due date: it
+    # can no longer be turned in. Shown as "Closed", never "Overdue".
+    closed: bool
     # What's left for the student on turned-in work: "confirm_reading"
     # (the AI's reading is waiting for their OK) or "finish_check" (the
     # understanding check is open). Null when there's nothing to do. A
@@ -482,7 +494,14 @@ class StudentHomeworkDetail(BaseModel):
     # empty = nothing for the student to see; the page hides the block.
     description: str | None
     type: str
+    # The student's effective due date (late_policy.effective_due_at).
     due_at: datetime | None
+    # The homework's late policy, so the page can say what turning in
+    # late costs: "none" | "penalty_per_day" | "no_credit".
+    late_policy: LatePolicy
+    # Not turned in, and the policy closed it at the due date: the page
+    # shows that instead of the upload panel, and submit would be refused.
+    closed: bool
     course_id: str
     course_name: str
     # Course subject ("math" | "physics" | "chemistry"). Threaded to the
@@ -506,6 +525,11 @@ class StudentHomeworkDetail(BaseModel):
     # edit work never leaks.
     submitted_at: datetime | None = None
     final_score: float | None = None
+    # Points the late policy took off the published score (already out of
+    # final_score; 10% of the score per started day late). 0 when none was
+    # taken. Rounded like final_score, so the two add back to the score
+    # before the penalty.
+    late_penalty: float
     grade_published_at: datetime | None = None
     breakdown: list[StudentProblemFeedback] | None = None
     # What's left for the student on turned-in work: "confirm_reading"
@@ -661,6 +685,7 @@ class DashboardAssignment(BaseModel):
     assignment_id: str
     title: str
     type: str
+    # The student's effective due date (late_policy.effective_due_at).
     due_at: datetime | None
     course_id: str
     course_name: str
@@ -692,6 +717,9 @@ class StudentDashboardResponse(BaseModel):
     first_name: str
     due_this_week: list[DashboardAssignment]
     overdue: list[DashboardAssignment]
+    # Never turned in, and closed by the late policy at the due date —
+    # nothing left to do, so not "overdue", but not silently gone either.
+    closed: list[DashboardAssignment]
     in_review: list[DashboardAssignment]
     recently_graded: list[DashboardGrade]
 
@@ -1283,15 +1311,29 @@ async def list_homework(
         )).all()
         submission_by_aid = {aid: sid for aid, sid in submitted_rows}
     next_steps = await _next_steps(db, list(submission_by_aid.values()))
+    due = await student_due_dates(db, user.id, rows)
+    now = datetime.now(UTC)
+    # A teacher's preview is never closed: she checks the homework as a
+    # student would, whatever its policy and due date.
+    closed_ids = {
+        a.id for a in rows
+        if not user.is_preview and a.id not in submission_by_aid
+        and is_closed(a.late_policy, due[a.id], now)
+    }
+    # Closed and never turned in sorts last: it's missed, not to do, so it
+    # stays in view without sitting among the work still open. `sorted` is
+    # stable, so each group keeps the due-date order.
+    rows = sorted(rows, key=lambda a: a.id in closed_ids)
 
     return [
         StudentHomeworkSummary(
             assignment_id=str(a.id),
             title=a.title,
             type=a.type,
-            due_at=a.due_at,
+            due_at=due[a.id],
             problem_count=len(problem_ids_in_content(a.content)),
             status="submitted" if a.id in submission_by_aid else "not_started",
+            closed=a.id in closed_ids,
             next_step=(
                 next_steps.get(submission_by_aid[a.id])
                 if a.id in submission_by_aid else None
@@ -1437,6 +1479,7 @@ async def get_dashboard(
             first_name=first_name,
             due_this_week=[],
             overdue=[],
+            closed=[],
             in_review=[],
             recently_graded=[],
         )
@@ -1466,6 +1509,7 @@ async def get_dashboard(
             first_name=first_name,
             due_this_week=[],
             overdue=[],
+            closed=[],
             in_review=[],
             recently_graded=[],
         )
@@ -1512,13 +1556,16 @@ async def get_dashboard(
 
     now = datetime.now(UTC)
     week_from_now = now + timedelta(days=7)
+    due_by_aid = await student_due_dates(db, user.id, (a for a, _ in assignments_by_id.values()))
 
     due_this_week: list[DashboardAssignment] = []
     overdue: list[DashboardAssignment] = []
+    closed: list[DashboardAssignment] = []
     in_review: list[DashboardAssignment] = []
 
     for aid, (a, sid) in assignments_by_id.items():
         meta = section_meta[sid]
+        due_at = due_by_aid[aid]
         submission_id = submission_by_aid.get(aid)
         is_submitted = submission_id is not None
         is_published = is_submitted and submission_id in published_by_sid
@@ -1535,37 +1582,50 @@ async def get_dashboard(
                 assignment_id=str(a.id),
                 title=a.title,
                 type=a.type,
-                due_at=a.due_at,
+                due_at=due_at,
                 course_id=str(meta["course_id"]),
                 course_name=meta["course_name"],
                 section_name=meta["section_name"],
                 status="submitted",
-                is_late=bool(a.due_at and a.due_at < now),
+                is_late=bool(due_at and due_at < now),
                 next_step=next_steps.get(submission_id) if submission_id else None,
             ))
             continue
 
-        # Unsubmitted — into Due or Overdue. HWs with no due date
-        # go into Due (sorted last, nullslast) so students can still
-        # see them; they're never "overdue" without a deadline.
-        if a.due_at and a.due_at < now:
-            overdue.append(DashboardAssignment(
+        # Unsubmitted — into Due, Overdue, or Closed when the late
+        # policy shut it at the due date. HWs with no due date go into
+        # Due (sorted last, nullslast) so students can still see them;
+        # they're never "overdue" without a deadline, and never close.
+        if not user.is_preview and is_closed(a.late_policy, due_at, now):
+            closed.append(DashboardAssignment(
                 assignment_id=str(a.id),
                 title=a.title,
                 type=a.type,
-                due_at=a.due_at,
+                due_at=due_at,
                 course_id=str(meta["course_id"]),
                 course_name=meta["course_name"],
                 section_name=meta["section_name"],
                 status="not_started",
                 is_late=True,
             ))
-        elif a.due_at is None or a.due_at <= week_from_now:
+        elif due_at and due_at < now:
+            overdue.append(DashboardAssignment(
+                assignment_id=str(a.id),
+                title=a.title,
+                type=a.type,
+                due_at=due_at,
+                course_id=str(meta["course_id"]),
+                course_name=meta["course_name"],
+                section_name=meta["section_name"],
+                status="not_started",
+                is_late=True,
+            ))
+        elif due_at is None or due_at <= week_from_now:
             due_this_week.append(DashboardAssignment(
                 assignment_id=str(a.id),
                 title=a.title,
                 type=a.type,
-                due_at=a.due_at,
+                due_at=due_at,
                 course_id=str(meta["course_id"]),
                 course_name=meta["course_name"],
                 section_name=meta["section_name"],
@@ -1578,6 +1638,8 @@ async def get_dashboard(
     # recently-submitted first (using submitted_at already in memory).
     due_this_week.sort(key=lambda x: (x.due_at is None, x.due_at or now))
     overdue.sort(key=lambda x: x.due_at or now)
+    # Most recently closed first — the one they may still ask about.
+    closed.sort(key=lambda x: x.due_at or now, reverse=True)
     in_review.sort(
         key=lambda x: submitted_at_by_aid.get(uuid.UUID(x.assignment_id), now),
         reverse=True,
@@ -1635,6 +1697,7 @@ async def get_dashboard(
         first_name=first_name,
         due_this_week=due_this_week,
         overdue=overdue,
+        closed=closed,
         in_review=in_review,
         recently_graded=recently_graded,
     )
@@ -1787,12 +1850,14 @@ async def homework_detail(
     # published fields (teacher_notes, ai_breakdown) stay off this
     # payload.
     final_score: float | None = None
+    late_penalty = 0.0
     grade_published_at: datetime | None = None
     breakdown_out: list[StudentProblemFeedback] | None = None
     if sub is not None:
         grade = (await db.execute(
             select(
                 SubmissionGrade.published_final_score,
+                SubmissionGrade.published_late_penalty,
                 SubmissionGrade.grade_published_at,
                 SubmissionGrade.published_breakdown,
             )
@@ -1820,6 +1885,7 @@ async def homework_detail(
                 if grade.published_final_score is not None
                 else None
             )
+            late_penalty = round(grade.published_late_penalty, 1)
             grade_published_at = grade.grade_published_at
             if grade.published_breakdown:
                 breakdown_out = []
@@ -1834,12 +1900,18 @@ async def homework_detail(
                         feedback=entry.get("feedback"),
                     ))
 
+    due_at = await effective_due_at(db, assignment, user.id)
     return StudentHomeworkDetail(
         assignment_id=str(assignment.id),
         title=assignment.title,
         description=assignment.description,
         type=assignment.type,
-        due_at=assignment.due_at,
+        due_at=due_at,
+        late_policy=assignment.late_policy,
+        closed=(
+            sub is None and not user.is_preview
+            and is_closed(assignment.late_policy, due_at, datetime.now(UTC))
+        ),
         course_id=str(course.id),
         course_name=course.name,
         course_subject=course.subject,
@@ -1849,6 +1921,7 @@ async def homework_detail(
         submission_id=str(sub.id) if sub is not None else None,
         submitted_at=sub.submitted_at if sub is not None else None,
         final_score=final_score,
+        late_penalty=late_penalty,
         grade_published_at=grade_published_at,
         breakdown=breakdown_out,
         next_step=(
@@ -2196,10 +2269,16 @@ async def submit_homework(
     db: AsyncSession = Depends(get_db),
 ) -> SubmitHomeworkResponse:
     """Insert a submission for this student/HW. One-shot — resubmission
-    is not allowed in v1; a second call returns 409. Soft-locks late
-    submissions (sets is_late=true, doesn't reject).
+    is not allowed in v1; a second call returns 409. A late turn-in is
+    accepted and marked late, unless the homework's late policy closes it
+    at the due date (`no_credit`), which refuses it with a 403 — except for
+    a teacher's preview, which always goes through.
     """
     assignment = await _load_assignment_for_student(db, assignment_id, user)
+    # One instant for "when was this turned in": the closed check, is_late
+    # and the late penalty (measured off submitted_at) must all agree.
+    now = datetime.now(UTC)
+    due_at = await effective_due_at(db, assignment, user.id)
 
     # Already submitted? One-shot enforcement.
     existing = (await db.execute(
@@ -2209,9 +2288,13 @@ async def submit_homework(
         )
         .limit(1)
     )).scalar_one_or_none()
+    if existing is not None and not user.is_preview:
+        raise HTTPException(status_code=409, detail="Already submitted")
+    # After the one-shot check, so work already in reads as "already
+    # submitted", not "closed"; before the preview's rehearsal is cleared.
+    if not user.is_preview and is_closed(assignment.late_policy, due_at, now):
+        raise HTTPException(status_code=403, detail=HOMEWORK_CLOSED_DETAIL)
     if existing is not None:
-        if not user.is_preview:
-            raise HTTPException(status_code=409, detail="Already submitted")
         # A teacher's preview is a rehearsal, not a turn-in. One-shot
         # exists so a student can't resubmit after seeing feedback —
         # applied to her own shadow it would mean a single rehearsal
@@ -2233,7 +2316,7 @@ async def submit_homework(
         # validated enrollment, but defensive.
         raise HTTPException(status_code=403, detail="Not enrolled in this assignment")
 
-    is_late = bool(assignment.due_at and datetime.now(UTC) > assignment.due_at)
+    is_late = days_late(now, due_at) > 0
     submission = Submission(
         assignment_id=assignment_id,
         student_id=user.id,
@@ -2245,6 +2328,7 @@ async def submit_homework(
         # confirm-and-edit step. The column is preserved so legacy
         # submissions render correctly on the read side.
         final_answers=None,
+        submitted_at=now,
         is_late=is_late,
     )
     db.add(submission)
@@ -2674,7 +2758,10 @@ async def retake_submission(
     validated_files = await _validated_upload_files(body)
 
     now = datetime.now(UTC)
-    is_late = sub.is_late or bool(assignment.due_at and now > assignment.due_at)
+    # Measured against the student's effective due date, like submit
+    # and the late policy (late_policy.effective_due_at).
+    due_at = await effective_due_at(db, assignment, user.id)
+    is_late = sub.is_late or days_late(now, due_at) > 0
     original = {
         "files": sub.files,
         "extraction": sub.extraction,

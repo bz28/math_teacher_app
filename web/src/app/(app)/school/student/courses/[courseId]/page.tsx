@@ -169,6 +169,10 @@ function HomeworkList({ courseId }: { courseId: string }) {
               <span className="rounded-full bg-success-light px-2 py-0.5 text-xs font-semibold text-success">
                 Submitted ✓
               </span>
+            ) : hw.closed ? (
+              <span className="rounded-full bg-bg-subtle px-2 py-0.5 text-xs font-semibold text-text-secondary">
+                Closed
+              </span>
             ) : (
               <span className="rounded-full bg-warning-bg px-2 py-0.5 text-xs font-semibold text-warning-dark">
                 Not started

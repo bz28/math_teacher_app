@@ -37,12 +37,26 @@ export function averageBreakdown(
   return { scores, leftOut };
 }
 
+/** The score the teacher gave, before any late penalty — what compares
+ *  with the AI's suggestion, which never has the penalty in it. */
+export function scoreGiven(cell: Extract<GradebookCell, { state: "published" }>): number {
+  return cell.score + cell.late_penalty;
+}
+
+/** The late policy's cut as a percent of the score she gave (10 per day
+ *  late): 85% with 8.5 taken off is 10. 0 when nothing was taken. */
+export function lateRate(cell: Extract<GradebookCell, { state: "published" }>): number {
+  const given = scoreGiven(cell);
+  return given > 0 ? (cell.late_penalty / given) * 100 : 0;
+}
+
 /** Did the teacher publish something other than the AI's suggestion?
  *  Judged on the numbers shown, so the dot agrees with the hover card's
  *  "AI suggested X% · you gave Y%". Both are means of per-problem
- *  percents, so a grade approved as-is is equal. */
+ *  percents, so a grade approved as-is is equal. A late penalty is the
+ *  policy's, not her change, so it doesn't count. */
 export function changedFromAi(cell: Extract<GradebookCell, { state: "published" }>): boolean {
-  return cell.ai_score !== null && shown(cell.ai_score) !== shown(cell.score);
+  return cell.ai_score !== null && shown(cell.ai_score) !== shown(scoreGiven(cell));
 }
 
 export type SortKey = "name" | "avg" | string; // string = assignment id

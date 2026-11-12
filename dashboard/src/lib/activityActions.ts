@@ -153,6 +153,11 @@ export const ACTIVITY_ACTIONS: Record<ActivityFamily, ActivityAction[]> = {
         `Marked graph item ${num(m, "n") ?? "?"} ${m.verdict === "yes" ? "shown" : "missing"}`,
     },
     {
+      action: "grade.late_penalty",
+      label: "Late penalty",
+      detail: (m) => (m.waived ? "Waived the late penalty" : "Restored the late penalty"),
+    },
+    {
       action: "grade.unmark_reviewed",
       label: "Reopened",
       detail: () => "Reopened for review",

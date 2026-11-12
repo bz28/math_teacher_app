@@ -5,6 +5,7 @@ import {
   ApiError,
   NetworkError,
   schoolStudent,
+  type LatePolicy,
   type SubmitHomeworkResponse,
 } from "@/lib/api";
 import {
@@ -51,6 +52,8 @@ import {
 interface Props {
   assignmentId: string;
   dueAt: string | null;
+  /** What turning in late costs — drives the past-due notice. */
+  latePolicy: LatePolicy;
   /** Called after a successful submit so the parent can swap into
    *  the submitted read-only view. */
   onSubmitted: (resp: SubmitHomeworkResponse) => void;
@@ -58,7 +61,18 @@ interface Props {
    *  submission instead of turning in for the first time. Same staging,
    *  checks and validation; the copy says what's different. */
   retake?: { submissionId: string; onCancel: () => void };
+  /** Called when the turn-in was refused because the homework closed
+   *  while the page was open, so the parent can show it closed. */
+  onClosed: () => void;
 }
+
+/** The past-due line above the upload, per late policy. `no_credit`
+ *  never reaches it — a closed homework has no upload panel. */
+const PAST_DUE_COPY: Record<Exclude<LatePolicy, "no_credit">, string> = {
+  none: "This homework is past due. You can still turn it in, and it will be marked late so your teacher knows.",
+  penalty_per_day:
+    "This homework is past due. You can still turn it in, but each day late takes 10% off your score: 85% a day late counts as 76.5%.",
+};
 
 /**
  * "Submit your homework" panel at the bottom of the locked HW page.
@@ -141,6 +155,13 @@ const UNCHECKED = {
  * two days, took it for a login problem, signed in four times in three
  * minutes, and never turned the work in.
  */
+/** The API's refusal of a turn-in after a `no_credit` homework closed
+ *  (api/core/late_policy.py HOMEWORK_CLOSED_DETAIL). */
+function isClosedRefusal(err: ApiError): boolean {
+  const detail = err.body.detail;
+  return typeof detail === "string" && detail.startsWith("This homework closed");
+}
+
 function friendlySubmitError(err: unknown, retake: boolean): string {
   if (err instanceof NetworkError) return err.message;
   if (err instanceof ApiError) {
@@ -152,8 +173,10 @@ function friendlySubmitError(err: unknown, retake: boolean): string {
 export function SubmissionPanel({
   assignmentId,
   dueAt,
+  latePolicy,
   onSubmitted,
   retake,
+  onClosed,
 }: Props) {
   const [stagedFiles, setStagedFiles] = useState<StagedFile[]>([]);
   const [submitting, setSubmitting] = useState(false);
@@ -435,6 +458,12 @@ export function SubmissionPanel({
         : await schoolStudent.submitHomework(assignmentId, body);
       onSubmitted(resp);
     } catch (err) {
+      // The homework closed while this page was open: there is nothing
+      // to retry, so hand over to the closed view.
+      if (err instanceof ApiError && err.status === 403 && isClosedRefusal(err)) {
+        onClosed();
+        return;
+      }
       // Never surface a raw exception message to a student. Staged
       // files stay put (we don't clear them) so a retry is one tap
       // away once they've read the friendly line.
@@ -492,10 +521,7 @@ export function SubmissionPanel({
       {isLate && (
         <div className="mb-5 flex items-start gap-2.5 rounded-[--radius-sm] border border-warning/25 bg-warning-bg/60 p-3 text-sm text-warning-dark">
           <AlertTriangleIcon className="mt-0.5 h-4 w-4 shrink-0 text-warning" strokeWidth={2} />
-          <span>
-            This homework is past due. You can still turn it in, and it will be
-            marked late so your teacher knows.
-          </span>
+          <span>{PAST_DUE_COPY[latePolicy === "no_credit" ? "none" : latePolicy]}</span>
         </div>
       )}
 
