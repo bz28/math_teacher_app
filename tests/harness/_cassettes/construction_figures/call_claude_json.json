@@ -1,4 +1,308 @@
 {
+  "029b4f9577fdd2c62ace434604a57d3b": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nGiven: $\\overline{BD}$ bisects $\\angle ABC$, and $\\overline{BD} \\perp \\overline{AC}$. Prove that $\\triangle",
+      "recorded_at": 1794518347.012811
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "BD",
+            "ABC"
+          ],
+          "kind": "bisects_angle",
+          "quote": "BD bisects \u2220ABC"
+        },
+        {
+          "items": [
+            "BD",
+            "AC"
+          ],
+          "kind": "perpendicular",
+          "quote": "BD \u22a5 AC"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [
+        {
+          "items": [
+            "ABD",
+            "CBD"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "Prove that \u25b3ABD \u2245 \u25b3CBD"
+        }
+      ],
+      "requested": [
+        {
+          "item": "ABD",
+          "kind": "triangle"
+        },
+        {
+          "item": "CBD",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "BD",
+        "AC"
+      ],
+      "triangles": [
+        "ABD",
+        "CBD"
+      ]
+    }
+  },
+  "041e70c9b9d0b3200069e7f7eaa1d22f": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn the figure below, $\\angle A = \\angle D$ and $\\angle B = \\angle E$. If $AB = 12$, $DE = 8$, and $BC = 9$,",
+      "recorded_at": 1794518417.234279
+    },
+    "response": {
+      "find": [
+        {
+          "item": "EF",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "A",
+            "D"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220A = \u2220D"
+        },
+        {
+          "items": [
+            "B",
+            "E"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220B = \u2220E"
+        },
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "AB = 12",
+          "value": 12
+        },
+        {
+          "items": [
+            "DE"
+          ],
+          "kind": "equal_length",
+          "quote": "DE = 8",
+          "value": 8
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "equal_length",
+          "quote": "BC = 9",
+          "value": 9
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F"
+      ],
+      "prove": [],
+      "requested": [
+        {
+          "item": "ABC",
+          "kind": "triangle"
+        },
+        {
+          "item": "DEF",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "AB",
+        "BC",
+        "DE",
+        "EF"
+      ],
+      "triangles": [
+        "ABC",
+        "DEF"
+      ]
+    }
+  },
+  "047c168de3375be9fad473d84d8c9236": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nLines $p$ and $q$ are parallel. A transversal forms alternate interior angles measuring $(7x - 3)\u00b0$ and $(4",
+      "recorded_at": 1794518408.843256
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "value of x",
+          "kind": "other"
+        },
+        {
+          "item": "each alternate interior angle",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "p",
+            "q"
+          ],
+          "kind": "parallel",
+          "quote": "Lines p and q are parallel."
+        },
+        {
+          "items": [
+            "",
+            "p",
+            "q"
+          ],
+          "kind": "transversal",
+          "quote": "A transversal forms alternate interior angles measuring (7x - 3)\u00b0 and (4x + 18)\u00b0."
+        },
+        {
+          "expr": "7x - 3",
+          "items": [
+            "1"
+          ],
+          "kind": "angle_measure",
+          "quote": "alternate interior angles measuring (7x - 3)\u00b0"
+        },
+        {
+          "expr": "4x + 18",
+          "items": [
+            "2"
+          ],
+          "kind": "angle_measure",
+          "quote": "alternate interior angles measuring (7x - 3)\u00b0 and (4x + 18)\u00b0."
+        }
+      ],
+      "lines": [],
+      "named_lines": [
+        "p",
+        "q"
+      ],
+      "points": [],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [
+        {
+          "item": "p",
+          "kind": "line"
+        },
+        {
+          "item": "q",
+          "kind": "line"
+        }
+      ],
+      "segments": [],
+      "triangles": []
+    }
+  },
+  "04ba5c4086f23523dc9053aceef7464f": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\n**Given:** $\\overline{BC} \\cong \\overline{DA}$, $\\overline{BC} \\parallel \\overline{AD}$\n\n**Prove:** $\\trian",
+      "recorded_at": 1794518347.801354
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "BC",
+            "DA"
+          ],
+          "kind": "congruent_segments",
+          "quote": "BC \u2245 DA"
+        },
+        {
+          "items": [
+            "BC",
+            "AD"
+          ],
+          "kind": "parallel",
+          "quote": "BC \u2225 AD"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [
+        {
+          "items": [
+            "ABC",
+            "CDA"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "\u25b3ABC \u2245 \u25b3CDA"
+        }
+      ],
+      "requested": [
+        {
+          "item": "ABC",
+          "kind": "triangle"
+        },
+        {
+          "item": "CDA",
+          "kind": "triangle"
+        },
+        {
+          "item": "BC",
+          "kind": "segment"
+        },
+        {
+          "item": "DA",
+          "kind": "segment"
+        },
+        {
+          "item": "AC",
+          "kind": "segment"
+        }
+      ],
+      "segments": [
+        "BC",
+        "DA",
+        "AD",
+        "AC"
+      ],
+      "triangles": [
+        "ABC",
+        "CDA"
+      ]
+    }
+  },
   "101027b73d8beb00f6c2f239e1f49eac": {
     "meta": {
       "mode": "bank_chat",
@@ -64,6 +368,69 @@
       "reply": "Here's a diagram added to the question. Points are placed so that AB \u22a5 BE, EC \u22a5 BE, and M is the midpoint of AC \u2014 all givens hold exactly."
     }
   },
+  "118d938f4b6a841eedaf399b85838368": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nGiven: $\\overline{BD}$ bisects $\\angle ABC$, and $\\overline{BD} \\perp \\overline{AC}$. Prove that $\\triangle",
+      "recorded_at": 1794518346.586255
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "BD",
+            "ABC"
+          ],
+          "kind": "bisects_angle",
+          "quote": "BD bisects \u2220ABC"
+        },
+        {
+          "items": [
+            "BD",
+            "AC"
+          ],
+          "kind": "perpendicular",
+          "quote": "BD \u22a5 AC"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [
+        {
+          "items": [
+            "ABD",
+            "CBD"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "Prove that \u25b3ABD \u2245 \u25b3CBD"
+        }
+      ],
+      "requested": [
+        {
+          "item": "ABD",
+          "kind": "triangle"
+        },
+        {
+          "item": "CBD",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "BD",
+        "AC"
+      ],
+      "triangles": [
+        "ABD",
+        "CBD"
+      ]
+    }
+  },
   "17cc4ccdc7a706580672257e0bf4e323": {
     "meta": {
       "mode": "bank_chat",
@@ -108,94 +475,292 @@
       "reply": "Here's a right triangle figure with the given labels \u2014 the right angle is at vertex B, with legs a = 5 and b = 12, and hypotenuse c = 13."
     }
   },
-  "19e3aebe98c68324937848a233aa6698": {
+  "2052c263fcc794aaad0c1a75cc0a9ee9": {
     "meta": {
-      "mode": "bank_chat",
+      "mode": "bank_chat_facts_b",
       "model": "claude-sonnet-4-6",
-      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nLines $m \\parallel n$ are cut by transversal $t$. The transversal forms an angle of $74\u00b0$ with line $m$. Th",
-      "recorded_at": 1794515015.7488
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn the figure below, $\\overrightarrow{OA}$, $\\overrightarrow{OB}$, $\\overrightarrow{OC}$, and $\\overrightar",
+      "recorded_at": 1794518408.407456
     },
     "response": {
-      "figure_spec": {
-        "angle_labels": {
-          "_mrA_Q": "74\u00b0",
-          "_nrPA": "\u03b8"
+      "find": [
+        {
+          "item": "AOB",
+          "kind": "angle"
         },
-        "arc_groups": [
-          [
-            "_mrAP",
-            "PA_Q"
-          ]
-        ],
-        "lines": [
-          {
-            "name": "m",
-            "through": [
-              "_ml",
-              "_mr"
-            ]
-          },
-          {
-            "name": "n",
-            "through": [
-              "_nl",
-              "_nr"
-            ]
-          },
-          {
-            "name": "t",
-            "through": [
-              "_t1",
-              "_Q"
-            ]
-          }
-        ],
-        "parallel_groups": [
-          [
-            "m",
-            "n"
-          ]
-        ],
-        "points": {
-          "A": [
-            2.0,
-            6.0
-          ],
-          "P": [
-            7.309,
-            2.0
-          ],
-          "_Q": [
-            3.147,
-            2.0
-          ],
-          "_ml": [
-            0.0,
-            6.0
-          ],
-          "_mr": [
-            9.0,
-            6.0
-          ],
-          "_nl": [
-            0.0,
-            2.0
-          ],
-          "_nr": [
-            9.0,
-            2.0
-          ],
-          "_t1": [
-            1.449,
-            7.923
-          ]
+        {
+          "item": "BOC",
+          "kind": "angle"
         },
-        "segments": [
-          "AP"
-        ],
-        "shape": "construction",
-        "type": "geometry"
-      }
+        {
+          "item": "COD",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "expr": "2x + 5",
+          "items": [
+            "AOB"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220AOB = 2x + 5"
+        },
+        {
+          "expr": "x + 8",
+          "items": [
+            "BOC"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220BOC = x + 8"
+        },
+        {
+          "expr": "3x - 1",
+          "items": [
+            "COD"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220COD = 3x - 1"
+        },
+        {
+          "items": [
+            "OA",
+            "OD"
+          ],
+          "kind": "opposite_rays",
+          "quote": "OA and OD are opposite rays"
+        }
+      ],
+      "points": [
+        "O",
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "rays": [
+        "OA",
+        "OB",
+        "OC",
+        "OD"
+      ],
+      "requested": [
+        {
+          "item": "OA",
+          "kind": "ray"
+        },
+        {
+          "item": "OB",
+          "kind": "ray"
+        },
+        {
+          "item": "OC",
+          "kind": "ray"
+        },
+        {
+          "item": "OD",
+          "kind": "ray"
+        },
+        {
+          "item": "O",
+          "kind": "point"
+        },
+        {
+          "item": "A",
+          "kind": "point"
+        },
+        {
+          "item": "B",
+          "kind": "point"
+        },
+        {
+          "item": "C",
+          "kind": "point"
+        },
+        {
+          "item": "D",
+          "kind": "point"
+        }
+      ]
+    }
+  },
+  "257d507da0104e3e3824189f1613614b": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n**Given:** $\\overline{AB} \\parallel \\overline{CD}$, $\\overline{BC} \\cong \\overline{DA}$\n\n**Prove:** $\\trian",
+      "recorded_at": 1794518348.208653
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        },
+        {
+          "items": [
+            "BC",
+            "DA"
+          ],
+          "kind": "congruent_segments",
+          "quote": "BC \u2245 DA"
+        },
+        {
+          "items": [
+            "BAC",
+            "DCA"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220BAC \u2245 \u2220DCA"
+        },
+        {
+          "items": [
+            "BCA",
+            "DAC"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220BCA \u2245 \u2220DAC"
+        },
+        {
+          "items": [
+            "AC",
+            "CA"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AC \u2245 CA"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [
+        {
+          "items": [
+            "ABC",
+            "CDA"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "\u25b3ABC \u2245 \u25b3CDA"
+        }
+      ],
+      "requested": [
+        {
+          "item": "ABC",
+          "kind": "triangle"
+        },
+        {
+          "item": "CDA",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "AB",
+        "CD",
+        "BC",
+        "DA",
+        "AC"
+      ],
+      "triangles": [
+        "ABC",
+        "CDA"
+      ]
+    }
+  },
+  "27ca90f7a65a70977bce88c5d6d1dac5": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nA rectangle has a width of $7$ inches and a length of $24$ inches. A diagonal is drawn from one corner to t",
+      "recorded_at": 1794518280.936569
+    },
+    "response": {
+      "find": [
+        {
+          "item": "d",
+          "kind": "segment"
+        },
+        {
+          "item": "whether the second rectangle's length is longer or shorter than 24 inches",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "items": [],
+          "kind": "rectangle",
+          "quote": "A rectangle has a width of 7 inches and a length of 24 inches."
+        },
+        {
+          "circle": null,
+          "expr": null,
+          "items": [],
+          "kind": "equal_length",
+          "point": null,
+          "quote": "A rectangle has a width of 7 inches and a length of 24 inches.",
+          "value": 7
+        },
+        {
+          "circle": null,
+          "expr": null,
+          "items": [],
+          "kind": "equal_length",
+          "point": null,
+          "quote": "A rectangle has a width of 7 inches and a length of 24 inches.",
+          "value": 24
+        },
+        {
+          "items": [],
+          "kind": "other",
+          "quote": "A diagonal is drawn from one corner to the opposite corner, dividing the rectangle into two right triangles."
+        },
+        {
+          "items": [],
+          "kind": "rectangle",
+          "quote": "a second rectangle \u2014 with width 9 inches and diagonal 40 inches"
+        },
+        {
+          "circle": null,
+          "expr": null,
+          "items": [],
+          "kind": "equal_length",
+          "point": null,
+          "quote": "a second rectangle \u2014 with width 9 inches and diagonal 40 inches",
+          "value": 9
+        },
+        {
+          "circle": null,
+          "expr": null,
+          "items": [],
+          "kind": "equal_length",
+          "point": null,
+          "quote": "a second rectangle \u2014 with width 9 inches and diagonal 40 inches",
+          "value": 40
+        }
+      ],
+      "points": [],
+      "polygons": [],
+      "prove": [],
+      "requested": [
+        {
+          "item": "first rectangle with diagonal",
+          "kind": "rectangle"
+        },
+        {
+          "item": "second rectangle",
+          "kind": "rectangle"
+        }
+      ],
+      "segments": [],
+      "triangles": []
     }
   },
   "3082e56930fd97833dce6d6c7253885b": {
@@ -254,49 +819,439 @@
       "reply": "Here's a figure for this problem. I've placed T at the top, Q and S symmetrically at the bottom, and R on the vertical axis between them so that the two given angle congruences (\u2220QRT \u2245 \u2220SRT and \u2220RQT \u2245 \u2220RST) are exactly satisfied, with RT shared by both triangles."
     }
   },
-  "3116cf2d71cd129266292fc5576e271e": {
+  "350d84850c302d73941eefb2128b8e60": {
     "meta": {
       "mode": "bank_chat",
       "model": "claude-sonnet-4-6",
-      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn the figure below, $\\triangle ABC$ and $\\triangle DBC$ share hypotenuse $\\overline{BC}$, with right angle",
-      "recorded_at": 1794514966.756973
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn the figure below, $\\angle A = \\angle D$ and $\\angle B = \\angle E$. If $AB = 12$, $DE = 8$, and $BC = 9$,",
+      "recorded_at": 1794518734.091469
+    },
+    "response": {
+      "figure_spec": {
+        "arc_groups": [
+          [
+            "BAC",
+            "EDF"
+          ],
+          [
+            "ABC",
+            "DEF"
+          ]
+        ],
+        "points": {
+          "A": [
+            0,
+            0
+          ],
+          "B": [
+            12,
+            0
+          ],
+          "C": [
+            7.5,
+            7.794
+          ],
+          "D": [
+            15,
+            0
+          ],
+          "E": [
+            23,
+            0
+          ],
+          "F": [
+            20.0,
+            5.196
+          ]
+        },
+        "segments": [
+          "AB",
+          "BC",
+          "CA",
+          "DE",
+          "EF",
+          "FD"
+        ],
+        "shape": "construction",
+        "side_labels": {
+          "AB": "12",
+          "BC": "9",
+          "DE": "8"
+        },
+        "type": "geometry"
+      }
+    }
+  },
+  "382c99022d7900929fda76e39c67af6b": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn the diagram below, $\\overline{AB} \\parallel \\overline{CD}$ and $M$ is the midpoint of $\\overline{BC}$. U",
+      "recorded_at": 1794518571.3183942
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "midpoint",
+          "point": "M",
+          "quote": "M is the midpoint of BC"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "M"
+      ],
+      "prove": [
+        {
+          "items": [
+            "ABM",
+            "DCM"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "prove that \u25b3ABM \u2245 \u25b3DCM"
+        }
+      ],
+      "requested": [
+        {
+          "item": "ABM",
+          "kind": "triangle"
+        },
+        {
+          "item": "DCM",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "AB",
+        "CD",
+        "BC",
+        "BM",
+        "MC"
+      ],
+      "triangles": [
+        "ABM",
+        "DCM"
+      ]
+    }
+  },
+  "3871b5ad7de127b86d6e19ec14cee256": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\n**Given:** $\\overline{BE}$ bisects $\\overline{AC}$ at point $M$, $\\overline{AB} \\perp \\overline{BE}$, $\\ove",
+      "recorded_at": 1794518381.80934
     },
     "response": {
       "figure_spec": {
         "points": {
           "A": [
-            2,
-            3.464
+            0,
+            3
           ],
           "B": [
             0,
             0
           ],
           "C": [
-            8,
+            6,
+            -3
+          ],
+          "E": [
+            6,
             0
           ],
-          "D": [
-            2,
-            -3.464
+          "M": [
+            3,
+            0
           ]
         },
         "right_angles": [
-          "BAC",
-          "BDC"
+          "ABE",
+          "CEB"
         ],
         "segments": [
           "AB",
+          "BE",
+          "EC",
           "AC",
-          "BC",
-          "BD",
-          "DC"
+          "AM",
+          "MC"
         ],
         "shape": "construction",
         "tick_groups": [
           [
             "AB",
-            "DB"
+            "EC"
+          ],
+          [
+            "AM",
+            "MC"
+          ]
+        ],
+        "type": "geometry"
+      }
+    }
+  },
+  "3c88f358dec9acd9ca09c2cef85d519b": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\n**Given:** $\\overline{BE}$ bisects $\\overline{AC}$ at point $M$, $\\overline{AB} \\perp \\overline{BE}$, $\\ove",
+      "recorded_at": 1794518347.968252
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "BE",
+            "AC"
+          ],
+          "kind": "bisects_segment",
+          "point": "M",
+          "quote": "BE bisects AC at point M"
+        },
+        {
+          "items": [
+            "AB",
+            "BE"
+          ],
+          "kind": "perpendicular",
+          "quote": "AB \u22a5 BE"
+        },
+        {
+          "items": [
+            "EC",
+            "BE"
+          ],
+          "kind": "perpendicular",
+          "quote": "EC \u22a5 BE"
+        },
+        {
+          "items": [
+            "AB",
+            "EC"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB \u2245 EC"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "E",
+        "M"
+      ],
+      "prove": [
+        {
+          "items": [
+            "ABM",
+            "ECM"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "Prove: \u25b3ABM \u2245 \u25b3ECM"
+        }
+      ],
+      "requested": [
+        {
+          "item": "ABM",
+          "kind": "triangle"
+        },
+        {
+          "item": "ECM",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "BE",
+        "AC",
+        "AB",
+        "EC"
+      ],
+      "triangles": [
+        "ABM",
+        "ECM"
+      ]
+    }
+  },
+  "3d228abea3eeb62adbc167e2c028de52": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn the figure below, $\\overline{DE} \\parallel \\overline{BC}$, where $D$ lies on $\\overline{AB}$ and $E$ lie",
+      "recorded_at": 1794518416.7675142
+    },
+    "response": {
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        },
+        {
+          "item": "AED",
+          "kind": "angle"
+        },
+        {
+          "item": "ACB",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "DE",
+            "BC"
+          ],
+          "kind": "parallel",
+          "quote": "DE \u2225 BC"
+        },
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "on_segment",
+          "point": "D",
+          "quote": "D lies on AB"
+        },
+        {
+          "items": [
+            "AC"
+          ],
+          "kind": "on_segment",
+          "point": "E",
+          "quote": "E lies on AC"
+        },
+        {
+          "expr": "4x + 8",
+          "items": [
+            "ADE"
+          ],
+          "kind": "angle_measure",
+          "quote": "The measure of \u2220ADE = 4x + 8 degrees"
+        },
+        {
+          "expr": "6x - 12",
+          "items": [
+            "ABC"
+          ],
+          "kind": "angle_measure",
+          "quote": "\u2220ABC = 6x - 12 degrees"
+        },
+        {
+          "items": [
+            "DAE"
+          ],
+          "kind": "angle_measure",
+          "quote": "\u2220DAE = 38 degrees",
+          "value": 38
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ],
+      "prove": [
+        {
+          "items": [
+            "ADE",
+            "ABC"
+          ],
+          "kind": "congruent_angles",
+          "quote": "Explain why \u2220ADE and \u2220ABC are congruent, and state the theorem that justifies this."
+        }
+      ],
+      "requested": [
+        {
+          "item": "ABC",
+          "kind": "triangle"
+        },
+        {
+          "item": "DE",
+          "kind": "segment"
+        }
+      ],
+      "segments": [
+        "DE",
+        "BC",
+        "AB",
+        "AC"
+      ],
+      "triangles": [
+        "ADE",
+        "ABC"
+      ]
+    }
+  },
+  "3d3b6d6e38ae8bfc7350bb7b6122a7b8": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\n**Given:** $\\overline{BC} \\cong \\overline{DA}$, $\\overline{BC} \\parallel \\overline{AD}$\n\n**Prove:** $\\trian",
+      "recorded_at": 1794518632.793109
+    },
+    "response": {
+      "figure_spec": {
+        "arc_groups": [
+          [
+            "BCA",
+            "DAC"
+          ]
+        ],
+        "parallel_groups": [
+          [
+            "BC",
+            "AD"
+          ]
+        ],
+        "points": {
+          "A": [
+            0.0,
+            0.0
+          ],
+          "B": [
+            1.0,
+            3.0
+          ],
+          "C": [
+            6.0,
+            3.0
+          ],
+          "D": [
+            5.0,
+            0.0
+          ]
+        },
+        "segments": [
+          "AB",
+          "BC",
+          "CA",
+          "CD",
+          "DA"
+        ],
+        "shape": "construction",
+        "tick_groups": [
+          [
+            "BC",
+            "DA"
           ]
         ],
         "type": "geometry"
@@ -371,63 +1326,6 @@
       ]
     }
   },
-  "49f97bf4389c203167f2badb4b075d34": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\n**Given:** $\\overline{BC} \\cong \\overline{DA}$, $\\overline{BC} \\parallel \\overline{AD}$\n\n**Prove:** $\\trian",
-      "recorded_at": 1794515028.194669
-    },
-    "response": {
-      "figure_spec": {
-        "arc_groups": [
-          [
-            "BCA",
-            "DAC"
-          ]
-        ],
-        "parallel_groups": [
-          [
-            "BC",
-            "DA"
-          ]
-        ],
-        "points": {
-          "A": [
-            0.0,
-            0.0
-          ],
-          "B": [
-            2.0,
-            3.0
-          ],
-          "C": [
-            8.0,
-            3.0
-          ],
-          "D": [
-            6.0,
-            0.0
-          ]
-        },
-        "segments": [
-          "AB",
-          "BC",
-          "CD",
-          "DA",
-          "AC"
-        ],
-        "shape": "construction",
-        "tick_groups": [
-          [
-            "BC",
-            "DA"
-          ]
-        ],
-        "type": "geometry"
-      }
-    }
-  },
   "4b93dbb34b23340e8cad97e37123ee19": {
     "meta": {
       "mode": "bank_chat",
@@ -494,6 +1392,142 @@
       "reply": "Here's the figure with the two similar triangles, marking the equal angle pairs and the known side lengths."
     }
   },
+  "4f3de1bde61f01a01e2f9900edba6cfd": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n**Given:** $\\angle QRT \\cong \\angle SRT$, $\\angle RQT \\cong \\angle RST$\n\n**Prove:** $\\overline{QT} \\cong \\o",
+      "recorded_at": 1794518347.438717
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "QRT",
+            "SRT"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220QRT \u2245 \u2220SRT"
+        },
+        {
+          "items": [
+            "RQT",
+            "RST"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220RQT \u2245 \u2220RST"
+        }
+      ],
+      "points": [
+        "Q",
+        "R",
+        "S",
+        "T"
+      ],
+      "prove": [
+        {
+          "items": [
+            "QT",
+            "ST"
+          ],
+          "kind": "congruent_segments",
+          "quote": "QT \u2245 ST"
+        }
+      ],
+      "requested": [
+        {
+          "item": "QRT",
+          "kind": "triangle"
+        },
+        {
+          "item": "SRT",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "QT",
+        "ST",
+        "RT"
+      ],
+      "triangles": [
+        "QRT",
+        "SRT"
+      ]
+    }
+  },
+  "525f867abd7de6dcf4d0483232c59141": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn the diagram below, $\\overline{WX} \\cong \\overline{YZ}$, $\\angle W \\cong \\angle Y$, and $\\angle X \\cong \\",
+      "recorded_at": 1794518426.263533
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "WX",
+            "YZ"
+          ],
+          "kind": "congruent_segments",
+          "quote": "WX \u2245 YZ"
+        },
+        {
+          "items": [
+            "W",
+            "Y"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220W \u2245 \u2220Y"
+        },
+        {
+          "items": [
+            "X",
+            "Z"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220X \u2245 \u2220Z"
+        }
+      ],
+      "points": [
+        "W",
+        "X",
+        "Y",
+        "Z",
+        "V"
+      ],
+      "prove": [
+        {
+          "items": [
+            "WXV",
+            "YZV"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "prove \u25b3WXV \u2245 \u25b3YZV"
+        }
+      ],
+      "requested": [
+        {
+          "item": "WXV",
+          "kind": "triangle"
+        },
+        {
+          "item": "YZV",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "WX",
+        "YZ"
+      ],
+      "triangles": [
+        "WXV",
+        "YZV"
+      ]
+    }
+  },
   "54e59d8d3b548b6cc1221baa4a1d4c32": {
     "meta": {
       "mode": "bank_chat",
@@ -548,6 +1582,146 @@
         "solution_steps": null
       },
       "reply": "Great call \u2014 I've added a diagram to the question showing the first rectangle with its diagonal labeled $d$, the width labeled 7, and the length labeled 24, so students can see the right triangle setup clearly."
+    }
+  },
+  "5787313b8f65d786bdba85f80f560ba0": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn the diagram below, $\\overline{AB} \\parallel \\overline{CD}$ and $M$ is the midpoint of $\\overline{BC}$. U",
+      "recorded_at": 1794518407.503618
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "midpoint",
+          "point": "M",
+          "quote": "M is the midpoint of BC"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "M"
+      ],
+      "prove": [
+        {
+          "items": [
+            "ABM",
+            "DCM"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "prove that \u25b3ABM \u2245 \u25b3DCM"
+        }
+      ],
+      "requested": [
+        {
+          "item": "ABM",
+          "kind": "triangle"
+        },
+        {
+          "item": "DCM",
+          "kind": "triangle"
+        },
+        {
+          "item": "AB",
+          "kind": "segment"
+        },
+        {
+          "item": "CD",
+          "kind": "segment"
+        },
+        {
+          "item": "BC",
+          "kind": "segment"
+        }
+      ],
+      "segments": [
+        "AB",
+        "CD",
+        "BC",
+        "BM",
+        "MC"
+      ],
+      "triangles": [
+        "ABM",
+        "DCM"
+      ]
+    }
+  },
+  "59ec7d9eb8235c31e72d093ee7cc436f": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nWrite a complete two-column proof.\n\n**Given:** $\\angle 1$ and $\\angle 3$ are vertical angles; $m\\angle 1 = ",
+      "recorded_at": 1794518438.2459252
+    },
+    "response": {
+      "figure_spec": {
+        "angle_labels": {
+          "AOD": "3",
+          "BOC": "1"
+        },
+        "arc_groups": [
+          [
+            "BOC",
+            "AOD"
+          ]
+        ],
+        "lines": [
+          {
+            "through": [
+              "A",
+              "B"
+            ]
+          },
+          {
+            "through": [
+              "C",
+              "D"
+            ]
+          }
+        ],
+        "points": {
+          "A": [
+            -4,
+            0
+          ],
+          "B": [
+            4,
+            0
+          ],
+          "C": [
+            3.019,
+            2.624
+          ],
+          "D": [
+            -3.019,
+            -2.624
+          ],
+          "O": [
+            0,
+            0
+          ]
+        },
+        "segments": [],
+        "shape": "construction",
+        "type": "geometry"
+      }
     }
   },
   "5b60c970d0c4712fea8cef4b13682bc1": {
@@ -671,61 +1845,6 @@
       "reply": "I've added a figure to the question showing quadrilateral ABCD with diagonal AC drawn, and added a matching diagram to the Alternate Interior Angles step with the congruent angles marked."
     }
   },
-  "65c91c8c0d39328123108e54d9122d5c": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nWrite a complete two-column proof.\n\n**Given:** $\\angle 1$ and $\\angle 3$ are vertical angles; $m\\angle 1 = ",
-      "recorded_at": 1794514977.472193
-    },
-    "response": {
-      "figure_spec": {
-        "angle_labels": {
-          "COA": "3",
-          "DOB": "1"
-        },
-        "lines": [
-          {
-            "through": [
-              "A",
-              "B"
-            ]
-          },
-          {
-            "through": [
-              "C",
-              "D"
-            ]
-          }
-        ],
-        "points": {
-          "A": [
-            -5,
-            0
-          ],
-          "B": [
-            5,
-            0
-          ],
-          "C": [
-            -3.774,
-            -3.281
-          ],
-          "D": [
-            3.774,
-            3.281
-          ],
-          "O": [
-            0,
-            0
-          ]
-        },
-        "segments": [],
-        "shape": "construction",
-        "type": "geometry"
-      }
-    }
-  },
   "67150211001a34f2930e4d78bd1f71f2": {
     "meta": {
       "mode": "bank_chat",
@@ -790,59 +1909,6 @@
         }
       },
       "reply": "Here's the figure showing two intersecting lines with the four angles labeled \u2014 \u22201 and \u22203 are marked as vertical angles (opposite each other at the intersection)."
-    }
-  },
-  "680ff8498eff16cb84e62b1ea402df61": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn the figure below, $\\overline{DE} \\parallel \\overline{BC}$, where $D$ lies on $\\overline{AB}$ and $E$ lie",
-      "recorded_at": 1794514980.345016
-    },
-    "response": {
-      "figure_spec": {
-        "angle_labels": {
-          "ABC": "6x \u2212 12\u00b0",
-          "ADE": "4x + 8\u00b0",
-          "DAE": "38\u00b0"
-        },
-        "parallel_groups": [
-          [
-            "DE",
-            "BC"
-          ]
-        ],
-        "points": {
-          "A": [
-            4,
-            8
-          ],
-          "B": [
-            1.395,
-            0.436
-          ],
-          "C": [
-            6.605,
-            0.436
-          ],
-          "D": [
-            2.698,
-            4.218
-          ],
-          "E": [
-            5.303,
-            4.218
-          ]
-        },
-        "segments": [
-          "AB",
-          "AC",
-          "BC",
-          "DE"
-        ],
-        "shape": "construction",
-        "type": "geometry"
-      }
     }
   },
   "6883c562c812c7bfd25f9971a570c0f6": {
@@ -990,6 +2056,75 @@
       "reply": "I'd love to add a figure, but I need the leg lengths (or other given measurements) for the triangle to place the points correctly. Could you share the values \u2014 for example, \"legs of length 3 and 4\" or similar?"
     }
   },
+  "6a22b71f88b09760af04952d5ff66283": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nWrite a complete two-column proof.\n\n**Given:** $\\angle 1$ and $\\angle 3$ are vertical angles; $m\\angle 1 = ",
+      "recorded_at": 1794518407.68678
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "1",
+            "3"
+          ],
+          "kind": "vertical_angles",
+          "quote": "\u22201 and \u22203 are vertical angles"
+        },
+        {
+          "expr": "4x + 9",
+          "items": [
+            "1"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u22201 = 4x + 9"
+        },
+        {
+          "expr": "7x - 15",
+          "items": [
+            "3"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u22203 = 7x - 15"
+        }
+      ],
+      "points": [
+        "1",
+        "3"
+      ],
+      "prove": [
+        {
+          "items": [
+            "1"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u22201 = m\u22203 = 41\u00b0",
+          "value": 41
+        },
+        {
+          "items": [
+            "3"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u22201 = m\u22203 = 41\u00b0",
+          "value": 41
+        }
+      ],
+      "requested": [
+        {
+          "item": "1",
+          "kind": "angle"
+        },
+        {
+          "item": "3",
+          "kind": "angle"
+        }
+      ]
+    }
+  },
   "6c9666b2c53cbb06bb988c36526a728d": {
     "meta": {
       "mode": "bank_chat",
@@ -1055,6 +2190,420 @@
       "reply": "Here's the figure with all segments including WM and ZM drawn in. M is placed exactly at the midpoint of XY, WX \u22a5 XY, and ZY \u22a5 XY, with WX = ZY as given."
     }
   },
+  "70040b0af9f7d9832830f9a80b6b2431": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n**Given:** $\\overline{BC} \\cong \\overline{DA}$, $\\overline{BC} \\parallel \\overline{AD}$\n\n**Prove:** $\\trian",
+      "recorded_at": 1794518571.168107
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "BC",
+            "DA"
+          ],
+          "kind": "congruent_segments",
+          "quote": "BC \u2245 DA"
+        },
+        {
+          "items": [
+            "BC",
+            "AD"
+          ],
+          "kind": "parallel",
+          "quote": "BC \u2225 AD"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [
+        {
+          "items": [
+            "ABC",
+            "CDA"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "\u25b3ABC \u2245 \u25b3CDA"
+        }
+      ],
+      "requested": [
+        {
+          "item": "ABC",
+          "kind": "triangle"
+        },
+        {
+          "item": "CDA",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "BC",
+        "DA",
+        "AC"
+      ],
+      "triangles": [
+        "ABC",
+        "CDA"
+      ]
+    }
+  },
+  "72d06af60b6553b1995795f46ecee790": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn the figure below, $\\overline{DE} \\parallel \\overline{BC}$, where $D$ lies on $\\overline{AB}$ and $E$ lie",
+      "recorded_at": 1794518416.671378
+    },
+    "response": {
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        },
+        {
+          "item": "AED",
+          "kind": "angle"
+        },
+        {
+          "item": "ACB",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "DE",
+            "BC"
+          ],
+          "kind": "parallel",
+          "quote": "DE \u2225 BC"
+        },
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "on_segment",
+          "point": "D",
+          "quote": "D lies on AB"
+        },
+        {
+          "items": [
+            "AC"
+          ],
+          "kind": "on_segment",
+          "point": "E",
+          "quote": "E lies on AC"
+        },
+        {
+          "expr": "4x + 8",
+          "items": [
+            "ADE"
+          ],
+          "kind": "angle_measure",
+          "quote": "The measure of \u2220ADE = 4x + 8 degrees"
+        },
+        {
+          "expr": "6x - 12",
+          "items": [
+            "ABC"
+          ],
+          "kind": "angle_measure",
+          "quote": "\u2220ABC = 6x - 12 degrees"
+        },
+        {
+          "items": [
+            "DAE"
+          ],
+          "kind": "angle_measure",
+          "quote": "\u2220DAE = 38 degrees",
+          "value": 38
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ],
+      "prove": [
+        {
+          "items": [
+            "ADE",
+            "ABC"
+          ],
+          "kind": "congruent_angles",
+          "quote": "Explain why \u2220ADE and \u2220ABC are congruent, and state the theorem that justifies this."
+        }
+      ],
+      "requested": [
+        {
+          "item": "ABC",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "DE",
+        "BC",
+        "AB",
+        "AC"
+      ],
+      "triangles": [
+        "ABC",
+        "ADE"
+      ]
+    }
+  },
+  "79b77485cb2f2dad59942742b3bf65a1": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\n$\\overrightarrow{KM}$ bisects $\\angle JKL$, and $\\overrightarrow{KN}$ bisects $\\angle MKL$. If $m\\angle JKL",
+      "recorded_at": 1794518408.000787
+    },
+    "response": {
+      "find": [
+        {
+          "item": "JKM",
+          "kind": "angle"
+        },
+        {
+          "item": "JKN",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "KM",
+            "JKL"
+          ],
+          "kind": "bisects_angle",
+          "quote": "Ray KM bisects angle JKL"
+        },
+        {
+          "items": [
+            "KN",
+            "MKL"
+          ],
+          "kind": "bisects_angle",
+          "quote": "ray KN bisects angle MKL"
+        },
+        {
+          "expr": "10x - 4",
+          "items": [
+            "JKL"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220JKL = 10x - 4"
+        },
+        {
+          "expr": "2x + 13",
+          "items": [
+            "NKL"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220NKL = 2x + 13"
+        }
+      ],
+      "points": [
+        "J",
+        "K",
+        "L",
+        "M",
+        "N"
+      ],
+      "prove": [],
+      "rays": [
+        "KM",
+        "KN",
+        "KJ",
+        "KL"
+      ],
+      "requested": [
+        {
+          "item": "KM",
+          "kind": "ray"
+        },
+        {
+          "item": "KN",
+          "kind": "ray"
+        },
+        {
+          "item": "KJ",
+          "kind": "ray"
+        },
+        {
+          "item": "KL",
+          "kind": "ray"
+        }
+      ]
+    }
+  },
+  "7c8e5727887fe80776adfe844f39f72c": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn the diagram below, $\\overline{AB} \\parallel \\overline{CD}$ and $M$ is the midpoint of $\\overline{BC}$. U",
+      "recorded_at": 1794518407.1910279
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "midpoint",
+          "point": "M",
+          "quote": "M is the midpoint of BC"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "M"
+      ],
+      "prove": [
+        {
+          "items": [
+            "ABM",
+            "DCM"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "prove that \u25b3ABM \u2245 \u25b3DCM"
+        }
+      ],
+      "requested": [
+        {
+          "item": "ABM",
+          "kind": "triangle"
+        },
+        {
+          "item": "DCM",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "AB",
+        "CD",
+        "BC",
+        "BM",
+        "MC"
+      ],
+      "triangles": [
+        "ABM",
+        "DCM"
+      ]
+    }
+  },
+  "7d9eba831df840ccaf2e2d5e8166114e": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn the figure below, $\\overrightarrow{OA}$, $\\overrightarrow{OB}$, $\\overrightarrow{OC}$, and $\\overrightar",
+      "recorded_at": 1794518407.545268
+    },
+    "response": {
+      "find": [
+        {
+          "item": "AOB",
+          "kind": "angle"
+        },
+        {
+          "item": "BOC",
+          "kind": "angle"
+        },
+        {
+          "item": "COD",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "expr": "2x + 5",
+          "items": [
+            "AOB"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220AOB = 2x + 5"
+        },
+        {
+          "expr": "x + 8",
+          "items": [
+            "BOC"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220BOC = x + 8"
+        },
+        {
+          "expr": "3x - 1",
+          "items": [
+            "COD"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220COD = 3x - 1"
+        },
+        {
+          "items": [
+            "OA",
+            "OD"
+          ],
+          "kind": "opposite_rays",
+          "quote": "OA and OD are opposite rays"
+        }
+      ],
+      "points": [
+        "O",
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "rays": [
+        "OA",
+        "OB",
+        "OC",
+        "OD"
+      ],
+      "requested": [
+        {
+          "item": "OA",
+          "kind": "ray"
+        },
+        {
+          "item": "OB",
+          "kind": "ray"
+        },
+        {
+          "item": "OC",
+          "kind": "ray"
+        },
+        {
+          "item": "OD",
+          "kind": "ray"
+        }
+      ]
+    }
+  },
   "7f7e403410bd37d1c37e0c72f28d2f79": {
     "meta": {
       "mode": "bank_chat",
@@ -1118,6 +2667,160 @@
         }
       },
       "reply": "Here's a figure showing both triangles with tick marks on the three pairs of congruent sides, matching the given info."
+    }
+  },
+  "840e9be4c7d721e1f81fdd95136aaa24": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nLines $m \\parallel n$ are cut by transversal $t$. The transversal forms an angle of $74\u00b0$ with line $m$. Th",
+      "recorded_at": 1794518416.7395399
+    },
+    "response": {
+      "find": [
+        {
+          "item": "\u03b8",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "m",
+            "n"
+          ],
+          "kind": "parallel",
+          "quote": "Lines m \u2225 n"
+        },
+        {
+          "items": [
+            "t",
+            "m",
+            "n"
+          ],
+          "kind": "transversal",
+          "quote": "cut by transversal t"
+        },
+        {
+          "items": [
+            "acute angle at line m"
+          ],
+          "kind": "angle_measure",
+          "quote": "The transversal forms an angle of 74\u00b0 with line m",
+          "value": 74
+        },
+        {
+          "items": [
+            "angle bisector",
+            "acute angle at line m"
+          ],
+          "kind": "bisects_angle",
+          "quote": "The angle bisector of the acute angle at line m"
+        },
+        {
+          "items": [
+            "angle bisector"
+          ],
+          "kind": "other",
+          "quote": "The angle bisector of the acute angle at line m meets line n at point P"
+        },
+        {
+          "expr": "\u03b8",
+          "items": [
+            "\u03b8"
+          ],
+          "kind": "angle_measure",
+          "quote": "forming an angle \u03b8 with line n"
+        }
+      ],
+      "named_lines": [
+        "m",
+        "n",
+        "t"
+      ],
+      "points": [
+        "P"
+      ],
+      "prove": [
+        {
+          "items": [
+            "\u03b8"
+          ],
+          "kind": "other",
+          "quote": "Find \u03b8. Justify each step using parallel line theorems."
+        }
+      ],
+      "requested": [
+        {
+          "item": "m",
+          "kind": "line"
+        },
+        {
+          "item": "n",
+          "kind": "line"
+        },
+        {
+          "item": "t",
+          "kind": "line"
+        }
+      ]
+    }
+  },
+  "860c4447876708cf3a9fb1cc1d869af6": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\n**Given:** $\\overline{BC} \\cong \\overline{DA}$, $\\overline{BC} \\parallel \\overline{AD}$\n\n**Prove:** $\\trian",
+      "recorded_at": 1794518606.2860942
+    },
+    "response": {
+      "figure_spec": {
+        "arc_groups": [
+          [
+            "BCA",
+            "DAC"
+          ]
+        ],
+        "parallel_groups": [
+          [
+            "BC",
+            "AD"
+          ]
+        ],
+        "points": {
+          "A": [
+            0.0,
+            0.0
+          ],
+          "B": [
+            1.0,
+            3.0
+          ],
+          "C": [
+            6.0,
+            3.0
+          ],
+          "D": [
+            5.0,
+            0.0
+          ]
+        },
+        "segments": [
+          "AB",
+          "BC",
+          "CA",
+          "CD",
+          "DA"
+        ],
+        "shape": "construction",
+        "tick_groups": [
+          [
+            "BC",
+            "DA"
+          ]
+        ],
+        "type": "geometry"
+      }
     }
   },
   "89883483e5e2fbebdd35594c025fc24e": {
@@ -1262,6 +2965,374 @@
       "reply": "Here's a figure with parallel lines p and q cut by a transversal, with the two alternate interior angles labeled."
     }
   },
+  "8e55b644ff7acdbfd72d9b371025a7b3": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn the figure below, $AB = DE$, $BC = EF$, and $AC = DF$. Name the congruence postulate that proves $\\trian",
+      "recorded_at": 1794518413.23837
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "DE"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB = DE"
+        },
+        {
+          "items": [
+            "BC",
+            "EF"
+          ],
+          "kind": "congruent_segments",
+          "quote": "BC = EF"
+        },
+        {
+          "items": [
+            "AC",
+            "DF"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AC = DF"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "ABC",
+            "DEF"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "proves \u25b3ABC \u2245 \u25b3DEF"
+        }
+      ],
+      "rays": [],
+      "requested": [
+        {
+          "item": "ABC",
+          "kind": "triangle"
+        },
+        {
+          "item": "DEF",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "AB",
+        "DE",
+        "BC",
+        "EF",
+        "AC",
+        "DF"
+      ],
+      "triangles": [
+        "ABC",
+        "DEF"
+      ]
+    }
+  },
+  "8e875238700a239eab326d857341604b": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nWrite a complete two-column proof.\n\n**Given:** $\\angle 1$ and $\\angle 3$ are vertical angles; $m\\angle 1 = ",
+      "recorded_at": 1794518407.714151
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "1",
+            "3"
+          ],
+          "kind": "vertical_angles",
+          "quote": "\u22201 and \u22203 are vertical angles"
+        },
+        {
+          "expr": "4x + 9",
+          "items": [
+            "1"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u22201 = 4x + 9"
+        },
+        {
+          "expr": "7x - 15",
+          "items": [
+            "3"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u22203 = 7x - 15"
+        }
+      ],
+      "points": [
+        "1",
+        "3"
+      ],
+      "prove": [
+        {
+          "items": [
+            "1"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u22201 = m\u22203 = 41\u00b0",
+          "value": 41
+        },
+        {
+          "items": [
+            "3"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u22201 = m\u22203 = 41\u00b0",
+          "value": 41
+        }
+      ],
+      "requested": [
+        {
+          "item": "1",
+          "kind": "angle"
+        },
+        {
+          "item": "3",
+          "kind": "angle"
+        }
+      ]
+    }
+  },
+  "8e878d3e62620bf40942110f2ef64e5c": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\n**Given:** $\\angle QRT \\cong \\angle SRT$, $\\angle RQT \\cong \\angle RST$\n\n**Prove:** $\\overline{QT} \\cong \\o",
+      "recorded_at": 1794518347.2824378
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "QRT",
+            "SRT"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220QRT \u2245 \u2220SRT"
+        },
+        {
+          "items": [
+            "RQT",
+            "RST"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220RQT \u2245 \u2220RST"
+        }
+      ],
+      "points": [
+        "Q",
+        "R",
+        "S",
+        "T"
+      ],
+      "prove": [
+        {
+          "items": [
+            "QT",
+            "ST"
+          ],
+          "kind": "congruent_segments",
+          "quote": "QT \u2245 ST"
+        }
+      ],
+      "requested": [
+        {
+          "item": "QRT",
+          "kind": "triangle"
+        },
+        {
+          "item": "SRT",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "QT",
+        "ST",
+        "RT"
+      ],
+      "triangles": [
+        "QRT",
+        "SRT"
+      ]
+    }
+  },
+  "9431099c68251aa66b734678e99acd2b": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\n$\\overrightarrow{KM}$ bisects $\\angle JKL$, and $\\overrightarrow{KN}$ bisects $\\angle MKL$. If $m\\angle JKL",
+      "recorded_at": 1794518452.7226062
+    },
+    "response": {
+      "figure_spec": {
+        "angle_labels": {
+          "JKL": "10x \u2212 4",
+          "NKL": "2x + 13"
+        },
+        "arc_groups": [
+          [
+            "JKM",
+            "MKL"
+          ],
+          [
+            "MKN",
+            "NKL"
+          ]
+        ],
+        "points": {
+          "J": [
+            0.523,
+            -4.973
+          ],
+          "K": [
+            0.0,
+            0.0
+          ],
+          "L": [
+            5.0,
+            0.0
+          ],
+          "M": [
+            -3.716,
+            3.346
+          ],
+          "N": [
+            1.792,
+            4.668
+          ]
+        },
+        "rays": [
+          "KL",
+          "KN",
+          "KM",
+          "KJ"
+        ],
+        "segments": [],
+        "shape": "construction",
+        "type": "geometry"
+      }
+    }
+  },
+  "952d465e7ff15f8434ec141d5c0b0669": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nLines $p$ and $q$ are parallel. A transversal forms alternate interior angles measuring $(7x - 3)\u00b0$ and $(4",
+      "recorded_at": 1794518409.678154
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        },
+        {
+          "item": "1",
+          "kind": "angle"
+        },
+        {
+          "item": "2",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "p",
+            "q"
+          ],
+          "kind": "parallel",
+          "quote": "Lines p and q are parallel."
+        },
+        {
+          "items": [
+            "",
+            "p",
+            "q"
+          ],
+          "kind": "transversal",
+          "quote": "A transversal forms alternate interior angles measuring (7x - 3)\u00b0 and (4x + 18)\u00b0."
+        },
+        {
+          "expr": "7x - 3",
+          "items": [
+            "1"
+          ],
+          "kind": "angle_measure",
+          "quote": "A transversal forms alternate interior angles measuring (7x - 3)\u00b0 and (4x + 18)\u00b0."
+        },
+        {
+          "expr": "4x + 18",
+          "items": [
+            "2"
+          ],
+          "kind": "angle_measure",
+          "quote": "A transversal forms alternate interior angles measuring (7x - 3)\u00b0 and (4x + 18)\u00b0."
+        },
+        {
+          "items": [
+            "1",
+            "2"
+          ],
+          "kind": "other",
+          "quote": "A transversal forms alternate interior angles measuring (7x - 3)\u00b0 and (4x + 18)\u00b0."
+        }
+      ],
+      "lines": [
+        "p",
+        "q"
+      ],
+      "named_lines": [
+        "p",
+        "q"
+      ],
+      "points": [],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [
+        {
+          "item": "p",
+          "kind": "line"
+        },
+        {
+          "item": "q",
+          "kind": "line"
+        },
+        {
+          "item": "transversal",
+          "kind": "line"
+        }
+      ],
+      "segments": [],
+      "triangles": []
+    }
+  },
   "95b6aeca11f1f22fd0c49e5833e0fe37": {
     "meta": {
       "mode": "bank_chat",
@@ -1321,67 +3392,137 @@
       "reply": "Here's the figure for the problem \u2014 triangle ABC with DE drawn parallel to BC inside it, all angle measures placed correctly for x = 10."
     }
   },
-  "9fdd394561df0591dbd0765d1afdf660": {
+  "9e9da447c13c5b33325f96e0a17300e5": {
     "meta": {
-      "mode": "bank_chat",
+      "mode": "bank_chat_facts_a",
       "model": "claude-sonnet-4-6",
-      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn the figure below, $\\angle A = \\angle D$ and $\\angle B = \\angle E$. If $AB = 12$, $DE = 8$, and $BC = 9$,",
-      "recorded_at": 1794515022.877747
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n**Given:** $\\overline{BC} \\cong \\overline{DA}$, $\\overline{BC} \\parallel \\overline{AD}$\n\n**Prove:** $\\trian",
+      "recorded_at": 1794518347.016821
     },
     "response": {
-      "figure_spec": {
-        "arc_groups": [
-          [
-            "BAC",
-            "EDF"
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "BC",
+            "DA"
           ],
-          [
+          "kind": "congruent_segments",
+          "quote": "BC \u2245 DA"
+        },
+        {
+          "items": [
+            "BC",
+            "AD"
+          ],
+          "kind": "parallel",
+          "quote": "BC \u2225 AD"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [
+        {
+          "items": [
+            "ABC",
+            "CDA"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "\u25b3ABC \u2245 \u25b3CDA"
+        }
+      ],
+      "requested": [
+        {
+          "item": "ABC",
+          "kind": "triangle"
+        },
+        {
+          "item": "CDA",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "BC",
+        "DA",
+        "AC"
+      ],
+      "triangles": [
+        "ABC",
+        "CDA"
+      ]
+    }
+  },
+  "9f4e0b0fbeeac6e07b7f8138be6217ac": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn the figure below, $AB = DE$, $BC = EF$, and $AC = DF$. Name the congruence postulate that proves $\\trian",
+      "recorded_at": 1794518411.702283
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "DE"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB = DE"
+        },
+        {
+          "items": [
+            "BC",
+            "EF"
+          ],
+          "kind": "congruent_segments",
+          "quote": "BC = EF"
+        },
+        {
+          "items": [
+            "AC",
+            "DF"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AC = DF"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F"
+      ],
+      "prove": [
+        {
+          "items": [
             "ABC",
             "DEF"
-          ]
-        ],
-        "points": {
-          "A": [
-            0,
-            0
           ],
-          "B": [
-            12,
-            0
-          ],
-          "C": [
-            8.1,
-            8.1
-          ],
-          "D": [
-            0,
-            -4
-          ],
-          "E": [
-            8,
-            -4
-          ],
-          "F": [
-            5.4,
-            1.4
-          ]
+          "kind": "congruent_triangles",
+          "quote": "proves \u25b3ABC \u2245 \u25b3DEF"
+        }
+      ],
+      "requested": [
+        {
+          "item": "ABC",
+          "kind": "triangle"
         },
-        "segments": [
-          "AB",
-          "BC",
-          "CA",
-          "DE",
-          "EF",
-          "FD"
-        ],
-        "shape": "construction",
-        "side_labels": {
-          "AB": "12",
-          "BC": "9",
-          "DE": "8"
-        },
-        "type": "geometry"
-      }
+        {
+          "item": "DEF",
+          "kind": "triangle"
+        }
+      ],
+      "triangles": [
+        "ABC",
+        "DEF"
+      ]
     }
   },
   "a524da28aa04dc3b268a833ba84b46c2": {
@@ -1645,61 +3786,633 @@
       "reply": "Here's a diagram for the problem \u2014 AB \u2225 CD with M as the midpoint of BC, showing the two triangles meeting at M."
     }
   },
-  "b04b841ebde46987d602ad1f0d5f7274": {
+  "af5fe2de206d255674309eed2071dca4": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn the diagram below, $\\overline{WX} \\cong \\overline{YZ}$, $\\angle W \\cong \\angle Y$, and $\\angle X \\cong \\",
+      "recorded_at": 1794518427.4738612
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "Determine which congruence theorem (ASA or AAS) can be used to prove \u25b3WXV \u2245 \u25b3YZV, and explain why the other theorem does NOT apply",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "WX",
+            "YZ"
+          ],
+          "kind": "congruent_segments",
+          "quote": "WX \u2245 YZ"
+        },
+        {
+          "items": [
+            "W",
+            "Y"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220W \u2245 \u2220Y"
+        },
+        {
+          "items": [
+            "X",
+            "Z"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220X \u2245 \u2220Z"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "W",
+        "X",
+        "Y",
+        "Z",
+        "V"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "WXV",
+            "YZV"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "prove \u25b3WXV \u2245 \u25b3YZV"
+        }
+      ],
+      "rays": [],
+      "requested": [
+        {
+          "item": "WXV",
+          "kind": "triangle"
+        },
+        {
+          "item": "YZV",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "WX",
+        "YZ"
+      ],
+      "triangles": [
+        "WXV",
+        "YZV"
+      ]
+    }
+  },
+  "af84e79f21ac07100d8a7ccae7d85414": {
     "meta": {
       "mode": "bank_chat",
       "model": "claude-sonnet-4-6",
-      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\n**Given:** $\\overline{BC} \\cong \\overline{DA}$, $\\overline{BC} \\parallel \\overline{AD}$\n\n**Prove:** $\\trian",
-      "recorded_at": 1794515044.286166
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn the figure below, $\\overline{DE} \\parallel \\overline{BC}$, where $D$ lies on $\\overline{AB}$ and $E$ lie",
+      "recorded_at": 1794518461.016259
     },
     "response": {
       "figure_spec": {
+        "angle_labels": {
+          "ABC": "6x \u2212 12\u00b0",
+          "ADE": "4x + 8\u00b0",
+          "DAE": "38\u00b0"
+        },
         "arc_groups": [
           [
-            "BCA",
-            "DAC"
+            "ADE",
+            "ABC"
           ]
         ],
         "parallel_groups": [
           [
-            "BC",
-            "DA"
+            "DE",
+            "BC"
           ]
         ],
         "points": {
           "A": [
+            8.671,
+            9.629
+          ],
+          "B": [
             0.0,
             0.0
           ],
-          "B": [
-            2.0,
-            3.0
-          ],
           "C": [
             8.0,
-            3.0
+            0.0
           ],
           "D": [
-            6.0,
-            0.0
+            4.336,
+            4.815
+          ],
+          "E": [
+            8.336,
+            4.815
           ]
         },
         "segments": [
           "AB",
+          "AC",
           "BC",
-          "CD",
-          "DA",
-          "AC"
+          "DE"
         ],
         "shape": "construction",
-        "tick_groups": [
-          [
-            "BC",
-            "DA"
-          ]
-        ],
         "type": "geometry"
       }
+    }
+  },
+  "b01a293ee0bfbe42212973ec2706c262": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn the right triangle below, the hypotenuse has length $c = 13$ and one leg has length $a = 5$. Find the le",
+      "recorded_at": 1794518277.001982
+    },
+    "response": {
+      "find": [
+        {
+          "item": "b",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [],
+          "kind": "right_triangle",
+          "quote": "In the right triangle below"
+        },
+        {
+          "items": [],
+          "kind": "equal_length",
+          "quote": "the hypotenuse has length c = 13",
+          "value": 13
+        },
+        {
+          "items": [],
+          "kind": "equal_length",
+          "quote": "one leg has length a = 5",
+          "value": 5
+        }
+      ],
+      "points": [],
+      "prove": [],
+      "requested": [
+        {
+          "item": "the right triangle",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [],
+      "triangles": []
+    }
+  },
+  "b15a8bcd4a37dcf5215912c620474a02": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\n**Given:** $\\overline{BC} \\cong \\overline{DA}$, $\\overline{BC} \\parallel \\overline{AD}$\n\n**Prove:** $\\trian",
+      "recorded_at": 1794518570.9005198
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "BC",
+            "DA"
+          ],
+          "kind": "congruent_segments",
+          "quote": "BC \u2245 DA"
+        },
+        {
+          "items": [
+            "BC",
+            "AD"
+          ],
+          "kind": "parallel",
+          "quote": "BC \u2225 AD"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [
+        {
+          "items": [
+            "ABC",
+            "CDA"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "\u25b3ABC \u2245 \u25b3CDA"
+        }
+      ],
+      "requested": [
+        {
+          "item": "ABC",
+          "kind": "triangle"
+        },
+        {
+          "item": "CDA",
+          "kind": "triangle"
+        },
+        {
+          "item": "AC",
+          "kind": "segment"
+        }
+      ],
+      "segments": [
+        "BC",
+        "DA",
+        "AD",
+        "AC"
+      ],
+      "triangles": [
+        "ABC",
+        "CDA"
+      ]
+    }
+  },
+  "b42090d8c1fe429e933f6596fbe1170d": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n**Given:** $\\overline{BE}$ bisects $\\overline{AC}$ at point $M$, $\\overline{AB} \\perp \\overline{BE}$, $\\ove",
+      "recorded_at": 1794518347.592126
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "BE",
+            "AC"
+          ],
+          "kind": "bisects_segment",
+          "point": "M",
+          "quote": "BE bisects AC at point M"
+        },
+        {
+          "items": [
+            "AB",
+            "BE"
+          ],
+          "kind": "perpendicular",
+          "quote": "AB \u22a5 BE"
+        },
+        {
+          "items": [
+            "EC",
+            "BE"
+          ],
+          "kind": "perpendicular",
+          "quote": "EC \u22a5 BE"
+        },
+        {
+          "items": [
+            "AB",
+            "EC"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB \u2245 EC"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "E",
+        "M"
+      ],
+      "prove": [
+        {
+          "items": [
+            "ABM",
+            "ECM"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "\u25b3ABM \u2245 \u25b3ECM"
+        }
+      ],
+      "requested": [
+        {
+          "item": "ABM",
+          "kind": "triangle"
+        },
+        {
+          "item": "ECM",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "BE",
+        "AC",
+        "AB",
+        "EC"
+      ],
+      "triangles": [
+        "ABM",
+        "ECM"
+      ]
+    }
+  },
+  "b587b58eeb0632bbd9b9025635d810dd": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nLines $m \\parallel n$ are cut by transversal $t$. The transversal forms an angle of $74\u00b0$ with line $m$. Th",
+      "recorded_at": 1794518416.619563
+    },
+    "response": {
+      "find": [
+        {
+          "item": "\u03b8",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "m",
+            "n"
+          ],
+          "kind": "parallel",
+          "quote": "Lines m \u2225 n"
+        },
+        {
+          "items": [
+            "t",
+            "m",
+            "n"
+          ],
+          "kind": "transversal",
+          "quote": "cut by transversal t"
+        },
+        {
+          "items": [
+            "acute angle at line m"
+          ],
+          "kind": "angle_measure",
+          "quote": "The transversal forms an angle of 74\u00b0 with line m",
+          "value": 74
+        },
+        {
+          "items": [
+            "angle bisector",
+            "acute angle at line m"
+          ],
+          "kind": "bisects_angle",
+          "quote": "The angle bisector of the acute angle at line m"
+        },
+        {
+          "items": [
+            "n"
+          ],
+          "kind": "on_line",
+          "point": "P",
+          "quote": "meets line n at point P"
+        },
+        {
+          "items": [
+            "\u03b8"
+          ],
+          "kind": "other",
+          "quote": "forming an angle \u03b8 with line n"
+        }
+      ],
+      "named_lines": [
+        "m",
+        "n",
+        "t"
+      ],
+      "points": [
+        "P"
+      ],
+      "prove": [
+        {
+          "items": [
+            "\u03b8"
+          ],
+          "kind": "other",
+          "quote": "Justify each step using parallel line theorems"
+        }
+      ],
+      "requested": [
+        {
+          "item": "m",
+          "kind": "line"
+        },
+        {
+          "item": "n",
+          "kind": "line"
+        },
+        {
+          "item": "t",
+          "kind": "line"
+        }
+      ]
+    }
+  },
+  "b7e9667db9810343e463b9b979dcace9": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn the figure below, $\\angle A = \\angle D$ and $\\angle B = \\angle E$. If $AB = 12$, $DE = 8$, and $BC = 9$,",
+      "recorded_at": 1794518417.340578
+    },
+    "response": {
+      "find": [
+        {
+          "item": "EF",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "A",
+            "D"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220A = \u2220D"
+        },
+        {
+          "items": [
+            "B",
+            "E"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220B = \u2220E"
+        },
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "AB = 12",
+          "value": 12
+        },
+        {
+          "items": [
+            "DE"
+          ],
+          "kind": "equal_length",
+          "quote": "DE = 8",
+          "value": 8
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "equal_length",
+          "quote": "BC = 9",
+          "value": 9
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F"
+      ],
+      "prove": [],
+      "requested": [
+        {
+          "item": "ABC",
+          "kind": "triangle"
+        },
+        {
+          "item": "DEF",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "AB",
+        "BC",
+        "DE",
+        "EF"
+      ],
+      "triangles": [
+        "ABC",
+        "DEF"
+      ]
+    }
+  },
+  "b80d54f039a0243bd4264007de1abb51": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn the figure below, $\\triangle ABC$ and $\\triangle DBC$ share hypotenuse $\\overline{BC}$, with right angle",
+      "recorded_at": 1794518410.37125
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "right_triangle",
+          "point": "A",
+          "quote": "\u25b3ABC and \u25b3DBC share hypotenuse BC, with right angles at A and D respectively"
+        },
+        {
+          "items": [
+            "DBC"
+          ],
+          "kind": "right_triangle",
+          "point": "D",
+          "quote": "\u25b3ABC and \u25b3DBC share hypotenuse BC, with right angles at A and D respectively"
+        },
+        {
+          "items": [
+            "BAC"
+          ],
+          "kind": "right_angle",
+          "quote": "with right angles at A and D respectively"
+        },
+        {
+          "items": [
+            "BDC"
+          ],
+          "kind": "right_angle",
+          "quote": "with right angles at A and D respectively"
+        },
+        {
+          "circle": null,
+          "items": [
+            "BC"
+          ],
+          "kind": "diameter",
+          "quote": "\u25b3ABC and \u25b3DBC share hypotenuse BC"
+        },
+        {
+          "items": [
+            "BC",
+            "BC"
+          ],
+          "kind": "congruent_segments",
+          "quote": "\u25b3ABC and \u25b3DBC share hypotenuse BC"
+        },
+        {
+          "items": [
+            "AB",
+            "DB"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB = DB"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "ABC",
+            "DBC"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "Identify which triangle congruence theorem applies and write a complete congruence statement."
+        }
+      ],
+      "rays": [],
+      "requested": [
+        {
+          "item": "ABC",
+          "kind": "triangle"
+        },
+        {
+          "item": "DBC",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "BC",
+        "AB",
+        "DB"
+      ],
+      "triangles": [
+        "ABC",
+        "DBC"
+      ]
     }
   },
   "c03e9b585f9efeb58a91807c65b7fe21": {
@@ -1761,56 +4474,340 @@
       "reply": "Here's the figure for this problem \u2014 it shows triangle ABC with D on AC, the angle bisector/perpendicular BD drawn, the bisected angles marked with arcs, and the right angle at D marked."
     }
   },
-  "c81583dec1c85277a5cf29224a1e43a8": {
+  "c5c73491219969c9562707b6d6c21edb": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn the right triangle below, the hypotenuse has length $c = 13$ and one leg has length $a = 5$. Find the le",
+      "recorded_at": 1794518277.9722
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "b",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [],
+          "kind": "right_triangle",
+          "quote": "In the right triangle below"
+        },
+        {
+          "items": [],
+          "kind": "equal_length",
+          "quote": "the hypotenuse has length c = 13",
+          "value": 13
+        },
+        {
+          "items": [],
+          "kind": "equal_length",
+          "quote": "one leg has length a = 5",
+          "value": 5
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [
+        {
+          "item": "the right triangle",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [],
+      "triangles": []
+    }
+  },
+  "c928391a8c1b7e9f259141ccd8ef26b3": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn the figure below, $AB = DE$, $\\angle B = \\angle E$, and $BC = EF$. Name the congruence postulate or theo",
+      "recorded_at": 1794518421.3237429
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "DE"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB = DE"
+        },
+        {
+          "items": [
+            "B",
+            "E"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220B = \u2220E"
+        },
+        {
+          "items": [
+            "BC",
+            "EF"
+          ],
+          "kind": "congruent_segments",
+          "quote": "BC = EF"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F"
+      ],
+      "prove": [
+        {
+          "items": [
+            "ABC",
+            "DEF"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "proves \u25b3ABC \u2245 \u25b3DEF"
+        }
+      ],
+      "requested": [
+        {
+          "item": "ABC",
+          "kind": "triangle"
+        },
+        {
+          "item": "DEF",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "AB",
+        "BC",
+        "DE",
+        "EF"
+      ],
+      "triangles": [
+        "ABC",
+        "DEF"
+      ]
+    }
+  },
+  "ca70254a217033f9b71efb82f2acb5e4": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn the figure below, $\\triangle ABC$ and $\\triangle DBC$ share hypotenuse $\\overline{BC}$, with right angle",
+      "recorded_at": 1794518407.667184
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "right_triangle",
+          "point": "A",
+          "quote": "right angles at A and D respectively"
+        },
+        {
+          "items": [
+            "DBC"
+          ],
+          "kind": "right_triangle",
+          "point": "D",
+          "quote": "right angles at A and D respectively"
+        },
+        {
+          "items": [
+            "AB",
+            "DB"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB = DB"
+        },
+        {
+          "items": [
+            "BC",
+            "BC"
+          ],
+          "kind": "congruent_segments",
+          "quote": "share hypotenuse BC"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [
+        {
+          "items": [
+            "ABC",
+            "DBC"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "Identify which triangle congruence theorem applies and write a complete congruence statement."
+        }
+      ],
+      "requested": [
+        {
+          "item": "ABC",
+          "kind": "triangle"
+        },
+        {
+          "item": "DBC",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "BC",
+        "AB",
+        "DB"
+      ],
+      "triangles": [
+        "ABC",
+        "DBC"
+      ]
+    }
+  },
+  "d20cf91f68dea417ef6ee0b576bb051a": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn the figure below, $AB = DE$, $\\angle B = \\angle E$, and $BC = EF$. Name the congruence postulate or theo",
+      "recorded_at": 1794518421.39446
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "DE"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB = DE"
+        },
+        {
+          "items": [
+            "B",
+            "E"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220B = \u2220E"
+        },
+        {
+          "items": [
+            "BC",
+            "EF"
+          ],
+          "kind": "congruent_segments",
+          "quote": "BC = EF"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F"
+      ],
+      "prove": [
+        {
+          "items": [
+            "ABC",
+            "DEF"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "proves \u25b3ABC \u2245 \u25b3DEF"
+        }
+      ],
+      "requested": [
+        {
+          "item": "ABC",
+          "kind": "triangle"
+        },
+        {
+          "item": "DEF",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "AB",
+        "DE",
+        "BC",
+        "EF"
+      ],
+      "triangles": [
+        "ABC",
+        "DEF"
+      ]
+    }
+  },
+  "d2fb850c89aac76418f6d78ace2bf0d1": {
     "meta": {
       "mode": "bank_chat",
       "model": "claude-sonnet-4-6",
-      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\n**Given:** $\\overline{BE}$ bisects $\\overline{AC}$ at point $M$, $\\overline{AB} \\perp \\overline{BE}$, $\\ove",
-      "recorded_at": 1794514966.2470028
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn the diagram below, $\\overline{WX} \\cong \\overline{YZ}$, $\\angle W \\cong \\angle Y$, and $\\angle X \\cong \\",
+      "recorded_at": 1794518534.304429
     },
     "response": {
       "figure_spec": {
+        "arc_groups": [
+          [
+            "XWV",
+            "ZYV"
+          ],
+          [
+            "WXV",
+            "YZV"
+          ]
+        ],
         "points": {
-          "A": [
-            0,
-            3
+          "V": [
+            5,
+            4
           ],
-          "B": [
-            0,
+          "W": [
+            2,
             0
           ],
-          "C": [
-            6,
-            -3
-          ],
-          "E": [
+          "X": [
             6,
             0
           ],
-          "M": [
-            3,
-            0
+          "Y": [
+            8,
+            8
+          ],
+          "Z": [
+            4,
+            8
           ]
         },
-        "right_angles": [
-          "ABE",
-          "CEB"
-        ],
         "segments": [
-          "AB",
-          "BE",
-          "EC",
-          "AC"
+          "WX",
+          "WV",
+          "XV",
+          "YZ",
+          "YV",
+          "ZV"
         ],
         "shape": "construction",
         "tick_groups": [
           [
-            "AB",
-            "EC"
-          ],
-          [
-            "AM",
-            "MC"
+            "WX",
+            "YZ"
           ]
         ],
         "type": "geometry"
@@ -1939,121 +4936,390 @@
       "reply": "Here's a figure for the problem with two triangles showing the given congruent sides (tick marks) and congruent included angles (arc marks)."
     }
   },
-  "d87e5c86d59371750205370b42ebc25a": {
+  "d7a37db27f6626b590c9ac0c95d5f501": {
     "meta": {
-      "mode": "bank_chat",
+      "mode": "bank_chat_facts_b",
       "model": "claude-sonnet-4-6",
-      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\n$\\overrightarrow{KM}$ bisects $\\angle JKL$, and $\\overrightarrow{KN}$ bisects $\\angle MKL$. If $m\\angle JKL",
-      "recorded_at": 1794514978.41054
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\n**Given:** $\\overline{WX} \\perp \\overline{XY}$, $\\overline{ZY} \\perp \\overline{XY}$, $M$ is the midpoint of",
+      "recorded_at": 1794518348.223092
     },
     "response": {
-      "figure_spec": {
-        "angle_labels": {
-          "JKL": "10x \u2212 4",
-          "NKL": "2x + 13"
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "WX",
+            "XY"
+          ],
+          "kind": "perpendicular",
+          "quote": "WX \u22a5 XY"
         },
-        "arc_groups": [
-          [
-            "JKM",
-            "MKL"
+        {
+          "items": [
+            "ZY",
+            "XY"
           ],
-          [
-            "MKN",
-            "NKL"
-          ]
-        ],
-        "points": {
-          "J": [
-            0.868,
-            4.924
-          ],
-          "K": [
-            0.0,
-            0.0
-          ],
-          "L": [
-            5.0,
-            0.0
-          ],
-          "M": [
-            3.83,
-            3.214
-          ],
-          "N": [
-            4.698,
-            1.71
-          ]
+          "kind": "perpendicular",
+          "quote": "ZY \u22a5 XY"
         },
-        "rays": [
-          "KL",
-          "KN",
-          "KM",
-          "KJ"
-        ],
-        "segments": [],
-        "shape": "construction",
-        "type": "geometry"
-      }
+        {
+          "items": [
+            "XY"
+          ],
+          "kind": "midpoint",
+          "point": "M",
+          "quote": "M is the midpoint of XY"
+        },
+        {
+          "items": [
+            "WX",
+            "ZY"
+          ],
+          "kind": "congruent_segments",
+          "quote": "WX \u2245 ZY"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "W",
+        "X",
+        "Y",
+        "Z",
+        "M"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "W",
+            "Z"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220W \u2245 \u2220Z"
+        }
+      ],
+      "rays": [],
+      "requested": [
+        {
+          "item": "WM",
+          "kind": "segment"
+        },
+        {
+          "item": "ZM",
+          "kind": "segment"
+        }
+      ],
+      "segments": [
+        "WX",
+        "XY",
+        "ZY",
+        "WM",
+        "ZM",
+        "XM",
+        "YM"
+      ],
+      "triangles": [
+        "WXM",
+        "ZYM"
+      ]
     }
   },
-  "da5edbe9c928095029cd024e6fe480c8": {
+  "df516635317616279625f8eae189ee62": {
     "meta": {
-      "mode": "bank_chat",
+      "mode": "bank_chat_facts_b",
       "model": "claude-sonnet-4-6",
-      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn the diagram below, $\\overline{WX} \\cong \\overline{YZ}$, $\\angle W \\cong \\angle Y$, and $\\angle X \\cong \\",
-      "recorded_at": 1794515038.015384
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\n**Given:** $\\overline{AB} \\parallel \\overline{CD}$, $\\overline{BC} \\cong \\overline{DA}$\n\n**Prove:** $\\trian",
+      "recorded_at": 1794518349.138962
     },
     "response": {
-      "figure_spec": {
-        "arc_groups": [
-          [
-            "XWV",
-            "ZYV"
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
           ],
-          [
-            "WXV",
-            "YZV"
-          ]
-        ],
-        "points": {
-          "V": [
-            1.777,
-            2.12
-          ],
-          "W": [
-            0.0,
-            0.0
-          ],
-          "X": [
-            3.0,
-            0.0
-          ],
-          "Y": [
-            3.553,
-            4.239
-          ],
-          "Z": [
-            0.553,
-            4.239
-          ]
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
         },
-        "segments": [
-          "WX",
-          "WV",
-          "XV",
-          "YZ",
-          "YV",
-          "ZV"
-        ],
-        "shape": "construction",
-        "tick_groups": [
-          [
-            "WX",
-            "YZ"
-          ]
-        ],
-        "type": "geometry"
-      }
+        {
+          "items": [
+            "BC",
+            "DA"
+          ],
+          "kind": "congruent_segments",
+          "quote": "BC \u2245 DA"
+        },
+        {
+          "items": [
+            "BAC",
+            "DCA"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220BAC \u2245 \u2220DCA"
+        },
+        {
+          "items": [
+            "BCA",
+            "DAC"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220BCA \u2245 \u2220DAC"
+        },
+        {
+          "items": [
+            "AC",
+            "CA"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AC \u2245 CA"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "ABC",
+            "CDA"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "\u25b3ABC \u2245 \u25b3CDA"
+        }
+      ],
+      "rays": [],
+      "requested": [
+        {
+          "item": "ABC",
+          "kind": "triangle"
+        },
+        {
+          "item": "CDA",
+          "kind": "triangle"
+        },
+        {
+          "item": "AB",
+          "kind": "segment"
+        },
+        {
+          "item": "CD",
+          "kind": "segment"
+        },
+        {
+          "item": "BC",
+          "kind": "segment"
+        },
+        {
+          "item": "DA",
+          "kind": "segment"
+        },
+        {
+          "item": "AC",
+          "kind": "segment"
+        }
+      ],
+      "segments": [
+        "AB",
+        "CD",
+        "BC",
+        "DA",
+        "AC"
+      ],
+      "triangles": [
+        "ABC",
+        "CDA"
+      ]
+    }
+  },
+  "e16726c3a4c1fa1241324f92c161b542": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n$\\overrightarrow{KM}$ bisects $\\angle JKL$, and $\\overrightarrow{KN}$ bisects $\\angle MKL$. If $m\\angle JKL",
+      "recorded_at": 1794518407.962712
+    },
+    "response": {
+      "find": [
+        {
+          "item": "JKM",
+          "kind": "angle"
+        },
+        {
+          "item": "JKN",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "KM",
+            "JKL"
+          ],
+          "kind": "bisects_angle",
+          "quote": "Ray KM bisects angle JKL"
+        },
+        {
+          "items": [
+            "KN",
+            "MKL"
+          ],
+          "kind": "bisects_angle",
+          "quote": "Ray KN bisects angle MKL"
+        },
+        {
+          "expr": "10x - 4",
+          "items": [
+            "JKL"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220JKL = 10x - 4"
+        },
+        {
+          "expr": "2x + 13",
+          "items": [
+            "NKL"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220NKL = 2x + 13"
+        }
+      ],
+      "points": [
+        "J",
+        "K",
+        "L",
+        "M",
+        "N"
+      ],
+      "prove": [],
+      "rays": [
+        "KM",
+        "KN",
+        "KJ",
+        "KL"
+      ],
+      "requested": [
+        {
+          "item": "KM",
+          "kind": "ray"
+        },
+        {
+          "item": "KN",
+          "kind": "ray"
+        },
+        {
+          "item": "KJ",
+          "kind": "ray"
+        },
+        {
+          "item": "KL",
+          "kind": "ray"
+        }
+      ]
+    }
+  },
+  "e23144be152e83c8f306535f1ee82c9b": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nA rectangle has a width of $7$ inches and a length of $24$ inches. A diagonal is drawn from one corner to t",
+      "recorded_at": 1794518282.229024
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "d",
+          "kind": "segment"
+        },
+        {
+          "item": "whether the second rectangle's length is longer or shorter than 24 inches",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "items": [],
+          "kind": "rectangle",
+          "quote": "A rectangle has a width of 7 inches and a length of 24 inches."
+        },
+        {
+          "items": [],
+          "kind": "equal_length",
+          "quote": "A rectangle has a width of 7 inches and a length of 24 inches.",
+          "value": 7
+        },
+        {
+          "items": [],
+          "kind": "equal_length",
+          "quote": "A rectangle has a width of 7 inches and a length of 24 inches.",
+          "value": 24
+        },
+        {
+          "items": [],
+          "kind": "other",
+          "quote": "A diagonal is drawn from one corner to the opposite corner, dividing the rectangle into two right triangles."
+        },
+        {
+          "items": [],
+          "kind": "right_triangle",
+          "quote": "dividing the rectangle into two right triangles"
+        },
+        {
+          "items": [],
+          "kind": "rectangle",
+          "quote": "a second rectangle \u2014 with width 9 inches and diagonal 40 inches"
+        },
+        {
+          "items": [],
+          "kind": "equal_length",
+          "quote": "a second rectangle \u2014 with width 9 inches and diagonal 40 inches",
+          "value": 9
+        },
+        {
+          "items": [],
+          "kind": "equal_length",
+          "quote": "a second rectangle \u2014 with width 9 inches and diagonal 40 inches",
+          "value": 40
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [],
+          "kind": "other",
+          "quote": "determine whether a second rectangle \u2014 with width 9 inches and diagonal 40 inches \u2014 has a longer or shorter length than the first rectangle's length of 24 inches"
+        }
+      ],
+      "rays": [],
+      "requested": [
+        {
+          "item": "first rectangle (width 7, length 24, with diagonal)",
+          "kind": "rectangle"
+        },
+        {
+          "item": "two right triangles formed by the diagonal",
+          "kind": "triangle"
+        },
+        {
+          "item": "second rectangle (width 9, diagonal 40)",
+          "kind": "rectangle"
+        }
+      ],
+      "segments": [],
+      "triangles": []
     }
   },
   "f44ff4609c0b42d15de60978584190d9": {
@@ -2206,6 +5472,206 @@
         }
       },
       "reply": "Here's a figure with O at the origin, OA and OD as opposite rays (forming a straight line), and OB and OC placed between them at angles matching the solved measures (61\u00b0 and 97\u00b0 from OA)."
+    }
+  },
+  "f789dbba0abc2ab6ce5472e575c87fc0": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn the diagram below, $\\overline{AB} \\parallel \\overline{CD}$ and $M$ is the midpoint of $\\overline{BC}$. U",
+      "recorded_at": 1794518571.378418
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "midpoint",
+          "point": "M",
+          "quote": "M is the midpoint of BC"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "M"
+      ],
+      "prove": [
+        {
+          "items": [
+            "ABM",
+            "DCM"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "prove that \u25b3ABM \u2245 \u25b3DCM"
+        }
+      ],
+      "requested": [
+        {
+          "item": "ABM",
+          "kind": "triangle"
+        },
+        {
+          "item": "DCM",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "AB",
+        "CD",
+        "BC",
+        "BM",
+        "MC"
+      ],
+      "triangles": [
+        "ABM",
+        "DCM"
+      ]
+    }
+  },
+  "fa7b239d2545ee7548f6729b107a4f75": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn the figure below, $\\overrightarrow{OA}$, $\\overrightarrow{OB}$, $\\overrightarrow{OC}$, and $\\overrightar",
+      "recorded_at": 1794518430.4402912
+    },
+    "response": {
+      "figure_spec": {
+        "angle_labels": {
+          "AOB": "2x + 5",
+          "BOC": "x + 8",
+          "COD": "3x \u2212 1"
+        },
+        "points": {
+          "A": [
+            -5,
+            0
+          ],
+          "B": [
+            -2.424,
+            4.373
+          ],
+          "C": [
+            0.609,
+            4.963
+          ],
+          "D": [
+            5,
+            0
+          ],
+          "O": [
+            0,
+            0
+          ]
+        },
+        "rays": [
+          "OA",
+          "OD",
+          "OB",
+          "OC"
+        ],
+        "segments": [],
+        "shape": "construction",
+        "type": "geometry"
+      }
+    }
+  },
+  "fe8a8745f9d1e11c0388763a51c30fb9": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n**Given:** $\\overline{WX} \\perp \\overline{XY}$, $\\overline{ZY} \\perp \\overline{XY}$, $M$ is the midpoint of",
+      "recorded_at": 1794518347.560833
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "WX",
+            "XY"
+          ],
+          "kind": "perpendicular",
+          "quote": "WX \u22a5 XY"
+        },
+        {
+          "items": [
+            "ZY",
+            "XY"
+          ],
+          "kind": "perpendicular",
+          "quote": "ZY \u22a5 XY"
+        },
+        {
+          "items": [
+            "XY"
+          ],
+          "kind": "midpoint",
+          "point": "M",
+          "quote": "M is the midpoint of XY"
+        },
+        {
+          "items": [
+            "WX",
+            "ZY"
+          ],
+          "kind": "congruent_segments",
+          "quote": "WX \u2245 ZY"
+        }
+      ],
+      "points": [
+        "W",
+        "X",
+        "Y",
+        "Z",
+        "M"
+      ],
+      "prove": [
+        {
+          "items": [
+            "W",
+            "Z"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220W \u2245 \u2220Z"
+        }
+      ],
+      "requested": [
+        {
+          "item": "WM",
+          "kind": "segment"
+        },
+        {
+          "item": "ZM",
+          "kind": "segment"
+        }
+      ],
+      "segments": [
+        "WX",
+        "XY",
+        "ZY",
+        "WM",
+        "ZM",
+        "XM",
+        "YM"
+      ],
+      "triangles": [
+        "WXM",
+        "ZYM"
+      ]
     }
   }
 }

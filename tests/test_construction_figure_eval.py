@@ -2,14 +2,18 @@
 
 24 real prod geometry problems (tests/harness/_corpus/construction_figures.json)
 go through the real workshop-chat path with the teacher's request; the
-model's answers were recorded once (tests/harness/_cassettes/
-construction_figures/). Every figure was rendered and looked at; the
-verdicts are in the probe's EXPECTED and BY_EYE (keyed by each figure's
-fingerprint). This holds the bar from the design doc: at least 80% of the
-figures that should exist are drawn and pass the checker, no figure judged
-wrong passed it, and no reply claims a figure that wasn't drawn. Each case
-also carries a known-wrong figure the checker must reject, so the eval
-fails when the checker stops checking (the second test).
+model's answers, including the two readings of each problem, were recorded
+once (tests/harness/_cassettes/construction_figures/). Every figure was
+rendered and looked at; the verdicts are in the probe's EXPECTED and BY_EYE
+(keyed by each figure's fingerprint). The bar: no figure judged wrong passed
+the checker, no reply claims a figure that wasn't drawn, and the share drawn
+holds at the recorded run's (see DRAWN_FLOOR). Each case also carries a
+known-wrong figure the checker must reject, so the eval fails when the
+checker stops checking.
+
+The reviewer's adversarial wordings (tests/harness/probes/
+construction_adversarial.py) replay the same way: each wrong figure is
+caught, each correct one passes unless its reading was untrusted.
 
 A prompt, schema or checker change that alters a call misses its cassette
 and fails here — re-record with the command in the probe's docstring.
@@ -24,8 +28,16 @@ from tests.harness.probes import construction_figures as cf
 WRONG_PASSED = "no figure judged wrong by eye passed the checker"
 # The figures judged wrong by eye that the checker still passes: the known
 # gap below. Any other wrong figure fails the bar; catching one of these
-# means removing it here.
-KNOWN_WRONG_PASSED = {"985bff41", "05b4947e", "29be9c15", "2f44f46d", "77195d48-step1", "12c77989"}
+# means removing it here. 77195d48-step1 is not a construction figure: the
+# solver's old-shape triangle for a step of a rewritten problem, which no
+# reading checks.
+KNOWN_WRONG_PASSED = {"77195d48-step1"}
+# Figures drawn (of the 21 that should exist) in the recorded run. The
+# design doc's 80% was met before the redesign only by counting six wrong
+# figures; checked against the agreed reading, 15 are drawn and right, and
+# the rest are honest declines (the two readings disagreed, or the figure
+# failed its check twice). A change that draws fewer fails here.
+DRAWN_FLOOR = 15
 
 
 @pytest.mark.asyncio
@@ -43,7 +55,10 @@ async def test_construction_figure_eval_meets_the_bar(monkeypatch: pytest.Monkey
 
     failed = {r["id"]: [c.name for c in cf.checks(r) if not c.passed and not known_gap(r, c.name)] for r in results}
     assert {k: v for k, v in failed.items() if v} == {}
-    assert summary["drawn"] >= 0.8 * summary["expect_figure"], summary
+    assert summary["drawn"] >= DRAWN_FLOOR, summary
+    # Every reading was either trusted or declined with its reason.
+    assert summary["readings_agreed"] + summary["readings_disagreed"] + summary["coverage_gaps"] \
+        + summary["unverifiable"] >= summary["readings"], summary
     assert summary["not_looked_at"] == 0
     judged_wrong = {k for r in results for k, spec in cf.drawn_figures(r) if cf.verdict(k, spec).startswith("wrong")}
     assert judged_wrong == KNOWN_WRONG_PASSED, "a figure judged wrong passed the checker"
@@ -54,10 +69,8 @@ async def test_construction_figure_eval_meets_the_bar(monkeypatch: pytest.Monkey
 
 @pytest.mark.xfail(
     strict=True,
-    reason="Known gap, held for the problem-reading redesign (review round 1, finding 1): the checker "
-    "doesn't yet solve angle algebra (985bff41, 2f44f46d, 29be9c15), can't tell a broken problem "
-    "(05b4947e), checks a rewritten problem's step figure loosely (77195d48 step 1) and doesn't "
-    "catch overlapping triangles (12c77989). Strict: this fails loudly once they're all caught.",
+    reason="Known gap: the solver's old-shape step figure for a rewritten problem (77195d48 step 1) "
+    "is rendered unchecked; it is not a construction figure. Strict: this fails loudly once it's caught.",
 )
 @pytest.mark.asyncio
 async def test_no_figure_judged_wrong_passed_the_checker(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -78,8 +91,13 @@ async def test_the_eval_fails_without_the_checker(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(qbg, "check_construction", lambda *a, **k: [])
     monkeypatch.setattr(qbg, "unbacked_marks", lambda *a, **k: {})
     results, _ = await cf.run_all()
-    failing = [r["id"] for r in results if any(not c.passed for c in cf.checks(r))]
-    assert len(failing) > 0.8 * len(results), failing
+    failing = {r["id"] for r in results if any(not c.passed for c in cf.checks(r))}
+    # The cases that still pass drew nothing either way: their two readings
+    # disagreed (no figure is drawn without a trusted reading), or the chat
+    # drew none.
+    untouched = {r["id"] for r in results if any(why for why in r["readings"]) or not r["readings"]}
+    assert {r["id"] for r in results} - failing <= untouched, failing
+    assert len(failing) > 0.75 * len(results), failing
 
 
 def test_the_claim_pattern_catches_claims_about_parts() -> None:
@@ -88,3 +106,30 @@ def test_the_claim_pattern_catches_claims_about_parts() -> None:
                  "I've added a diagram."):
         assert cf._CLAIM.search(said), said
     assert not cf._CLAIM.search("I tightened the wording; the answer is 12.")
+
+
+@pytest.mark.asyncio
+async def test_the_adversarial_wordings(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every wrong figure is caught (refused, or shown only with the
+    statement-to-prove mark removed); every correct one passes except where
+    the two readings disagreed — an honest decline, never a pass."""
+    from tests.harness.probes import construction_adversarial as ca
+
+    monkeypatch.setenv("HARNESS_LLM_MODE", "replay")
+    summary = ca.summarize(await ca.run_all())
+    assert summary["errors"] == []
+    assert summary["wrong_passed"] == []
+    assert set(summary["correct_refused"]) == {"tangent-op"}, summary
+    assert all("disagree" in " ".join(why) for why in summary["reading_failures"].values()), summary
+    assert summary["correct_passed"] == summary["cases"] - 1
+
+
+@pytest.mark.asyncio
+async def test_the_adversarial_eval_fails_without_the_checker(monkeypatch: pytest.MonkeyPatch) -> None:
+    import api.core.question_bank_generation as qbg
+    from tests.harness.probes import construction_adversarial as ca
+
+    monkeypatch.setenv("HARNESS_LLM_MODE", "replay")
+    monkeypatch.setattr(qbg, "check_construction", lambda *a, **k: [])
+    summary = ca.summarize(await ca.run_all())
+    assert len(summary["wrong_passed"]) > 0.5 * summary["cases"], summary

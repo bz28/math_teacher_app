@@ -21,9 +21,13 @@ What it measures (the bar from the design doc):
     checker switched off, most cases fail
     (tests/test_construction_figure_eval.py).
 
-Record (costs a few dollars; delete the cassette file first so stale
-entries don't linger) and render every figure to PNG:
-    HARNESS_LLM_MODE=auto python -m tests.harness.probes.construction_figures --png-dir /tmp/figs
+The figure is checked against the problem's agreed reading (two AI
+readings checked by code, api/core/geometry/facts.py); each case records
+how its reading went (agreed, or why not) for the eval table.
+
+Record one set at a time (SETS below), each under a hard $5 spending cap
+(tests/harness/budget.py), and render every figure to PNG:
+    HARNESS_LLM_MODE=auto python -m tests.harness.probes.construction_figures --set unit5 --png-dir /tmp/figs
 Replay ($0):
     HARNESS_LLM_MODE=replay python -m tests.harness.probes.construction_figures
 """
@@ -48,6 +52,19 @@ from tests.harness.types import CheckResult, GeneratedItem, HarnessContext
 _HERE = Path(__file__).resolve().parent.parent
 CORPUS = _HERE / "_corpus" / "construction_figures.json"
 CASSETTE_DIR = _HERE / "_cassettes" / "construction_figures"
+
+# The cases in recording sets, each run under its own spending cap. From
+# prod (question_bank_items → units / assignments, read 2026-11-12): one
+# geometry teacher's Unit 5 congruent-triangle proofs, her other homework
+# (Units 1–3), another teacher's Pythagorean problems, and the two cases
+# that also ask for step figures.
+SETS: dict[str, list[str]] = {
+    "unit5": ["d9f94a62", "589e4a97", "ee6a495e", "dd7ab4c1", "7d8e403c", "f4ac1109"],
+    "other_hw": ["985bff41", "05b4947e", "2d01d709", "77195d48", "12c77989", "e87bd653", "49c9fee5",
+                 "b1768f86", "099d8962", "29be9c15", "6d780084", "7ef5c01b", "7450aa6e", "2f44f46d"],
+    "rest": ["31f9bf18", "d5a862d3"],
+    "steps": ["dd7ab4c1-step", "7ef5c01b-step"],
+}
 
 # By-eye verdict per case, after looking at every rendered figure:
 #   "figure"  — a correct figure must be drawn;
@@ -76,28 +93,27 @@ EXPECTED: dict[str, str] = {
 # fingerprint fails the run until someone looks at it; one judged wrong
 # that the checker passed is counted in `wrong_but_passed` and fails it.
 BY_EYE: dict[str, tuple[str, str]] = {
-    "985bff41": ("704a82f2a9ed", "wrong: x = 28 makes ∠AOB 61°, ∠BOC 36°, ∠COD 83°; drawn about 127°, 49°, 4°"),
-    "05b4947e": ("e368e037339f", "wrong: the problem's numbers force ∠JKL = 276°; no figure is right"),
-    "2d01d709": ("c8dc38ffe28e", "right"),  # vertical angles 1 and 3, both 41°
-    "29be9c15": ("5ba90b8f65bb", "wrong: x = 7 makes both angles 46°; drawn as 135°"),
+    # Looked at 2026-11-12 after the problem-reading redesign (two AI
+    # readings checked by code; angle algebra solved from the facts).
+    "985bff41": ("6f29d0281571", "right"),  # ∠AOB 61°, ∠BOC 36°, ∠COD 83°; OA, OD opposite
+    "2d01d709": ("e27ae6ebc4cb", "right"),  # vertical angles 1 and 3, both 41°
     "d9f94a62": ("edb221230af9", "right"),  # BD bisects ∠ABC and is ⊥ AC
     "589e4a97": ("cc949543b72e", "right"),  # two angle pairs marked; QT, ST unmarked
     "dd7ab4c1": ("2650050a4e9b", "right"),  # BC ≅ DA, BC ∥ AD, diagonal AC
     "7d8e403c": ("9ad64e58b44d", "right"),  # right angles at X, Y; M midpoint; WX ≅ ZY
     "f4ac1109": ("da20aa19f6f6", "right"),  # AB ∥ CD, BC ≅ DA, diagonal AC
     "31f9bf18": ("1299374d877d", "right"),  # 24 × 7 rectangle, diagonal d
-    "d5a862d3": ("5eba881424ad", "right"),  # legs 5 and 12, hypotenuse 13
     "6d780084": ("07973af286a5", "right"),  # shared hypotenuse BC, right angles A and D, AB = DB
     "7ef5c01b": ("72425e15988b", "right"),  # AB ∥ CD, M midpoint of BC
     "7450aa6e": ("9e89b9643c34", "right"),  # three pairs of equal sides
-    "2f44f46d": ("0cc9f72eb27f", "wrong: x = 10 makes ∠ADE = ∠ABC = 48°; drawn as 71°"),
     "77195d48-step1": ("f841c5afaf9d", "wrong: the side labelled 'bisector' makes the whole 74° with line m"),
     "77195d48-step2": ("8cd2cf284ab5", "right"),  # the bisector at 37° to line m
-    "12c77989": ("29281cb9d3af", "wrong: the triangles overlap and '12' (AB) sits on EF, the side asked for"),
+    "12c77989": ("d2dbbf2d9bbf", "right"),  # similar triangles drawn apart, AB 12, BC 9, DE 8; EF unlabelled
+    "099d8962": ("eff508f3d677", "right"),  # WX ≅ YZ, ∠W ≅ ∠Y, ∠X ≅ ∠Z, meeting at V
+    "d5a862d3": ("2d5194fc59d7", "right"),  # legs 5 and 12 to scale, hypotenuse 13, b unlabelled
+    "dd7ab4c1-step": ("cf16febd6d13", "right"),  # BC ≅ DA, BC ∥ AD, diagonal AC
+    "dd7ab4c1-step-step3": ("5fb1cb8338ce", "right"),  # alternate interior angles at A and C
     "e87bd653": ("6d4e00ff5e1d", "right"),  # SAS marks
-    "099d8962": ("b60a364cc0ef", "right"),  # WX ≅ YZ, ∠W ≅ ∠Y, ∠X ≅ ∠Z
-    "dd7ab4c1-step": ("bf52a5726cde", "right"),
-    "dd7ab4c1-step-step3": ("aa54c4ab4383", "right"),  # alternate interior angles at A and C
     "7ef5c01b-step": ("b6ec68ce21d7", "right"),
     "7ef5c01b-step-step4": ("ed6d9dc38966", "right"),  # vertical angles at M
 }
@@ -167,6 +183,8 @@ def load_cases() -> list[dict[str, Any]]:
 
 
 _CASE: contextvars.ContextVar[str] = contextvars.ContextVar("construction_case", default="")
+# Per case, how each reading of its problem went: [] when agreed, else why not.
+_READINGS: contextvars.ContextVar[dict[str, list[list[str]]]] = contextvars.ContextVar("construction_readings")
 
 
 async def run_case(case: dict[str, Any]) -> dict[str, Any]:
@@ -190,6 +208,9 @@ async def run_case(case: dict[str, Any]) -> dict[str, Any]:
     proposal = msg.get("proposal") or {}
     steps = proposal.get("solution_steps") or []
     return {
+        "figure_facts": proposal.get("figure_facts"),
+        "step_facts": proposal.get("step_facts"),
+        "readings": _READINGS.get().get(case["id"], []),
         "id": case["id"],
         "request": case["request"],
         "final_answer": proposal.get("final_answer") or case["final_answer"] or "",
@@ -213,15 +234,40 @@ async def run_all(cases: list[dict[str, Any]] | None = None) -> tuple[list[dict[
     cases = cases if cases is not None else load_cases()
     prev = os.environ.get("HARNESS_CASSETTE_DIR")
     os.environ["HARNESS_CASSETTE_DIR"] = str(CASSETTE_DIR)
-    saved = (qbg.redraw_figure, qbc.fetch_source_documents)
+    saved = (qbg.redraw_figure, qbc.fetch_source_documents, qbg.read_figure_facts)
     redraws: dict[str, int] = {}
-    real_redraw = qbg.redraw_figure
+    readings: dict[str, list[list[str]]] = {}
+    _READINGS.set(readings)
+    real_redraw, real_read = qbg.redraw_figure, qbg.read_figure_facts
 
     async def counted(*args: Any, **kwargs: Any) -> Any:
         redraws[_CASE.get()] = redraws.get(_CASE.get(), 0) + 1
         return await real_redraw(*args, **kwargs)
 
+    import api.core.geometry.facts as facts_mod
+
+    real_differ = facts_mod.disagreements
+
+    def differ(a: Any, b: Any) -> list[str]:
+        out = real_differ(a, b)
+        detail.setdefault(_CASE.get(), []).append(out)
+        return out
+
+    detail: dict[str, list[list[str]]] = {}
+
+    async def read(*args: Any, **kwargs: Any) -> Any:
+        facts, why = await real_read(*args, **kwargs)
+        # The teacher sees the plain reason; the eval keeps where they differ.
+        where = (detail.get(_CASE.get()) or [[]])[-1]
+        readings.setdefault(_CASE.get(), []).append(
+            [*why, *(f"differ on {d}" for d in where[:4] if why)],
+        )
+        return facts, why
+
+    facts_mod.disagreements = differ  # type: ignore[assignment]
+
     qbg.redraw_figure = counted  # type: ignore[assignment]
+    qbg.read_figure_facts = read  # type: ignore[assignment]
     qbc.fetch_source_documents = AsyncMock(return_value=[])  # type: ignore[assignment]
     sem = asyncio.Semaphore(6)
 
@@ -231,6 +277,7 @@ async def run_all(cases: list[dict[str, Any]] | None = None) -> tuple[list[dict[
                 return await run_case(c)
             except Exception as e:  # a case that can't run fails its checks, not the whole run
                 return {
+                    "figure_facts": None, "step_facts": None, "readings": readings.get(c["id"], []),
                     "id": c["id"], "request": c["request"], "final_answer": "", "error": repr(e)[:200],
                     "question": c["question"], "reply": "", "figure_spec": None, "figure_svg": None,
                     "step_figures": [],
@@ -239,7 +286,8 @@ async def run_all(cases: list[dict[str, Any]] | None = None) -> tuple[list[dict[
     try:
         results = await asyncio.gather(*(one(c) for c in cases))
     finally:
-        qbg.redraw_figure, qbc.fetch_source_documents = saved  # type: ignore[assignment]
+        qbg.redraw_figure, qbc.fetch_source_documents, qbg.read_figure_facts = saved  # type: ignore[assignment]
+        facts_mod.disagreements = real_differ  # type: ignore[assignment]
         if prev is None:
             os.environ.pop("HARNESS_CASSETTE_DIR", None)
         else:
@@ -260,15 +308,17 @@ def verdict(key: str, spec: dict[str, Any]) -> str:
 
 
 def negative_rejected(result: dict[str, Any]) -> bool | None:
-    """The checker rejects the case's known-wrong figure (None: no negative)."""
+    """The checker rejects the case's known-wrong figure, checked against
+    the same reading its figure passed (None: no negative)."""
     import api.core.question_bank_generation as qbg
 
     change = NEGATIVES.get(result["id"])
-    if change is None or not result["figure_spec"]:
+    if change is None or not result["figure_spec"] or not result["figure_facts"]:
         return None
     bad = mutate(result["figure_spec"], change)
     _spec, svg, _issues = qbg._check_figure(
         bad, result["question"], final_answer=result["final_answer"], request=result["request"],
+        facts=result["figure_facts"],
     )
     return svg is None
 
@@ -342,6 +392,17 @@ def summarize(results: list[dict[str, Any]], redraws: dict[str, int]) -> dict[st
         ),
         "step_figures": sum(len(r["step_figures"]) for r in results),
         "step_figures_moved": moved,
+        # The reading: how often the two AI readings were trusted, and why not.
+        "readings": sum(len(r["readings"]) for r in results),
+        "readings_agreed": sum(1 for r in results for why in r["readings"] if not why),
+        "readings_disagreed": sum(
+            1 for r in results for why in r["readings"] if any("disagree" in w for w in why)
+        ),
+        "coverage_gaps": sum(1 for r in results for why in r["readings"] if any("missed" in w for w in why)),
+        "unverifiable": sum(
+            1 for r in results for why in r["readings"] if any("can't verify" in w for w in why)
+        ),
+        "reading_failures": {r["id"]: why for r in results for why in r["readings"] if why},
     }
 
 
@@ -394,11 +455,22 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--png-dir", type=Path)
     parser.add_argument("--only", nargs="*")
+    parser.add_argument("--set", choices=sorted(SETS), help="one recording set, under its spending cap")
+    parser.add_argument("--cap", type=float, default=5.0, help="the set's spending cap in $")
     args = parser.parse_args()
+    from tests.harness.budget import spending_cap
+
     cases = load_cases()
+    if args.set:
+        cases = [c for c in cases if c["id"] in SETS[args.set]]
     if args.only:
         cases = [c for c in cases if c["id"] in args.only]
-    results, redraws = asyncio.run(run_all(cases))
+    with spending_cap(args.set or "all", cap_usd=args.cap) as spend:
+        results, redraws = asyncio.run(run_all(cases))
+    cost = spend.row(problems=len(cases))
+    print("COST", json.dumps(cost))
+    if spend.stopped:
+        print(spend.stopped)
     if args.png_dir:
         args.png_dir.mkdir(parents=True, exist_ok=True)
     report = []
@@ -423,6 +495,7 @@ def main() -> None:
     if args.png_dir:
         (args.png_dir / "report.json").write_text(json.dumps(report, indent=1, ensure_ascii=False))
         (args.png_dir / "summary.json").write_text(json.dumps(summary, indent=1))
+        (args.png_dir / "cost.json").write_text(json.dumps(cost, indent=1))
 
 
 if __name__ == "__main__":
