@@ -19,6 +19,7 @@ import re
 from typing import Any
 
 from api.core.geometry.dsl import ConstructionFigure, is_hidden, split_points
+from api.core.geometry.facts import FACTS_TOOL, FigureFacts, as_facts
 from api.core.geometry.figure_check import givens_marked, parse_problem
 from api.core.llm_client import MODEL_REASON, call_claude_json
 from api.core.llm_schemas import FIGURE_REDRAW_SCHEMA
@@ -107,9 +108,10 @@ async def redraw_figure(
     step_text: str | None = None,
     base_spec: dict[str, Any] | None = None,
     generation_job_id: str | None = None,
+    facts: Any = None,
 ) -> dict[str, Any] | None:
     """The one retry: the same model and mode as the call that drew the
-    figure, shown the checker's exact errors. Returns the new spec, or None
+    figure, shown the checker's exact errors (and the facts it checks). Returns the new spec, or None
     when the call fails or returns none (the caller then drops the figure)."""
     parts = [f"Problem:\n{problem_text}"]
     if request:
@@ -122,6 +124,12 @@ async def redraw_figure(
         )
         if base_spec is not None:
             parts.append(f"The question's figure:\n{json.dumps(base_spec, sort_keys=True)}")
+    reading = as_facts(facts)
+    if reading is not None:
+        parts.append(
+            "The facts the figure is checked against:\n"
+            + json.dumps(reading.model_dump(exclude_none=True), sort_keys=True),
+        )
     parts.append(f"Your previous figure:\n{json.dumps(previous_spec, sort_keys=True)}")
     parts.append("The checker found these problems:\n- " + "\n- ".join(issues))
     parts.append(
@@ -151,6 +159,117 @@ async def redraw_figure(
     return spec if isinstance(spec, dict) else None
 
 
+# ── Reading the problem: two independent AI readings, checked by code ──
+
+_FACTS_VOCAB = """Fact kinds (items as the problem names them; angles "ABC" with the vertex in the
+middle, or "B", or "1"; segments, rays and two-point lines "AB"; named lines "m";
+triangles "ABC"; polygons "ABCD" in order):
+- parallel [l1, l2]; perpendicular [l1, l2] (point: where they meet, if stated)
+- congruent_segments [s1, s2, ...]; congruent_angles [a1, a2, ...]
+- equal_length [s] with value (a number) or expr; angle_measure [a] with value (degrees) or expr ("2x + 5")
+- midpoint [s] with point; on_segment [s] with point; on_line [l] with point; collinear [P, Q, R, ...]
+- intersect [l1, l2] with point; bisects_segment [bisector, s] (point if stated); bisects_angle [ray, angle]
+- right_angle [a]; opposite_rays [r1, r2] (same endpoint first)
+- vertical_angles / linear_pair / supplementary / complementary [a1, a2]
+- congruent_triangles / similar_triangles [t1, t2] with vertices in the stated correspondence
+- isosceles [t] (point: the apex, if the base, legs or vertex angle are stated); equilateral [t];
+  right_triangle [t] (point: the right-angle vertex, if stated)
+- parallelogram / rectangle / square / rhombus / trapezoid / isosceles_trapezoid / kite [polygon]
+  (items [] when the shape has no name: "the rectangle below")
+- on_circle [P, Q, ...] with circle (its center; "" if unnamed); tangent [l] with circle and point;
+  chord / diameter / radius [s] with circle; central_angle / inscribed_angle [a] with circle (value if stated)
+- numbered_angle ["1", angle it labels] when the problem says which angle ∠1 is
+- transversal [t, l1, l2] (t "" when unnamed)
+- other: anything else stated about the figure (say it in quote)
+Naming a figure ("In △ABC", "quadrilateral ABCD") is not a fact: list it under triangles or polygons.
+Use only the names the problem itself uses; never invent one. When it names no points ("a
+rectangle has a width of 7"), points is [] and facts have items []: rectangle [], right_triangle [],
+equal_length [] with value for each length it gives (say which side in quote).
+Points are letters ("A", "B'"); "∠1" is an angle, not a point.
+Each fact's quote is the exact words of the problem it comes from."""
+
+_FACTS_SYSTEM_A = f"""You read geometry problems for a figure checker. List what the problem STATES
+about its figure — nothing you infer, derive or solve, and nothing from the solution.
+
+{_FACTS_VOCAB}
+
+Sections: points (every point named); segments, rays, lines, named_lines, triangles, polygons,
+circles (every part the problem names); givens (what the problem gives); prove (each statement
+the student must prove, show, explain or justify); find (each angle or segment the problem asks
+for; kind "other" for anything else, such as "determine whether …"); requested (parts the
+teacher's message asks to draw, by name)."""
+
+_FACTS_SYSTEM_B = f"""You are auditing a geometry problem before a diagram is drawn for it. Go through
+the problem one sentence at a time. For each sentence, record every relation it states as a fact
+(stated facts only: no theorems applied, no values solved for, nothing from the answer).
+Put a fact under prove when the sentence asks the student to prove / show / explain / justify /
+verify it, and under givens otherwise. Then list: every point name; the segments, rays, lines,
+named lines, triangles, polygons and circles the problem names; the angles and segments it asks
+you to find (find; a question such as "determine whether …" is find kind "other", never a
+fact); and the parts the teacher's message asks to have drawn, by name (requested).
+
+{_FACTS_VOCAB}"""
+
+
+async def _read_once(system: str, message: str, *, mode: str, user_id: str | None,
+                     generation_job_id: str | None) -> Any:
+
+    result = await call_claude_json(
+        system, message, mode=mode, tool_schema=FACTS_TOOL, user_id=user_id, model=MODEL_REASON,
+        max_tokens=4096, temperature=0.0, generation_job_id=generation_job_id,
+    )
+    return FigureFacts.model_validate(result)
+
+
+async def read_figure_facts(
+    problem_text: str,
+    *,
+    final_answer: str = "",
+    request: str = "",
+    mode: str,
+    user_id: str | None,
+    generation_job_id: str | None = None,
+) -> tuple[Any, list[str]]:
+    """(the agreed facts, []) or (None, [why the reading can't be trusted]).
+
+    Two independent readings (different prompts, same model); code then
+    requires that they agree, that they account for every point and every
+    relation word in the text, and that each fact has a check."""
+    import asyncio
+
+    from api.core.geometry.facts import coverage_gaps, disagreements, merged, unverifiable
+
+    message = f"Problem:\n{problem_text}"
+    if final_answer:
+        message += (
+            "\n\nFinal answer (shown only so you know what is asked; take no points, parts or facts "
+            f"from it):\n{final_answer}"
+        )
+    message += f"\n\nThe teacher's message:\n{request or '(none)'}"
+    try:
+        a, b = await asyncio.gather(
+            _read_once(_FACTS_SYSTEM_A, message, mode=f"{mode}_facts_a", user_id=user_id,
+                       generation_job_id=generation_job_id),
+            _read_once(_FACTS_SYSTEM_B, message, mode=f"{mode}_facts_b", user_id=user_id,
+                       generation_job_id=generation_job_id),
+        )
+    except Exception:
+        logger.exception("figure facts reading failed")
+        return None, ["the problem couldn't be read for checking"]
+    differ = disagreements(a, b)
+    if differ:
+        logger.warning("figure facts: the two readings differ: %s", differ)
+        return None, ["two readings of the problem disagree, so the figure can't be checked"]
+    gaps = coverage_gaps(problem_text, a)
+    if gaps:
+        return None, [f"the reading of the problem missed {g}, so the figure can't be checked" for g in gaps[:3]]
+    agreed = merged(a, b)
+    cant = unverifiable(agreed)
+    if cant:
+        return None, [f"the checker can't verify “{c}” yet, so it can't confirm the figure" for c in cant[:3]]
+    return agreed, []
+
+
 # ── What the teacher is told ───────────────────────────────────────────
 
 
@@ -160,7 +279,9 @@ def _join(items: list[str]) -> str:
     return ", ".join(items[:-1]) + " and " + items[-1]
 
 
-def figure_sentence(spec: dict[str, Any], request: str, *, updated: bool, problem_text: str = "") -> str:
+def figure_sentence(
+    spec: dict[str, Any], request: str, *, updated: bool, problem_text: str = "", facts: Any = None,
+) -> str:
     """One sentence about a figure that passed its check, written from what
     was drawn: its visible points, the parts the teacher asked about, and —
     only when every given with a textbook mark is marked — that the givens
@@ -185,7 +306,9 @@ def figure_sentence(spec: dict[str, Any], request: str, *, updated: bool, proble
     if asked_angles:
         extras.append(f"{_join(asked_angles)} labelled")
     detail = f", with {' and '.join(extras)}" if extras else ""
-    tail = "; the givens are marked." if givens_marked(fig, problem_text) else "."
+    reading = as_facts(facts)
+    # "The givens are marked" is said only from the agreed reading.
+    tail = "; the givens are marked." if reading is not None and givens_marked(fig, problem_text, reading) else "."
     return f"{lead}{pts}{detail}{tail}"
 
 

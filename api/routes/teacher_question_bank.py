@@ -797,6 +797,7 @@ async def revert_bank_item(
     # Restore the figure alongside the prose so the two stay in sync.
     item.figure_spec = item.previous_figure_spec
     item.figure_svg = item.previous_figure_svg
+    item.figure_facts = item.previous_figure_facts
     # The flag travels with the prose it was derived from — unless the
     # teacher set it, in which case undoing a question edit leaves it.
     if item.previous_requires_drawing is not None and not item.requires_drawing_teacher_set:
@@ -808,6 +809,7 @@ async def revert_bank_item(
     item.previous_status = None
     item.previous_figure_spec = None
     item.previous_figure_svg = None
+    item.previous_figure_facts = None
     item.previous_requires_drawing = None
     # Undo restores the snapshot's status alongside its prose, so it can
     # move an item back to rejected (or approved) with no other trace. That
@@ -1195,20 +1197,25 @@ async def accept_chat_proposal(
     if proposal.get("figure_spec") is not None:
         new_figure_spec, new_figure_svg = _resolve_figure(
             proposal["figure_spec"], item.question, final_answer=item.final_answer or "",
+            facts=proposal.get("figure_facts"),
         )
         item.figure_spec = new_figure_spec
         item.figure_svg = new_figure_svg
+        # The reading the figure was checked against is kept with it.
+        item.figure_facts = proposal.get("figure_facts") if new_figure_svg else None
     elif proposal.get("question") is not None:
         # Question rewritten without a fresh figure → the old figure
         # almost certainly no longer describes the new question.
         # Match what the preview showed (no figure).
         item.figure_spec = None
         item.figure_svg = None
+        item.figure_facts = None
     # Steps last: a construction step figure is checked against the
     # figure the question has now (the chat checked it against the same).
     if accepted_steps is not None:
         item.solution_steps = _render_step_figures(
             accepted_steps, question_text=item.question, question_spec=item.figure_spec,
+            facts=proposal.get("step_facts") or item.figure_facts,
         )
 
     # Build a NEW list with NEW dict copies for any modified message.

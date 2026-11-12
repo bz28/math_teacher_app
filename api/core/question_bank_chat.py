@@ -195,6 +195,13 @@ def _figure_context(item: QuestionBankItem) -> str:
     parts: list[str] = []
     if isinstance(item.figure_spec, dict):
         parts.append(f"\nCurrent figure (figure_spec):\n{json.dumps(item.figure_spec)}")
+        facts = getattr(item, "figure_facts", None)
+        if isinstance(facts, dict):
+            # What the figure (and any step figure) is checked against.
+            parts.append(
+                "\nThe problem's facts, which the figure and every step figure are checked "
+                f"against:\n{json.dumps(facts, sort_keys=True)}",
+            )
     pending = next(
         (
             m["proposal"] for m in reversed(item.chat_messages or [])
@@ -320,6 +327,7 @@ async def chat_with_bank_item(
     # clicks Accept. Without pre-rendering, the preview reads
     # figure_svg=None (since the proposal carries raw figure_spec)
     # and the diagram only appears post-accept — confusing UX.
+    from api.core.geometry.facts import as_facts
     from api.core.question_bank_generation import (
         _check_figure,
         _figure_drop_reason,
@@ -345,6 +353,10 @@ async def chat_with_bank_item(
     construction_step_drops: dict[int, list[str]] = {}
     any_construction_step = False
     top_text = item.question
+    # The problem's agreed reading the construction figure was checked
+    # against (stored with the figure on accept).
+    top_facts: Any = None
+    step_facts: Any = None
     if isinstance(proposal_raw, dict):
         steps_raw = proposal_raw.get("solution_steps")
         top_spec_raw = proposal_raw.get("figure_spec")
@@ -358,7 +370,7 @@ async def chat_with_bank_item(
         top_construction = _is_construction(top_spec_raw)
         if top_construction:
             answer = str(proposal_raw.get("final_answer") or ("" if rewrites_question else item.final_answer or ""))
-            top_figure_spec, top_figure_svg, top_issues = await _resolve_figure_with_retry(
+            top_figure_spec, top_figure_svg, top_issues, top_facts = await _resolve_figure_with_retry(
                 top_spec_raw, top_text, mode=LLMMode.BANK_CHAT, user_id=str(user_id),
                 final_answer=answer, request=teacher_message,
             )
@@ -394,13 +406,18 @@ async def chat_with_bank_item(
             step_base = top_figure_spec if top_figure_spec is not None else (
                 None if rewrites_question else item.figure_spec
             )
+            # ...and against that question's reading: the proposal's, else
+            # (question unchanged) the stored one, else it is read once.
+            step_facts = top_facts if top_figure_svg else (
+                None if rewrites_question else item.figure_facts
+            )
             # Pre-render any per-step figures so the preview can
             # display them; accept_chat_proposal re-runs the same
             # path to write the final state.
             if tmp:
-                cleaned_steps, construction_step_drops = await _render_step_figures_with_retry(
+                cleaned_steps, construction_step_drops, step_facts = await _render_step_figures_with_retry(
                     tmp, question_text=top_text, question_spec=step_base,
-                    mode=LLMMode.BANK_CHAT, user_id=str(user_id),
+                    mode=LLMMode.BANK_CHAT, user_id=str(user_id), facts=step_facts,
                 )
             any_construction_step = any(_is_construction(s.get("figure_spec")) for s in tmp)
             # _render_step_figures keeps every (dict) step, in order.
@@ -424,6 +441,13 @@ async def chat_with_bank_item(
         # Drop the proposal entirely if every field is null
         if all(v is None for v in proposal.values()):
             proposal = None
+        else:
+            if top_figure_svg and top_facts is not None:
+                proposal["figure_facts"] = as_facts(top_facts).model_dump()  # type: ignore[union-attr]
+            # The reading the step figures were checked against, so accept
+            # checks them against the same one.
+            if any_construction_step and step_facts is not None:
+                proposal["step_facts"] = as_facts(step_facts).model_dump()  # type: ignore[union-attr]
 
     # Deterministic correctness: when the proposal rewrites the QUESTION, the
     # chat's own inline solution can silently disagree with it — it may fudge a
@@ -456,6 +480,7 @@ async def chat_with_bank_item(
             proposal["solution_steps"] = (
                 _render_step_figures(
                     steps, question_text=proposal["question"], question_spec=proposal["figure_spec"],
+                    facts=proposal.get("figure_facts"),
                 )
                 if isinstance(steps, list) and steps else None
             )
@@ -466,8 +491,11 @@ async def chat_with_bank_item(
                 spec, svg, issues = _check_figure(
                     proposal["figure_spec"], proposal["question"],
                     final_answer=proposal["final_answer"] or "", request=teacher_message,
+                    facts=proposal.get("figure_facts"),
                 )
                 proposal["figure_spec"], proposal["figure_svg"] = spec, svg
+                if not svg:
+                    proposal.pop("figure_facts", None)
                 top_issues = issues
             # Replace (not append) the chat's prose: its narrative may assert a
             # specific answer it computed free-hand, which can disagree with the
@@ -480,6 +508,7 @@ async def chat_with_bank_item(
                 "re-derived independently rather than written by hand."
             )
             step_drops = []  # the chat's steps (and their figures) were replaced
+            proposal.pop("step_facts", None)
             construction_step_drops = {}
             any_construction_step = False
 
@@ -572,7 +601,7 @@ def _construction_reply(
             assert proposal is not None
             notes.append(figure_sentence(
                 proposal["figure_spec"], teacher_message, updated=bool(item.figure_spec),
-                problem_text=question_text,
+                problem_text=question_text, facts=proposal.get("figure_facts"),
             ))
         elif top_construction:
             notes.append(failure_sentence(top_issues or ["the figure didn't pass its check"]))
