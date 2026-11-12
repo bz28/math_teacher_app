@@ -4977,7 +4977,7 @@ function EarlierTurnInsCallout({
           </p>
           <p className="mt-1 text-xs leading-relaxed text-text-secondary">
             This page shows the new work, read and graded fresh. The earlier{" "}
-            {attempts.length === 1 ? "turn-in is" : "turn-ins are"} kept as they were.
+            {attempts.length === 1 ? "turn-in is kept as it was" : "turn-ins are kept as they were"}, below.
           </p>
           <ul className="mt-2 space-y-1.5">
             {attempts.map((a) => {

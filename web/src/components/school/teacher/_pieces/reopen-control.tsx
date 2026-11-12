@@ -159,8 +159,16 @@ export function ReopenControl({
         <button type="button" onClick={open} disabled={busy} className={linkButton}>
           Change date
         </button>
-        <button type="button" onClick={() => void undo()} disabled={busy} className={linkButton}>
-          {busy ? "Undoing…" : "Undo reopen"}
+        {/* Once they've turned it in again, undoing re-prices that work
+            against the class date — so say that, not "undo". */}
+        <button
+          type="button"
+          onClick={() => void undo()}
+          disabled={busy}
+          className={linkButton}
+          title={submitted && !reopenedAt ? "Their work is then late against the class due date" : undefined}
+        >
+          {busy ? "Saving…" : submitted && !reopenedAt ? "Back to the class due date" : "Undo reopen"}
         </button>
         {error && (
           <span role="alert" className="font-semibold text-[color:var(--color-error)]">
