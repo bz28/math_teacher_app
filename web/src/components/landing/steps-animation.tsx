@@ -226,7 +226,7 @@ export function StepsAnimation({
             <span className="h-2.5 w-2.5 rounded-full bg-green-400/70" />
           </div>
           <span className="ml-2 font-mono text-[11px] text-[color:var(--color-text-muted)]">
-            veradicai.com / learn
+            veradicai.com / practice
           </span>
           <span className="ml-auto flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-[color:var(--color-primary)]">
             <span className="relative flex h-2 w-2">
