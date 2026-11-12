@@ -58,6 +58,9 @@ const schibsted = Schibsted_Grotesk({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700", "800", "900"],
   display: "swap",
+  // Not preloaded: only marketing pages use it, so app pages shouldn't
+  // download it. Marketing pages fetch it on first use (display: swap).
+  preload: false,
 });
 
 const kalam = Kalam({
@@ -65,6 +68,7 @@ const kalam = Kalam({
   subsets: ["latin"],
   weight: ["400", "700"],
   display: "swap",
+  preload: false,
 });
 
 export const metadata: Metadata = {
