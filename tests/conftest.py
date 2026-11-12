@@ -84,6 +84,55 @@ def auth_headers(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+async def make_join_code() -> str:
+    """A fresh, open class join code, for tests that sign a student up.
+
+    /auth/register is invite-only (RegisterRequest.enforce_invite_only_signup),
+    so a student signup needs a code. The course has no school, so nothing
+    leaks into the schools table between runs.
+    """
+    code = f"T{uuid.uuid4().hex[:7].upper()}"
+    async with get_session_factory()() as s:
+        course = Course(name=f"Signup course {code}", subject="math")
+        s.add(course)
+        await s.flush()
+        s.add(Section(course_id=course.id, name="Period 1", join_code=code))
+        await s.commit()
+    return code
+
+
+async def make_teacher_invite(email: str) -> str:
+    """A pending teacher invite for `email` at a fresh school; returns its token.
+
+    The only way a teacher can sign up: /auth/register refuses teacher
+    signups without one.
+    """
+    from datetime import timedelta
+
+    from api.models.school import School
+    from api.models.teacher_invite import TeacherInvite
+
+    tag = uuid.uuid4().hex[:8]
+    token = f"invite-{tag}"
+    async with get_session_factory()() as s:
+        admin = User(
+            email=f"invite_admin_{tag}@t.com", password_hash=hash_password("x"),
+            grade_level=12, role="admin", name="Admin",
+        )
+        school = School(
+            name=f"Invite School {tag}", contact_name="Admin",
+            contact_email=f"invite_admin_{tag}@t.com",
+        )
+        s.add_all([admin, school])
+        await s.flush()
+        s.add(TeacherInvite(
+            school_id=school.id, email=email, invited_by=admin.id, token=token,
+            status="pending", expires_at=datetime.now(UTC) + timedelta(days=7),
+        ))
+        await s.commit()
+    return token
+
+
 # ── Global integrity AI mocks ──
 #
 # The integrity pipeline runs as a fire-and-forget asyncio task

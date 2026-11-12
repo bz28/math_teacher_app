@@ -22,7 +22,7 @@ from api.models.section import Section
 from api.models.section_invite import SectionInvite
 from api.models.user import User
 
-from .conftest import auth_headers
+from .conftest import auth_headers, make_join_code
 
 JOIN_URL = "/v1/teacher/join"
 REGISTER_URL = "/v1/auth/register"
@@ -235,6 +235,7 @@ async def test_closed_enrollment_still_admits_an_invited_existing_student(
         "password": "StrongPass1",
         "name": "Already Registered",
         "grade_level": 9,
+        "join_code": await make_join_code(),
     })
     assert existing.status_code == 201, existing.text
 

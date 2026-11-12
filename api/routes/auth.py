@@ -55,7 +55,7 @@ from api.middleware.rate_limit import limiter
 from api.models.app_stat import AppStat
 from api.models.course import Course, CourseTeacher
 from api.models.llm_call import LLMCall
-from api.models.school import SCHOOL_KIND_INDIVIDUAL, School
+from api.models.school import School
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.section_invite import SectionInvite
@@ -138,12 +138,11 @@ async def register(
     body: RegisterRequest,
     db: AsyncSession = Depends(get_db),
 ) -> TokenResponse:
-    # COPPA gate before any DB work. Runs first so an under-13 attempting
-    # personal self-signup gets a deterministic 400 without leaking whether
-    # their email is registered. Invited / join-code paths bypass the gate
-    # because the school-consent exception under 15 U.S.C. § 6502 applies.
+    # Invite-only gate before any DB work, so a signup with no invite or
+    # join code gets a deterministic 400 without leaking whether its email
+    # is registered. See RegisterRequest.enforce_invite_only_signup.
     try:
-        body.enforce_coppa_self_signup_gate()
+        body.enforce_invite_only_signup()
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
@@ -197,8 +196,8 @@ async def register(
             school_id = section_course.school_id
 
     # Join code (student): validate up-front so we don't create a user if
-    # the code is bad. Mutually exclusive with invite flows (either invite
-    # already picked the section/school, or the student is self-signing up).
+    # the code is bad. Mutually exclusive with invite flows (the invite
+    # already picked the section/school).
     join_section_obj: Section | None = None
     if body.join_code:
         if body.invite_token or body.section_invite_token:
@@ -222,31 +221,22 @@ async def register(
             select(Course).where(Course.id == join_section_obj.course_id)
         )).scalar_one_or_none()
         if join_course and join_course.school_id is not None:
+            # Same rule as the class-invite path (_load_section_invite): a
+            # deactivated school's codes stop admitting new students.
+            join_school = (await db.execute(
+                select(School).where(School.id == join_course.school_id)
+            )).scalar_one_or_none()
+            if join_school is not None and not join_school.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="This class's school is no longer active on Veradic.",
+                )
             school_id = join_course.school_id
         # Join codes are a student-only enrollment path. Force the role
         # to student so a malicious caller can't combine role=teacher
         # with a leaked join code to escalate into a teacher attached
         # to that school. Mirrors the section_invite override above.
         role = "student"
-
-    # Teacher self-signup with no invite/section/join token: provision a
-    # synthetic personal school so every teacher (and any student who
-    # later joins their section) has a stamped school_id. Entitlements
-    # still cap them via the `kind='individual'` signal, and the
-    # ck_users_school_required_for_teacher CHECK constraint requires a
-    # non-NULL school_id for teachers.
-    if role == "teacher" and school_id is None:
-        display_name = body.name.strip() or body.email.split("@")[0]
-        personal_school = School(
-            name=f"{display_name}'s classroom",
-            kind=SCHOOL_KIND_INDIVIDUAL,
-            contact_name=display_name,
-            contact_email=body.email,
-            is_active=True,
-        )
-        db.add(personal_school)
-        await db.flush()
-        school_id = personal_school.id
 
     user = User(
         email=body.email,
@@ -255,11 +245,6 @@ async def register(
         grade_level=body.grade_level,
         role=role,
         school_id=school_id,
-        signup_school_name=(
-            body.signup_school_name
-            if role == "teacher" and not body.invite_token
-            else None
-        ),
     )
     db.add(user)
     await db.flush()
@@ -298,22 +283,20 @@ async def register(
         signup_path = (
             "Teacher invite" if body.invite_token else
             "Section invite" if body.section_invite_token else
-            "Join code" if body.join_code else
-            "Self-signup"
+            "Join code"
         )
         safe_name = html.escape(body.name)
         safe_email = html.escape(body.email)
-        school_line = (
-            f"<li><strong>School:</strong> {html.escape(body.signup_school_name)}</li>"
-            if role == "teacher" and body.signup_school_name else ""
-        )
         grade_line = (
             f"<li><strong>Grade:</strong> {body.grade_level}</li>"
             if body.grade_level else ""
         )
+        # Straight to the new user's own page: since signup went
+        # invite-only, new users mostly belong to a school, so the
+        # "independent" lists would not show them.
         dashboard_path = (
-            "teachers/independent" if role == "teacher"
-            else "students/independent"
+            f"teachers/{user.id}" if role == "teacher"
+            else f"students/{user.id}"
         )
         asyncio.create_task(send_email(
             to=settings.admin_alert_emails,
@@ -324,7 +307,6 @@ async def register(
                 f"<li><strong>Name:</strong> {safe_name}</li>"
                 f"<li><strong>Email:</strong> {safe_email}</li>"
                 f"<li><strong>Role:</strong> {role}</li>"
-                f"{school_line}"
                 f"{grade_line}"
                 f"<li><strong>Signup path:</strong> {signup_path}</li>"
                 f"</ul>"

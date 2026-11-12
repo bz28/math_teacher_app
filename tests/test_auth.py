@@ -1,19 +1,25 @@
 import pytest
 from httpx import AsyncClient
 
+from .conftest import make_join_code, make_teacher_invite
+
 REGISTER_URL = "/v1/auth/register"
 LOGIN_URL = "/v1/auth/login"
 REFRESH_URL = "/v1/auth/refresh"
 ME_URL = "/v1/auth/me"
 
 
-def _user(email: str = "test@example.com", password: str = "StrongPass1", grade_level: int = 8) -> dict:
-    return {"email": email, "password": password, "name": "Test", "grade_level": grade_level}
+async def _user(email: str = "test@example.com", password: str = "StrongPass1", grade_level: int = 8) -> dict:
+    """A student signup payload with a fresh class join code (signup is invite-only)."""
+    return {
+        "email": email, "password": password, "name": "Test",
+        "grade_level": grade_level, "join_code": await make_join_code(),
+    }
 
 
 @pytest.mark.asyncio
 async def test_register_success(client: AsyncClient) -> None:
-    resp = await client.post(REGISTER_URL, json=_user("reg@test.com"))
+    resp = await client.post(REGISTER_URL, json=await _user("reg@test.com"))
     assert resp.status_code == 201
     data = resp.json()
     assert "access_token" in data
@@ -22,26 +28,26 @@ async def test_register_success(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_register_duplicate_email(client: AsyncClient) -> None:
-    await client.post(REGISTER_URL, json=_user("dup@test.com"))
-    resp = await client.post(REGISTER_URL, json=_user("dup@test.com"))
+    await client.post(REGISTER_URL, json=await _user("dup@test.com"))
+    resp = await client.post(REGISTER_URL, json=await _user("dup@test.com"))
     assert resp.status_code == 409
 
 
 @pytest.mark.asyncio
 async def test_register_weak_password(client: AsyncClient) -> None:
-    resp = await client.post(REGISTER_URL, json=_user("weak@test.com", password="short"))
+    resp = await client.post(REGISTER_URL, json=await _user("weak@test.com", password="short"))
     assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
 async def test_register_invalid_grade(client: AsyncClient) -> None:
-    resp = await client.post(REGISTER_URL, json=_user("grade@test.com", grade_level=99))
+    resp = await client.post(REGISTER_URL, json=await _user("grade@test.com", grade_level=99))
     assert resp.status_code == 422
 
 
 @pytest.mark.asyncio
 async def test_login_success(client: AsyncClient) -> None:
-    await client.post(REGISTER_URL, json=_user("login@test.com"))
+    await client.post(REGISTER_URL, json=await _user("login@test.com"))
     resp = await client.post(LOGIN_URL, json={"email": "login@test.com", "password": "StrongPass1"})
     assert resp.status_code == 200
     assert "access_token" in resp.json()
@@ -49,7 +55,7 @@ async def test_login_success(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_login_wrong_password(client: AsyncClient) -> None:
-    await client.post(REGISTER_URL, json=_user("wrongpw@test.com"))
+    await client.post(REGISTER_URL, json=await _user("wrongpw@test.com"))
     resp = await client.post(LOGIN_URL, json={"email": "wrongpw@test.com", "password": "WrongPass1"})
     assert resp.status_code == 401
 
@@ -62,7 +68,7 @@ async def test_login_nonexistent_user(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_refresh_token_rotation(client: AsyncClient) -> None:
-    reg = await client.post(REGISTER_URL, json=_user("refresh@test.com"))
+    reg = await client.post(REGISTER_URL, json=await _user("refresh@test.com"))
     refresh_token = reg.json()["refresh_token"]
 
     # Use refresh token
@@ -79,7 +85,7 @@ async def test_refresh_token_rotation(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_refresh_reuse_invalidates_family(client: AsyncClient) -> None:
-    reg = await client.post(REGISTER_URL, json=_user("family@test.com"))
+    reg = await client.post(REGISTER_URL, json=await _user("family@test.com"))
     old_refresh = reg.json()["refresh_token"]
 
     # Rotate once
@@ -96,7 +102,7 @@ async def test_refresh_reuse_invalidates_family(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_me_with_valid_token(client: AsyncClient) -> None:
-    reg = await client.post(REGISTER_URL, json=_user("me@test.com"))
+    reg = await client.post(REGISTER_URL, json=await _user("me@test.com"))
     token = reg.json()["access_token"]
     resp = await client.get(ME_URL, headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 200
@@ -125,7 +131,7 @@ async def test_mfa_pending_token_cannot_authenticate(client: AsyncClient) -> Non
     from api.core.auth import decode_access_token
     from api.core.mfa import create_pending_token
 
-    reg = await client.post(REGISTER_URL, json=_user("pending@test.com"))
+    reg = await client.post(REGISTER_URL, json=await _user("pending@test.com"))
     payload = decode_access_token(reg.json()["access_token"])
     assert payload is not None  # a real access token still decodes
     pending = create_pending_token(str(payload["sub"]))
@@ -137,103 +143,156 @@ async def test_mfa_pending_token_cannot_authenticate(client: AsyncClient) -> Non
 # ── Teacher self-signup ──────────────────────────────────────────────
 
 
-@pytest.mark.asyncio
-async def test_teacher_self_signup_no_invite(client: AsyncClient) -> None:
-    """A teacher can self-register without an invite — and gets stamped
-    with a synthetic 'individual' school so downstream school-aware
-    code doesn't have to special-case nulls."""
-    from sqlalchemy import select
-
-    from api.database import get_session_factory
-    from api.models.school import SCHOOL_KIND_INDIVIDUAL, School
-    from api.models.user import User
-
-    payload = {
-        "email": "solo_teacher@test.com",
-        "password": "StrongPass1",
-        "name": "Solo Teacher",
-        "grade_level": 12,
-        "role": "teacher",
-    }
-    resp = await client.post(REGISTER_URL, json=payload)
-    assert resp.status_code == 201, resp.text
-    token = resp.json()["access_token"]
-
-    me = await client.get(ME_URL, headers={"Authorization": f"Bearer {token}"})
-    assert me.status_code == 200
-    me_data = me.json()
-    assert me_data["role"] == "teacher"
-    assert me_data["school_id"] is not None
-
-    async with get_session_factory()() as session:
-        user = (await session.execute(
-            select(User).where(User.email == "solo_teacher@test.com")
-        )).scalar_one()
-        school = (await session.execute(
-            select(School).where(School.id == user.school_id)
-        )).scalar_one()
-        assert school.kind == SCHOOL_KIND_INDIVIDUAL
-        assert school.name == "Solo Teacher's classroom"
-
-
-@pytest.mark.asyncio
-async def test_teacher_self_signup_persists_school_name(client: AsyncClient) -> None:
-    """signup_school_name lands on the user row when provided."""
+async def _user_exists(email: str) -> bool:
     from sqlalchemy import select
 
     from api.database import get_session_factory
     from api.models.user import User
 
-    payload = {
-        "email": "with_school@test.com",
-        "password": "StrongPass1",
-        "name": "Named Teacher",
-        "grade_level": 12,
-        "role": "teacher",
-        "signup_school_name": "Lincoln High School",
-    }
-    resp = await client.post(REGISTER_URL, json=payload)
-    assert resp.status_code == 201, resp.text
-
     async with get_session_factory()() as session:
-        user = (await session.execute(
-            select(User).where(User.email == "with_school@test.com")
-        )).scalar_one()
-        assert user.signup_school_name == "Lincoln High School"
+        return (await session.execute(
+            select(User.id).where(User.email == email)
+        )).scalar_one_or_none() is not None
 
 
 @pytest.mark.asyncio
-async def test_teacher_self_signup_school_name_optional(client: AsyncClient) -> None:
-    """Omitting signup_school_name leaves the column NULL."""
+@pytest.mark.parametrize("grade_level", [8, 12])
+async def test_student_signup_without_join_code_is_refused(
+    client: AsyncClient, grade_level: int,
+) -> None:
+    """Invite-only: a student with no join code or class invite gets a 400
+    and no account. The grade-12 case is the Nov 9 prod signup: a solo
+    student who then spent LLM calls on the self-study tools."""
+    email = f"solo_student_{grade_level}@test.com"
+    resp = await client.post(REGISTER_URL, json={
+        "email": email, "password": "StrongPass1", "name": "Solo",
+        "grade_level": grade_level, "role": "student",
+    })
+    assert resp.status_code == 400, resp.text
+    assert "join code" in resp.json()["detail"]
+    assert not await _user_exists(email)
+
+
+@pytest.mark.asyncio
+async def test_whitespace_join_code_is_not_a_code(client: AsyncClient) -> None:
+    """A blank-looking code must not get past the invite-only gate. If it
+    did, the request would reach the duplicate-email check and answer 409
+    for a registered email, telling a code-less caller who has an account."""
+    email = "blank_code@test.com"
+    first = await client.post(REGISTER_URL, json=await _user(email))
+    assert first.status_code == 201, first.text
+
+    resp = await client.post(REGISTER_URL, json={
+        "email": email, "password": "StrongPass1", "name": "Blank",
+        "grade_level": 12, "join_code": "   ",
+    })
+    assert resp.status_code == 400, resp.text
+    assert "To create a student account" in resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_join_code_from_deactivated_school_is_refused(client: AsyncClient) -> None:
+    """Join codes are now the main way in, so they follow the class-invite
+    rule: a deactivated school's codes stop admitting students."""
+    import uuid
+
+    from api.database import get_session_factory
+    from api.models.course import Course
+    from api.models.school import School
+    from api.models.section import Section
+
+    tag = uuid.uuid4().hex[:6].upper()
+    async with get_session_factory()() as s:
+        school = School(
+            name=f"Closed School {tag}", contact_name="x",
+            contact_email=f"closed_{tag.lower()}@t.com", is_active=False,
+        )
+        s.add(school)
+        await s.flush()
+        course = Course(name=f"Algebra {tag}", subject="math", school_id=school.id)
+        s.add(course)
+        await s.flush()
+        s.add(Section(course_id=course.id, name="Period 1", join_code=f"CL{tag}"))
+        await s.commit()
+
+    email = f"closed_school_student_{tag.lower()}@test.com"
+    resp = await client.post(REGISTER_URL, json={
+        "email": email, "password": "StrongPass1", "name": "Late",
+        "grade_level": 9, "join_code": f"CL{tag}",
+    })
+    assert resp.status_code == 400, resp.text
+    assert "no longer active" in resp.json()["detail"]
+    assert not await _user_exists(email)
+
+
+@pytest.mark.asyncio
+async def test_teacher_signup_without_invite_is_refused(client: AsyncClient) -> None:
+    """Teachers come in through a school invite after a demo. A bare
+    role=teacher signup used to mint a personal 'individual' school; now
+    it gets a 400 pointing at the demo page, and creates nothing."""
+    from sqlalchemy import func, select
+
+    from api.database import get_session_factory
+    from api.models.school import School
+
+    async with get_session_factory()() as session:
+        schools_before = (await session.execute(select(func.count(School.id)))).scalar_one()
+
+    resp = await client.post(REGISTER_URL, json={
+        "email": "solo_teacher@test.com", "password": "StrongPass1",
+        "name": "Solo Teacher", "grade_level": 12, "role": "teacher",
+    })
+    assert resp.status_code == 400, resp.text
+    assert "demo" in resp.json()["detail"]
+    assert not await _user_exists("solo_teacher@test.com")
+
+    async with get_session_factory()() as session:
+        schools_after = (await session.execute(select(func.count(School.id)))).scalar_one()
+    assert schools_after == schools_before
+
+
+@pytest.mark.asyncio
+async def test_teacher_signup_with_invite_joins_the_school(client: AsyncClient) -> None:
+    """The path that stays open for teachers: the invite from their school."""
     from sqlalchemy import select
 
     from api.database import get_session_factory
-    from api.models.user import User
+    from api.models.teacher_invite import TeacherInvite
 
-    payload = {
-        "email": "noschool_teacher@test.com",
-        "password": "StrongPass1",
-        "name": "Anon Teacher",
-        "grade_level": 12,
-        "role": "teacher",
-    }
-    resp = await client.post(REGISTER_URL, json=payload)
+    email = "invited_teacher@test.com"
+    token = await make_teacher_invite(email)
+    resp = await client.post(REGISTER_URL, json={
+        "email": email, "password": "StrongPass1", "name": "Invited Teacher",
+        "grade_level": 12, "role": "teacher", "invite_token": token,
+    })
     assert resp.status_code == 201, resp.text
 
+    me = await client.get(ME_URL, headers={"Authorization": f"Bearer {resp.json()['access_token']}"})
+    assert me.json()["role"] == "teacher"
     async with get_session_factory()() as session:
-        user = (await session.execute(
-            select(User).where(User.email == "noschool_teacher@test.com")
+        invite = (await session.execute(
+            select(TeacherInvite).where(TeacherInvite.token == token)
         )).scalar_one()
-        assert user.signup_school_name is None
+    assert me.json()["school_id"] == str(invite.school_id)
+    assert invite.status == "accepted"
+
+
+@pytest.mark.asyncio
+async def test_under_13_student_can_join_with_a_join_code(client: AsyncClient) -> None:
+    """Younger students join under the school-consent exception, so a join
+    code admits them; the old under-13 self-signup gate is now covered by
+    the invite-only rule."""
+    resp = await client.post(REGISTER_URL, json=await _user("sixth_grader@test.com", grade_level=6))
+    assert resp.status_code == 201, resp.text
 
 
 @pytest.mark.asyncio
 async def test_join_code_with_teacher_role_forces_student(client: AsyncClient) -> None:
     """role=teacher + a valid join_code must resolve to a student account.
 
-    Regression: with bare role=teacher self-signup now allowed, the
-    join_code branch needs its own role-override or a caller could use
-    a leaked code to escalate into a teacher attached to that school.
+    Regression: the join_code branch needs its own role-override or a
+    caller could use a leaked code to escalate into a teacher attached
+    to that school.
     """
     import uuid
 
@@ -279,8 +338,8 @@ async def test_join_code_with_teacher_role_forces_student(client: AsyncClient) -
 async def test_indie_teacher_join_code_stamps_student_with_individual_school(
     client: AsyncClient,
 ) -> None:
-    """The bug this PR fixes end-to-end: an indie teacher signs up,
-    creates a course + section + join code; a student joining via that
+    """An indie teacher (one of the pre-beta self-signups) has a course +
+    section + join code; a student joining via that
     code must get the same school_id as the teacher (the synthetic
     'individual' school). Without this, the student lands on the
     consumer homepage instead of /school/student.
@@ -289,6 +348,7 @@ async def test_indie_teacher_join_code_stamps_student_with_individual_school(
 
     from sqlalchemy import select
 
+    from api.core.auth import hash_password
     from api.database import get_session_factory
     from api.models.course import Course, CourseTeacher
     from api.models.school import SCHOOL_KIND_INDIVIDUAL, School
@@ -297,23 +357,23 @@ async def test_indie_teacher_join_code_stamps_student_with_individual_school(
 
     tag = uuid.uuid4().hex[:6].lower()
 
-    teacher_payload = {
-        "email": f"indie_{tag}@t.com",
-        "password": "StrongPass1",
-        "name": "Indie Teacher",
-        "grade_level": 12,
-        "role": "teacher",
-    }
-    resp = await client.post(REGISTER_URL, json=teacher_payload)
-    assert resp.status_code == 201, resp.text
-
+    # Indie teachers can no longer sign up, but the ones who did keep
+    # their 'individual' school and still run classes, so seed one directly.
     teacher_school_id = None
     async with get_session_factory()() as s:
-        teacher = (await s.execute(
-            select(User).where(User.email == teacher_payload["email"])
-        )).scalar_one()
-        teacher_school_id = teacher.school_id
-        assert teacher_school_id is not None
+        school = School(
+            name=f"Indie Teacher {tag}'s classroom", kind=SCHOOL_KIND_INDIVIDUAL,
+            contact_name="Indie Teacher", contact_email=f"indie_{tag}@t.com",
+        )
+        s.add(school)
+        await s.flush()
+        teacher = User(
+            email=f"indie_{tag}@t.com", password_hash=hash_password("x"),
+            grade_level=12, role="teacher", name="Indie Teacher", school_id=school.id,
+        )
+        s.add(teacher)
+        await s.flush()
+        teacher_school_id = school.id
 
         course = Course(
             name=f"Indie Course {tag}",
@@ -357,38 +417,12 @@ async def test_indie_teacher_join_code_stamps_student_with_individual_school(
         assert school.kind == SCHOOL_KIND_INDIVIDUAL
 
 
-@pytest.mark.asyncio
-async def test_student_signup_ignores_school_name(client: AsyncClient) -> None:
-    """signup_school_name is teacher-scoped — student rows stay NULL."""
-    from sqlalchemy import select
-
-    from api.database import get_session_factory
-    from api.models.user import User
-
-    payload = {
-        "email": "student_with_school@test.com",
-        "password": "StrongPass1",
-        "name": "Student",
-        "grade_level": 8,
-        "role": "student",
-        "signup_school_name": "Should Be Ignored",
-    }
-    resp = await client.post(REGISTER_URL, json=payload)
-    assert resp.status_code == 201, resp.text
-
-    async with get_session_factory()() as session:
-        user = (await session.execute(
-            select(User).where(User.email == "student_with_school@test.com")
-        )).scalar_one()
-        assert user.signup_school_name is None
-
-
 TOUR_SEEN_URL = "/v1/auth/me/tour-seen"
 
 
 @pytest.mark.asyncio
 async def test_tours_seen_defaults_empty(client: AsyncClient) -> None:
-    reg = await client.post(REGISTER_URL, json=_user("tour_default@test.com"))
+    reg = await client.post(REGISTER_URL, json=await _user("tour_default@test.com"))
     token = reg.json()["access_token"]
     resp = await client.get(ME_URL, headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 200
@@ -397,7 +431,7 @@ async def test_tours_seen_defaults_empty(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_mark_tour_seen_records_and_is_idempotent(client: AsyncClient) -> None:
-    reg = await client.post(REGISTER_URL, json=_user("tour_mark@test.com"))
+    reg = await client.post(REGISTER_URL, json=await _user("tour_mark@test.com"))
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -430,7 +464,7 @@ async def test_mark_tour_seen_accepts_every_persona(
     # the three persona overviews (teacher, school student, personal
     # learner). The teacher overview now walks every workspace tab, so
     # the old per-feature walkthrough keys were retired.
-    reg = await client.post(REGISTER_URL, json=_user(f"tour_{persona}@test.com"))
+    reg = await client.post(REGISTER_URL, json=await _user(f"tour_{persona}@test.com"))
     token = reg.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
@@ -443,7 +477,7 @@ async def test_mark_tour_seen_accepts_every_persona(
 
 @pytest.mark.asyncio
 async def test_mark_tour_seen_rejects_unknown_persona(client: AsyncClient) -> None:
-    reg = await client.post(REGISTER_URL, json=_user("tour_bad@test.com"))
+    reg = await client.post(REGISTER_URL, json=await _user("tour_bad@test.com"))
     token = reg.json()["access_token"]
     resp = await client.post(
         TOUR_SEEN_URL, json={"persona": "astronaut"},
@@ -464,7 +498,7 @@ SET_PASSWORD_URL = "/v1/auth/set-password"
 
 
 async def _lock_out(client: AsyncClient, email: str) -> None:
-    await client.post(REGISTER_URL, json=_user(email))
+    await client.post(REGISTER_URL, json=await _user(email))
     for _ in range(5):
         await client.post(LOGIN_URL, json={"email": email, "password": "WrongPass1"})
     resp = await client.post(LOGIN_URL, json={"email": email, "password": "StrongPass1"})

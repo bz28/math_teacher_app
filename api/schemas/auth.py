@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, EmailStr, field_validator
 
 
 class RegisterRequest(BaseModel):
@@ -14,10 +14,6 @@ class RegisterRequest(BaseModel):
     invite_token: str | None = None
     section_invite_token: str | None = None
     join_code: str | None = None
-    # Capped at the DB column width (User.signup_school_name is
-    # VARCHAR(200)). Without this, a >200 char POST bypasses Pydantic
-    # and surfaces as a 500 from asyncpg's StringDataRightTruncationError.
-    signup_school_name: str | None = Field(None, max_length=200)
 
     @field_validator("password")
     @classmethod
@@ -40,27 +36,35 @@ class RegisterRequest(BaseModel):
             raise ValueError("Role must be 'student' or 'teacher'")
         return v
 
-    def enforce_coppa_self_signup_gate(self) -> None:
-        """COPPA gate for non-invite self-signups.
+    def enforce_invite_only_signup(self) -> None:
+        """Veradic is invite-only: every new account arrives through a school.
 
-        Students under 13 (proxied by grade_level < 8) cannot self-signup
-        for personal use. They must arrive via a teacher_invite or a
-        section_invite_token, which routes them through the school-consent
-        exception under 15 U.S.C. § 6502. Teachers are unaffected by
-        grade gating regardless of invite status.
+        Teachers come in on a teacher invite (sent after a demo); students
+        come in on a class invite or their teacher's join code. A signup
+        with none of the three is refused, whatever role it asks for.
 
-        Called from /auth/register after the invite branches; raises
-        ValueError when the gate fails so the route turns it into a 400.
+        This replaces the old under-13 self-signup gate: students under 13
+        may only sign up through their teacher's class (the school-consent
+        exception, 15 U.S.C. section 6502), and with no personal signup path
+        left there is nothing for a separate age gate to block.
+
+        Called first in /auth/register; raises ValueError, which the route
+        turns into a 400.
         """
+        # Strip first: a whitespace-only code must not count as a code.
+        if any((t or "").strip() for t in (
+            self.invite_token, self.section_invite_token, self.join_code,
+        )):
+            return
         if self.role == "teacher":
-            return
-        if self.invite_token or self.section_invite_token or self.join_code:
-            return
-        if self.grade_level < 8:
             raise ValueError(
-                "Students under 13 should join through their teacher's classroom "
-                "invite link. Personal accounts on Veradic require you to be 13 or older."
+                "Teacher accounts are set up with your school. Book a demo at "
+                "veradicai.com/demo, or use the link in your invite email."
             )
+        raise ValueError(
+            "To create a student account you need a class join code from "
+            "your teacher, or the invite link they emailed you."
+        )
 
 
 class CheckEmailRequest(BaseModel):
