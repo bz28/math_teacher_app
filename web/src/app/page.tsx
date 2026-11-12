@@ -1,15 +1,19 @@
 import { Navbar } from "@/components/landing/navbar";
 import { Hero } from "@/components/landing/hero";
 import { HomeIntegrity } from "@/components/landing/home-integrity";
+import { HomeGrading } from "@/components/landing/home-grading";
 import { HomeWorkspace } from "@/components/landing/home-workspace";
+import { HomeCuriosity, HomePractice, HomeTrust } from "@/components/landing/home-students";
 import { CtaBand } from "@/components/landing/cta-band";
 import { Footer } from "@/components/landing/footer";
 
 /**
- * Lean, proof-forward landing: Hook → Integrity demo → Homework demo → Ask.
- * The two animated demos *show* the value, so the old prose Problem and
- * Outcomes sections (which asserted/re-narrated what the demos prove) were
- * cut. Rhythm alternates light → dark → light → dark.
+ * Proof-forward landing, teacher side first, then the student side:
+ * Hook → understanding check → grading by your rules → homework from your
+ * chapter → practice → learning to use AI well → safe for students → Ask.
+ * Each section shows a real product surface rather than asserting a claim.
+ * Rhythm: light, dark, alt, light, alt, dark, light, ink; demo sides
+ * alternate so no two neighbouring sections share a shape.
  */
 export default function Home() {
   return (
@@ -18,7 +22,11 @@ export default function Home() {
       <main>
         <Hero />
         <HomeIntegrity />
+        <HomeGrading />
         <HomeWorkspace />
+        <HomePractice />
+        <HomeCuriosity />
+        <HomeTrust />
         {/* No eyebrow. Every section on this page opened with the same
             small uppercase label, which is most of why four different
             arguments read as one shape repeated — and the headline
