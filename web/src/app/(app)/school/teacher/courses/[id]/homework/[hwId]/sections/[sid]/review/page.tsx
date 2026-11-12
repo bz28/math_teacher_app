@@ -3901,11 +3901,14 @@ function SubmissionDetailPanel({
     [originalsState, detail.submission_id],
   );
   // A retake replaced this turn-in's first photos: the newest attempt.
-  const { retakeOriginal, reopenedAttempts } = useMemo(() => {
+  // Every attempt before it came before a reopen — the earlier turn-ins,
+  // and any photos a retake replaced on one of them.
+  const { retakeOriginal, earlierAttempts } = useMemo(() => {
     const last = detail.attempts.at(-1);
+    const retake = detail.retaken_at && last?.reason === "retake" ? last : null;
     return {
-      retakeOriginal: detail.retaken_at && last?.reason === "retake" ? last : null,
-      reopenedAttempts: detail.attempts.filter((a) => a.reason === "reopen"),
+      retakeOriginal: retake,
+      earlierAttempts: detail.attempts.filter((a) => a !== retake),
     };
   }, [detail.attempts, detail.retaken_at]);
   const onOpenWork = useCallback(() => setGalleryPage(0), []);
@@ -4629,9 +4632,9 @@ function SubmissionDetailPanel({
 
       {/* Earlier turn-ins a reopen replaced — this page grades the new
           one; what came before, and the grade it had, stay in view. */}
-      {reopenedAttempts.length > 0 && (
+      {earlierAttempts.length > 0 && (
         <EarlierTurnInsCallout
-          attempts={reopenedAttempts}
+          attempts={earlierAttempts}
           onView={(n) => void openOriginals(n)}
           stateFor={attemptState}
         />
@@ -4948,9 +4951,9 @@ function RetakeCallout({
 }
 
 /**
- * The turn-ins a reopen replaced, oldest first: when each came in, the
- * grade it had (and whether the student had seen it), and its photos one
- * click away. Calm, like the retake callout — the student turning it in
+ * What came before a reopen, oldest first: each earlier turn-in — when it
+ * came in, the grade it had (and whether the student had seen it) — and
+ * any photos a retake replaced, each with its photos one click away. Calm, like the retake callout — the student turning it in
  * again is what she asked for.
  */
 function EarlierTurnInsCallout({
@@ -4989,7 +4992,9 @@ function EarlierTurnInsCallout({
                     {a.is_late ? ", late" : ""}
                   </span>
                   <span className="text-text-secondary">
-                    {a.final_score === null
+                    {a.reason === "retake"
+                      ? "· photos the student replaced with a retake"
+                      : a.final_score === null
                       ? "· not graded"
                       : `· graded ${formatPercent(a.final_score)}%${a.grade_published ? ", shown to the student" : ", not published"}`}
                   </span>

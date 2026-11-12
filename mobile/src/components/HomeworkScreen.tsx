@@ -285,6 +285,32 @@ export function HomeworkScreen({
     }
   };
 
+  // The turn-in that stands: shown as turned in, and below the upload
+  // block while a reopen lets them turn it in again.
+  const turnedIn = hw?.submitted ? (
+    <>
+      {hw.next_step && hw.submission_id ? (
+        <NextStepCard
+          step={hw.next_step}
+          onPress={() =>
+            hw.next_step === "confirm_reading"
+              ? onConfirmReading()
+              : onFinishCheck(hw.submission_id!)
+          }
+          styles={styles}
+          colors={colors}
+        />
+      ) : null}
+      <SubmittedStatus
+        hw={hw}
+        files={submittedFiles}
+        onZoom={setZoomFile}
+        styles={styles}
+        colors={colors}
+      />
+    </>
+  ) : null;
+
   return (
     <SafeAreaView style={styles.container}>
       <AnimatedPressable onPress={onBack} style={styles.backButton}>
@@ -329,25 +355,7 @@ export function HomeworkScreen({
 
           {hw.submitted && !isRetake && !isResubmit ? (
             <>
-              {hw.next_step && hw.submission_id ? (
-                <NextStepCard
-                  step={hw.next_step}
-                  onPress={() =>
-                    hw.next_step === "confirm_reading"
-                      ? onConfirmReading()
-                      : onFinishCheck(hw.submission_id!)
-                  }
-                  styles={styles}
-                  colors={colors}
-                />
-              ) : null}
-              <SubmittedStatus
-                hw={hw}
-                files={submittedFiles}
-                onZoom={setZoomFile}
-                styles={styles}
-                colors={colors}
-              />
+              {turnedIn}
               {canRetake && (
                 <View style={styles.nextStepCard}>
                   <Text style={styles.statusTitle}>Were your photos the problem?</Text>
@@ -553,6 +561,7 @@ export function HomeworkScreen({
               )}
             </View>
           )}
+          {isResubmit && turnedIn}
         </ScrollView>
       )}
 

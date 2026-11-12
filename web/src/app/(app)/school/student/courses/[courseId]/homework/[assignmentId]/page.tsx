@@ -38,6 +38,9 @@ export default function HomeworkPage() {
   const [submission, setSubmission] = useState<StudentSubmission | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<HomeworkMode>({ kind: "homework" });
+  // Reopened, with a step left on the turn-in that stands: where the
+  // "finish it" link under the upload panel goes.
+  const [openStep, setOpenStep] = useState<HomeworkMode | null>(null);
   // True only for the render right after the student submits in this
   // session — drives the celebratory entrance animation on the
   // SubmittedView. A plain revisit (navigating back to already-turned-in
@@ -69,12 +72,6 @@ export default function HomeworkPage() {
     try {
       const detail = await schoolStudent.homeworkDetail(aid);
       setHw(detail);
-      // Reopened for them: the homework page with the upload panel, not
-      // the screens of the turn-in it will replace.
-      if (detail.can_resubmit) {
-        setMode({ kind: "homework" });
-        return;
-      }
       if (detail.submitted && detail.submission_id) {
         const [sub, integrity] = await Promise.all([
           schoolStudent.getMySubmission(aid).catch(() => null),
@@ -84,9 +81,17 @@ export default function HomeworkPage() {
         // Always set the mode: loadAll also runs from inside the
         // confirm and preparing screens, and leaving the mode alone
         // strands the student on a screen whose job is done.
-        const next = routeSubmittedHomework(
+        const routed = routeSubmittedHomework(
           sub, integrity, detail.grade_published_at != null,
         );
+        // Reopened for them: this page, with the upload panel the teacher
+        // reopened it for. A step they can still finish on the turn-in
+        // that stands until then (confirm the reading, the check) is a
+        // link under the panel, not a screen in the way of it.
+        const actionable =
+          routed.kind === "integrity_confirm" || routed.kind === "integrity_chat";
+        setOpenStep(detail.can_resubmit && actionable ? routed : null);
+        const next = detail.can_resubmit ? ({ kind: "homework" } as const) : routed;
         if (next.kind === "integrity_pending") setPendingRun((n) => n + 1);
         setMode(next);
       }
@@ -428,7 +433,9 @@ export default function HomeworkPage() {
           )}
       </div>
 
-      {hw.can_resubmit ? (
+      {/* Reopened for them: they may turn it in again — and until they
+          do, their turn-in and its grade stand, shown below as usual. */}
+      {hw.can_resubmit && (
         <SubmissionPanel
           assignmentId={hw.assignment_id}
           dueAt={hw.due_at}
@@ -440,7 +447,22 @@ export default function HomeworkPage() {
             await loadAll(hw.assignment_id);
           }}
         />
-      ) : hw.submitted && submission ? (
+      )}
+      {hw.can_resubmit && openStep && (
+        <p className="mt-3 text-sm text-text-secondary">
+          Not turning it in again?{" "}
+          <button
+            type="button"
+            onClick={() => setMode(openStep)}
+            className="rounded-[--radius-sm] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+          >
+            {openStep.kind === "integrity_confirm"
+              ? "Check the reading of the work you turned in"
+              : "Finish the questions about the work you turned in"}
+          </button>
+        </p>
+      )}
+      {hw.submitted && submission ? (
         <SubmittedView
           submission={submission}
           graded={hw.grade_published_at !== null}

@@ -362,6 +362,17 @@ describe("HomeworkScreen one more step", () => {
     expect(await waitForText("Submitted — in review")).toBeTruthy();
     expect(screen.queryByText("One more step")).toBeNull();
   });
+
+  it("reopened: the upload block, and the turn-in that stands with its step below", async () => {
+    mockedApi.getHomework.mockResolvedValue(
+      { ...IN_REVIEW, next_step: "confirm_reading", can_resubmit: true } as never,
+    );
+    render(<HomeworkScreen {...PROPS} />);
+    expect(await waitForText("Turn it in again")).toBeTruthy();
+    expect(screen.getByText("Submitted — in review")).toBeTruthy();
+    await fireEvent.press(screen.getByText("Confirm your reading"));
+    expect(PROPS.onConfirmReading).toHaveBeenCalled();
+  });
 });
 
 describe("HomeworkScreen retake", () => {
