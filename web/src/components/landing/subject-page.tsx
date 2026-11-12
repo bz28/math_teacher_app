@@ -17,6 +17,15 @@ import { InkCtaBand } from "@/components/site/ink-cta-band";
  * the product does. Physics and chemistry are less complete than math
  * (docs/product/overview.md), and their pages say so in the FAQ.
  *
+ * Each hero sheet holds one problem, answered wrong. That is the case
+ * where the understanding check asks about the step that broke
+ * ("struggling_attempted" in api/core/integrity_ai.py: "find where the
+ * approach broke down"); with a right answer it asks the student to
+ * explain it instead, as on the homepage hero. Physics and chemistry
+ * homework run through the same extraction, check, grading and practice
+ * (a local end-to-end run on 2026-11-12 caught a km/h slip and an
+ * unbalanced equation), though grading's prompt is still math-worded.
+ *
  * Static on purpose: no motion, so nothing to reduce.
  */
 
