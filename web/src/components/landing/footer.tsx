@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LogoMark } from "@/components/shared/logo-mark";
+import { Logo } from "@/components/site/logo";
 
 type LinkItem = { label: string; href: string };
 
@@ -41,17 +41,15 @@ function FooterColumn({
 }) {
   return (
     <div>
-      {/* Dashboard-parity small caps: 11px / 600 / 0.18em tracking,
-          on --color-text-secondary so it passes AA at this small size. */}
-      <h3 className="mb-4 font-sans text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
-        {heading}
-      </h3>
-      <ul className="space-y-3 text-sm">
+      {/* Sentence-case, bold ink: a label that names the group, not a
+          tracked-out caps eyebrow. */}
+      <h2 className="mb-4 text-[15px] font-extrabold text-ink">{heading}</h2>
+      <ul className="space-y-3 text-[15px]">
         {links.map((link) => (
           <li key={link.href}>
             <Link
               href={link.href}
-              className="text-[color:var(--color-text-secondary)] transition-colors hover:text-[color:var(--color-primary)]"
+              className="text-ink-soft transition-colors hover:text-veradic hover:underline hover:underline-offset-4"
             >
               {link.label}
             </Link>
@@ -62,26 +60,19 @@ function FooterColumn({
   );
 }
 
+/**
+ * The marketing footer, shared by every marketing page. Like the navbar it
+ * carries `site` itself, so it has the notebook look on pages that haven't
+ * moved over yet. Plain paper, no grid: the page ends quietly.
+ */
 export function Footer() {
   return (
-    <footer className="border-t border-[color:var(--color-border-light)] bg-[color:var(--color-surface)]">
-      <div className="mx-auto max-w-6xl px-6 py-16 md:px-8 md:py-20">
-        <div className="grid gap-x-8 gap-y-12 md:grid-cols-[1.5fr_repeat(4,1fr)]">
-          {/* Brand — wordmark + italic-serif tagline mirrors the
-              dashboard brand block. */}
-          <div className="md:pr-8">
-            <div className="flex items-center gap-2.5">
-              <LogoMark size={32} />
-              <span className="flex flex-col leading-none">
-                <span className="text-lg font-bold tracking-[-0.01em] text-[color:var(--color-text)]">
-                  Veradic AI
-                </span>
-                <span className="mt-1 font-serif italic text-[13px] text-[color:var(--color-text-secondary)]">
-                  classroom AI, teacher-controlled
-                </span>
-              </span>
-            </div>
-            <p className="mt-5 max-w-xs text-sm leading-relaxed text-[color:var(--color-text-secondary)]">
+    <footer className="site border-t border-hairline bg-paper">
+      <div className="mx-auto max-w-[1200px] px-4 py-14 md:px-8 md:py-16">
+        <div className="grid gap-x-8 gap-y-10 sm:grid-cols-2 md:grid-cols-[1.5fr_repeat(4,1fr)]">
+          <div className="sm:col-span-2 md:col-span-1 md:pr-8">
+            <Logo />
+            <p className="mt-5 max-w-xs text-[15px] leading-relaxed text-ink-soft">
               Classroom AI that reads the work, checks who understands,
               drafts the grading, and gives every student more practice
               than you have time to write.
@@ -96,14 +87,9 @@ export function Footer() {
           <FooterColumn heading="Legal" links={legalLinks} />
         </div>
 
-        {/* Bottom bar */}
-        <div className="mt-16 flex flex-col items-start gap-4 border-t border-[color:var(--color-border-light)] pt-8 md:flex-row md:items-center md:justify-between">
-          <p className="text-xs text-[color:var(--color-text-secondary)]">
-            &copy; {new Date().getFullYear()} Veradic LLC. All rights reserved.
-          </p>
-          <p className="text-xs text-[color:var(--color-text-secondary)]">
-            Made for classrooms in the United States.
-          </p>
+        <div className="mt-14 flex flex-col items-start gap-3 border-t border-hairline pt-8 text-sm text-ink-soft md:flex-row md:items-center md:justify-between">
+          <p>&copy; {new Date().getFullYear()} Veradic LLC. All rights reserved.</p>
+          <p>Made for classrooms in the United States.</p>
         </div>
       </div>
     </footer>
