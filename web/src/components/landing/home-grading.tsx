@@ -58,7 +58,7 @@ function GradingDemo() {
       <div style={CARD} className="p-5 sm:p-6">
         <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
           <p className="text-[15px] font-semibold text-[#23201A]">Class rules</p>
-          <p className="text-[12.5px] text-[#7D7669]">Applies to every Geometry homework</p>
+          <p className="text-[12.5px] text-[#6B6457]">Applies to every Geometry homework</p>
         </div>
         <ul className="mt-4 space-y-2">
           {RULES.map((r) => (
@@ -69,7 +69,7 @@ function GradingDemo() {
               }`}
             >
               <span>{r.text}</span>
-              <span className={`shrink-0 text-[12.5px] font-semibold ${r.applied ? "text-[#0E5238]" : "text-[#7D7669]"}`}>
+              <span className={`shrink-0 text-[12.5px] font-semibold ${r.applied ? "text-[#0E5238]" : "text-[#6B6457]"}`}>
                 &minus;{r.points} pt
               </span>
             </li>
@@ -81,13 +81,13 @@ function GradingDemo() {
       <div style={CARD} className="relative mt-4 p-5 sm:ml-10 sm:p-6">
         <div className="flex items-baseline justify-between gap-4">
           <p className="text-[15px] font-semibold text-[#23201A]">
-            Maya R.<span className="ml-2 font-normal text-[#7D7669]">Problem 3</span>
+            Maya R.<span className="ml-2 font-normal text-[#6B6457]">Problem 3</span>
           </p>
           <p className="text-[15px] font-semibold text-[#23201A]">
-            8<span className="text-[#7D7669]">/10</span>
+            8<span className="text-[#6B6457]">/10</span>
           </p>
         </div>
-        <p className="mt-1 text-[12.5px] text-[#7D7669]">Draft. Maya can&rsquo;t see it until you approve.</p>
+        <p className="mt-1 text-[12.5px] text-[#6B6457]">Draft. Maya can&rsquo;t see it until you approve.</p>
 
         <ul className="mt-4 space-y-2.5">
           {DEDUCTIONS.map((d) => (
@@ -119,7 +119,7 @@ export function HomeGrading() {
         </div>
         <div className="order-1 max-w-xl xl:order-2">
           <h2 className="text-display-md text-[color:var(--color-text)]">
-            Graded by your rules, not the AI&rsquo;s.
+            Graded by your rules.
           </h2>
           <p className="mt-6 text-lg leading-relaxed text-[color:var(--color-text-secondary)] md:text-xl">
             Write your grading rules once for the class &mdash; &ldquo;name the

@@ -41,7 +41,7 @@ function PracticeDemo() {
     <div style={CARD} className="w-full max-w-[560px] p-5 sm:p-6" role="img" aria-label="Example: a student practicing a new version of a homework problem">
       <div className="flex items-baseline justify-between gap-4">
         <p className="text-[15px] font-semibold text-[#23201A]">A new version of Problem 4</p>
-        <p className="text-[12.5px] text-[#7D7669]">Ungraded</p>
+        <p className="text-[12.5px] text-[#6B6457]">Ungraded</p>
       </div>
       <p className="mt-4 text-[16px] leading-relaxed text-[#23201A]">
         Solve the system: 2x + 3y = 12 and x &minus; y = 1
@@ -61,7 +61,7 @@ function PracticeDemo() {
         ))}
       </div>
       <p className="mt-4 rounded-[10px] bg-[#F7F5F0] px-3 py-2.5 text-[14px] leading-snug text-[#5C554C]">
-        Not quite. Check it in the second equation: 2 &minus; 3 isn&rsquo;t 1.
+        Not quite. Try again, or walk through it a step at a time.
       </p>
       <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
         <span className="rounded-full border border-[#E4DFD2] px-4 py-1.5 text-[13px] font-semibold text-[#5C554C]">Walk me through it</span>
@@ -182,7 +182,7 @@ const TRUST = [
   { title: "Student work never trains AI", body: "Not ours, not anyone else’s." },
   { title: "FERPA and COPPA", body: "We work as a school official, under your district’s direction." },
   { title: "Your district’s paperwork", body: "We sign the standard data privacy agreement (NDPA)." },
-  { title: "Hosted in the U.S.", body: "Encrypted, exportable and deletable on request." },
+  { title: "Hosted in the U.S.", body: "Encrypted, and your school can export or delete its data at any time." },
 ];
 
 export function HomeTrust() {
