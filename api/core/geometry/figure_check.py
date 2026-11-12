@@ -214,11 +214,22 @@ def _collect_parts(t: str, out: ProblemParts) -> None:
 
 def _bare_request_parts(t: str, out: ProblemParts) -> None:
     """A teacher's request names parts plainly: "draw in segments WM and
-    ZM", "label angle 1 and angle 2", "with diagonal AC"."""
+    ZM", "label angle 1 and angle 2", "with diagonal AC", "connect B and D",
+    "a segment from B to D"."""
+    sep = r"\s*(?:,\s*and|,|and)\s*"
+    pairs: list[tuple[str, str]] = []
     for m in re.finditer(
-        rf"\b(?:segments?|diagonals?|sides?)\s+((?:{_PT}{_PT})(?:\s*(?:,|and|,\s*and)\s*{_PT}{_PT})*)", t,
+        rf"\b(?:[Ss]egments?|[Dd]iagonals?|[Ss]ides?|[Dd]raw(?:\s+in)?)\s+((?:{_PT}{_PT})(?:{sep}{_PT}{_PT})*)"
+        r"(?![A-Za-z0-9'])", t,
     ):
-        for pair in re.findall(rf"({_PT})({_PT})", m.group(1)):
+        pairs += re.findall(rf"({_PT})({_PT})", m.group(1))
+    pairs += re.findall(
+        rf"\b(?:[Cc]onnect(?:s|ed|ing)?|[Jj]oin(?:s|ed|ing)?)\s+(?:points?\s+)?({_PT})\s+(?:and|to|with)\s+"
+        rf"(?:point\s+)?({_PT})(?![A-Za-z0-9'])", t,
+    )
+    pairs += re.findall(rf"\b[Ff]rom\s+(?:point\s+)?({_PT})\s+to\s+(?:point\s+)?({_PT})(?![A-Za-z0-9'])", t)
+    for pair in pairs:
+        if pair[0] != pair[1]:
             out.segments.add(frozenset(pair))
             out.points.update(pair)
     for m in re.finditer(r"\bangles?\s+(\d+(?:\s*(?:,|and|,\s*and)\s*(?:angle\s+)?\d+)*)", t):
@@ -416,20 +427,35 @@ class _Drawing:
     def seg_drawn(self, a: str, b: str) -> bool:
         return a in self.p and b in self.p and self.covered(self.p[a], self.p[b])
 
-    def ray_drawn(self, a: str, b: str) -> bool:
-        """From a through b and beyond: a ray or line along it, or (for an
-        angle's arm) at least the segment a→b."""
-        if a not in self.p or b not in self.p:
+    def arm_drawn(self, v: str, x: str) -> bool:
+        """An angle's arm from v through x: a ray or line along it, or at
+        least the segment v→x (a triangle's angle is drawn by its sides)."""
+        if v not in self.p or x not in self.p:
             return False
         return any(
-            k in ("ray", "line") and self.piece_covers((k, c, d), self.p[a], self.p[b])
+            k in ("ray", "line") and self.piece_covers((k, c, d), self.p[v], self.p[x])
             for k, c, d in self.pieces
-        ) or self.seg_drawn(a, b)
+        ) or self.seg_drawn(v, x)
+
+    def ray_drawn(self, a: str, b: str) -> bool:
+        """The ray from a through b: a drawn ray that starts at a and points
+        at b. A reversed ray, a segment or a line is not it."""
+        if a not in self.p or b not in self.p:
+            return False
+        pa, pb = self.p[a], self.p[b]
+        tol = _TOL_COLLINEAR * self.scale
+        for k, c, e in self.pieces:
+            if k != "ray":
+                continue
+            pc, pe = self.p[c], self.p[e]
+            if _dist(pc, pa) <= tol and self.collinear(pc, pe, pb) and self.param(pc, pe, pb) > 1e-3:
+                return True
+        return False
 
     def line_through(self, a: str, b: str) -> bool:
-        return a in self.p and b in self.p and (
-            any(k == "line" and self.piece_covers((k, c, d), self.p[a], self.p[b]) for k, c, d in self.pieces)
-            or self.seg_drawn(a, b)
+        """A drawn line through a and b (a segment or ray is not a line)."""
+        return a in self.p and b in self.p and any(
+            k == "line" and self.piece_covers((k, c, d), self.p[a], self.p[b]) for k, c, d in self.pieces
         )
 
     def single_vertex_angle(self, v: str) -> tuple[str, str, str] | None:
@@ -510,7 +536,7 @@ def check_construction(
             say("not_drawn", f"not drawn: line {a}{b}")
     for a, v, b in sorted(parts.angles):
         for x in (a, b):
-            if v in d.p and x in d.p and not d.ray_drawn(v, x):
+            if v in d.p and x in d.p and not d.arm_drawn(v, x):
                 say("not_drawn", f"not drawn: {v}{x} (a side of ∠{a}{v}{b})")
     for name in sorted(parts.line_names - set(d.lines)):
         say("not_drawn", f"not drawn: line {name.replace('ell', 'ℓ')}")
@@ -671,20 +697,100 @@ def _marked(rel: _Relation, d: _Drawing) -> bool:
         return any(ka in {key(r) for r in g} and kb in {key(r) for r in g} for g in groups)
 
     k, args = rel.kind, rel.args
-    if k == "eqlen":
-        return same_group(f.tick_groups, args[0], args[1], 2)
-    if k == "par":
-        line_names = {ln.name for ln in f.lines if ln.name}
-        segs = [[r for r in g if r not in line_names] for g in f.parallel_groups]
-        return same_group(segs, args[0], args[1], 2)
-    if k == "eqang":
-        a1, a2 = (d.resolve(x) for x in args)
-        return a1 is not None and a2 is not None and same_group(f.arc_groups, a1, a2, 3)
-    if k == "perp":
-        (a, b), (c, e) = args
-        shared = {a, b} & {c, e}
-        return any(_three(r)[1] in shared for r in f.right_angles)
+    p = d.p
+    try:
+        if k == "eqlen":
+            return same_group(f.tick_groups, args[0], args[1], 2)
+        if k == "mid":
+            m, (a, b) = args
+            return same_group(f.tick_groups, (a, m), (m, b), 2)
+        if k == "par":
+            line_names = {ln.name for ln in f.lines if ln.name}
+            segs = [[r for r in g if r not in line_names] for g in f.parallel_groups]
+            return same_group(segs, args[0], args[1], 2)
+        if k == "linepar":
+            return any({args[0], args[1]} <= {_line_key(r) for r in g} for g in f.parallel_groups)
+        if k == "eqang":
+            a1, a2 = (d.resolve(x) for x in args)
+            return a1 is not None and a2 is not None and same_group(f.arc_groups, a1, a2, 3)
+        if k == "perp":
+            (a, b), (c, e) = args
+            return any(_box_on_lines(d, _three(r), (p[a], p[b]), (p[c], p[e])) for r in f.right_angles)
+        if k == "measure":
+            ang = d.resolve(args[0])
+            if ang is None:
+                return False
+            value = float(args[1])
+            if value == 90 and any(_same_angle(d, _three(r), ang, mod=180) for r in f.right_angles):
+                return True
+            return any(
+                _plain_number(text) == value and _same_angle(d, key, ang) for key, text in d.labels.items()
+            )
+    except (KeyError, ValueError, TypeError, ZeroDivisionError):
+        return False
     return False
+
+
+def _arm_dirs(d: _Drawing, ang: tuple[str, str, str]) -> tuple[Point, float, float]:
+    v = d.p[ang[1]]
+    dirs = [
+        math.degrees(math.atan2(d.p[x][1] - v[1], d.p[x][0] - v[0])) % 360 for x in (ang[0], ang[2])
+    ]
+    return v, dirs[0], dirs[1]
+
+
+def _same_angle(d: _Drawing, a1: tuple[str, str, str], a2: tuple[str, str, str], *, mod: float = 360) -> bool:
+    """The same angle in the drawing, whatever its points are called: same
+    vertex, same two arm directions (mod 180: a box on any of the four
+    angles two perpendicular lines make)."""
+    v1, x1, y1 = _arm_dirs(d, a1)
+    v2, x2, y2 = _arm_dirs(d, a2)
+    if _dist(v1, v2) > _TOL_COLLINEAR * d.scale:
+        return False
+
+    def close(u: float, w: float) -> bool:
+        diff = abs(u - w) % mod
+        return min(diff, mod - diff) < _TOL_ANG
+
+    return (close(x1, x2) and close(y1, y2)) or (close(x1, y2) and close(y1, x2))
+
+
+def _box_on_lines(d: _Drawing, box: tuple[str, str, str], l1: tuple[Point, Point], l2: tuple[Point, Point]) -> bool:
+    """A right-angle box where two lines cross, with its arms along them."""
+    (p1, p2), (p3, p4) = l1, l2
+    den = (p1[0] - p2[0]) * (p3[1] - p4[1]) - (p1[1] - p2[1]) * (p3[0] - p4[0])
+    if abs(den) < 1e-12:
+        return False
+    t_ = ((p1[0] - p3[0]) * (p3[1] - p4[1]) - (p1[1] - p3[1]) * (p3[0] - p4[0])) / den
+    x = (p1[0] + t_ * (p2[0] - p1[0]), p1[1] + t_ * (p2[1] - p1[1]))
+    v, a, b = _arm_dirs(d, box)
+    if _dist(v, x) > _TOL_COLLINEAR * d.scale:
+        return False
+    want = sorted((_direction(p1, p2), _direction(p3, p4)))
+    got = sorted((a % 180, b % 180))
+    return all(_dir_diff(g, w) < _TOL_ANG for g, w in zip(got, want)) or all(
+        _dir_diff(g, w) < _TOL_ANG for g, w in zip(got, want[::-1])
+    )
+
+
+# Givens with a textbook mark: ≅ sides, ≅ angles, ⊥, ∥, a midpoint (and a
+# 90° angle: a box).
+_MARKABLE = ("eqlen", "eqang", "perp", "par", "linepar", "mid")
+
+
+def givens_marked(fig: ConstructionFigure, problem_text: str) -> bool:
+    """Every given that has a textbook mark (≅ sides, ≅ angles, ⊥, ∥, a
+    right angle, a midpoint) is marked on `fig`, and there is at least one."""
+    parts = parse_problem(problem_text)
+    d = _Drawing(fig)
+    markable = [
+        r for r in parts.givens
+        if r.kind in _MARKABLE or (r.kind == "measure" and float(r.args[1]) == 90)
+    ]
+    try:
+        return bool(markable) and all(_marked(r, d) for r in markable)
+    except (KeyError, ValueError, TypeError, ZeroDivisionError):
+        return False
 
 
 def _is_radius(d: _Drawing, a: str, b: str) -> bool:
@@ -712,6 +818,17 @@ def _mark_issues(d: _Drawing) -> list[str]:
         if max(sizes) - min(sizes) > _TOL_ANG:
             names = ", ".join("∠" + r for r in group)
             out.append(f"the arcs on {names} claim equal angles, but they differ in the drawing")
+    for kind, refs in (
+        ("label", list(f.angle_labels)), ("arc", [r for g in f.arc_groups for r in g]),
+        ("right-angle mark", list(f.right_angles)),
+    ):
+        for ref in refs:
+            x, v, y = _three(ref)
+            for arm in (x, y):
+                if not d.arm_drawn(v, arm):
+                    out.append(
+                        f"the {kind} on ∠{ref} sits on an angle whose side {v}{arm} isn't drawn".replace("_", "")
+                    )
     for ref in f.right_angles:
         drawn = d.measure(_three(ref))
         if abs(drawn - 90) > _TOL_ANG:
@@ -816,7 +933,7 @@ def _label_issues(d: _Drawing, parts: ProblemParts, final_answer: str, problem_t
         # A bare whole number with no degree sign names the angle (∠1,
         # ∠2, ...) when the problem numbers its angles, or is that number.
         bare = value is not None and value.is_integer() and re.fullmatch(r"\s*\d+\s*", text) is not None
-        is_name = bare and (text.strip() in parts.numbered or bool(parts.numbered))
+        is_name = bare and text.strip() in parts.numbered
         if is_name:
             continue
         drawn = d.measure(key)
@@ -863,10 +980,10 @@ def _step_consistency(step: _Drawing, base: _Drawing) -> list[str]:
         if a not in step.p or b not in step.p:
             out.append(f"the step's figure leaves out {a}{b}, which the question's figure draws")
             continue
-        if kind == "seg" and not step.seg_drawn(a, b):
-            out.append(f"the step's figure leaves out {a}{b}, which the question's figure draws")
-        elif kind in ("ray", "line") and not step.ray_drawn(a, b):
-            out.append(f"the step's figure leaves out {kind} {a}{b}, which the question's figure draws")
+        kept = {"seg": step.seg_drawn, "ray": step.ray_drawn, "line": step.line_through}[kind](a, b)
+        if not kept:
+            name = f"{a}{b}" if kind == "seg" else f"{kind} {a}{b}"
+            out.append(f"the step's figure leaves out {name}, which the question's figure draws")
     return out
 
 
@@ -980,4 +1097,27 @@ def unbacked_marks(fig: ConstructionFigure, problem_text: str) -> dict[str, list
         pkeys = [_line_key(r) if r in line_names else seg_key(_two(r)) for r in group]
         if len(pkeys) < 2 or not pars.same(pkeys):
             out.setdefault("parallel_groups", []).append(i)
+    for i, ref in enumerate(fig.right_angles):
+        if not _box_backed(d, _three(ref), parts.givens):
+            out.setdefault("right_angles", []).append(i)
     return out
+
+
+def _box_backed(d: _Drawing, box: tuple[str, str, str], givens: list[_Relation]) -> bool:
+    """A right-angle box some given states: a ⊥ where the two lines cross,
+    or a 90° angle / right angle at that corner."""
+    p = d.p
+    for rel in givens:
+        k, args = rel.kind, rel.args
+        try:
+            if k == "perp":
+                (a, b), (c, e) = args
+                if _box_on_lines(d, box, (p[a], p[b]), (p[c], p[e])):
+                    return True
+            elif k == "measure" and float(args[1]) == 90:
+                ang = d.resolve(args[0])
+                if ang is not None and _same_angle(d, ang, box, mod=180):
+                    return True
+        except (KeyError, ValueError, TypeError, ZeroDivisionError):
+            continue
+    return False
