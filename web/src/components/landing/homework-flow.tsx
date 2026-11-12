@@ -131,7 +131,7 @@ function Stepper({ active, onJump }: { active: number; onJump: (i: number) => vo
     <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: 8 }}>
       {STAGES.map((s, i) => (
         <div key={s} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button type="button" onClick={() => onJump(i)} style={{ background: "none", border: "none", cursor: "pointer", padding: "3px 5px", whiteSpace: "nowrap", fontSize: 13.5, fontFamily: "inherit", fontWeight: i === active ? 800 : 600, color: i === active ? "#0E5238" : "#4A5565", borderBottom: i === active ? "2px solid #0E5238" : "2px solid transparent", transition: "color 0.25s" }}>
+          <button type="button" aria-current={i === active ? "step" : undefined} onClick={() => onJump(i)} style={{ background: "none", border: "none", cursor: "pointer", padding: "3px 5px", whiteSpace: "nowrap", fontSize: 13.5, fontFamily: "inherit", fontWeight: i === active ? 800 : 600, color: i === active ? "#0E5238" : "#4A5565", textDecoration: i === active ? "underline" : "none", textDecorationThickness: 2, textUnderlineOffset: 6, transition: "color 0.25s" }}>
             {i + 1}. {s}
           </button>
           {i < STAGES.length - 1 && <span aria-hidden="true" style={{ color: "#9AA3AF", fontSize: 12 }}>→</span>}
