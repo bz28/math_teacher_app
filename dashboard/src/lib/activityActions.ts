@@ -114,6 +114,19 @@ export const ACTIVITY_ACTIONS: Record<ActivityFamily, ActivityAction[]> = {
       label: "Unpublished",
       detail: (m) => quoted(m, "title", "Unpublished"),
     },
+    {
+      action: "assignment.reopen_student",
+      label: "Reopened for a student",
+      detail: (m) => {
+        const due = str(m, "due_at");
+        return due ? `Personal due date ${new Date(due).toLocaleString()}` : "Reopened for one student";
+      },
+    },
+    {
+      action: "assignment.reopen_student_cancel",
+      label: "Undid a reopen",
+      detail: () => "Back to the class due date for one student",
+    },
   ],
 
   generation: [
@@ -321,6 +334,15 @@ export const ACTIVITY_ACTIONS: Record<ActivityFamily, ActivityAction[]> = {
       detail: (m) =>
         join(
           `Replaced ${plural(num(m, "previous_file_count"), "file")} with ${plural(num(m, "file_count"), "file")} for a fresh reading`,
+          m.is_late ? "late" : undefined,
+        ),
+    },
+    {
+      action: "submission.resubmit",
+      label: "Turned in again",
+      detail: (m) =>
+        join(
+          `${plural(num(m, "file_count"), "file")} after a reopen — the earlier turn-in kept`,
           m.is_late ? "late" : undefined,
         ),
     },
