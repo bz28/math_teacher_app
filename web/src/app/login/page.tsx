@@ -280,9 +280,11 @@ function LoginPageContent() {
               <div className="text-center">
                 <span
                   aria-hidden="true"
-                  className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full border-2 border-veradic font-hand text-2xl text-veradic"
+                  className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full border-2 border-veradic text-veradic"
                 >
-                  &#10003;
+                  <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M5 13l4 4L19 7" />
+                  </svg>
                 </span>
                 <h2 id="forgot-title" className="m-0 text-[22px] font-black tracking-[-0.02em] text-ink">
                   Check your email

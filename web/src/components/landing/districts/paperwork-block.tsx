@@ -25,10 +25,12 @@ export function PaperworkBlock() {
         </div>
         <ul className="m-0 min-w-0 flex-[1_1_520px] list-none border-t-2 border-ink p-0">
           {HANDLED.map((line) => (
-            <li key={line} className="flex items-baseline gap-3.5 border-b border-rule py-3.5 text-[17px] leading-[1.5]">
-              <span aria-hidden="true" className="w-5 flex-none font-hand text-[21px] leading-none text-veradic">
-                &#10003;
-              </span>
+            <li key={line} className="flex items-start gap-3.5 border-b border-rule py-3.5 text-[17px] leading-[1.5]">
+              {/* A plain check, not handwriting: Kalam is only for the
+                  student's pencil and the teacher's red pen. */}
+              <svg aria-hidden="true" className="mt-[5px] h-4 w-4 flex-none text-veradic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M5 13l4 4L19 7" />
+              </svg>
               <span>{line}</span>
             </li>
           ))}
