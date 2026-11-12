@@ -6,7 +6,10 @@ type LinkItem = { label: string; href: string };
 // "Classroom" = the teacher-led, in-school product (the homepage pitch +
 // /for-districts + book-a-demo). There is no self-study column: Veradic is
 // invite-only, so students join through their teacher's class.
+// The top bar carries only sign-in and book-a-demo, so the page links
+// (how it works, for districts, trust) live here.
 const classroomLinks: LinkItem[] = [
+  { label: "How it works", href: "/#integrity" },
   { label: "For districts", href: "/for-districts" },
   { label: "Book a demo", href: "/demo" },
 ];
