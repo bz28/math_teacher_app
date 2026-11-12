@@ -40,7 +40,7 @@ Two ways:
 - **Section invite link** — send a link to your students. They sign up (or sign in with existing accounts) and land directly in your section.
 - **Join code** — give your class a short code. Students enter it during signup.
 
-Students under 13 must enroll through one of these paths so the federal COPPA school-consent exception applies. Veradic blocks personal self-signup for under-13s.
+Every student account is created through one of these paths: Veradic has no personal self-signup, so students of any age join through their teacher's class (which also satisfies the federal COPPA school-consent exception for under-13s).
 
 ### 4. Add curriculum materials
 

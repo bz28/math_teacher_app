@@ -8,8 +8,8 @@ Veradic is an AI math-education **school portal**. A student photographs their h
 
 ### Web — `web/` (Next.js, veradicai.com)
 The primary product surface **and** the marketing site, one Next.js 16 App Router app (React 19, TypeScript, Tailwind v4, Zustand, Framer Motion, KaTeX).
-- **Public / marketing**: landing (`/`), `/students`, `/for-districts`, `/demo` (request-a-demo), `/subjects/{math,physics,chemistry}`, and legal pages under `(legal)/` (`/privacy`, `/terms`, `/support`, `/trust`).
-- **Auth**: `/login`, `/register`, `/set-password`, `/invite` (section join).
+- **Public / marketing**: landing (`/`), `/for-districts`, `/demo` (request-a-demo), `/subjects/{math,physics,chemistry}`, and legal pages under `(legal)/` (`/privacy`, `/terms`, `/support`, `/trust`).
+- **Auth**: `/login`, `/register` (invite-only: students need a class join code or invite, teachers a teacher invite), `/set-password`, `/invite` (section join).
 - **Student app** (`(app)/`): `/home`, self-study `/learn` + `/practice` + `/mock-test` + `/review` + `/history`, and the classroom surface under `/school/student/*` (courses, homework, per-assignment practice, grades, practice-history).
 - **Teacher portal**: `/school/teacher/*` — courses, units, sections, assignments/homework, per-section grade review, per-student drill-down.
 - **Billing**: `/pricing` (Stripe checkout).
