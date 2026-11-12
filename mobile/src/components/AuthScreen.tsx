@@ -85,14 +85,21 @@ export function AuthScreen({ onAuth, onTeacherGate, defaultToRegister = false }:
       return;
     }
 
+    // Veradic is invite-only: a student account needs the class code from
+    // their teacher (the API refuses signups without one).
+    const code = normalizeJoinCode(joinCode);
+    if (!code) {
+      setError("Enter the class code from your teacher to create an account.");
+      return;
+    }
+
     setLoading(true);
     try {
       const normalizedEmail = email.trim().toLowerCase();
       const { available } = await checkEmail(normalizedEmail);
       if (!available) throw new Error("This email is already registered");
       const gradeLevel = ageToGradeLevel(age);
-      const code = normalizeJoinCode(joinCode);
-      const resp = await register(normalizedEmail, password, name.trim(), gradeLevel, code || undefined);
+      const resp = await register(normalizedEmail, password, name.trim(), gradeLevel, code);
       await saveTokens(resp.access_token, resp.refresh_token);
       await saveUserName(name.trim());
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -417,14 +424,14 @@ function CredentialsStep({ name, email, onEmailChange, password, onPasswordChang
               style={styles.input}
               value={joinCode}
               onChangeText={(v) => onJoinCodeChange(v.toUpperCase())}
-              placeholder="Class code (optional)"
+              placeholder="Class code"
               autoCapitalize="characters"
               autoCorrect={false}
               placeholderTextColor={colors.textMuted}
             />
           </View>
           <Text style={styles.joinHint}>
-            Have a code from your teacher? Enter it to join your class.
+            Your teacher gives you this code. Don't have one? Ask your teacher.
           </Text>
 
           {error && <ErrorRow message={error} />}

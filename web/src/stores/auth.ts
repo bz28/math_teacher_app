@@ -57,7 +57,6 @@ interface AuthState {
     invite_token?: string;
     section_invite_token?: string;
     join_code?: string;
-    signup_school_name?: string;
   }) => Promise<void>;
 
   logout: () => void;

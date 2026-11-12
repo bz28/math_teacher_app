@@ -640,17 +640,17 @@ export const register = (
   password: string,
   name: string,
   gradeLevel: number,
-  joinCode?: string,
+  joinCode: string,
 ) =>
   apiPost<{ access_token: string; refresh_token: string }>("/auth/register", {
     email,
     password,
     name,
     grade_level: gradeLevel,
-    // Only sent when the student entered a class code. The backend then
-    // enrolls them in that section and stamps school_id (and the code
-    // satisfies the COPPA school-consent exception for under-13s).
-    ...(joinCode ? { join_code: joinCode } : {}),
+    // Required: signup is invite-only, and the API refuses a student
+    // without a class code. It enrolls them in that section and stamps
+    // school_id.
+    join_code: joinCode,
   });
 
 export const forgotPassword = (email: string) =>
