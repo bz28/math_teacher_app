@@ -1360,8 +1360,9 @@ async def list_homework(
             closed=a.id in closed_ids,
             can_resubmit=a.id in resubmit_ids,
             next_step=(
+                # A reopen's next step is the new turn-in, not the old one's.
                 next_steps.get(submission_by_aid[a.id])
-                if a.id in submission_by_aid else None
+                if a.id in submission_by_aid and a.id not in resubmit_ids else None
             ),
         )
         for a in rows

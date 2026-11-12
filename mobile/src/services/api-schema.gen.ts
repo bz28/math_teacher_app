@@ -2227,11 +2227,13 @@ export interface paths {
         put?: never;
         /**
          * Submit Homework
-         * @description Insert a submission for this student/HW. One-shot — resubmission
-         *     is not allowed in v1; a second call returns 409. A late turn-in is
+         * @description Insert a submission for this student/HW. One-shot — a second call
+         *     returns 409 — unless the teacher reopened the homework for this
+         *     student after they turned it in (`Submission.reopened_at`): then this
+         *     turns it in once more (`_resubmit_reopened`). A late turn-in is
          *     accepted and marked late, unless the homework's late policy closes it
-         *     at the due date (`no_credit`), which refuses it with a 403 — except for
-         *     a teacher's preview, which always goes through.
+         *     at the student's due date (`no_credit`), which refuses it with a 403 —
+         *     except for a teacher's preview, which always goes through.
          */
         post: operations["submit_homework_v1_school_student_homework__assignment_id__submit_post"];
         delete?: never;
@@ -2513,12 +2515,13 @@ export interface paths {
          *     the new reading, confirms or flags it.
          *
          *     Nothing is destroyed: the turn-in it replaces — files, reading, edits,
-         *     flag and note, original submitted_at and is_late — is kept on
-         *     `retake_original` and shown to the teacher.
+         *     flag and note, original submitted_at and is_late — is kept as a
+         *     `SubmissionAttempt` and shown to the teacher.
          *
          *     Lateness follows submit's rule — work is late when it was turned in
-         *     after the due date — and a retake can't launder it: the new photos
-         *     are late if they arrive past due, and a late original stays late.
+         *     after the student's due date — measured on the new photos, which
+         *     always arrive after the ones they replace: a retake can't launder
+         *     lateness, only add it.
          *
          *     Rejects: 404 / 403 (not found / not yours, or the homework no longer
          *     takes turn-ins), 409 when a retake isn't allowed (with why), and
@@ -2896,6 +2899,44 @@ export interface paths {
          */
         post: operations["assign_to_sections_v1_teacher_assignments__assignment_id__sections_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/teacher/assignments/{assignment_id}/students/{student_id}/reopen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reopen For Student
+         * @description Reopen this homework for one student, until `due_at`.
+         *
+         *     That date becomes the student's due date (late_policy.effective_due_at):
+         *     a homework that closed at the class date takes their turn-in again,
+         *     and work turned in by the new date is on time — including work they
+         *     already turned in, which is re-priced against it at once.
+         *
+         *     If they had turned it in, they may turn it in once more
+         *     (`Submission.reopened_at`). Their current turn-in and its grade stand
+         *     until they do; when they do, both are kept as an attempt and the new
+         *     one is read and graded from scratch, for her to approve. Reopening
+         *     again (a new date, or after they resubmitted) grants another turn-in.
+         */
+        post: operations["reopen_for_student_v1_teacher_assignments__assignment_id__students__student_id__reopen_post"];
+        /**
+         * Cancel Reopen For Student
+         * @description Undo a reopen: the student's due date is the class date again, and
+         *     a turn-in still owed by the reopen is no longer taken. Work already in
+         *     is re-priced against the class date (late, if it was); nothing is
+         *     deleted. Idempotent.
+         */
+        delete: operations["cancel_reopen_for_student_v1_teacher_assignments__assignment_id__students__student_id__reopen_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4125,6 +4166,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/teacher/submissions/{submission_id}/attempts/{number}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Attempt Files
+         * @description The photos of an earlier turn-in — opened from the review page's
+         *     "View original photos". Ownership is checked first, the same rule as
+         *     the detail, so another teacher can't tell from the status whether a
+         *     submission has earlier attempts. 404 when there's no such attempt.
+         */
+        get: operations["get_attempt_files_v1_teacher_submissions__submission_id__attempts__number__files_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teacher/submissions/{submission_id}/grade": {
         parameters: {
             query?: never;
@@ -4307,29 +4371,6 @@ export interface paths {
          *     for a full Vision read on every regrade to paper over.
          */
         post: operations["regrade_submission_v1_teacher_submissions__submission_id__regrade_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/teacher/submissions/{submission_id}/retake-original-files": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Retake Original Files
-         * @description The photos a student's retake replaced — opened from the review
-         *     page's "View original photos". Ownership is checked first, the same
-         *     rule as the detail, so another teacher can't tell from the status
-         *     whether a submission was retaken. 404 when it wasn't.
-         */
-        get: operations["get_retake_original_files_v1_teacher_submissions__submission_id__retake_original_files_get"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4857,6 +4898,11 @@ export interface components {
         DashboardAssignment: {
             /** Assignment Id */
             assignment_id: string;
+            /**
+             * Can Resubmit
+             * @default false
+             */
+            can_resubmit: boolean;
             /** Course Id */
             course_id: string;
             /** Course Name */
@@ -5896,6 +5942,23 @@ export interface components {
             /** Signup School Name */
             signup_school_name?: string | null;
         };
+        /** ReopenRequest */
+        ReopenRequest: {
+            /**
+             * Due At
+             * Format: date-time
+             */
+            due_at: string;
+        };
+        /** ReopenResponse */
+        ReopenResponse: {
+            /** Due At */
+            due_at: string | null;
+            /** Reopened At */
+            reopened_at: string | null;
+            /** Student Id */
+            student_id: string;
+        };
         /** ReportedAiGrade */
         ReportedAiGrade: {
             /** Confidence */
@@ -6112,6 +6175,11 @@ export interface components {
             assignment_id: string;
             /** Breakdown */
             breakdown?: components["schemas"]["StudentProblemFeedback"][] | null;
+            /**
+             * Can Resubmit
+             * @default false
+             */
+            can_resubmit: boolean;
             /** Closed */
             closed: boolean;
             /** Course Id */
@@ -6181,6 +6249,11 @@ export interface components {
         StudentHomeworkSummary: {
             /** Assignment Id */
             assignment_id: string;
+            /**
+             * Can Resubmit
+             * @default false
+             */
+            can_resubmit: boolean;
             /** Closed */
             closed: boolean;
             /** Due At */
@@ -6412,6 +6485,13 @@ export interface components {
             /** Filenames */
             filenames: string[];
         };
+        /** TeacherAttemptFiles */
+        TeacherAttemptFiles: {
+            /** Files */
+            files: {
+                [key: string]: string;
+            }[];
+        };
         /**
          * TeacherGraphCheck
          * @description A graph problem's drawing check as its grade was charged: the
@@ -6522,16 +6602,18 @@ export interface components {
             teacher_dismissed: boolean;
         };
         /**
-         * TeacherRetakeOriginal
-         * @description The turn-in a student's retake replaced — what the teacher needs to
-         *     see it was the same work: how many pages, when they came in, and what
-         *     the student said was wrong with that reading. The photos themselves
-         *     are fetched only when she opens them (`GET /submissions/{id}/
-         *     retake-original-files`), so every detail load doesn't carry a second
-         *     set of pages. The original reading stays on the row for audit but
-         *     isn't rendered.
+         * TeacherSubmissionAttempt
+         * @description An earlier turn-in of this submission, which a newer one replaced
+         *     (`SubmissionAttempt`): a retake of flagged photos ("retake"), or a
+         *     turn-in after the teacher reopened the homework ("reopen"). What the
+         *     teacher needs to see what changed: how many pages, when they came in,
+         *     what the student said was wrong with that reading, and — for a reopen
+         *     — the grade it had. The photos are fetched only when she opens them
+         *     (`GET /submissions/{id}/attempts/{number}/files`), so a detail load
+         *     doesn't carry every set of pages. The reading, the whole grade row
+         *     and the understanding check are kept on the attempt for audit.
          */
-        TeacherRetakeOriginal: {
+        TeacherSubmissionAttempt: {
             /** Extraction Flag Note */
             extraction_flag_note?: string | null;
             /** Extraction Flagged At */
@@ -6541,20 +6623,35 @@ export interface components {
              * @default 0
              */
             file_count: number;
+            /** Final Score */
+            final_score?: number | null;
+            /**
+             * Grade Published
+             * @default false
+             */
+            grade_published: boolean;
             /**
              * Is Late
              * @default false
              */
             is_late: boolean;
-            /** Submitted At */
-            submitted_at?: string | null;
-        };
-        /** TeacherRetakeOriginalFiles */
-        TeacherRetakeOriginalFiles: {
-            /** Files */
-            files: {
-                [key: string]: string;
-            }[];
+            /** Number */
+            number: number;
+            /**
+             * Reason
+             * @enum {string}
+             */
+            reason: "retake" | "reopen";
+            /**
+             * Replaced At
+             * Format: date-time
+             */
+            replaced_at: string;
+            /**
+             * Submitted At
+             * Format: date-time
+             */
+            submitted_at: string;
         };
         /** TeacherSubmissionDetail */
         TeacherSubmissionDetail: {
@@ -6568,6 +6665,11 @@ export interface components {
             assignment_id: string;
             /** Assignment Title */
             assignment_title: string;
+            /**
+             * Attempts
+             * @default []
+             */
+            attempts: components["schemas"]["TeacherSubmissionAttempt"][];
             /** Breakdown */
             breakdown: {
                 [key: string]: unknown;
@@ -6636,7 +6738,8 @@ export interface components {
             other_work: components["schemas"]["TeacherSubmissionStep"][];
             /** Problems */
             problems: components["schemas"]["TeacherSubmissionDetailProblem"][];
-            retake_original?: components["schemas"]["TeacherRetakeOriginal"] | null;
+            /** Reopened At */
+            reopened_at?: string | null;
             /** Retaken At */
             retaken_at?: string | null;
             /** Reviewed At */
@@ -11804,6 +11907,74 @@ export interface operations {
             };
         };
     };
+    reopen_for_student_v1_teacher_assignments__assignment_id__students__student_id__reopen_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assignment_id: string;
+                student_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReopenRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReopenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_reopen_for_student_v1_teacher_assignments__assignment_id__students__student_id__reopen_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assignment_id: string;
+                student_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReopenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_submissions_v1_teacher_assignments__assignment_id__submissions_get: {
         parameters: {
             query?: never;
@@ -14283,6 +14454,38 @@ export interface operations {
             };
         };
     };
+    get_attempt_files_v1_teacher_submissions__submission_id__attempts__number__files_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+                number: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeacherAttemptFiles"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     grade_submission_v1_teacher_submissions__submission_id__grade_patch: {
         parameters: {
             query?: never;
@@ -14480,37 +14683,6 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_retake_original_files_v1_teacher_submissions__submission_id__retake_original_files_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                submission_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TeacherRetakeOriginalFiles"];
                 };
             };
             /** @description Validation Error */
