@@ -1,8 +1,8 @@
 import { IntegrityInterview } from "./integrity-interview";
 
 /**
- * The integrity layer — the page's signature moment, on its own dark-green
- * "spotlight" section (the demo's natural home). An animated interview where a
+ * The integrity layer — the page's signature moment, on a white band
+ * between the graph-paper sections. An animated interview where a
  * correct answer gets interrogated and flagged, resolving into the real teacher
  * verdict. Leads with the dual purpose: catches copying AND misunderstanding.
  *
@@ -27,22 +27,16 @@ import { IntegrityInterview } from "./integrity-interview";
  */
 export function HomeIntegrity() {
   return (
-    <section
-      id="integrity"
-      className="relative w-full"
-      style={{ background: "radial-gradient(125% 88% at 50% 0%, #0C3325 0%, #08231A 55%, #061812 100%)" }}
-    >
-      <div className="mx-auto w-full max-w-6xl px-6 py-16 md:px-8 md:py-24">
-        <div className="grid items-start gap-12 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)] xl:gap-16">
+    <section id="integrity" className="scroll-mt-20 border-y border-hairline bg-white md:scroll-mt-24">
+      <div className="mx-auto w-full max-w-[1200px] px-4 py-20 md:px-8 md:py-24">
+        <div className="grid items-start gap-12 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1fr)] xl:gap-[72px]">
           {/* The argument. Left-anchored, not centred — a centred column
               sitting beside an artifact gives the eye two competing axes. */}
           <div className="max-w-xl">
-            <h2 className="text-display-md text-[#F4F1E8]">
-              Know if they truly{" "}
-              <span className="font-display-serif italic text-[#7FC4A0]">understand it</span>
-              &nbsp;&mdash; not just whether the answer&rsquo;s right.
+            <h2 className="site-h2">
+              Know if they truly understand it, not just whether the answer&rsquo;s right.
             </h2>
-            <p className="mt-6 text-lg leading-relaxed text-[#8FB7A4] md:text-xl">
+            <p className="mt-6 text-lg leading-relaxed text-ink-soft md:text-[19px] md:leading-[1.6]">
               After a submission, Veradic asks the student to explain their own
               steps &mdash; the understanding a grade alone can&rsquo;t show. Some
               can&rsquo;t explain it because they&rsquo;re lost; some because they
@@ -53,7 +47,7 @@ export function HomeIntegrity() {
                 all — but it is the reassurance a teacher wants *while*
                 watching an AI interrogate their student, so it belongs
                 beside the claim it qualifies, not after the evidence. */}
-            <p className="mt-8 border-t border-[#1C4030] pt-6 text-sm leading-relaxed text-[#6E9684]">
+            <p className="mt-8 border-t border-hairline pt-6 text-[15px] leading-relaxed text-ink-soft">
               You see the grade, the flag, the full conversation, and how the work
               was produced &mdash; and you decide. Veradic drafts; you publish.
             </p>

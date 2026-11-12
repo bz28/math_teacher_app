@@ -4,7 +4,7 @@ import { HomeIntegrity } from "@/components/landing/home-integrity";
 import { HomeGrading } from "@/components/landing/home-grading";
 import { HomeWorkspace } from "@/components/landing/home-workspace";
 import { HomeCuriosity, HomePractice, HomeTrust } from "@/components/landing/home-students";
-import { CtaBand } from "@/components/landing/cta-band";
+import { InkCtaBand } from "@/components/site/ink-cta-band";
 import { Footer } from "@/components/landing/footer";
 
 /**
@@ -12,14 +12,17 @@ import { Footer } from "@/components/landing/footer";
  * Hook → understanding check → grading by your rules → homework from your
  * chapter → practice → learning to use AI well → safe for students → Ask.
  * Each section shows a real product surface rather than asserting a claim.
- * Rhythm: light, dark, alt, light, alt, dark, light, ink; demo sides
+ *
+ * The notebook design ("the student's page"): the whole page is graph
+ * paper, and every other section is a white band, so the rhythm is
+ * grid, white, grid, white… ending on the dark ink ask. Demo sides
  * alternate so no two neighbouring sections share a shape.
  */
 export default function Home() {
   return (
-    <>
+    <div className="site graph-paper flex min-h-full flex-1 flex-col">
       <Navbar />
-      <main>
+      <main className="flex-1">
         <Hero />
         <HomeIntegrity />
         <HomeGrading />
@@ -27,13 +30,7 @@ export default function Home() {
         <HomePractice />
         <HomeCuriosity />
         <HomeTrust />
-        {/* No eyebrow. Every section on this page opened with the same
-            small uppercase label, which is most of why four different
-            arguments read as one shape repeated — and the headline
-            carries its own weight without one. The prop stays on
-            CtaBand because /for-districts and the subject pages still
-            pass it; this is a homepage decision, not a component one. */}
-        <CtaBand
+        <InkCtaBand
           headline="Bring Veradic to your school."
           subhead="Book a 20-minute walkthrough — we'll show you the whole loop on your own material and get your classes set up."
           primaryLabel="Book a demo"
@@ -43,6 +40,6 @@ export default function Home() {
         />
       </main>
       <Footer />
-    </>
+    </div>
   );
 }
