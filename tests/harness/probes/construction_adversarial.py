@@ -39,6 +39,10 @@ _CIRCLE = [{"center": "O", "through": "A"}]
 _P1 = {"A": [0, 0], "B": [8, 0], "C": [0, 3], "D": [8, 3], "E": [2, -1], "F": [6, 4], "X": [2.8, 0], "Y": [5.2, 3]}
 _GIVEN_T = (r"Given: $\overline{AB} \parallel \overline{CD}$ and transversal $\overline{EF}$ meets them at "
             r"$X$ and $Y$. ")
+_TR = {"A": [0, 0], "B": [8, 0], "C": [0, 4], "D": [8, 4], "E": [2, -2], "F": [6, 6], "G": [3, 0], "H": [5, 4]}
+_TR_LINES = [{"through": ["A", "B"]}, {"through": ["C", "D"]}, {"through": ["E", "F"]}]
+_X = {k: _TR[k] for k in "ABEFG"}
+_X_LINES = [{"through": ["A", "B"]}, {"through": ["E", "F"]}]
 _RHOMBUS = {"A": [0, 0], "B": [3, -2], "C": [6, 0], "D": [3, 2], "E": [3, 0]}
 
 
@@ -181,6 +185,45 @@ CASES: list[dict[str, Any]] = [
      "good": _fig({"A": [0, 0], "B": [6, 0], "C": [6, 4], "D": [0, 4]}, segments=[*_SIDES, "BD"]),
      "bad": _fig({"A": [0, 0], "B": [6, 0], "C": [6, 4], "D": [0, 4]}, segments=_SIDES),
      "why": "the diagonal the teacher asked for is missing"},
+    # Where two angles sit around a transversal. AB (y = 0) ∥ CD (y = 4), cut by EF at G and H; each
+    # wrong figure puts ∠2 where the problem doesn't (most at the same size, so only its place is wrong).
+    {"id": "pair-same-side",
+     "text": r"Lines $AB$ and $CD$ are parallel, cut by transversal $EF$ at $G$ and $H$. $\angle 1$ and "
+             r"$\angle 2$ are same-side interior angles, with $m\angle 1 = 63^\circ$ and $m\angle 2 = (2x + 3)^\circ$. "
+             r"Find $x$.",
+     "good": _fig(_TR, lines=_TR_LINES, angle_labels={"BGH": "1", "DHG": "2"}),
+     "bad": _fig(_TR, lines=_TR_LINES, angle_labels={"BGH": "1", "CHG": "2"}),
+     "why": "∠2 is alternate interior to ∠1 (drawn 63°; the problem makes it 117°)"},
+    {"id": "pair-alt-interior",
+     "text": r"Lines $AB$ and $CD$ are parallel, cut by transversal $EF$ at $G$ and $H$. $\angle 1$ and "
+             r"$\angle 2$ are alternate interior angles, and $m\angle 1 = 63^\circ$. Find $m\angle 2$.",
+     "good": _fig(_TR, lines=_TR_LINES, angle_labels={"BGH": "1", "CHG": "2"}),
+     "bad": _fig(_TR, lines=_TR_LINES, angle_labels={"BGH": "1", "DHF": "2"}),
+     "why": "∠2 is corresponding to ∠1, not alternate interior (both 63°)"},
+    {"id": "pair-alt-exterior",
+     "text": r"Lines $AB$ and $CD$ are parallel, cut by transversal $EF$ at $G$ and $H$. $\angle 1$ and "
+             r"$\angle 2$ are alternate exterior angles. Prove $\angle 1 \cong \angle 2$.",
+     "good": _fig(_TR, lines=_TR_LINES, angle_labels={"BGE": "1", "CHF": "2"}),
+     "bad": _fig(_TR, lines=_TR_LINES, angle_labels={"BGE": "1", "DHG": "2"}),
+     "why": "∠2 is corresponding to ∠1, not alternate exterior (both 117°)"},
+    {"id": "pair-corresponding",
+     "text": r"Lines $AB$ and $CD$ are parallel, cut by transversal $EF$ at $G$ and $H$. $\angle 1$ and "
+             r"$\angle 2$ are corresponding angles, and $m\angle 1 = 63^\circ$. Find $m\angle 2$.",
+     "good": _fig(_TR, lines=_TR_LINES, angle_labels={"BGH": "1", "DHF": "2"}),
+     "bad": _fig(_TR, lines=_TR_LINES, angle_labels={"BGH": "1", "CHG": "2"}),
+     "why": "∠2 is alternate interior to ∠1, not corresponding (both 63°)"},
+    {"id": "pair-vertical",
+     "text": r"Lines $AB$ and $EF$ intersect at $G$. $\angle 1$ and $\angle 2$ are vertical angles, and "
+             r"$m\angle 1 = 63^\circ$. Find $m\angle 2$.",
+     "good": _fig(_X, lines=_X_LINES, angle_labels={"BGF": "1", "AGE": "2"}),
+     "bad": _fig(_X, lines=_X_LINES, angle_labels={"BGF": "1", "AGF": "2"}),
+     "why": "∠2 is beside ∠1 (a linear pair), not opposite it"},
+    {"id": "pair-linear",
+     "text": r"Lines $AB$ and $EF$ intersect at $G$. $\angle 1$ and $\angle 2$ form a linear pair, and "
+             r"$m\angle 1 = 63^\circ$. Find $m\angle 2$.",
+     "good": _fig(_X, lines=_X_LINES, angle_labels={"BGF": "1", "AGF": "2"}),
+     "bad": _fig(_X, lines=_X_LINES, angle_labels={"BGF": "1", "AGE": "2"}),
+     "why": "∠2 is opposite ∠1 (vertical angles), not beside it"},
 ]
 
 

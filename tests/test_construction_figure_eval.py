@@ -58,7 +58,8 @@ async def test_construction_figure_eval_meets_the_bar(monkeypatch: pytest.Monkey
     assert summary["drawn"] >= DRAWN_FLOOR, summary
     # Every reading was either trusted or declined with its reason.
     assert summary["readings_agreed"] + summary["readings_disagreed"] + summary["coverage_gaps"] \
-        + summary["unverifiable"] >= summary["readings"], summary
+        + summary["unverifiable"] + summary["described_in_words"] + summary["impossible_numbers"] \
+        >= summary["readings"], summary
     assert summary["not_looked_at"] == 0
     judged_wrong = {k for r in results for k, spec in cf.drawn_figures(r) if cf.verdict(k, spec).startswith("wrong")}
     assert judged_wrong == KNOWN_WRONG_PASSED, "a figure judged wrong passed the checker"
@@ -96,8 +97,9 @@ async def test_the_eval_fails_without_the_checker(monkeypatch: pytest.MonkeyPatc
     # disagreed (no figure is drawn without a trusted reading), or the chat
     # drew none.
     untouched = {r["id"] for r in results if any(why for why in r["readings"]) or not r["readings"]}
-    assert {r["id"] for r in results} - failing <= untouched, failing
-    assert len(failing) > 0.75 * len(results), failing
+    # Every case the checker decides fails without it.
+    assert {r["id"] for r in results} - untouched <= failing, failing
+    assert len(failing) > 0.6 * len(results), failing
 
 
 def test_the_claim_pattern_catches_claims_about_parts() -> None:

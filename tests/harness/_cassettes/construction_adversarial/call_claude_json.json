@@ -1,30 +1,480 @@
 {
-  "0498798df2afba21e783716351e8a8b9": {
+  "02e019a63d7c28db28c63dec2b0d8cc7": {
     "meta": {
       "mode": "bank_chat_facts_b",
       "model": "claude-sonnet-4-6",
-      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nGiven: $\\triangle ABC \\sim \\triangle DEF$. Find $EF$.\n\nThe teacher's message:\n(none)",
-      "recorded_at": 1794518782.284864
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nSquare $ABCD$ has side 6. Find the diagonal $\\overline{AC}$.\n\nFinal answer (shown only so you know what is ",
+      "recorded_at": 1794525974.171461
     },
     "response": {
       "circles": [],
       "find": [
         {
-          "item": "EF",
+          "item": "AC",
           "kind": "segment"
         }
       ],
       "givens": [
         {
           "items": [
-            "ABC",
-            "DEF"
+            "ABCD"
           ],
-          "kind": "similar_triangles",
-          "quote": "\u25b3ABC ~ \u25b3DEF"
+          "kind": "square",
+          "quote": "Square ABCD"
+        },
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "has side 6",
+          "value": 6
         }
       ],
       "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [
+        "ABCD"
+      ],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AC"
+      ],
+      "triangles": []
+    }
+  },
+  "0875d91eda0ad43b861c0819bc4cbe3f": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn quadrilateral ABCD, AB \u2225 CD and AD = BC. Prove ABCD is isosceles.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794525994.3529742
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "ABCD"
+          ],
+          "kind": "trapezoid",
+          "quote": "In quadrilateral ABCD, AB \u2225 CD"
+        },
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        },
+        {
+          "items": [
+            "AD",
+            "BC"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AD = BC"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [
+        "ABCD"
+      ],
+      "prove": [
+        {
+          "items": [
+            "ABCD"
+          ],
+          "kind": "isosceles_trapezoid",
+          "quote": "Prove ABCD is isosceles"
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD",
+        "AD",
+        "BC"
+      ],
+      "triangles": []
+    }
+  },
+  "08e462d8ebedc07bb9728afd16bc1842": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nGiven: $\\overline{AB} \\parallel \\overline{CD}$ and transversal $\\overline{EF}$ meets them at $X$ and $Y$. S",
+      "recorded_at": 1794525986.089449
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        },
+        {
+          "items": [
+            "EF",
+            "AB",
+            "CD"
+          ],
+          "kind": "transversal",
+          "quote": "transversal EF meets them at X and Y"
+        },
+        {
+          "items": [
+            "EF",
+            "AB"
+          ],
+          "kind": "intersect",
+          "point": "X",
+          "quote": "transversal EF meets them at X and Y"
+        },
+        {
+          "items": [
+            "EF",
+            "CD"
+          ],
+          "kind": "intersect",
+          "point": "Y",
+          "quote": "transversal EF meets them at X and Y"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "X",
+        "Y"
+      ],
+      "prove": [
+        {
+          "items": [
+            "BXY",
+            "CYX"
+          ],
+          "kind": "congruent_angles",
+          "quote": "Show that \u2220BXY \u2245 \u2220CYX"
+        }
+      ],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD",
+        "EF"
+      ]
+    }
+  },
+  "0a2e1d821ffbcf969e9f3aff75e3e6f7": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nLines $AB$ and $CD$ are parallel, cut by transversal $EF$ at $G$ and $H$. $\\angle 1$ and $\\angle 2$ are cor",
+      "recorded_at": 1794526012.300982
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "m\u22202",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "Lines AB and CD are parallel"
+        },
+        {
+          "items": [
+            "EF",
+            "AB",
+            "CD"
+          ],
+          "kind": "transversal",
+          "quote": "cut by transversal EF at G and H"
+        },
+        {
+          "items": [
+            "EF",
+            "AB"
+          ],
+          "kind": "intersect",
+          "point": "G",
+          "quote": "cut by transversal EF at G and H"
+        },
+        {
+          "items": [
+            "EF",
+            "CD"
+          ],
+          "kind": "intersect",
+          "point": "H",
+          "quote": "cut by transversal EF at G and H"
+        },
+        {
+          "items": [
+            "1",
+            "2"
+          ],
+          "kind": "corresponding",
+          "quote": "\u22201 and \u22202 are corresponding angles"
+        },
+        {
+          "items": [
+            "1"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u22201 = 63\u00b0",
+          "value": 63
+        }
+      ],
+      "lines": [],
+      "named_lines": [
+        "AB",
+        "CD",
+        "EF"
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": []
+    }
+  },
+  "0f250d2e8885700ecdc3afbcd4a5f0ee": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nDraw $\\overrightarrow{AB}$ and $\\overrightarrow{AC}$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794526002.344276
+    },
+    "response": {
+      "find": [],
+      "givens": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "prove": [],
+      "rays": [
+        "AB",
+        "AC"
+      ],
+      "requested": [
+        {
+          "item": "AB",
+          "kind": "ray"
+        },
+        {
+          "item": "AC",
+          "kind": "ray"
+        }
+      ]
+    }
+  },
+  "102f083930b5763f76f6c35147a467d1": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, $\\angle C$ is a right angle. Find $AB$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794525977.5517068
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "AB",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "right_triangle",
+          "point": "C",
+          "quote": "\u2220C is a right angle"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "12cee0547307846bbf655d8d0aa000a3": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nLines $AB$ and $CD$ are parallel, cut by transversal $EF$ at $G$ and $H$. $\\angle 1$ and $\\angle 2$ are alt",
+      "recorded_at": 1794526008.977338
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "m\u22202",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "Lines AB and CD are parallel"
+        },
+        {
+          "items": [
+            "EF",
+            "AB",
+            "CD"
+          ],
+          "kind": "transversal",
+          "quote": "cut by transversal EF at G and H"
+        },
+        {
+          "items": [
+            "EF",
+            "AB"
+          ],
+          "kind": "intersect",
+          "point": "G",
+          "quote": "cut by transversal EF at G and H"
+        },
+        {
+          "items": [
+            "EF",
+            "CD"
+          ],
+          "kind": "intersect",
+          "point": "H",
+          "quote": "cut by transversal EF at G and H"
+        },
+        {
+          "items": [
+            "1",
+            "2"
+          ],
+          "kind": "alternate_interior",
+          "quote": "\u22201 and \u22202 are alternate interior angles"
+        },
+        {
+          "items": [
+            "1"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u22201 = 63\u00b0",
+          "value": 63
+        }
+      ],
+      "lines": [
+        "AB",
+        "CD",
+        "EF"
+      ],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": []
+    }
+  },
+  "1467374241917c535276a3598c103b45": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nLines AB and CD are cut by a transversal EF.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794526002.802471
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "EF",
+            "AB",
+            "CD"
+          ],
+          "kind": "transversal",
+          "quote": "Lines AB and CD are cut by a transversal EF."
+        }
+      ],
+      "lines": [
+        "AB",
+        "CD",
+        "EF"
+      ],
       "named_lines": [],
       "points": [
         "A",
@@ -39,74 +489,115 @@
       "rays": [],
       "requested": [],
       "segments": [],
-      "triangles": [
-        "ABC",
-        "DEF"
-      ]
+      "triangles": []
     }
   },
-  "0c9289619523cf4daaa9a42275647fc6": {
+  "14a9f71a8e2ee56cc28bdda305b04d36": {
     "meta": {
-      "mode": "bank_chat_facts_a",
+      "mode": "bank_chat_facts_b",
       "model": "claude-sonnet-4-6",
-      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nABCD is a parallelogram with AB = 8 and BC = 5. Find its perimeter.\n\nFinal answer (shown only so you know w",
-      "recorded_at": 1794518799.808226
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\n$\\triangle ABC$ is a right triangle with right angle $C$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794525978.2994401
     },
     "response": {
-      "find": [
-        {
-          "item": "perimeter of ABCD",
-          "kind": "other"
-        }
-      ],
+      "circles": [],
+      "find": [],
       "givens": [
         {
           "items": [
-            "ABCD"
+            "ABC"
           ],
-          "kind": "parallelogram",
-          "quote": "ABCD is a parallelogram"
+          "kind": "right_triangle",
+          "point": "C",
+          "quote": "\u25b3ABC is a right triangle with right angle C"
         },
         {
           "items": [
+            "ACB"
+          ],
+          "kind": "right_angle",
+          "quote": "right angle C"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "17ecde886b3fa4aa6cd09e8466b90b06": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nGiven: $\\overline{CA} \\cong \\overline{CB}$, $\\overline{CM} \\perp \\overline{AB}$. Prove: $M$ is the midpoint",
+      "recorded_at": 1794526004.899652
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "CA",
+            "CB"
+          ],
+          "kind": "congruent_segments",
+          "quote": "CA \u2245 CB"
+        },
+        {
+          "items": [
+            "CM",
             "AB"
           ],
-          "kind": "equal_length",
-          "quote": "AB = 8",
-          "value": 8
-        },
-        {
-          "items": [
-            "BC"
-          ],
-          "kind": "equal_length",
-          "quote": "BC = 5",
-          "value": 5
+          "kind": "perpendicular",
+          "quote": "CM \u22a5 AB"
         }
       ],
       "points": [
         "A",
         "B",
         "C",
-        "D"
+        "M"
       ],
-      "polygons": [
-        "ABCD"
+      "prove": [
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "midpoint",
+          "point": "M",
+          "quote": "M is the midpoint of AB"
+        }
       ],
-      "prove": [],
       "requested": [],
       "segments": [
-        "AB",
-        "BC"
+        "CA",
+        "CB",
+        "CM",
+        "AB"
+      ],
+      "triangles": [
+        "CAM",
+        "CBM"
       ]
     }
   },
-  "0fa4d9aa4dde263faf57a370e1e30e75": {
+  "1b321b35e15d97ab4a84eaf73ec6b98d": {
     "meta": {
-      "mode": "bank_chat_facts_b",
+      "mode": "bank_chat_facts_a",
       "model": "claude-sonnet-4-6",
-      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nGiven: segment AB $\\cong$ segment CD in quadrilateral ABCD.\n\nThe teacher's message:\n(none)",
-      "recorded_at": 1794518790.692727
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nGiven: segment AB $\\cong$ segment CD in quadrilateral ABCD.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794525981.07584
     },
     "response": {
       "circles": [],
@@ -142,12 +633,51 @@
       "triangles": []
     }
   },
-  "137566dff58c072511c8de9856807522": {
+  "1c234bf3591df9e45fd18b87037ba4e2": {
     "meta": {
-      "mode": "bank_chat_facts_a",
+      "mode": "bank_chat_facts_b",
       "model": "claude-sonnet-4-6",
-      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, BD bisects $\\angle ABC$ and D lies on AC.\n\nThe teacher's message:\n(none)",
-      "recorded_at": 1794518789.82806
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nPoints $A$, $B$, and $C$ lie on circle $O$. Find $m\\angle ABC$.\n\nFinal answer (shown only so you know what ",
+      "recorded_at": 1794526000.044079
+    },
+    "response": {
+      "circles": [
+        "O"
+      ],
+      "find": [
+        {
+          "item": "ABC",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "circle": "O",
+          "items": [
+            "A",
+            "B",
+            "C"
+          ],
+          "kind": "on_circle",
+          "quote": "Points A, B, and C lie on circle O."
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "O"
+      ],
+      "prove": [],
+      "requested": []
+    }
+  },
+  "224bcdd732a4d5a9ea55aa328b007893": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, $\\overline{AD}$ is perpendicular to $\\overline{BC}$ at $D$.\n\nThe teacher's message:\n(no",
+      "recorded_at": 1794525978.130646
     },
     "response": {
       "circles": [],
@@ -155,19 +685,20 @@
       "givens": [
         {
           "items": [
-            "BD",
-            "ABC"
+            "AD",
+            "BC"
           ],
-          "kind": "bisects_angle",
-          "quote": "BD bisects \u2220ABC"
+          "kind": "perpendicular",
+          "point": "D",
+          "quote": "AD is perpendicular to BC at D"
         },
         {
           "items": [
-            "AC"
+            "BC"
           ],
           "kind": "on_segment",
           "point": "D",
-          "quote": "D lies on AC"
+          "quote": "AD is perpendicular to BC at D"
         }
       ],
       "lines": [],
@@ -182,18 +713,352 @@
       "prove": [],
       "rays": [],
       "requested": [],
+      "segments": [
+        "AD",
+        "BC"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "239f8d2fd647feee58a01ed6bae30d9c": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nGiven: $\\overline{AB} \\cong \\overline{AD}$, $\\overline{CB}\\cong\\overline{CD}$, E on AC. Prove: $m\\angle AEB",
+      "recorded_at": 1794525991.975081
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "AD"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB \u2245 AD"
+        },
+        {
+          "items": [
+            "CB",
+            "CD"
+          ],
+          "kind": "congruent_segments",
+          "quote": "CB \u2245 CD"
+        },
+        {
+          "items": [
+            "AC"
+          ],
+          "kind": "on_segment",
+          "point": "E",
+          "quote": "E on AC"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "AEB"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220AEB = 90\u00b0",
+          "value": 90
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "AD",
+        "CB",
+        "CD",
+        "AC"
+      ],
+      "triangles": []
+    }
+  },
+  "24eb1372e9e9aaed31c7bcc468b07810": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nSquare $ABCD$ has side 6. Find the diagonal $\\overline{AC}$.\n\nFinal answer (shown only so you know what is ",
+      "recorded_at": 1794525972.724389
+    },
+    "response": {
+      "find": [
+        {
+          "item": "AC",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABCD"
+          ],
+          "kind": "square",
+          "quote": "Square ABCD"
+        },
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "has side 6",
+          "value": 6
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [
+        "ABCD"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "AC"
+      ]
+    }
+  },
+  "2609501c0d4c0236c55b05f0ccce37b9": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nEquilateral $\\triangle ABC$ has side length 6.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794525977.307167
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "equilateral",
+          "quote": "Equilateral \u25b3ABC"
+        },
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "has side length 6",
+          "value": 6
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
       "segments": [],
       "triangles": [
         "ABC"
       ]
     }
   },
-  "16708e71d8a19d50ce0ff424ace9749d": {
+  "2d20d5030733273775d852de35ea49e3": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, $\\overline{AB} \\cong \\overline{AC}$ and $m\\angle B = 65^\\circ$. Find $m\\angle C$.\n\nFina",
+      "recorded_at": 1794525995.433283
+    },
+    "response": {
+      "find": [
+        {
+          "item": "m\u2220C",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "AC"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB \u2245 AC"
+        },
+        {
+          "items": [
+            "B"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220B = 65\u00b0",
+          "value": 65
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "AC"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "2d6323a5fef16a7944700819108a606a": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n$\\overline{PA}$ is tangent to circle $O$ at $A$. Find $PA$ if radius $OA = 3$ and $OP = 5$.\n\nFinal answer (",
+      "recorded_at": 1794525999.405888
+    },
+    "response": {
+      "circles": [
+        "O"
+      ],
+      "find": [
+        {
+          "item": "PA",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "circle": "O",
+          "items": [
+            "PA"
+          ],
+          "kind": "tangent",
+          "point": "A",
+          "quote": "PA is tangent to circle O at A"
+        },
+        {
+          "circle": "O",
+          "items": [
+            "OA"
+          ],
+          "kind": "radius",
+          "quote": "radius OA = 3",
+          "value": null
+        },
+        {
+          "items": [
+            "OA"
+          ],
+          "kind": "equal_length",
+          "quote": "radius OA = 3",
+          "value": 3
+        },
+        {
+          "items": [
+            "OP"
+          ],
+          "kind": "equal_length",
+          "quote": "OP = 5",
+          "value": 5
+        }
+      ],
+      "points": [
+        "P",
+        "A",
+        "O"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "PA",
+        "OA",
+        "OP"
+      ]
+    }
+  },
+  "2df8f3920359ab34178b385d69c1a2ee": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nRectangle ABCD has AB = 6 and BC = 3. Find AC.\n\nFinal answer (shown only so you know what is asked; take no",
+      "recorded_at": 1794525991.838005
+    },
+    "response": {
+      "find": [
+        {
+          "item": "AC",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABCD"
+          ],
+          "kind": "rectangle",
+          "quote": "Rectangle ABCD"
+        },
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "AB = 6",
+          "value": 6
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "equal_length",
+          "quote": "BC = 3",
+          "value": 3
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [
+        "ABCD"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "BC",
+        "AC"
+      ]
+    }
+  },
+  "2e13503a22ec5a746da8233a035bec3a": {
     "meta": {
       "mode": "bank_chat_facts_b",
       "model": "claude-sonnet-4-6",
       "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nRectangle ABCD has AB = 6 and BC = 3. Find AC.\n\nFinal answer (shown only so you know what is asked; take no",
-      "recorded_at": 1794518801.836094
+      "recorded_at": 1794525992.487524
     },
     "response": {
       "circles": [],
@@ -250,18 +1115,425 @@
       "triangles": []
     }
   },
-  "1ff3799e060c491019ee7c727899813b": {
+  "324e4b6fc065e02e1b42cafc94d8bef9": {
     "meta": {
       "mode": "bank_chat_facts_b",
       "model": "claude-sonnet-4-6",
-      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nRectangle $ABCD$ has $AB = 6$ and $BC = 4$. Find $BD$.\n\nFinal answer (shown only so you know what is asked;",
-      "recorded_at": 1794518814.3301592
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\n$\\overline{PA}$ is tangent to circle $O$ at $A$, and radius $\\overline{OA} = 3$. Find $PA$.\n\nThe teacher's ",
+      "recorded_at": 1794526001.1670551
+    },
+    "response": {
+      "circles": [
+        "O"
+      ],
+      "find": [
+        {
+          "item": "PA",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "circle": "O",
+          "items": [
+            "PA"
+          ],
+          "kind": "tangent",
+          "point": "A",
+          "quote": "PA is tangent to circle O at A"
+        },
+        {
+          "circle": "O",
+          "items": [
+            "OA"
+          ],
+          "kind": "radius",
+          "quote": "radius OA"
+        },
+        {
+          "items": [
+            "OA"
+          ],
+          "kind": "equal_length",
+          "quote": "radius OA = 3",
+          "value": 3
+        }
+      ],
+      "points": [
+        "P",
+        "A",
+        "O"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "PA",
+        "OA"
+      ]
+    }
+  },
+  "330b91cb75308c07fd99d45753a184da": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nGiven: $\\triangle ABC \\cong \\triangle A^{\\prime}B^{\\prime}C^{\\prime}$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794525981.9103181
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "ABC",
+            "A'B'C'"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "\u25b3ABC \u2245 \u25b3A\u2032B\u2032C\u2032"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "A'",
+        "B'",
+        "C'"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": [
+        "ABC",
+        "A'B'C'"
+      ]
+    }
+  },
+  "34302beddcfa82e91d511760cf97bb6e": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nDraw $\\overrightarrow{AB}$ and $\\overrightarrow{AC}$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794526002.245226
+    },
+    "response": {
+      "find": [],
+      "givens": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "prove": [],
+      "rays": [
+        "AB",
+        "AC"
+      ],
+      "requested": [
+        {
+          "item": "AB",
+          "kind": "ray"
+        },
+        {
+          "item": "AC",
+          "kind": "ray"
+        }
+      ]
+    }
+  },
+  "35b8eb45daaad86da23dd2550d202414": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, $\\overline{AD}$ is perpendicular to $\\overline{BC}$ at $D$.\n\nThe teacher's message:\n(no",
+      "recorded_at": 1794525976.955265
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AD",
+            "BC"
+          ],
+          "kind": "perpendicular",
+          "point": "D",
+          "quote": "AD is perpendicular to BC at D"
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "on_segment",
+          "point": "D",
+          "quote": "AD is perpendicular to BC at D"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "AD",
+        "BC"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "383ad4a97a3a9a209f43b6ee71395dd5": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n$\\angle 1$ and $\\angle 2$ are a linear pair and $m\\angle 1 = 3x$, $m\\angle 2 = 2x$.\n\nThe teacher's message:",
+      "recorded_at": 1794525997.061184
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "1",
+            "2"
+          ],
+          "kind": "linear_pair",
+          "quote": "\u22201 and \u22202 are a linear pair"
+        },
+        {
+          "expr": "3x",
+          "items": [
+            "1"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u22201 = 3x"
+        },
+        {
+          "expr": "2x",
+          "items": [
+            "2"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u22202 = 2x"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": []
+    }
+  },
+  "3a406e0d407b811848d94c2ae6ffb0cf": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nGiven: $\\overline{AB} \\parallel \\overline{CD}$ and transversal $\\overline{EF}$ meets them at $X$ and $Y$. P",
+      "recorded_at": 1794525983.185976
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        },
+        {
+          "items": [
+            "EF",
+            "AB",
+            "CD"
+          ],
+          "kind": "transversal",
+          "quote": "transversal EF meets them at X and Y"
+        },
+        {
+          "items": [
+            "EF",
+            "AB"
+          ],
+          "kind": "intersect",
+          "point": "X",
+          "quote": "transversal EF meets them at X and Y"
+        },
+        {
+          "items": [
+            "EF",
+            "CD"
+          ],
+          "kind": "intersect",
+          "point": "Y",
+          "quote": "transversal EF meets them at X and Y"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "X",
+        "Y"
+      ],
+      "prove": [
+        {
+          "items": [
+            "BXY",
+            "CYX"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220BXY \u2245 \u2220CYX"
+        }
+      ],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD",
+        "EF"
+      ]
+    }
+  },
+  "3c5eb76ca15e916c1e2b24fe3d7e11e9": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nGiven: $\\overline{CA} \\cong \\overline{CB}$, $\\overline{CM} \\perp \\overline{AB}$. Prove: $M$ is the midpoint",
+      "recorded_at": 1794526005.774326
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "CA",
+            "CB"
+          ],
+          "kind": "congruent_segments",
+          "quote": "CA \u2245 CB"
+        },
+        {
+          "items": [
+            "CM",
+            "AB"
+          ],
+          "kind": "perpendicular",
+          "quote": "CM \u22a5 AB"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "M"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "midpoint",
+          "point": "M",
+          "quote": "M is the midpoint of AB"
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "CA",
+        "CB",
+        "CM",
+        "AB"
+      ],
+      "triangles": []
+    }
+  },
+  "4ce142df54cc7c78dcecf5936c5c6dba": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, $\\overline{AB} \\cong \\overline{AC}$ and $m\\angle B = 65^\\circ$. Find $m\\angle C$.\n\nFina",
+      "recorded_at": 1794525996.528288
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "C",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "AC"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB \u2245 AC"
+        },
+        {
+          "items": [
+            "B"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220B = 65\u00b0",
+          "value": 65
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "AC"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "4e4ae06cb6e3be81071cdc94b41d199e": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nGiven: Parallelogram $ABCD$. Find $m\\angle B$ if $m\\angle A = 70^\\circ$.\n\nFinal answer (shown only so you k",
+      "recorded_at": 1794525972.780985
     },
     "response": {
       "find": [
         {
-          "item": "BD",
-          "kind": "segment"
+          "item": "B",
+          "kind": "angle"
         }
       ],
       "givens": [
@@ -269,24 +1541,16 @@
           "items": [
             "ABCD"
           ],
-          "kind": "rectangle",
-          "quote": "Rectangle ABCD"
+          "kind": "parallelogram",
+          "quote": "Parallelogram ABCD"
         },
         {
           "items": [
-            "AB"
+            "A"
           ],
-          "kind": "equal_length",
-          "quote": "AB = 6",
-          "value": 6
-        },
-        {
-          "items": [
-            "BC"
-          ],
-          "kind": "equal_length",
-          "quote": "BC = 4",
-          "value": 4
+          "kind": "angle_measure",
+          "quote": "m\u2220A = 70\u00b0",
+          "value": 70
         }
       ],
       "points": [
@@ -299,25 +1563,111 @@
         "ABCD"
       ],
       "prove": [],
-      "requested": [
-        {
-          "item": "BD",
-          "kind": "segment"
-        }
-      ],
-      "segments": [
-        "AB",
-        "BC",
-        "BD"
-      ]
+      "requested": []
     }
   },
-  "2326d4ad0c946e150ea21992bd5ab125": {
+  "4f852ef0f1e547acdf663315a72fed07": {
     "meta": {
       "mode": "bank_chat_facts_a",
       "model": "claude-sonnet-4-6",
-      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, $\\angle C$ is a right angle. Find $AB$.\n\nThe teacher's message:\n(none)",
-      "recorded_at": 1794518786.19286
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nABCD is a parallelogram with AB = 8 and BC = 5. Find its perimeter.\n\nFinal answer (shown only so you know w",
+      "recorded_at": 1794525991.0264509
+    },
+    "response": {
+      "find": [
+        {
+          "item": "perimeter of ABCD",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABCD"
+          ],
+          "kind": "parallelogram",
+          "quote": "ABCD is a parallelogram"
+        },
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "AB = 8",
+          "value": 8
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "equal_length",
+          "quote": "BC = 5",
+          "value": 5
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [
+        "ABCD"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "BC"
+      ]
+    }
+  },
+  "518432870bd18565ef4bd4abf08f8139": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nGiven: ABCD is a parallelogram. Prove: $\\angle A \\cong \\angle C$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794525972.805584
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "ABCD"
+          ],
+          "kind": "parallelogram",
+          "quote": "ABCD is a parallelogram."
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [
+        "ABCD"
+      ],
+      "prove": [
+        {
+          "items": [
+            "A",
+            "C"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220A \u2245 \u2220C"
+        }
+      ],
+      "requested": []
+    }
+  },
+  "51e8a2b46d49364ded422816b283fa25": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, $\\angle C$ is a right angle. Find $AB$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794525977.697321
     },
     "response": {
       "circles": [],
@@ -354,70 +1704,1192 @@
       ]
     }
   },
-  "342e69638ebba941b2f055dee5ed47c8": {
+  "56e7950ae7a019b75a919cb72b8cbe75": {
     "meta": {
       "mode": "bank_chat_facts_a",
       "model": "claude-sonnet-4-6",
-      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n$\\overline{PA}$ is tangent to circle $O$ at $A$, and radius $\\overline{OA} = 3$. Find $PA$.\n\nThe teacher's ",
-      "recorded_at": 1794518809.63818
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nGiven: $\\overline{AB} \\parallel \\overline{CD}$ and transversal $\\overline{EF}$ meets them at $X$ and $Y$. S",
+      "recorded_at": 1794525987.136051
     },
     "response": {
-      "circles": [
-        "O"
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        },
+        {
+          "items": [
+            "EF",
+            "AB",
+            "CD"
+          ],
+          "kind": "transversal",
+          "quote": "transversal EF meets them at X and Y"
+        },
+        {
+          "items": [
+            "EF",
+            "AB"
+          ],
+          "kind": "intersect",
+          "point": "X",
+          "quote": "transversal EF meets them at X and Y"
+        },
+        {
+          "items": [
+            "EF",
+            "CD"
+          ],
+          "kind": "intersect",
+          "point": "Y",
+          "quote": "transversal EF meets them at X and Y"
+        }
       ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "X",
+        "Y"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "BXY",
+            "CYX"
+          ],
+          "kind": "congruent_angles",
+          "quote": "Show that \u2220BXY \u2245 \u2220CYX"
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD",
+        "EF"
+      ],
+      "triangles": []
+    }
+  },
+  "5b8b4aba2f220d7049a89d9d83fe8366": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nLines AB and CD are cut by a transversal EF.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794526001.94339
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "EF",
+            "AB",
+            "CD"
+          ],
+          "kind": "transversal",
+          "quote": "Lines AB and CD are cut by a transversal EF."
+        }
+      ],
+      "named_lines": [
+        "AB",
+        "CD",
+        "EF"
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F"
+      ],
+      "prove": [],
+      "requested": []
+    }
+  },
+  "5d51ed2f6054f1373ddbb2fa3ebca4b8": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n$\\angle 1$ and $\\angle AOC$ form a linear pair. $m\\angle 1 = 65^\\circ$. Find $m\\angle AOC$.\n\nFinal answer (",
+      "recorded_at": 1794525996.556436
+    },
+    "response": {
+      "circles": [],
       "find": [
         {
-          "item": "PA",
-          "kind": "segment"
+          "item": "AOC",
+          "kind": "angle"
         }
       ],
       "givens": [
         {
-          "circle": "O",
           "items": [
-            "PA"
+            "1",
+            "AOC"
           ],
-          "kind": "tangent",
-          "point": "A",
-          "quote": "PA is tangent to circle O at A"
-        },
-        {
-          "circle": "O",
-          "items": [
-            "OA"
-          ],
-          "kind": "radius",
-          "quote": "radius OA = 3",
-          "value": 3
+          "kind": "linear_pair",
+          "quote": "\u22201 and \u2220AOC form a linear pair."
         },
         {
           "items": [
-            "OA"
+            "1"
           ],
-          "kind": "equal_length",
-          "quote": "radius OA = 3",
-          "value": 3
+          "kind": "angle_measure",
+          "quote": "m\u22201 = 65\u00b0",
+          "value": 65
         }
       ],
+      "lines": [],
+      "named_lines": [],
       "points": [
-        "P",
         "A",
-        "O"
+        "O",
+        "C"
       ],
+      "polygons": [],
       "prove": [],
+      "rays": [],
       "requested": [],
-      "segments": [
-        "PA",
-        "OA"
-      ]
+      "segments": [],
+      "triangles": []
     }
   },
-  "349bb868117f3655c5ea97b2beb39016": {
+  "5dad3c51d52d79596b2c3978f6746c6d": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nGiven: ABCD is a parallelogram. Prove: $\\angle A \\cong \\angle C$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794525973.765146
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "ABCD"
+          ],
+          "kind": "parallelogram",
+          "quote": "ABCD is a parallelogram"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [
+        "ABCD"
+      ],
+      "prove": [
+        {
+          "items": [
+            "A",
+            "C"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220A \u2245 \u2220C"
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": []
+    }
+  },
+  "5f25e03f588e1949b7a5c121d5c61590": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nGiven: $\\overline{AB} \\parallel \\overline{CD}$ and transversal $\\overline{EF}$ meets them at $X$ and $Y$. E",
+      "recorded_at": 1794525987.562946
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        },
+        {
+          "items": [
+            "EF",
+            "AB",
+            "CD"
+          ],
+          "kind": "transversal",
+          "quote": "transversal EF meets them at X and Y"
+        },
+        {
+          "items": [
+            "EF",
+            "AB"
+          ],
+          "kind": "intersect",
+          "point": "X",
+          "quote": "transversal EF meets them at X and Y"
+        },
+        {
+          "items": [
+            "EF",
+            "CD"
+          ],
+          "kind": "intersect",
+          "point": "Y",
+          "quote": "transversal EF meets them at X and Y"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "X",
+        "Y"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "BXY",
+            "CYX"
+          ],
+          "kind": "congruent_angles",
+          "quote": "Explain why \u2220BXY \u2245 \u2220CYX"
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD",
+        "EF"
+      ],
+      "triangles": []
+    }
+  },
+  "606ae0e69708d12974dfed448d61662e": {
     "meta": {
       "mode": "bank_chat_facts_a",
       "model": "claude-sonnet-4-6",
       "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nGiven: $\\overline{AB} \\cong \\overline{BC} \\cong \\overline{CD} \\cong \\overline{DA}$, diagonals meet at $E$. ",
-      "recorded_at": 1794518797.789588
+      "recorded_at": 1794525989.639345
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "BC",
+            "CD",
+            "DA"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB \u2245 BC \u2245 CD \u2245 DA"
+        },
+        {
+          "items": [
+            "AC",
+            "BD"
+          ],
+          "kind": "intersect",
+          "point": "E",
+          "quote": "diagonals meet at E"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ],
+      "polygons": [
+        "ABCD"
+      ],
+      "prove": [
+        {
+          "items": [
+            "AC",
+            "BD"
+          ],
+          "kind": "perpendicular",
+          "quote": "AC \u22a5 BD"
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "BC",
+        "CD",
+        "DA",
+        "AC",
+        "BD"
+      ],
+      "triangles": []
+    }
+  },
+  "62757c1be96c21196a4230f43a1b940f": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nGiven: $\\overline{AB} \\parallel \\overline{CD}$ and transversal $\\overline{EF}$ meets them at $X$ and $Y$. P",
+      "recorded_at": 1794525984.948714
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        },
+        {
+          "items": [
+            "EF",
+            "AB",
+            "CD"
+          ],
+          "kind": "transversal",
+          "quote": "transversal EF meets them at X and Y"
+        },
+        {
+          "items": [
+            "EF"
+          ],
+          "kind": "on_segment",
+          "point": "X",
+          "quote": "transversal EF meets them at X and Y"
+        },
+        {
+          "items": [
+            "EF"
+          ],
+          "kind": "on_segment",
+          "point": "Y",
+          "quote": "transversal EF meets them at X and Y"
+        },
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "on_segment",
+          "point": "X",
+          "quote": "transversal EF meets them at X and Y"
+        },
+        {
+          "items": [
+            "CD"
+          ],
+          "kind": "on_segment",
+          "point": "Y",
+          "quote": "transversal EF meets them at X and Y"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "X",
+        "Y"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "BXY",
+            "CYX"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220BXY \u2245 \u2220CYX"
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD",
+        "EF"
+      ],
+      "triangles": []
+    }
+  },
+  "6542aebc1939c362f8ddc85605830949": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nLines $AB$ and $CD$ are parallel, cut by transversal $EF$ at $G$ and $H$. $\\angle 1$ and $\\angle 2$ are alt",
+      "recorded_at": 1794526012.3459258
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "Lines AB and CD are parallel"
+        },
+        {
+          "items": [
+            "EF",
+            "AB",
+            "CD"
+          ],
+          "kind": "transversal",
+          "quote": "cut by transversal EF at G and H"
+        },
+        {
+          "items": [
+            "EF",
+            "AB"
+          ],
+          "kind": "intersect",
+          "point": "G",
+          "quote": "cut by transversal EF at G and H"
+        },
+        {
+          "items": [
+            "EF",
+            "CD"
+          ],
+          "kind": "intersect",
+          "point": "H",
+          "quote": "cut by transversal EF at G and H"
+        },
+        {
+          "items": [
+            "1",
+            "1"
+          ],
+          "kind": "numbered_angle",
+          "quote": "\u22201 and \u22202 are alternate exterior angles"
+        },
+        {
+          "items": [
+            "2",
+            "2"
+          ],
+          "kind": "numbered_angle",
+          "quote": "\u22201 and \u22202 are alternate exterior angles"
+        },
+        {
+          "items": [
+            "1",
+            "2"
+          ],
+          "kind": "alternate_exterior",
+          "quote": "\u22201 and \u22202 are alternate exterior angles"
+        }
+      ],
+      "lines": [
+        "AB",
+        "CD",
+        "EF"
+      ],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "1",
+            "2"
+          ],
+          "kind": "congruent_angles",
+          "quote": "Prove \u22201 \u2245 \u22202"
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": []
+    }
+  },
+  "65f1c1c91e0aff1a4915dcdcebf1ba8c": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nABCD is a parallelogram with AB = 8 and BC = 5. Find its perimeter.\n\nFinal answer (shown only so you know w",
+      "recorded_at": 1794525992.71326
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "perimeter of ABCD",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABCD"
+          ],
+          "kind": "parallelogram",
+          "quote": "ABCD is a parallelogram"
+        },
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "AB = 8",
+          "value": 8
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "equal_length",
+          "quote": "BC = 5",
+          "value": 5
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [
+        "ABCD"
+      ],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "BC"
+      ],
+      "triangles": []
+    }
+  },
+  "698ad771113308208e3e28383ebacaad": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nLines $AB$ and $EF$ intersect at $G$. $\\angle 1$ and $\\angle 2$ are vertical angles, and $m\\angle 1 = 63^\\c",
+      "recorded_at": 1794526012.993151
+    },
+    "response": {
+      "find": [
+        {
+          "item": "m\u22202",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "EF"
+          ],
+          "kind": "intersect",
+          "point": "G",
+          "quote": "Lines AB and EF intersect at G."
+        },
+        {
+          "items": [
+            "1",
+            "2"
+          ],
+          "kind": "vertical_angles",
+          "quote": "\u22201 and \u22202 are vertical angles"
+        },
+        {
+          "items": [
+            "1"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u22201 = 63\u00b0",
+          "value": 63
+        }
+      ],
+      "named_lines": [
+        "AB",
+        "EF"
+      ],
+      "points": [
+        "A",
+        "B",
+        "E",
+        "F",
+        "G"
+      ],
+      "prove": [],
+      "requested": []
+    }
+  },
+  "6c6684dbc58618e3568c236c28c4e65a": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nLines $AB$ and $CD$ are parallel, cut by transversal $EF$ at $G$ and $H$. $\\angle 1$ and $\\angle 2$ are alt",
+      "recorded_at": 1794526012.0590458
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "Lines AB and CD are parallel"
+        },
+        {
+          "items": [
+            "EF",
+            "AB",
+            "CD"
+          ],
+          "kind": "transversal",
+          "quote": "cut by transversal EF at G and H"
+        },
+        {
+          "items": [
+            "EF",
+            "AB"
+          ],
+          "kind": "intersect",
+          "point": "G",
+          "quote": "cut by transversal EF at G and H"
+        },
+        {
+          "items": [
+            "EF",
+            "CD"
+          ],
+          "kind": "intersect",
+          "point": "H",
+          "quote": "cut by transversal EF at G and H"
+        },
+        {
+          "items": [
+            "1",
+            "1"
+          ],
+          "kind": "numbered_angle",
+          "quote": "\u22201 and \u22202 are alternate exterior angles"
+        },
+        {
+          "items": [
+            "2",
+            "2"
+          ],
+          "kind": "numbered_angle",
+          "quote": "\u22201 and \u22202 are alternate exterior angles"
+        },
+        {
+          "items": [
+            "1",
+            "2"
+          ],
+          "kind": "alternate_exterior",
+          "quote": "\u22201 and \u22202 are alternate exterior angles"
+        }
+      ],
+      "lines": [
+        "AB",
+        "CD",
+        "EF"
+      ],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "1",
+            "2"
+          ],
+          "kind": "congruent_angles",
+          "quote": "Prove \u22201 \u2245 \u22202"
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": []
+    }
+  },
+  "6e9cd66af83104652a34049a2a377399": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nLines $AB$ and $CD$ are parallel, cut by transversal $EF$ at $G$ and $H$. $\\angle 1$ and $\\angle 2$ are sam",
+      "recorded_at": 1794526009.337684
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "Lines AB and CD are parallel"
+        },
+        {
+          "items": [
+            "EF",
+            "AB",
+            "CD"
+          ],
+          "kind": "transversal",
+          "quote": "cut by transversal EF at G and H"
+        },
+        {
+          "items": [
+            "EF",
+            "AB"
+          ],
+          "kind": "intersect",
+          "point": "G",
+          "quote": "cut by transversal EF at G and H"
+        },
+        {
+          "items": [
+            "EF",
+            "CD"
+          ],
+          "kind": "intersect",
+          "point": "H",
+          "quote": "cut by transversal EF at G and H"
+        },
+        {
+          "items": [
+            "1",
+            ""
+          ],
+          "kind": "numbered_angle",
+          "quote": "\u22201 and \u22202 are same-side interior angles"
+        },
+        {
+          "items": [
+            "2",
+            ""
+          ],
+          "kind": "numbered_angle",
+          "quote": "\u22201 and \u22202 are same-side interior angles"
+        },
+        {
+          "items": [
+            "1",
+            "2"
+          ],
+          "kind": "same_side_interior",
+          "quote": "\u22201 and \u22202 are same-side interior angles"
+        },
+        {
+          "items": [
+            "1"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u22201 = 63\u00b0",
+          "value": 63
+        },
+        {
+          "expr": "(2x + 3)\u00b0",
+          "items": [
+            "2"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u22202 = (2x + 3)\u00b0"
+        }
+      ],
+      "lines": [
+        "AB",
+        "CD",
+        "EF"
+      ],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": []
+    }
+  },
+  "7927e32b73bce7756b9cd03f23214079": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nLines $AB$ and $CD$ are parallel, cut by transversal $EF$ at $G$ and $H$. $\\angle 1$ and $\\angle 2$ are cor",
+      "recorded_at": 1794526011.222674
+    },
+    "response": {
+      "find": [
+        {
+          "item": "m\u22202",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "Lines AB and CD are parallel"
+        },
+        {
+          "items": [
+            "EF",
+            "AB",
+            "CD"
+          ],
+          "kind": "transversal",
+          "quote": "cut by transversal EF at G and H"
+        },
+        {
+          "items": [
+            "EF",
+            "AB"
+          ],
+          "kind": "intersect",
+          "point": "G",
+          "quote": "cut by transversal EF at G and H"
+        },
+        {
+          "items": [
+            "EF",
+            "CD"
+          ],
+          "kind": "intersect",
+          "point": "H",
+          "quote": "cut by transversal EF at G and H"
+        },
+        {
+          "items": [
+            "1",
+            "2"
+          ],
+          "kind": "corresponding",
+          "quote": "\u22201 and \u22202 are corresponding angles"
+        },
+        {
+          "items": [
+            "1"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u22201 = 63\u00b0",
+          "value": 63
+        }
+      ],
+      "lines": [
+        "AB",
+        "CD",
+        "EF"
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H"
+      ],
+      "prove": [],
+      "requested": []
+    }
+  },
+  "7addd7abd0d4991e50d3636586893e37": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nGiven: $\\overline{AB} \\parallel \\overline{CD}$ and transversal $\\overline{EF}$ meets them at $X$ and $Y$. p",
+      "recorded_at": 1794525986.83872
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        },
+        {
+          "items": [
+            "EF",
+            "AB",
+            "CD"
+          ],
+          "kind": "transversal",
+          "quote": "transversal EF meets them at X and Y"
+        },
+        {
+          "items": [
+            "EF",
+            "AB"
+          ],
+          "kind": "intersect",
+          "point": "X",
+          "quote": "transversal EF meets them at X and Y"
+        },
+        {
+          "items": [
+            "EF",
+            "CD"
+          ],
+          "kind": "intersect",
+          "point": "Y",
+          "quote": "transversal EF meets them at X and Y"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "X",
+        "Y"
+      ],
+      "prove": [
+        {
+          "items": [
+            "BXY",
+            "CYX"
+          ],
+          "kind": "congruent_angles",
+          "quote": "prove that \u2220BXY \u2245 \u2220CYX"
+        }
+      ],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD",
+        "EF"
+      ]
+    }
+  },
+  "7c82154b5ea872216264a3948532178f": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\n$\\angle 1$ and $\\angle AOC$ form a linear pair. $m\\angle 1 = 65^\\circ$. Find $m\\angle AOC$.\n\nFinal answer (",
+      "recorded_at": 1794525997.066446
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "AOC",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "1",
+            "AOC"
+          ],
+          "kind": "linear_pair",
+          "quote": "\u22201 and \u2220AOC form a linear pair."
+        },
+        {
+          "items": [
+            "1"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u22201 = 65\u00b0",
+          "value": 65
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "O",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": []
+    }
+  },
+  "880d436a741e0efe31865a4422c192ac": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nGiven: $\\overline{AB} \\parallel \\overline{CD}$ and transversal $\\overline{EF}$ meets them at $X$ and $Y$. p",
+      "recorded_at": 1794525987.7607229
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        },
+        {
+          "items": [
+            "EF",
+            "AB",
+            "CD"
+          ],
+          "kind": "transversal",
+          "quote": "transversal EF meets them at X and Y"
+        },
+        {
+          "items": [
+            "EF",
+            "AB"
+          ],
+          "kind": "intersect",
+          "point": "X",
+          "quote": "transversal EF meets them at X and Y"
+        },
+        {
+          "items": [
+            "EF",
+            "CD"
+          ],
+          "kind": "intersect",
+          "point": "Y",
+          "quote": "transversal EF meets them at X and Y"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "X",
+        "Y"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "BXY",
+            "CYX"
+          ],
+          "kind": "congruent_angles",
+          "quote": "prove that \u2220BXY \u2245 \u2220CYX"
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD",
+        "EF"
+      ],
+      "triangles": []
+    }
+  },
+  "88720dd2143b96da4b136f1ec4e2d9a4": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nGiven: $\\overline{AB} \\cong \\overline{BC} \\cong \\overline{CD} \\cong \\overline{DA}$, diagonals meet at $E$. ",
+      "recorded_at": 1794525989.185332
     },
     "response": {
       "find": [],
@@ -473,191 +2945,91 @@
       ]
     }
   },
-  "376f62fee840ead73310c975ad7ac61f": {
+  "8d293b646b570f84c0a08929deb9d9d3": {
     "meta": {
-      "mode": "bank_chat_facts_b",
+      "mode": "bank_chat_facts_a",
       "model": "claude-sonnet-4-6",
-      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn quadrilateral ABCD, AB \u2225 CD and AD = BC. Prove ABCD is isosceles.\n\nThe teacher's message:\n(none)",
-      "recorded_at": 1794518803.613142
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nLines $AB$ and $EF$ intersect at $G$. $\\angle 1$ and $\\angle 2$ form a linear pair, and $m\\angle 1 = 63^\\ci",
+      "recorded_at": 1794526014.004998
     },
     "response": {
       "circles": [],
-      "find": [],
+      "find": [
+        {
+          "item": "m\u22202",
+          "kind": "angle"
+        }
+      ],
       "givens": [
         {
           "items": [
-            "ABCD"
-          ],
-          "kind": "trapezoid",
-          "quote": "In quadrilateral ABCD, AB \u2225 CD"
-        },
-        {
-          "items": [
             "AB",
-            "CD"
+            "EF"
           ],
-          "kind": "parallel",
-          "quote": "AB \u2225 CD"
+          "kind": "intersect",
+          "point": "G",
+          "quote": "Lines AB and EF intersect at G"
         },
         {
           "items": [
-            "AD",
-            "BC"
+            "1",
+            "2"
           ],
-          "kind": "congruent_segments",
-          "quote": "AD = BC"
+          "kind": "linear_pair",
+          "quote": "\u22201 and \u22202 form a linear pair"
+        },
+        {
+          "items": [
+            "1"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u22201 = 63\u00b0",
+          "value": 63
         }
       ],
-      "lines": [],
+      "lines": [
+        "AB",
+        "EF"
+      ],
       "named_lines": [],
       "points": [
         "A",
         "B",
-        "C",
-        "D"
+        "E",
+        "F",
+        "G"
       ],
-      "polygons": [
-        "ABCD"
-      ],
-      "prove": [
-        {
-          "items": [
-            "ABCD"
-          ],
-          "kind": "isosceles_trapezoid",
-          "quote": "Prove ABCD is isosceles"
-        }
-      ],
+      "polygons": [],
+      "prove": [],
       "rays": [],
       "requested": [],
       "segments": [],
       "triangles": []
     }
   },
-  "3b76a25fe536c003f5f96c37e9d7a5e6": {
+  "8e73d7b385ea5c6bc325f21e784771ba": {
     "meta": {
-      "mode": "bank_chat_facts_b",
+      "mode": "bank_chat_facts_a",
       "model": "claude-sonnet-4-6",
-      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nDraw $\\overrightarrow{AB}$ and $\\overrightarrow{AC}$.\n\nThe teacher's message:\n(none)",
-      "recorded_at": 1794518811.131691
-    },
-    "response": {
-      "find": [],
-      "givens": [],
-      "points": [
-        "A",
-        "B",
-        "C"
-      ],
-      "prove": [],
-      "rays": [
-        "AB",
-        "AC"
-      ],
-      "requested": [
-        {
-          "item": "AB",
-          "kind": "ray"
-        },
-        {
-          "item": "AC",
-          "kind": "ray"
-        }
-      ]
-    }
-  },
-  "4190999793a3debabba21e4cc00960e6": {
-    "meta": {
-      "mode": "bank_chat_facts_b",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nGiven: $\\overline{AB} \\parallel \\overline{CD}$ and transversal $\\overline{EF}$ meets them at $X$ and $Y$. P",
-      "recorded_at": 1794518792.09346
-    },
-    "response": {
-      "find": [],
-      "givens": [
-        {
-          "items": [
-            "AB",
-            "CD"
-          ],
-          "kind": "parallel",
-          "quote": "AB \u2225 CD"
-        },
-        {
-          "items": [
-            "EF",
-            "AB",
-            "CD"
-          ],
-          "kind": "transversal",
-          "quote": "transversal EF meets them at X and Y"
-        },
-        {
-          "items": [
-            "EF",
-            "AB"
-          ],
-          "kind": "intersect",
-          "point": "X",
-          "quote": "transversal EF meets them at X and Y"
-        },
-        {
-          "items": [
-            "EF",
-            "CD"
-          ],
-          "kind": "intersect",
-          "point": "Y",
-          "quote": "transversal EF meets them at X and Y"
-        }
-      ],
-      "points": [
-        "A",
-        "B",
-        "C",
-        "D",
-        "E",
-        "F",
-        "X",
-        "Y"
-      ],
-      "prove": [
-        {
-          "items": [
-            "BXY",
-            "CYX"
-          ],
-          "kind": "congruent_angles",
-          "quote": "\u2220BXY \u2245 \u2220CYX"
-        }
-      ],
-      "requested": [],
-      "segments": [
-        "AB",
-        "CD",
-        "EF"
-      ]
-    }
-  },
-  "44bfef52020529dfcdfb51835ba880a2": {
-    "meta": {
-      "mode": "bank_chat_facts_b",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nGiven: $\\triangle ABC \\cong \\triangle A^{\\prime}B^{\\prime}C^{\\prime}$.\n\nThe teacher's message:\n(none)",
-      "recorded_at": 1794518791.146589
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nGiven: $\\triangle ABC \\sim \\triangle DEF$. Find $EF$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794525972.893462
     },
     "response": {
       "circles": [],
-      "find": [],
+      "find": [
+        {
+          "item": "EF",
+          "kind": "segment"
+        }
+      ],
       "givens": [
         {
           "items": [
             "ABC",
-            "A'B'C'"
+            "DEF"
           ],
-          "kind": "congruent_triangles",
-          "quote": "\u25b3ABC \u2245 \u25b3A\u2032B\u2032C\u2032"
+          "kind": "similar_triangles",
+          "quote": "\u25b3ABC ~ \u25b3DEF"
         }
       ],
       "lines": [],
@@ -666,9 +3038,9 @@
         "A",
         "B",
         "C",
-        "A'",
-        "B'",
-        "C'"
+        "D",
+        "E",
+        "F"
       ],
       "polygons": [],
       "prove": [],
@@ -677,27 +3049,21 @@
       "segments": [],
       "triangles": [
         "ABC",
-        "A'B'C'"
+        "DEF"
       ]
     }
   },
-  "4525324afd347e07987e13c8503ae8a3": {
+  "93e15392bbe55d9fa01be6d5041dfc12": {
     "meta": {
-      "mode": "bank_chat_facts_a",
+      "mode": "bank_chat_facts_b",
       "model": "claude-sonnet-4-6",
-      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn quadrilateral ABCD, AB \u2225 CD and AD = BC. Prove ABCD is isosceles.\n\nThe teacher's message:\n(none)",
-      "recorded_at": 1794518802.717133
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn quadrilateral ABCD, AB \u2225 CD and AD = BC. Prove ABCD is isosceles.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794525994.6893382
     },
     "response": {
+      "circles": [],
       "find": [],
       "givens": [
-        {
-          "items": [
-            "ABCD"
-          ],
-          "kind": "trapezoid",
-          "quote": "In quadrilateral ABCD, AB \u2225 CD"
-        },
         {
           "items": [
             "AB",
@@ -713,8 +3079,17 @@
           ],
           "kind": "congruent_segments",
           "quote": "AD = BC"
+        },
+        {
+          "items": [
+            "ABCD"
+          ],
+          "kind": "trapezoid",
+          "quote": "In quadrilateral ABCD, AB \u2225 CD"
         }
       ],
+      "lines": [],
+      "named_lines": [],
       "points": [
         "A",
         "B",
@@ -733,158 +3108,27 @@
           "quote": "Prove ABCD is isosceles"
         }
       ],
+      "rays": [],
       "requested": [],
-      "segments": [
-        "AB",
-        "CD",
-        "AD",
-        "BC"
-      ]
+      "segments": [],
+      "triangles": []
     }
   },
-  "457d20dc9a8eb6bdd190f012152f5903": {
-    "meta": {
-      "mode": "bank_chat_facts_a",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n$\\overline{PA}$ is tangent to circle $O$ at $A$. Find $PA$ if radius $OA = 3$ and $OP = 5$.\n\nFinal answer (",
-      "recorded_at": 1794518807.483372
-    },
-    "response": {
-      "circles": [
-        "O"
-      ],
-      "find": [
-        {
-          "item": "PA",
-          "kind": "segment"
-        }
-      ],
-      "givens": [
-        {
-          "circle": "O",
-          "items": [
-            "PA"
-          ],
-          "kind": "tangent",
-          "point": "A",
-          "quote": "PA is tangent to circle O at A"
-        },
-        {
-          "circle": "O",
-          "items": [
-            "OA"
-          ],
-          "kind": "radius",
-          "quote": "radius OA = 3",
-          "value": 3
-        },
-        {
-          "items": [
-            "OP"
-          ],
-          "kind": "equal_length",
-          "quote": "OP = 5",
-          "value": 5
-        }
-      ],
-      "points": [
-        "P",
-        "A",
-        "O"
-      ],
-      "prove": [],
-      "requested": [],
-      "segments": [
-        "PA",
-        "OA",
-        "OP"
-      ]
-    }
-  },
-  "4e9d5d58a385e735a2efbf3022390bdd": {
+  "9ae692c9e69b304681c469828773bc5f": {
     "meta": {
       "mode": "bank_chat_facts_b",
       "model": "claude-sonnet-4-6",
-      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nGiven: $\\overline{AB} \\parallel \\overline{CD}$ and transversal $\\overline{EF}$ meets them at $X$ and $Y$. E",
-      "recorded_at": 1794518795.446649
-    },
-    "response": {
-      "find": [],
-      "givens": [
-        {
-          "items": [
-            "AB",
-            "CD"
-          ],
-          "kind": "parallel",
-          "quote": "AB \u2225 CD"
-        },
-        {
-          "items": [
-            "EF",
-            "AB",
-            "CD"
-          ],
-          "kind": "transversal",
-          "quote": "transversal EF meets them at X and Y"
-        },
-        {
-          "items": [
-            "EF",
-            "AB"
-          ],
-          "kind": "intersect",
-          "point": "X",
-          "quote": "transversal EF meets them at X and Y"
-        },
-        {
-          "items": [
-            "EF",
-            "CD"
-          ],
-          "kind": "intersect",
-          "point": "Y",
-          "quote": "transversal EF meets them at X and Y"
-        }
-      ],
-      "points": [
-        "A",
-        "B",
-        "C",
-        "D",
-        "E",
-        "F",
-        "X",
-        "Y"
-      ],
-      "prove": [
-        {
-          "items": [
-            "BXY",
-            "CYX"
-          ],
-          "kind": "congruent_angles",
-          "quote": "Explain why \u2220BXY \u2245 \u2220CYX"
-        }
-      ],
-      "requested": [],
-      "segments": [
-        "AB",
-        "CD",
-        "EF"
-      ]
-    }
-  },
-  "50dc9f1d4f0037d989093855ddad6bfc": {
-    "meta": {
-      "mode": "bank_chat_facts_a",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nGiven: $\\overline{AB} \\parallel \\overline{CD}$ and transversal $\\overline{EF}$ meets them at $X$ and $Y$. E",
-      "recorded_at": 1794518796.155437
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nLines $AB$ and $CD$ are parallel, cut by transversal $EF$ at $G$ and $H$. $\\angle 1$ and $\\angle 2$ are alt",
+      "recorded_at": 1794526009.116759
     },
     "response": {
       "circles": [],
-      "find": [],
+      "find": [
+        {
+          "item": "m\u22202",
+          "kind": "angle"
+        }
+      ],
       "givens": [
         {
           "items": [
@@ -892,7 +3136,7 @@
             "CD"
           ],
           "kind": "parallel",
-          "quote": "AB \u2225 CD"
+          "quote": "Lines AB and CD are parallel"
         },
         {
           "items": [
@@ -901,7 +3145,7 @@
             "CD"
           ],
           "kind": "transversal",
-          "quote": "transversal EF meets them at X and Y"
+          "quote": "cut by transversal EF at G and H"
         },
         {
           "items": [
@@ -909,8 +3153,8 @@
             "AB"
           ],
           "kind": "intersect",
-          "point": "X",
-          "quote": "transversal EF meets them at X and Y"
+          "point": "G",
+          "quote": "cut by transversal EF at G and H"
         },
         {
           "items": [
@@ -918,11 +3162,31 @@
             "CD"
           ],
           "kind": "intersect",
-          "point": "Y",
-          "quote": "transversal EF meets them at X and Y"
+          "point": "H",
+          "quote": "cut by transversal EF at G and H"
+        },
+        {
+          "items": [
+            "1",
+            "2"
+          ],
+          "kind": "alternate_interior",
+          "quote": "\u22201 and \u22202 are alternate interior angles"
+        },
+        {
+          "items": [
+            "1"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u22201 = 63\u00b0",
+          "value": 63
         }
       ],
-      "lines": [],
+      "lines": [
+        "AB",
+        "CD",
+        "EF"
+      ],
       "named_lines": [],
       "points": [
         "A",
@@ -931,202 +3195,73 @@
         "D",
         "E",
         "F",
-        "X",
-        "Y"
+        "G",
+        "H"
       ],
       "polygons": [],
-      "prove": [
-        {
-          "items": [
-            "BXY",
-            "CYX"
-          ],
-          "kind": "congruent_angles",
-          "quote": "Explain why \u2220BXY \u2245 \u2220CYX"
-        }
-      ],
+      "prove": [],
       "rays": [],
       "requested": [],
-      "segments": [
-        "AB",
-        "CD",
-        "EF"
-      ],
+      "segments": [],
       "triangles": []
     }
   },
-  "5284e328abf61971e74641922fa55a6c": {
-    "meta": {
-      "mode": "bank_chat_facts_a",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nGiven: $\\overline{CA} \\cong \\overline{CB}$, $\\overline{CM} \\perp \\overline{AB}$. Prove: $M$ is the midpoint",
-      "recorded_at": 1794518813.0433972
-    },
-    "response": {
-      "find": [],
-      "givens": [
-        {
-          "items": [
-            "CA",
-            "CB"
-          ],
-          "kind": "congruent_segments",
-          "quote": "CA \u2245 CB"
-        },
-        {
-          "items": [
-            "CM",
-            "AB"
-          ],
-          "kind": "perpendicular",
-          "quote": "CM \u22a5 AB"
-        }
-      ],
-      "points": [
-        "A",
-        "B",
-        "C",
-        "M"
-      ],
-      "prove": [
-        {
-          "items": [
-            "AB"
-          ],
-          "kind": "midpoint",
-          "point": "M",
-          "quote": "M is the midpoint of AB"
-        }
-      ],
-      "requested": [],
-      "segments": [
-        "CA",
-        "CB",
-        "CM",
-        "AB"
-      ],
-      "triangles": [
-        "CAM",
-        "CBM"
-      ]
-    }
-  },
-  "52df61f4c33ddbba12fc1b3acba72049": {
+  "a221eb6171997dd6df05406bf711806f": {
     "meta": {
       "mode": "bank_chat_facts_b",
       "model": "claude-sonnet-4-6",
-      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nGiven: $\\overline{AB} \\parallel \\overline{CD}$ and transversal $\\overline{EF}$ meets them at $X$ and $Y$. S",
-      "recorded_at": 1794518794.8574579
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, BD bisects $\\angle ABC$ and D lies on AC.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794525981.720073
     },
     "response": {
+      "circles": [],
       "find": [],
       "givens": [
         {
           "items": [
-            "AB",
-            "CD"
+            "BD",
+            "ABC"
           ],
-          "kind": "parallel",
-          "quote": "AB \u2225 CD"
+          "kind": "bisects_angle",
+          "quote": "BD bisects \u2220ABC"
         },
         {
           "items": [
-            "EF",
-            "AB",
-            "CD"
+            "AC"
           ],
-          "kind": "transversal",
-          "quote": "transversal EF meets them at X and Y"
-        },
-        {
-          "items": [
-            "EF",
-            "AB"
-          ],
-          "kind": "intersect",
-          "point": "X",
-          "quote": "transversal EF meets them at X and Y"
-        },
-        {
-          "items": [
-            "EF",
-            "CD"
-          ],
-          "kind": "intersect",
-          "point": "Y",
-          "quote": "transversal EF meets them at X and Y"
+          "kind": "on_segment",
+          "point": "D",
+          "quote": "D lies on AC"
         }
       ],
-      "points": [
-        "A",
-        "B",
-        "C",
-        "D",
-        "E",
-        "F",
-        "X",
-        "Y"
-      ],
-      "prove": [
-        {
-          "items": [
-            "BXY",
-            "CYX"
-          ],
-          "kind": "congruent_angles",
-          "quote": "Show that \u2220BXY \u2245 \u2220CYX"
-        }
-      ],
-      "requested": [],
-      "segments": [
-        "AB",
-        "CD",
-        "EF"
-      ]
-    }
-  },
-  "5bbdc671e552c1234b5c1182ef57d966": {
-    "meta": {
-      "mode": "bank_chat_facts_a",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nGiven: segment AB $\\cong$ segment CD in quadrilateral ABCD.\n\nThe teacher's message:\n(none)",
-      "recorded_at": 1794518789.042498
-    },
-    "response": {
-      "find": [],
-      "givens": [
-        {
-          "items": [
-            "AB",
-            "CD"
-          ],
-          "kind": "congruent_segments",
-          "quote": "segment AB \u2245 segment CD"
-        }
-      ],
+      "lines": [],
+      "named_lines": [],
       "points": [
         "A",
         "B",
         "C",
         "D"
       ],
-      "polygons": [
-        "ABCD"
-      ],
+      "polygons": [],
       "prove": [],
+      "rays": [
+        "BD"
+      ],
       "requested": [],
       "segments": [
-        "AB",
-        "CD"
+        "BD"
+      ],
+      "triangles": [
+        "ABC"
       ]
     }
   },
-  "5d4bc26c64f51322fc78ba90942a70a5": {
+  "a3407b30384643570b82d9da576a8f78": {
     "meta": {
       "mode": "bank_chat_facts_b",
       "model": "claude-sonnet-4-6",
       "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\n$\\overline{PA}$ is tangent to circle $O$ at $A$. Find $PA$ if $OA = 3$.\n\nThe teacher's message:\n(none)",
-      "recorded_at": 1794518809.1534238
+      "recorded_at": 1794526001.283573
     },
     "response": {
       "circles": [
@@ -1178,500 +3313,12 @@
       ]
     }
   },
-  "67c05abc45e5cc9e40adadb0d1635697": {
-    "meta": {
-      "mode": "bank_chat_facts_b",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nGiven: $\\overline{AB} \\parallel \\overline{CD}$ and transversal $\\overline{EF}$ meets them at $X$ and $Y$. p",
-      "recorded_at": 1794518795.912788
-    },
-    "response": {
-      "find": [],
-      "givens": [
-        {
-          "items": [
-            "AB",
-            "CD"
-          ],
-          "kind": "parallel",
-          "quote": "AB \u2225 CD"
-        },
-        {
-          "items": [
-            "EF",
-            "AB",
-            "CD"
-          ],
-          "kind": "transversal",
-          "quote": "transversal EF meets them at X and Y"
-        },
-        {
-          "items": [
-            "EF",
-            "AB"
-          ],
-          "kind": "intersect",
-          "point": "X",
-          "quote": "transversal EF meets them at X and Y"
-        },
-        {
-          "items": [
-            "EF",
-            "CD"
-          ],
-          "kind": "intersect",
-          "point": "Y",
-          "quote": "transversal EF meets them at X and Y"
-        }
-      ],
-      "points": [
-        "A",
-        "B",
-        "C",
-        "D",
-        "E",
-        "F",
-        "X",
-        "Y"
-      ],
-      "prove": [
-        {
-          "items": [
-            "BXY",
-            "CYX"
-          ],
-          "kind": "congruent_angles",
-          "quote": "prove that \u2220BXY \u2245 \u2220CYX"
-        }
-      ],
-      "requested": [],
-      "segments": [
-        "AB",
-        "CD",
-        "EF"
-      ]
-    }
-  },
-  "6813bdbfa1e762eaf65292cb3c3b7fa0": {
-    "meta": {
-      "mode": "bank_chat_facts_b",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nPoints $A$, $B$, and $C$ lie on circle $O$. Find $m\\angle ABC$.\n\nFinal answer (shown only so you know what ",
-      "recorded_at": 1794518808.4897459
-    },
-    "response": {
-      "circles": [
-        "O"
-      ],
-      "find": [
-        {
-          "item": "ABC",
-          "kind": "angle"
-        }
-      ],
-      "givens": [
-        {
-          "circle": "O",
-          "items": [
-            "A",
-            "B",
-            "C"
-          ],
-          "kind": "on_circle",
-          "quote": "Points A, B, and C lie on circle O."
-        }
-      ],
-      "points": [
-        "A",
-        "B",
-        "C",
-        "O"
-      ],
-      "prove": [],
-      "requested": []
-    }
-  },
-  "6be8d68b45143e92a56ec97f37392d6a": {
-    "meta": {
-      "mode": "bank_chat_facts_b",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, BD bisects $\\angle ABC$ and D lies on AC.\n\nThe teacher's message:\n(none)",
-      "recorded_at": 1794518788.889706
-    },
-    "response": {
-      "find": [],
-      "givens": [
-        {
-          "items": [
-            "BD",
-            "ABC"
-          ],
-          "kind": "bisects_angle",
-          "quote": "BD bisects \u2220ABC"
-        },
-        {
-          "items": [
-            "AC"
-          ],
-          "kind": "on_segment",
-          "point": "D",
-          "quote": "D lies on AC"
-        }
-      ],
-      "points": [
-        "A",
-        "B",
-        "C",
-        "D"
-      ],
-      "prove": [],
-      "rays": [
-        "BD"
-      ],
-      "requested": [],
-      "segments": [
-        "BD",
-        "AC"
-      ],
-      "triangles": [
-        "ABC"
-      ]
-    }
-  },
-  "6f278eaedd54e287dc69658745d489dd": {
-    "meta": {
-      "mode": "bank_chat_facts_a",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n$\\angle 1$ and $\\angle 2$ are a linear pair and $m\\angle 1 = 3x$, $m\\angle 2 = 2x$.\n\nThe teacher's message:",
-      "recorded_at": 1794518805.993334
-    },
-    "response": {
-      "circles": [],
-      "find": [],
-      "givens": [
-        {
-          "items": [
-            "1",
-            "2"
-          ],
-          "kind": "linear_pair",
-          "quote": "\u22201 and \u22202 are a linear pair"
-        },
-        {
-          "expr": "3x",
-          "items": [
-            "1"
-          ],
-          "kind": "angle_measure",
-          "quote": "m\u22201 = 3x"
-        },
-        {
-          "expr": "2x",
-          "items": [
-            "2"
-          ],
-          "kind": "angle_measure",
-          "quote": "m\u22202 = 2x"
-        }
-      ],
-      "lines": [],
-      "named_lines": [],
-      "points": [],
-      "polygons": [],
-      "prove": [],
-      "rays": [],
-      "requested": [],
-      "segments": [],
-      "triangles": []
-    }
-  },
-  "709f6180ba367ba762b965ee6d5e5a59": {
-    "meta": {
-      "mode": "bank_chat_facts_b",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nGiven: $\\overline{AB} \\cong \\overline{BC} \\cong \\overline{CD} \\cong \\overline{DA}$, diagonals meet at $E$. ",
-      "recorded_at": 1794518798.749504
-    },
-    "response": {
-      "circles": [],
-      "find": [],
-      "givens": [
-        {
-          "items": [
-            "AB",
-            "BC",
-            "CD",
-            "DA"
-          ],
-          "kind": "congruent_segments",
-          "quote": "AB \u2245 BC \u2245 CD \u2245 DA"
-        },
-        {
-          "items": [
-            "AC",
-            "BD"
-          ],
-          "kind": "intersect",
-          "point": "E",
-          "quote": "diagonals meet at E"
-        }
-      ],
-      "lines": [],
-      "named_lines": [],
-      "points": [
-        "A",
-        "B",
-        "C",
-        "D",
-        "E"
-      ],
-      "polygons": [],
-      "prove": [
-        {
-          "items": [
-            "AC",
-            "BD"
-          ],
-          "kind": "perpendicular",
-          "quote": "Prove: AC \u22a5 BD"
-        }
-      ],
-      "rays": [],
-      "requested": [],
-      "segments": [
-        "AB",
-        "BC",
-        "CD",
-        "DA",
-        "AC",
-        "BD"
-      ],
-      "triangles": []
-    }
-  },
-  "74e2e7eec9c9b18442edcb994dfce577": {
-    "meta": {
-      "mode": "bank_chat_facts_a",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n$\\angle 1$ and $\\angle AOC$ form a linear pair. $m\\angle 1 = 65^\\circ$. Find $m\\angle AOC$.\n\nFinal answer (",
-      "recorded_at": 1794518805.0605829
-    },
-    "response": {
-      "circles": [],
-      "find": [
-        {
-          "item": "AOC",
-          "kind": "angle"
-        }
-      ],
-      "givens": [
-        {
-          "items": [
-            "1",
-            "AOC"
-          ],
-          "kind": "linear_pair",
-          "quote": "\u22201 and \u2220AOC form a linear pair."
-        },
-        {
-          "items": [
-            "1"
-          ],
-          "kind": "angle_measure",
-          "quote": "m\u22201 = 65\u00b0",
-          "value": 65
-        }
-      ],
-      "lines": [],
-      "named_lines": [],
-      "points": [
-        "A",
-        "O",
-        "C"
-      ],
-      "polygons": [],
-      "prove": [],
-      "rays": [],
-      "requested": [],
-      "segments": [],
-      "triangles": []
-    }
-  },
-  "79b10f347686232754973cc21a1bae30": {
-    "meta": {
-      "mode": "bank_chat_facts_a",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nGiven: $\\overline{AB} \\cong \\overline{AD}$, $\\overline{CB}\\cong\\overline{CD}$, E on AC. Prove: $m\\angle AEB",
-      "recorded_at": 1794518801.132714
-    },
-    "response": {
-      "circles": [],
-      "find": [],
-      "givens": [
-        {
-          "items": [
-            "AB",
-            "AD"
-          ],
-          "kind": "congruent_segments",
-          "quote": "AB \u2245 AD"
-        },
-        {
-          "items": [
-            "CB",
-            "CD"
-          ],
-          "kind": "congruent_segments",
-          "quote": "CB \u2245 CD"
-        },
-        {
-          "items": [
-            "AC"
-          ],
-          "kind": "on_segment",
-          "point": "E",
-          "quote": "E on AC"
-        }
-      ],
-      "lines": [],
-      "named_lines": [],
-      "points": [
-        "A",
-        "B",
-        "C",
-        "D",
-        "E"
-      ],
-      "polygons": [],
-      "prove": [
-        {
-          "items": [
-            "AEB"
-          ],
-          "kind": "angle_measure",
-          "quote": "m\u2220AEB = 90\u00b0",
-          "value": 90
-        }
-      ],
-      "rays": [],
-      "requested": [],
-      "segments": [
-        "AB",
-        "AD",
-        "CB",
-        "CD",
-        "AC"
-      ],
-      "triangles": []
-    }
-  },
-  "7b695c2e845e841d7c3ec4e1ea4787f5": {
-    "meta": {
-      "mode": "bank_chat_facts_b",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\n$\\overline{PA}$ is tangent to circle $O$ at $A$, and radius $\\overline{OA} = 3$. Find $PA$.\n\nThe teacher's ",
-      "recorded_at": 1794518810.019892
-    },
-    "response": {
-      "circles": [
-        "O"
-      ],
-      "find": [
-        {
-          "item": "PA",
-          "kind": "segment"
-        }
-      ],
-      "givens": [
-        {
-          "circle": "O",
-          "items": [
-            "PA"
-          ],
-          "kind": "tangent",
-          "point": "A",
-          "quote": "PA is tangent to circle O at A"
-        },
-        {
-          "circle": "O",
-          "items": [
-            "OA"
-          ],
-          "kind": "radius",
-          "quote": "radius OA"
-        },
-        {
-          "items": [
-            "OA"
-          ],
-          "kind": "equal_length",
-          "quote": "radius OA = 3",
-          "value": 3
-        }
-      ],
-      "points": [
-        "P",
-        "A",
-        "O"
-      ],
-      "prove": [],
-      "requested": [],
-      "segments": [
-        "PA",
-        "OA"
-      ]
-    }
-  },
-  "80934fd0a2ed2f9a5b3f331c6d8127d1": {
-    "meta": {
-      "mode": "bank_chat_facts_a",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nEquilateral $\\triangle ABC$ has side length 6.\n\nThe teacher's message:\n(none)",
-      "recorded_at": 1794518787.3770041
-    },
-    "response": {
-      "circles": [],
-      "find": [],
-      "givens": [
-        {
-          "items": [
-            "ABC"
-          ],
-          "kind": "equilateral",
-          "quote": "Equilateral \u25b3ABC"
-        },
-        {
-          "items": [
-            "AB"
-          ],
-          "kind": "equal_length",
-          "quote": "has side length 6",
-          "value": 6
-        }
-      ],
-      "lines": [],
-      "named_lines": [],
-      "points": [
-        "A",
-        "B",
-        "C"
-      ],
-      "polygons": [],
-      "prove": [],
-      "rays": [],
-      "requested": [],
-      "segments": [],
-      "triangles": [
-        "ABC"
-      ]
-    }
-  },
-  "848ae37f7b7a8899b8b7209862f159df": {
+  "a49baa6b019b0b07bab02e8c4fe9dce8": {
     "meta": {
       "mode": "bank_chat_facts_a",
       "model": "claude-sonnet-4-6",
       "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nRectangle $ABCD$ has $AB = 6$ and $BC = 4$. Find $BD$.\n\nFinal answer (shown only so you know what is asked;",
-      "recorded_at": 1794518813.7246249
+      "recorded_at": 1794526005.4339478
     },
     "response": {
       "find": [
@@ -1728,336 +3375,68 @@
       ]
     }
   },
-  "8ababf8b4dd730a4cab2f9d79a26de32": {
-    "meta": {
-      "mode": "bank_chat_facts_b",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, $\\angle C$ is a right angle. Find $AB$.\n\nThe teacher's message:\n(none)",
-      "recorded_at": 1794518786.8394828
-    },
-    "response": {
-      "circles": [],
-      "find": [
-        {
-          "item": "AB",
-          "kind": "segment"
-        }
-      ],
-      "givens": [
-        {
-          "items": [
-            "ABC"
-          ],
-          "kind": "right_triangle",
-          "point": "C",
-          "quote": "\u2220C is a right angle"
-        }
-      ],
-      "lines": [],
-      "named_lines": [],
-      "points": [
-        "A",
-        "B",
-        "C"
-      ],
-      "polygons": [],
-      "prove": [],
-      "rays": [],
-      "requested": [],
-      "segments": [],
-      "triangles": [
-        "ABC"
-      ]
-    }
-  },
-  "8f5bea9644991d35f0d7b656c0337f40": {
-    "meta": {
-      "mode": "bank_chat_facts_b",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\n$\\overline{PA}$ is tangent to circle $O$ at $A$. Find $PA$ if radius $OA = 3$ and $OP = 5$.\n\nFinal answer (",
-      "recorded_at": 1794518808.06597
-    },
-    "response": {
-      "circles": [
-        "O"
-      ],
-      "find": [
-        {
-          "item": "PA",
-          "kind": "segment"
-        }
-      ],
-      "givens": [
-        {
-          "circle": "O",
-          "items": [
-            "PA"
-          ],
-          "kind": "tangent",
-          "point": "A",
-          "quote": "PA is tangent to circle O at A"
-        },
-        {
-          "circle": "O",
-          "items": [
-            "OA"
-          ],
-          "kind": "radius",
-          "quote": "radius OA = 3",
-          "value": 3
-        },
-        {
-          "items": [
-            "OA"
-          ],
-          "kind": "equal_length",
-          "quote": "radius OA = 3",
-          "value": 3
-        },
-        {
-          "items": [
-            "OP"
-          ],
-          "kind": "equal_length",
-          "quote": "OP = 5",
-          "value": 5
-        }
-      ],
-      "points": [
-        "P",
-        "A",
-        "O"
-      ],
-      "prove": [],
-      "requested": [],
-      "segments": [
-        "PA",
-        "OA",
-        "OP"
-      ]
-    }
-  },
-  "95a41a2995ff8bed8e1cbbaa2c51b837": {
-    "meta": {
-      "mode": "bank_chat_facts_b",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nGiven: ABCD is a parallelogram. Prove: $\\angle A \\cong \\angle C$.\n\nThe teacher's message:\n(none)",
-      "recorded_at": 1794518782.997059
-    },
-    "response": {
-      "circles": [],
-      "find": [],
-      "givens": [
-        {
-          "items": [
-            "ABCD"
-          ],
-          "kind": "parallelogram",
-          "quote": "ABCD is a parallelogram."
-        }
-      ],
-      "lines": [],
-      "named_lines": [],
-      "points": [
-        "A",
-        "B",
-        "C",
-        "D"
-      ],
-      "polygons": [
-        "ABCD"
-      ],
-      "prove": [
-        {
-          "items": [
-            "A",
-            "C"
-          ],
-          "kind": "congruent_angles",
-          "quote": "\u2220A \u2245 \u2220C"
-        }
-      ],
-      "rays": [],
-      "requested": [],
-      "segments": [],
-      "triangles": []
-    }
-  },
-  "96d6893d3ef23c8d17e38044ef09a60a": {
+  "a658cce9f342d84b769ea1ea5c0bd2d4": {
     "meta": {
       "mode": "bank_chat_facts_a",
       "model": "claude-sonnet-4-6",
-      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n$\\triangle ABC$ is a right triangle with right angle $C$.\n\nThe teacher's message:\n(none)",
-      "recorded_at": 1794518786.317714
-    },
-    "response": {
-      "circles": [],
-      "find": [],
-      "givens": [
-        {
-          "items": [
-            "ABC"
-          ],
-          "kind": "right_triangle",
-          "point": "C",
-          "quote": "\u25b3ABC is a right triangle with right angle C"
-        }
-      ],
-      "lines": [],
-      "named_lines": [],
-      "points": [
-        "A",
-        "B",
-        "C"
-      ],
-      "polygons": [],
-      "prove": [],
-      "rays": [],
-      "requested": [],
-      "segments": [],
-      "triangles": [
-        "ABC"
-      ]
-    }
-  },
-  "9bc69c081dd8f647cc053321ed2f4989": {
-    "meta": {
-      "mode": "bank_chat_facts_a",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, $\\overline{AD}$ is perpendicular to $\\overline{BC}$ at $D$.\n\nThe teacher's message:\n(no",
-      "recorded_at": 1794518785.796436
-    },
-    "response": {
-      "find": [],
-      "givens": [
-        {
-          "items": [
-            "AD",
-            "BC"
-          ],
-          "kind": "perpendicular",
-          "point": "D",
-          "quote": "AD is perpendicular to BC at D"
-        },
-        {
-          "items": [
-            "BC"
-          ],
-          "kind": "on_segment",
-          "point": "D",
-          "quote": "AD is perpendicular to BC at D"
-        }
-      ],
-      "points": [
-        "A",
-        "B",
-        "C",
-        "D"
-      ],
-      "prove": [],
-      "requested": [],
-      "segments": [
-        "AD",
-        "BC"
-      ],
-      "triangles": [
-        "ABC"
-      ]
-    }
-  },
-  "9d1f8ed13a09d058a969c5053b57982d": {
-    "meta": {
-      "mode": "bank_chat_facts_b",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nGiven: Parallelogram $ABCD$. Find $m\\angle B$ if $m\\angle A = 70^\\circ$.\n\nFinal answer (shown only so you k",
-      "recorded_at": 1794518782.377287
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nLines $AB$ and $EF$ intersect at $G$. $\\angle 1$ and $\\angle 2$ are vertical angles, and $m\\angle 1 = 63^\\c",
+      "recorded_at": 1794526012.8410292
     },
     "response": {
       "find": [
         {
-          "item": "B",
+          "item": "m\u22202",
           "kind": "angle"
         }
       ],
       "givens": [
         {
           "items": [
-            "ABCD"
+            "AB",
+            "EF"
           ],
-          "kind": "parallelogram",
-          "quote": "Parallelogram ABCD"
+          "kind": "intersect",
+          "point": "G",
+          "quote": "Lines AB and EF intersect at G."
         },
         {
           "items": [
-            "A"
+            "1",
+            "2"
+          ],
+          "kind": "vertical_angles",
+          "quote": "\u22201 and \u22202 are vertical angles"
+        },
+        {
+          "items": [
+            "1"
           ],
           "kind": "angle_measure",
-          "quote": "m\u2220A = 70\u00b0",
-          "value": 70
+          "quote": "m\u22201 = 63\u00b0",
+          "value": 63
         }
+      ],
+      "lines": [
+        "AB",
+        "EF"
       ],
       "points": [
         "A",
         "B",
-        "C",
-        "D"
-      ],
-      "polygons": [
-        "ABCD"
+        "E",
+        "F",
+        "G"
       ],
       "prove": [],
       "requested": []
     }
   },
-  "9d3da75aa3c22b40bc515f1b10e545ee": {
+  "ac3b84de8e8d0d5db2ec9b00683fedb4": {
     "meta": {
       "mode": "bank_chat_facts_a",
       "model": "claude-sonnet-4-6",
-      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nLines AB and CD are cut by a transversal EF.\n\nThe teacher's message:\n(none)",
-      "recorded_at": 1794518811.400293
-    },
-    "response": {
-      "circles": [],
-      "find": [],
-      "givens": [
-        {
-          "items": [
-            "EF",
-            "AB",
-            "CD"
-          ],
-          "kind": "transversal",
-          "quote": "Lines AB and CD are cut by a transversal EF."
-        }
-      ],
-      "lines": [
-        "AB",
-        "CD",
-        "EF"
-      ],
-      "named_lines": [],
-      "points": [
-        "A",
-        "B",
-        "C",
-        "D",
-        "E",
-        "F"
-      ],
-      "polygons": [],
-      "prove": [],
-      "rays": [],
-      "requested": [],
-      "segments": [],
-      "triangles": []
-    }
-  },
-  "a6263ff282c0d8c97cd0f32c5377b5f5": {
-    "meta": {
-      "mode": "bank_chat_facts_a",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n$\\overline{PA}$ is tangent to circle $O$ at $A$. Find $PA$ if $OA = 3$.\n\nThe teacher's message:\n(none)",
-      "recorded_at": 1794518808.936237
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nPoints $A$, $B$, and $C$ lie on circle $O$. Find $m\\angle ABC$.\n\nFinal answer (shown only so you know what ",
+      "recorded_at": 1794525999.791169
     },
     "response": {
       "circles": [
@@ -2065,202 +3444,38 @@
       ],
       "find": [
         {
-          "item": "PA",
-          "kind": "segment"
-        }
-      ],
-      "givens": [
-        {
-          "circle": "O",
-          "items": [
-            "PA"
-          ],
-          "kind": "tangent",
-          "point": "A",
-          "quote": "PA is tangent to circle O at A"
-        },
-        {
-          "circle": "O",
-          "items": [
-            "OA"
-          ],
-          "kind": "radius",
-          "quote": "PA is tangent to circle O at A"
-        },
-        {
-          "items": [
-            "OA"
-          ],
-          "kind": "equal_length",
-          "quote": "OA = 3",
-          "value": 3
-        }
-      ],
-      "points": [
-        "P",
-        "A",
-        "O"
-      ],
-      "prove": [],
-      "requested": [],
-      "segments": [
-        "PA",
-        "OA"
-      ]
-    }
-  },
-  "a93c03e4dcc08c8bfb9555b972c1a9bf": {
-    "meta": {
-      "mode": "bank_chat_facts_b",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, $\\overline{AB} \\cong \\overline{AC}$ and $m\\angle B = 65^\\circ$. Find $m\\angle C$.\n\nFina",
-      "recorded_at": 1794518805.6993961
-    },
-    "response": {
-      "circles": [],
-      "find": [
-        {
-          "item": "m\u2220C",
+          "item": "ABC",
           "kind": "angle"
         }
       ],
       "givens": [
         {
+          "circle": "O",
           "items": [
-            "AB",
-            "AC"
+            "A",
+            "B",
+            "C"
           ],
-          "kind": "congruent_segments",
-          "quote": "AB \u2245 AC"
-        },
-        {
-          "items": [
-            "B"
-          ],
-          "kind": "angle_measure",
-          "quote": "m\u2220B = 65\u00b0",
-          "value": 65
-        }
-      ],
-      "lines": [],
-      "named_lines": [],
-      "points": [
-        "A",
-        "B",
-        "C"
-      ],
-      "polygons": [],
-      "prove": [],
-      "rays": [],
-      "requested": [],
-      "segments": [
-        "AB",
-        "AC"
-      ],
-      "triangles": [
-        "ABC"
-      ]
-    }
-  },
-  "b06441429a63e6fe7bfe413d6db42c71": {
-    "meta": {
-      "mode": "bank_chat_facts_b",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, $\\overline{AD}$ is perpendicular to $\\overline{BC}$ at $D$.\n\nThe teacher's message:\n(no",
-      "recorded_at": 1794518785.885361
-    },
-    "response": {
-      "find": [],
-      "givens": [
-        {
-          "items": [
-            "AD",
-            "BC"
-          ],
-          "kind": "perpendicular",
-          "point": "D",
-          "quote": "AD is perpendicular to BC at D"
-        },
-        {
-          "items": [
-            "BC"
-          ],
-          "kind": "on_segment",
-          "point": "D",
-          "quote": "AD is perpendicular to BC at D"
+          "kind": "on_circle",
+          "quote": "Points A, B, and C lie on circle O."
         }
       ],
       "points": [
         "A",
         "B",
         "C",
-        "D"
+        "O"
       ],
       "prove": [],
-      "requested": [],
-      "segments": [
-        "AD",
-        "BC"
-      ],
-      "triangles": [
-        "ABC"
-      ]
+      "requested": []
     }
   },
-  "b1c99c3cdef099ee417b80f4bd60d20e": {
-    "meta": {
-      "mode": "bank_chat_facts_a",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, $\\overline{AB} \\cong \\overline{AC}$ and $m\\angle B = 65^\\circ$. Find $m\\angle C$.\n\nFina",
-      "recorded_at": 1794518804.421386
-    },
-    "response": {
-      "find": [
-        {
-          "item": "m\u2220C",
-          "kind": "angle"
-        }
-      ],
-      "givens": [
-        {
-          "items": [
-            "AB",
-            "AC"
-          ],
-          "kind": "congruent_segments",
-          "quote": "AB \u2245 AC"
-        },
-        {
-          "items": [
-            "B"
-          ],
-          "kind": "angle_measure",
-          "quote": "m\u2220B = 65\u00b0",
-          "value": 65
-        }
-      ],
-      "points": [
-        "A",
-        "B",
-        "C"
-      ],
-      "prove": [],
-      "requested": [],
-      "segments": [
-        "AB",
-        "AC"
-      ],
-      "triangles": [
-        "ABC"
-      ]
-    }
-  },
-  "b9d8e14cce5e9284b698952b6ed00c5f": {
+  "ae5e189de7da342b7d476ff2622bd6dc": {
     "meta": {
       "mode": "bank_chat_facts_b",
       "model": "claude-sonnet-4-6",
       "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\n$\\angle 1$ and $\\angle 2$ are a linear pair and $m\\angle 1 = 3x$, $m\\angle 2 = 2x$.\n\nThe teacher's message:",
-      "recorded_at": 1794518804.8250508
+      "recorded_at": 1794525996.147281
     },
     "response": {
       "find": [],
@@ -2295,17 +3510,113 @@
       "requested": []
     }
   },
-  "bdcd8de47a905da64834cf317f069b48": {
+  "b4841c0b2a03c106340fb2cca45d9bf7": {
     "meta": {
       "mode": "bank_chat_facts_a",
       "model": "claude-sonnet-4-6",
-      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nRectangle ABCD has AB = 6 and BC = 3. Find AC.\n\nFinal answer (shown only so you know what is asked; take no",
-      "recorded_at": 1794518800.616846
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nGiven: Parallelogram $ABCD$. Find $m\\angle B$ if $m\\angle A = 70^\\circ$.\n\nFinal answer (shown only so you k",
+      "recorded_at": 1794525973.546779
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "B",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABCD"
+          ],
+          "kind": "parallelogram",
+          "quote": "Parallelogram ABCD"
+        },
+        {
+          "items": [
+            "A"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220A = 70\u00b0",
+          "value": 70
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [
+        "ABCD"
+      ],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": []
+    }
+  },
+  "d2fb2453bb2a3ad45dc7c51929735e4e": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, BD bisects $\\angle ABC$ and D lies on AC.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794525981.3391511
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "BD",
+            "ABC"
+          ],
+          "kind": "bisects_angle",
+          "quote": "BD bisects \u2220ABC"
+        },
+        {
+          "items": [
+            "AC"
+          ],
+          "kind": "on_segment",
+          "point": "D",
+          "quote": "D lies on AC"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "db6539d7ca6ada98a415b7b7f9284872": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nRectangle $ABCD$ has $AB = 6$ and $BC = 4$. Find $BD$.\n\nFinal answer (shown only so you know what is asked;",
+      "recorded_at": 1794526005.363063
     },
     "response": {
       "find": [
         {
-          "item": "AC",
+          "item": "BD",
           "kind": "segment"
         }
       ],
@@ -2330,8 +3641,8 @@
             "BC"
           ],
           "kind": "equal_length",
-          "quote": "BC = 3",
-          "value": 3
+          "quote": "BC = 4",
+          "value": 4
         }
       ],
       "points": [
@@ -2344,470 +3655,25 @@
         "ABCD"
       ],
       "prove": [],
-      "requested": [],
+      "requested": [
+        {
+          "item": "BD",
+          "kind": "segment"
+        }
+      ],
       "segments": [
         "AB",
         "BC",
-        "AC"
+        "BD"
       ]
     }
   },
-  "c2185897cb4b89cb2966040bdb40a2c4": {
-    "meta": {
-      "mode": "bank_chat_facts_a",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nPoints $A$, $B$, and $C$ lie on circle $O$. Find $m\\angle ABC$.\n\nFinal answer (shown only so you know what ",
-      "recorded_at": 1794518808.811258
-    },
-    "response": {
-      "circles": [
-        "O"
-      ],
-      "find": [
-        {
-          "item": "ABC",
-          "kind": "angle"
-        }
-      ],
-      "givens": [
-        {
-          "circle": "O",
-          "items": [
-            "A",
-            "B",
-            "C"
-          ],
-          "kind": "on_circle",
-          "quote": "Points A, B, and C lie on circle O"
-        }
-      ],
-      "points": [
-        "A",
-        "B",
-        "C",
-        "O"
-      ],
-      "prove": [],
-      "requested": []
-    }
-  },
-  "c74d0c563962f335ea65c2c93063d050": {
-    "meta": {
-      "mode": "bank_chat_facts_a",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nGiven: ABCD is a parallelogram. Prove: $\\angle A \\cong \\angle C$.\n\nThe teacher's message:\n(none)",
-      "recorded_at": 1794518781.950001
-    },
-    "response": {
-      "find": [],
-      "givens": [
-        {
-          "items": [
-            "ABCD"
-          ],
-          "kind": "parallelogram",
-          "quote": "ABCD is a parallelogram"
-        }
-      ],
-      "points": [
-        "A",
-        "B",
-        "C",
-        "D"
-      ],
-      "polygons": [
-        "ABCD"
-      ],
-      "prove": [
-        {
-          "items": [
-            "A",
-            "C"
-          ],
-          "kind": "congruent_angles",
-          "quote": "\u2220A \u2245 \u2220C"
-        }
-      ],
-      "requested": []
-    }
-  },
-  "c9e6c88867f6ab91bf57a20a1bc09419": {
-    "meta": {
-      "mode": "bank_chat_facts_a",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nGiven: $\\overline{AB} \\parallel \\overline{CD}$ and transversal $\\overline{EF}$ meets them at $X$ and $Y$. p",
-      "recorded_at": 1794518797.131383
-    },
-    "response": {
-      "circles": [],
-      "find": [],
-      "givens": [
-        {
-          "items": [
-            "AB",
-            "CD"
-          ],
-          "kind": "parallel",
-          "quote": "AB \u2225 CD"
-        },
-        {
-          "items": [
-            "EF",
-            "AB",
-            "CD"
-          ],
-          "kind": "transversal",
-          "quote": "transversal EF meets them at X and Y"
-        },
-        {
-          "items": [
-            "EF",
-            "AB"
-          ],
-          "kind": "intersect",
-          "point": "X",
-          "quote": "transversal EF meets them at X and Y"
-        },
-        {
-          "items": [
-            "EF",
-            "CD"
-          ],
-          "kind": "intersect",
-          "point": "Y",
-          "quote": "transversal EF meets them at X and Y"
-        }
-      ],
-      "lines": [],
-      "named_lines": [],
-      "points": [
-        "A",
-        "B",
-        "C",
-        "D",
-        "E",
-        "F",
-        "X",
-        "Y"
-      ],
-      "polygons": [],
-      "prove": [
-        {
-          "items": [
-            "BXY",
-            "CYX"
-          ],
-          "kind": "congruent_angles",
-          "quote": "prove that \u2220BXY \u2245 \u2220CYX"
-        }
-      ],
-      "rays": [],
-      "requested": [],
-      "segments": [
-        "AB",
-        "CD",
-        "EF"
-      ],
-      "triangles": []
-    }
-  },
-  "c9f0587684322acdda15c72f2399c0fb": {
-    "meta": {
-      "mode": "bank_chat_facts_b",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\n$\\angle 1$ and $\\angle AOC$ form a linear pair. $m\\angle 1 = 65^\\circ$. Find $m\\angle AOC$.\n\nFinal answer (",
-      "recorded_at": 1794518804.398292
-    },
-    "response": {
-      "find": [
-        {
-          "item": "m\u2220AOC",
-          "kind": "angle"
-        }
-      ],
-      "givens": [
-        {
-          "items": [
-            "1",
-            "AOC"
-          ],
-          "kind": "linear_pair",
-          "quote": "\u22201 and \u2220AOC form a linear pair."
-        },
-        {
-          "items": [
-            "1"
-          ],
-          "kind": "angle_measure",
-          "quote": "m\u22201 = 65\u00b0",
-          "value": 65
-        }
-      ],
-      "points": [
-        "A",
-        "O",
-        "C"
-      ],
-      "prove": [],
-      "requested": []
-    }
-  },
-  "c9f63942067960f492b2621c50527d71": {
-    "meta": {
-      "mode": "bank_chat_facts_a",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nGiven: $\\triangle ABC \\sim \\triangle DEF$. Find $EF$.\n\nThe teacher's message:\n(none)",
-      "recorded_at": 1794518782.5372689
-    },
-    "response": {
-      "circles": [],
-      "find": [
-        {
-          "item": "EF",
-          "kind": "segment"
-        }
-      ],
-      "givens": [
-        {
-          "items": [
-            "ABC",
-            "DEF"
-          ],
-          "kind": "similar_triangles",
-          "quote": "\u25b3ABC ~ \u25b3DEF"
-        }
-      ],
-      "lines": [],
-      "named_lines": [],
-      "points": [
-        "A",
-        "B",
-        "C",
-        "D",
-        "E",
-        "F"
-      ],
-      "polygons": [],
-      "prove": [],
-      "rays": [],
-      "requested": [],
-      "segments": [],
-      "triangles": [
-        "ABC",
-        "DEF"
-      ]
-    }
-  },
-  "d0c5281a1ea8688063d7685d86252717": {
-    "meta": {
-      "mode": "bank_chat_facts_b",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nABCD is a parallelogram with AB = 8 and BC = 5. Find its perimeter.\n\nFinal answer (shown only so you know w",
-      "recorded_at": 1794518801.0878148
-    },
-    "response": {
-      "circles": [],
-      "find": [
-        {
-          "item": "perimeter of ABCD",
-          "kind": "other"
-        }
-      ],
-      "givens": [
-        {
-          "items": [
-            "ABCD"
-          ],
-          "kind": "parallelogram",
-          "quote": "ABCD is a parallelogram"
-        },
-        {
-          "items": [
-            "AB"
-          ],
-          "kind": "equal_length",
-          "quote": "AB = 8",
-          "value": 8
-        },
-        {
-          "items": [
-            "BC"
-          ],
-          "kind": "equal_length",
-          "quote": "BC = 5",
-          "value": 5
-        }
-      ],
-      "lines": [],
-      "named_lines": [],
-      "points": [
-        "A",
-        "B",
-        "C",
-        "D"
-      ],
-      "polygons": [
-        "ABCD"
-      ],
-      "prove": [],
-      "rays": [],
-      "requested": [],
-      "segments": [
-        "AB",
-        "BC"
-      ],
-      "triangles": []
-    }
-  },
-  "d2fc0c73186ff7465afb2774da74bb65": {
-    "meta": {
-      "mode": "bank_chat_facts_a",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nGiven: $\\overline{AB} \\parallel \\overline{CD}$ and transversal $\\overline{EF}$ meets them at $X$ and $Y$. P",
-      "recorded_at": 1794518794.060931
-    },
-    "response": {
-      "circles": [],
-      "find": [],
-      "givens": [
-        {
-          "items": [
-            "AB",
-            "CD"
-          ],
-          "kind": "parallel",
-          "quote": "AB \u2225 CD"
-        },
-        {
-          "items": [
-            "EF",
-            "AB",
-            "CD"
-          ],
-          "kind": "transversal",
-          "quote": "transversal EF meets them at X and Y"
-        },
-        {
-          "items": [
-            "EF"
-          ],
-          "kind": "on_segment",
-          "point": "X",
-          "quote": "transversal EF meets them at X and Y"
-        },
-        {
-          "items": [
-            "EF"
-          ],
-          "kind": "on_segment",
-          "point": "Y",
-          "quote": "transversal EF meets them at X and Y"
-        },
-        {
-          "items": [
-            "EF",
-            "AB"
-          ],
-          "kind": "intersect",
-          "point": "X",
-          "quote": "transversal EF meets them at X and Y"
-        },
-        {
-          "items": [
-            "EF",
-            "CD"
-          ],
-          "kind": "intersect",
-          "point": "Y",
-          "quote": "transversal EF meets them at X and Y"
-        }
-      ],
-      "lines": [],
-      "named_lines": [],
-      "points": [
-        "A",
-        "B",
-        "C",
-        "D",
-        "E",
-        "F",
-        "X",
-        "Y"
-      ],
-      "polygons": [],
-      "prove": [
-        {
-          "items": [
-            "BXY",
-            "CYX"
-          ],
-          "kind": "congruent_angles",
-          "quote": "\u2220BXY \u2245 \u2220CYX"
-        }
-      ],
-      "rays": [],
-      "requested": [],
-      "segments": [
-        "AB",
-        "CD",
-        "EF"
-      ],
-      "triangles": []
-    }
-  },
-  "d5efda2135fcde3535a77907e74f0976": {
-    "meta": {
-      "mode": "bank_chat_facts_a",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nSquare $ABCD$ has side 6. Find the diagonal $\\overline{AC}$.\n\nFinal answer (shown only so you know what is ",
-      "recorded_at": 1794518781.926516
-    },
-    "response": {
-      "find": [
-        {
-          "item": "AC",
-          "kind": "segment"
-        }
-      ],
-      "givens": [
-        {
-          "items": [
-            "ABCD"
-          ],
-          "kind": "square",
-          "quote": "Square ABCD"
-        },
-        {
-          "items": [
-            "AB"
-          ],
-          "kind": "equal_length",
-          "quote": "has side 6",
-          "value": 6
-        }
-      ],
-      "points": [
-        "A",
-        "B",
-        "C",
-        "D"
-      ],
-      "polygons": [
-        "ABCD"
-      ],
-      "prove": [],
-      "requested": [],
-      "segments": [
-        "AC"
-      ]
-    }
-  },
-  "dc230f68d8177e0e4daa3816b63aa07c": {
+  "dbb1b7a8fd8df43482e1b3ffcc5bb897": {
     "meta": {
       "mode": "bank_chat_facts_b",
       "model": "claude-sonnet-4-6",
       "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nEquilateral $\\triangle ABC$ has side length 6.\n\nThe teacher's message:\n(none)",
-      "recorded_at": 1794518786.402008
+      "recorded_at": 1794525977.6030169
     },
     "response": {
       "circles": [],
@@ -2846,12 +3712,165 @@
       ]
     }
   },
-  "e2d82ae9651d8a8a22e2447479be1600": {
+  "dd48199be515c62e62ed2e93f6055246": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nLines $AB$ and $CD$ are parallel, cut by transversal $EF$ at $G$ and $H$. $\\angle 1$ and $\\angle 2$ are sam",
+      "recorded_at": 1794526008.129735
+    },
+    "response": {
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "Lines AB and CD are parallel"
+        },
+        {
+          "items": [
+            "EF",
+            "AB",
+            "CD"
+          ],
+          "kind": "transversal",
+          "quote": "cut by transversal EF at G and H"
+        },
+        {
+          "items": [
+            "EF",
+            "AB"
+          ],
+          "kind": "intersect",
+          "point": "G",
+          "quote": "cut by transversal EF at G and H"
+        },
+        {
+          "items": [
+            "EF",
+            "CD"
+          ],
+          "kind": "intersect",
+          "point": "H",
+          "quote": "cut by transversal EF at G and H"
+        },
+        {
+          "items": [
+            "1",
+            "2"
+          ],
+          "kind": "same_side_interior",
+          "quote": "\u22201 and \u22202 are same-side interior angles"
+        },
+        {
+          "items": [
+            "1"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u22201 = 63\u00b0",
+          "value": 63
+        },
+        {
+          "expr": "2x + 3",
+          "items": [
+            "2"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u22202 = (2x + 3)\u00b0"
+        }
+      ],
+      "lines": [
+        "AB",
+        "CD",
+        "EF"
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H"
+      ],
+      "prove": [],
+      "requested": []
+    }
+  },
+  "e602d51456ee26e65f19bcc1b3b7e895": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n$\\overline{PA}$ is tangent to circle $O$ at $A$, and radius $\\overline{OA} = 3$. Find $PA$.\n\nThe teacher's ",
+      "recorded_at": 1794526000.909344
+    },
+    "response": {
+      "circles": [
+        "O"
+      ],
+      "find": [
+        {
+          "item": "PA",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "circle": "O",
+          "items": [
+            "PA"
+          ],
+          "kind": "tangent",
+          "point": "A",
+          "quote": "PA is tangent to circle O at A"
+        },
+        {
+          "circle": "O",
+          "items": [
+            "OA"
+          ],
+          "kind": "radius",
+          "quote": "radius OA = 3",
+          "value": 3
+        },
+        {
+          "circle": "O",
+          "items": [
+            "OA"
+          ],
+          "kind": "equal_length",
+          "quote": "radius OA = 3",
+          "value": 3
+        }
+      ],
+      "points": [
+        "P",
+        "A",
+        "O"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "PA",
+        "OA"
+      ]
+    }
+  },
+  "ea0a9e1454fac9cb7d71d0f40dac6c2d": {
     "meta": {
       "mode": "bank_chat_facts_b",
       "model": "claude-sonnet-4-6",
       "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nGiven: $\\overline{AB} \\cong \\overline{AD}$, $\\overline{CB}\\cong\\overline{CD}$, E on AC. Prove: $m\\angle AEB",
-      "recorded_at": 1794518800.302099
+      "recorded_at": 1794525992.1138701
     },
     "response": {
       "circles": [],
@@ -2914,12 +3933,49 @@
       "triangles": []
     }
   },
-  "e738a40c8e75bd084aa3fabe1976c0eb": {
+  "ee4149316cdf2c8531116c843714b1a6": {
     "meta": {
       "mode": "bank_chat_facts_a",
       "model": "claude-sonnet-4-6",
-      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nGiven: $\\triangle ABC \\cong \\triangle A^{\\prime}B^{\\prime}C^{\\prime}$.\n\nThe teacher's message:\n(none)",
-      "recorded_at": 1794518790.5615098
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n$\\triangle ABC$ is a right triangle with right angle $C$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794525977.780322
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "right_triangle",
+          "point": "C",
+          "quote": "\u25b3ABC is a right triangle with right angle C"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "f194c18053b82475bdb044e07cf002cd": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nGiven: $\\triangle ABC \\cong \\triangle A^{\\prime}B^{\\prime}C^{\\prime}$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794525981.898614
     },
     "response": {
       "circles": [],
@@ -2955,12 +4011,12 @@
       ]
     }
   },
-  "ebe04798b0ed00fa220c8e369244aefd": {
+  "f3bb0e4c84bf03a386c2f0fe02249816": {
     "meta": {
       "mode": "bank_chat_facts_b",
       "model": "claude-sonnet-4-6",
-      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nLines AB and CD are cut by a transversal EF.\n\nThe teacher's message:\n(none)",
-      "recorded_at": 1794518811.76311
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nGiven: segment AB $\\cong$ segment CD in quadrilateral ABCD.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794525981.276559
     },
     "response": {
       "circles": [],
@@ -2968,19 +4024,116 @@
       "givens": [
         {
           "items": [
-            "EF",
             "AB",
             "CD"
           ],
-          "kind": "transversal",
-          "quote": "Lines AB and CD are cut by a transversal EF."
+          "kind": "congruent_segments",
+          "quote": "segment AB \u2245 segment CD"
         }
       ],
-      "lines": [
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [
+        "ABCD"
+      ],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
         "AB",
-        "CD",
+        "CD"
+      ],
+      "triangles": []
+    }
+  },
+  "f99a3f219b6264119b2c63010d1ac1aa": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nLines $AB$ and $EF$ intersect at $G$. $\\angle 1$ and $\\angle 2$ form a linear pair, and $m\\angle 1 = 63^\\ci",
+      "recorded_at": 1794526013.150313
+    },
+    "response": {
+      "find": [
+        {
+          "item": "m\u22202",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "EF"
+          ],
+          "kind": "intersect",
+          "point": "G",
+          "quote": "Lines AB and EF intersect at G."
+        },
+        {
+          "items": [
+            "1",
+            "2"
+          ],
+          "kind": "linear_pair",
+          "quote": "\u22201 and \u22202 form a linear pair"
+        },
+        {
+          "items": [
+            "1"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u22201 = 63\u00b0",
+          "value": 63
+        }
+      ],
+      "named_lines": [
+        "AB",
         "EF"
       ],
+      "points": [
+        "A",
+        "B",
+        "E",
+        "F",
+        "G"
+      ],
+      "prove": [],
+      "requested": []
+    }
+  },
+  "faeeb2a9d6f5b107913aa4550e41f268": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nGiven: $\\triangle ABC \\sim \\triangle DEF$. Find $EF$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794525973.89343
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "EF",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABC",
+            "DEF"
+          ],
+          "kind": "similar_triangles",
+          "quote": "\u25b3ABC \u223c \u25b3DEF"
+        }
+      ],
+      "lines": [],
       "named_lines": [],
       "points": [
         "A",
@@ -2995,18 +4148,87 @@
       "rays": [],
       "requested": [],
       "segments": [],
-      "triangles": []
+      "triangles": [
+        "ABC",
+        "DEF"
+      ]
     }
   },
-  "ed0bd1c72a34888db3715404de4e3484": {
+  "fbb6a1090d75ed20f179cdaae8159b8f": {
     "meta": {
-      "mode": "bank_chat_facts_a",
+      "mode": "bank_chat_facts_b",
       "model": "claude-sonnet-4-6",
-      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nGiven: $\\overline{AB} \\parallel \\overline{CD}$ and transversal $\\overline{EF}$ meets them at $X$ and $Y$. S",
-      "recorded_at": 1794518795.3553321
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\n$\\overline{PA}$ is tangent to circle $O$ at $A$. Find $PA$ if radius $OA = 3$ and $OP = 5$.\n\nFinal answer (",
+      "recorded_at": 1794525999.3127959
     },
     "response": {
-      "circles": [],
+      "circles": [
+        "O"
+      ],
+      "find": [
+        {
+          "item": "PA",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "circle": "O",
+          "items": [
+            "PA"
+          ],
+          "kind": "tangent",
+          "point": "A",
+          "quote": "PA is tangent to circle O at A"
+        },
+        {
+          "circle": "O",
+          "items": [
+            "OA"
+          ],
+          "kind": "radius",
+          "quote": "radius OA = 3",
+          "value": 3
+        },
+        {
+          "items": [
+            "OA"
+          ],
+          "kind": "equal_length",
+          "quote": "radius OA = 3",
+          "value": 3
+        },
+        {
+          "items": [
+            "OP"
+          ],
+          "kind": "equal_length",
+          "quote": "OP = 5",
+          "value": 5
+        }
+      ],
+      "points": [
+        "P",
+        "A",
+        "O"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "PA",
+        "OA",
+        "OP"
+      ]
+    }
+  },
+  "fc1769baf32bfd13054e09ef3b3c7fb2": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nGiven: $\\overline{AB} \\parallel \\overline{CD}$ and transversal $\\overline{EF}$ meets them at $X$ and $Y$. E",
+      "recorded_at": 1794525987.5497
+    },
+    "response": {
       "find": [],
       "givens": [
         {
@@ -3028,19 +4250,33 @@
         },
         {
           "items": [
-            "EF",
-            "AB"
+            "EF"
           ],
-          "kind": "intersect",
+          "kind": "on_segment",
           "point": "X",
           "quote": "transversal EF meets them at X and Y"
         },
         {
           "items": [
-            "EF",
+            "EF"
+          ],
+          "kind": "on_segment",
+          "point": "Y",
+          "quote": "transversal EF meets them at X and Y"
+        },
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "on_segment",
+          "point": "X",
+          "quote": "transversal EF meets them at X and Y"
+        },
+        {
+          "items": [
             "CD"
           ],
-          "kind": "intersect",
+          "kind": "on_segment",
           "point": "Y",
           "quote": "transversal EF meets them at X and Y"
         }
@@ -3055,7 +4291,6 @@
         "X",
         "Y"
       ],
-      "polygons": [],
       "prove": [
         {
           "items": [
@@ -3063,7 +4298,7 @@
             "CYX"
           ],
           "kind": "congruent_angles",
-          "quote": "Show that \u2220BXY \u2245 \u2220CYX"
+          "quote": "Explain why \u2220BXY \u2245 \u2220CYX"
         }
       ],
       "requested": [],
@@ -3071,231 +4306,64 @@
         "AB",
         "CD",
         "EF"
-      ],
-      "triangles": []
+      ]
     }
   },
-  "f2c5f21f2e5b46ffe56ed56ccf272a1f": {
+  "fe5fd3e80cd5bd1aeee5df3f2b686020": {
     "meta": {
-      "mode": "bank_chat_facts_b",
+      "mode": "bank_chat_facts_a",
       "model": "claude-sonnet-4-6",
-      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nSquare $ABCD$ has side 6. Find the diagonal $\\overline{AC}$.\n\nFinal answer (shown only so you know what is ",
-      "recorded_at": 1794518783.349162
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n$\\overline{PA}$ is tangent to circle $O$ at $A$. Find $PA$ if $OA = 3$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794526000.3058639
     },
     "response": {
-      "circles": [],
+      "circles": [
+        "O"
+      ],
       "find": [
         {
-          "item": "AC",
+          "item": "PA",
           "kind": "segment"
         }
       ],
       "givens": [
         {
+          "circle": "O",
           "items": [
-            "ABCD"
+            "PA"
           ],
-          "kind": "square",
-          "quote": "Square ABCD"
+          "kind": "tangent",
+          "point": "A",
+          "quote": "PA is tangent to circle O at A"
+        },
+        {
+          "circle": "O",
+          "items": [
+            "OA"
+          ],
+          "kind": "radius",
+          "quote": "PA is tangent to circle O at A"
         },
         {
           "items": [
-            "AB"
+            "OA"
           ],
           "kind": "equal_length",
-          "quote": "has side 6",
-          "value": 6
+          "quote": "OA = 3",
+          "value": 3
         }
       ],
-      "lines": [],
-      "named_lines": [],
       "points": [
+        "P",
         "A",
-        "B",
-        "C",
-        "D"
-      ],
-      "polygons": [
-        "ABCD"
+        "O"
       ],
       "prove": [],
-      "rays": [],
       "requested": [],
       "segments": [
-        "AC"
-      ],
-      "triangles": []
-    }
-  },
-  "f43aa5af5e550f03e516685f442afd8c": {
-    "meta": {
-      "mode": "bank_chat_facts_a",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nDraw $\\overrightarrow{AB}$ and $\\overrightarrow{AC}$.\n\nThe teacher's message:\n(none)",
-      "recorded_at": 1794518811.241079
-    },
-    "response": {
-      "find": [],
-      "givens": [],
-      "points": [
-        "A",
-        "B",
-        "C"
-      ],
-      "prove": [],
-      "rays": [
-        "AB",
-        "AC"
-      ],
-      "requested": [
-        {
-          "item": "AB",
-          "kind": "ray"
-        },
-        {
-          "item": "AC",
-          "kind": "ray"
-        }
+        "PA",
+        "OA"
       ]
-    }
-  },
-  "f7e621b1774c67b7c3be7a81c2563094": {
-    "meta": {
-      "mode": "bank_chat_facts_b",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\n$\\triangle ABC$ is a right triangle with right angle $C$.\n\nThe teacher's message:\n(none)",
-      "recorded_at": 1794518787.460736
-    },
-    "response": {
-      "circles": [],
-      "find": [],
-      "givens": [
-        {
-          "items": [
-            "ABC"
-          ],
-          "kind": "right_triangle",
-          "point": "C",
-          "quote": "\u25b3ABC is a right triangle with right angle C"
-        }
-      ],
-      "lines": [],
-      "named_lines": [],
-      "points": [
-        "A",
-        "B",
-        "C"
-      ],
-      "polygons": [],
-      "prove": [],
-      "rays": [],
-      "requested": [],
-      "segments": [],
-      "triangles": [
-        "ABC"
-      ]
-    }
-  },
-  "f935b75bf45f4e8d8ff3ad5dd30c7b2b": {
-    "meta": {
-      "mode": "bank_chat_facts_b",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nGiven: $\\overline{CA} \\cong \\overline{CB}$, $\\overline{CM} \\perp \\overline{AB}$. Prove: $M$ is the midpoint",
-      "recorded_at": 1794518813.632449
-    },
-    "response": {
-      "circles": [],
-      "find": [],
-      "givens": [
-        {
-          "items": [
-            "CA",
-            "CB"
-          ],
-          "kind": "congruent_segments",
-          "quote": "CA \u2245 CB"
-        },
-        {
-          "items": [
-            "CM",
-            "AB"
-          ],
-          "kind": "perpendicular",
-          "quote": "CM \u22a5 AB"
-        }
-      ],
-      "lines": [],
-      "named_lines": [],
-      "points": [
-        "A",
-        "B",
-        "C",
-        "M"
-      ],
-      "polygons": [],
-      "prove": [
-        {
-          "items": [
-            "AB"
-          ],
-          "kind": "midpoint",
-          "point": "M",
-          "quote": "M is the midpoint of AB"
-        }
-      ],
-      "rays": [],
-      "requested": [],
-      "segments": [
-        "CA",
-        "CB",
-        "CM",
-        "AB"
-      ],
-      "triangles": []
-    }
-  },
-  "ff2aa48a7ea9bb973ab0082eae1a7ff7": {
-    "meta": {
-      "mode": "bank_chat_facts_a",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nGiven: Parallelogram $ABCD$. Find $m\\angle B$ if $m\\angle A = 70^\\circ$.\n\nFinal answer (shown only so you k",
-      "recorded_at": 1794518782.269509
-    },
-    "response": {
-      "find": [
-        {
-          "item": "m\u2220B",
-          "kind": "angle"
-        }
-      ],
-      "givens": [
-        {
-          "items": [
-            "ABCD"
-          ],
-          "kind": "parallelogram",
-          "quote": "Parallelogram ABCD"
-        },
-        {
-          "items": [
-            "A"
-          ],
-          "kind": "angle_measure",
-          "quote": "m\u2220A = 70\u00b0",
-          "value": 70
-        }
-      ],
-      "points": [
-        "A",
-        "B",
-        "C",
-        "D"
-      ],
-      "polygons": [
-        "ABCD"
-      ],
-      "prove": [],
-      "requested": []
     }
   }
 }

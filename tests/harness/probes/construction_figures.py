@@ -108,14 +108,17 @@ BY_EYE: dict[str, tuple[str, str]] = {
     "7450aa6e": ("9e89b9643c34", "right"),  # three pairs of equal sides
     "77195d48-step1": ("f841c5afaf9d", "wrong: the side labelled 'bisector' makes the whole 74° with line m"),
     "77195d48-step2": ("8cd2cf284ab5", "right"),  # the bisector at 37° to line m
-    "12c77989": ("d2dbbf2d9bbf", "right"),  # similar triangles drawn apart, AB 12, BC 9, DE 8; EF unlabelled
+    "12c77989": ("db9767c9722b", "right"),  # similar triangles apart; AB 12, BC 9, DE 8; EF unlabelled
+    # (cosmetic: F's name sits on AB's label "12")
     "099d8962": ("eff508f3d677", "right"),  # WX ≅ YZ, ∠W ≅ ∠Y, ∠X ≅ ∠Z, meeting at V
     "d5a862d3": ("2d5194fc59d7", "right"),  # legs 5 and 12 to scale, hypotenuse 13, b unlabelled
-    "dd7ab4c1-step": ("cf16febd6d13", "right"),  # BC ≅ DA, BC ∥ AD, diagonal AC
-    "dd7ab4c1-step-step3": ("5fb1cb8338ce", "right"),  # alternate interior angles at A and C
+    "dd7ab4c1-step": ("ca59cf60e077", "right"),  # BC ≅ DA, BC ∥ AD, diagonal AC
+    "dd7ab4c1-step-step3": ("768d2f28df5d", "right"),  # alternate interior angles at A and C
     "e87bd653": ("6d4e00ff5e1d", "right"),  # SAS marks
     "7ef5c01b-step": ("b6ec68ce21d7", "right"),
     "7ef5c01b-step-step4": ("ed6d9dc38966", "right"),  # vertical angles at M
+    # Looked at 2026-11-12 after angle pairs, circle grounding and prove marks removed.
+    "2f44f46d": ("9171372e18da", "right"),  # DE ∥ BC, D on AB, E on AC; ∠ADE ≅ ∠ABC not marked
 }
 
 # A known-wrong version of each case's figure (a point moved so a given is
@@ -401,6 +404,12 @@ def summarize(results: list[dict[str, Any]], redraws: dict[str, int]) -> dict[st
         "coverage_gaps": sum(1 for r in results for why in r["readings"] if any("missed" in w for w in why)),
         "unverifiable": sum(
             1 for r in results for why in r["readings"] if any("can't verify" in w for w in why)
+        ),
+        "described_in_words": sum(
+            1 for r in results for why in r["readings"] if any("in words rather than naming" in w for w in why)
+        ),
+        "impossible_numbers": sum(
+            1 for r in results for why in r["readings"] if any("check the problem for a typo" in w for w in why)
         ),
         "reading_failures": {r["id"]: why for r in results for why in r["readings"] if why},
     }
