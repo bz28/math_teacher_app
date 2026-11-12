@@ -6,10 +6,10 @@ import logging
 from typing import Any
 
 from api.core.constants import SOLUTION_FAILED_SENTINEL
-from api.core.construction_figures import CONSTRUCTION_FIGURE_RULES, construction_on
+from api.core.construction_figures import CONSTRUCTION_FIGURE_RULES
 from api.core.document_vision import build_vision_content
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
-from api.core.llm_schemas import GENERATE_QUESTIONS_CONSTRUCTION_SCHEMA, GENERATE_QUESTIONS_SCHEMA
+from api.core.llm_schemas import GENERATE_QUESTIONS_CONSTRUCTION_SCHEMA
 from api.core.step_decomposition import decompose_problem
 from api.core.subjects import Subject, get_config
 
@@ -62,93 +62,9 @@ student level — NOT absolute math/science difficulty:
 - hard: synthesis, unusual setup, or a non-obvious step. Tough but
   solvable with practice for THIS course.
 
-# Figures (diagrams)
-
-Some problems genuinely need a diagram to be understood —
-right-triangle trigonometry, Pythagorean theorem, congruence /
-similarity setups, circles with inscribed angles or tangent lines,
-chords. Emit `figure_spec` for those, NOT for algebra, word
-problems, or anything where the prose already carries the full
-picture. A figure that decorates rather than informs is noise.
-
-Two supported shapes today: triangle and circle. If a problem
-needs a polygon, coordinate-plane setup, or other shape, either
-reword it so prose carries the figure, or skip the problem —
-don't emit a mis-shaped figure_spec.
-
-Pick the variant by setting `shape`:
-
-**Triangles** (`shape: "triangle"`):
-- Use single-character vertex names (A, B, C).
-- Provide enough constraints to determine the triangle (3 sides;
-  or 2 sides + 1 angle; or 1 side + 2 angles).
-- Don't emit the same edge twice ('AB' or 'BA' — pick one).
-- For a 90° angle use `right_angle_at` (draws the square marker).
-- side_labels / angle_labels are what STUDENTS see — match the
-  variable names the question uses (e.g. side_label 'c' when the
-  problem asks the student to find c).
-
-**Circles** (`shape: "circle"`):
-- Set `radius` to any positive number — proportions are what
-  matter; the renderer auto-scales.
-- Add named points on the circumference via `points`: each entry
-  maps a single-character name to an angle in degrees, measured
-  CCW from the positive x-axis. e.g. `{{"A": 30, "B": 150}}`.
-- `chords` lists two-character chord identifiers — straight
-  segments between named points.
-- `show_center: true` draws a dot + label at the center; pair
-  with `center_label` (defaults to "O").
-- `radius_label` draws a labeled radius to the FIRST named point.
-- Don't emit the same chord twice ('AB' or 'BA' — pick one).
-- For a point OUTSIDE the circle (tangent–secant angle, two secants /
-  power of a point, two tangents from a point), use `external_points`.
-  Each entry names a point defined as the intersection of two lines —
-  `line1`/`line2`, where each line is either `{{"tangent_at": "T"}}`
-  (tangent at on-circle point T) or `{{"secant_through": ["A", "B"]}}`
-  (line through on-circle points A and B). The renderer computes the
-  point and draws the tangent/secant segments to the circle, so you
-  never give coordinates. e.g. a tangent–secant from P:
-  `{{"P": {{"line1": {{"tangent_at": "T"}}, "line2": {{"secant_through":
-  ["A", "B"]}}}}}}`. Spread the on-circle points out so the two lines
-  meet OUTSIDE the circle — don't fake an external point with a chord.
-  For TWO secants from P, put the two near points (closer to P) close
-  together on the arc facing P and the two far points close together on
-  the opposite arc (e.g. near ~30° and ~330°, far ~100° and ~260°) so
-  both secants converge to P; parallel chords never meet.
-
-**Polygons** (`shape: "polygon"`, for 4+ sides — squares,
-pentagons, hexagons, n-gons; for triangles use `shape: "triangle"`
-since it has the full constraint solver):
-- REGULAR polygons: set `n_sides` (4-20). The renderer auto-scales,
-  so you don't need to specify side_length unless you want to.
-- IRREGULAR polygons (kites, trapezoids, arbitrary quads): set
-  `vertex_positions` as a list of [x, y] pairs in drawing order.
-  Connect vertices in sequence (last back to first).
-- Don't use polygon mode for triangles — use shape='triangle'.
-
-**Compound: triangle WITH inscribed or circumscribed circle**:
-For problems like "a circle inscribed in a right triangle" or "a
-triangle inscribed in a circle," DON'T emit a separate circle
-figure. Use `shape: "triangle"` and set the optional
-`inscribed_circle` or `circumscribed_circle` field — the renderer
-computes the circle's geometry from the triangle automatically, so
-the two stay perfectly consistent.
-
-- For an AMC-style "find the inradius" problem: set
-  `inscribed_circle: {{"show_center": true, "radius_label": "r"}}`.
-  Add `"show_tangent_points": true` if the problem references where
-  the circle touches each side.
-- For "find the circumradius" or "triangle inscribed in circle":
-  set `circumscribed_circle: {{"show_center": true,
-  "radius_label": "R"}}`.
-- The triangle's `side_lengths` / `angles` still need to fully
-  determine the triangle — the circle inherits its geometry from
-  whatever shape you specify."""
+"""
 
 
-# With construction figures on, the "# Figures" section above is replaced:
-# everything before it is shared.
-_FIGURES_HEADING = "# Figures (diagrams)"
 _CONSTRUCTION_FIGURES_SECTION = """\
 # Figures (diagrams)
 
@@ -164,13 +80,8 @@ that says "in the figure below" MUST carry its figure_spec.
 
 def _build_question_generation_prompt(subject: str) -> str:
     cfg = get_config(subject)
-    if construction_on():
-        head = _GENERATE_QUESTIONS_TEMPLATE.split(_FIGURES_HEADING)[0]
-        return head.format(professor_role=cfg["professor_role"]) + (
-            _CONSTRUCTION_FIGURES_SECTION + CONSTRUCTION_FIGURE_RULES
-        )
-    return _GENERATE_QUESTIONS_TEMPLATE.format(
-        professor_role=cfg["professor_role"],
+    return _GENERATE_QUESTIONS_TEMPLATE.format(professor_role=cfg["professor_role"]) + (
+        _CONSTRUCTION_FIGURES_SECTION + CONSTRUCTION_FIGURE_RULES
     )
 
 
@@ -328,7 +239,7 @@ async def generate_questions(
         return []
 
     system_prompt = _build_question_generation_prompt(subject)
-    schema = GENERATE_QUESTIONS_CONSTRUCTION_SCHEMA if construction_on() else GENERATE_QUESTIONS_SCHEMA
+    schema = GENERATE_QUESTIONS_CONSTRUCTION_SCHEMA
     # Order the user message to match the prompt's priority hierarchy:
     # teacher's brief first (intent), structured constraints next, then
     # unit name + course + count.

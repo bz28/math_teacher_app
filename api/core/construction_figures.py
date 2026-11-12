@@ -9,9 +9,6 @@ checker's exact errors; a second failure saves no figure and records why.
 In the workshop chat the sentence about the figure is written here, from
 what was actually drawn — the model's reply is written before anything is
 drawn, so it can't be trusted to describe the result.
-
-All of it sits behind `settings.geometry_construction_figures`; off restores
-the triangle / circle / polygon prompts and schemas.
 """
 
 from __future__ import annotations
@@ -21,17 +18,12 @@ import logging
 import re
 from typing import Any
 
-from api.config import settings
 from api.core.geometry.dsl import ConstructionFigure, is_hidden, split_points
 from api.core.geometry.figure_check import parse_problem
 from api.core.llm_client import MODEL_REASON, call_claude_json
 from api.core.llm_schemas import FIGURE_REDRAW_SCHEMA
 
 logger = logging.getLogger(__name__)
-
-
-def construction_on() -> bool:
-    return settings.geometry_construction_figures
 
 
 CONSTRUCTION_FIGURE_RULES = """\

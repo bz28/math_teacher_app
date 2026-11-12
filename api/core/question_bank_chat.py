@@ -23,14 +23,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.construction_figures import (
     CONSTRUCTION_FIGURE_RULES,
     _join,
-    construction_on,
     failure_sentence,
     figure_sentence,
     without_figure_talk,
 )
 from api.core.document_vision import MAX_VISION_IMAGES, build_vision_content, fetch_source_documents
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
-from api.core.llm_schemas import BANK_CHAT_REPLY_CONSTRUCTION_SCHEMA, BANK_CHAT_REPLY_SCHEMA
+from api.core.llm_schemas import BANK_CHAT_REPLY_CONSTRUCTION_SCHEMA
 from api.core.subjects import get_config
 from api.models.course import Course
 from api.models.question_bank import QuestionBankItem
@@ -81,92 +80,7 @@ Rules for proposals:
   commands (e.g. \\frac, \\sqrt, \\begin{{pmatrix}}). Do not double-escape.
 - Each solution step has a short title (2-5 words) and a full description.
 
-Geometry figures (you CAN produce these — and you MUST emit them
-when you say you are):
-
-The question and EACH solution step can carry a `figure_spec`.
-The renderer turns the spec into an exact SVG diagram. You don't
-draw pixels — you describe geometric relationships and code does
-the rest.
-
-**Hard rule about consistency between reply and proposal:**
-If your `reply` text mentions adding, changing, or removing a
-diagram, the `proposal` MUST contain the corresponding
-`figure_spec` field (on the question, or on the specific
-solution_steps[i], or both). Saying "I've added a triangle to
-step 2" without putting figure_spec on step 2 is broken behavior
-— the teacher sees no diagram and concludes the system is buggy.
-
-**Hard rule about figure freshness when rewriting the question:**
-If your proposal changes the question text AND the question
-currently has a figure, you MUST either:
-  (a) Emit a NEW figure_spec at the proposal's top level that
-      matches the new question, or
-  (b) Confirm in your reply that the existing figure still
-      applies to the new question (only valid when the new
-      prose is a minor edit that doesn't change the figure's
-      geometry).
-Never silently rewrite a Pythagorean problem into a circle problem
-and leave the old triangle figure attached — the teacher will see
-prose about circles next to a triangle diagram and the system will
-look broken.
-
-**Triangle figure_spec example** (when the teacher asks for a
-diagram on a Pythagorean problem):
-{{
-  "type": "geometry",
-  "shape": "triangle",
-  "vertices": ["A", "B", "C"],
-  "side_lengths": {{"AB": 3, "BC": 4}},
-  "right_angle_at": ["B"],
-  "side_labels": {{"AB": "a", "BC": "b", "CA": "c"}}
-}}
-
-**Circle figure_spec example** (for an inscribed-angle problem):
-{{
-  "type": "geometry",
-  "shape": "circle",
-  "radius": 5,
-  "points": {{"A": 30, "B": 150, "C": 270}},
-  "chords": ["AB", "AC"],
-  "show_center": true
-}}
-
-**Compound — circle inscribed in triangle** (AMC-style):
-{{
-  "type": "geometry",
-  "shape": "triangle",
-  "vertices": ["A", "B", "C"],
-  "side_lengths": {{"AB": 9, "BC": 12, "CA": 15}},
-  "right_angle_at": ["B"],
-  "inscribed_circle": {{"show_center": true, "radius_label": "r"}}
-}}
-DO NOT emit a separate circle figure for "inscribed in triangle"
-problems — use the triangle's inscribed_circle field. Renderer
-guarantees the circle is geometrically consistent with the triangle.
-
-Rules:
-- Triangles need enough constraints to determine the shape
-  (3 sides; or 2 sides + 1 angle; or 1 side + 2 angles). Use
-  `right_angle_at` (not `angles`) for 90° angles.
-- Circles need a positive `radius`. Each named point has an
-  angle in degrees CCW from positive x-axis. Chords reference
-  two named points.
-- Polygons (4+ sides — squares, pentagons, hexagons, irregular
-  quads): use `shape='polygon'` with `n_sides` (regular) OR
-  `vertex_positions` (irregular). Do NOT use polygon mode for
-  triangles; `shape='triangle'` has the constraint solver.
-- Use figures only when they actually clarify (geometry, NOT
-  algebra). On a step that visibly evolves the construction
-  (drop an altitude, draw a chord), attach a figure_spec to that
-  step. Leave figure_spec OFF (omit the key, or null) for steps
-  that don't change the picture.
-- When the teacher says "add a diagram to step N" and step N's
-  current title doesn't make sense as a figure-bearing step,
-  pick the most appropriate step to attach to and SAY which one
-  in your reply.
-
-CRITICAL — solution_steps is a FULL REPLACEMENT, not a patch:
+<<FIGURES>>CRITICAL — solution_steps is a FULL REPLACEMENT, not a patch:
 - If you set solution_steps, you MUST return the complete list of all steps
   in the correct order. Unchanged steps must be included verbatim.
 - Returning only the step(s) you modified will delete every step you omit.
@@ -184,10 +98,8 @@ Reply text:
 """
 
 
-# With construction figures on, the chat's figure section (from "Geometry
-# figures" up to "CRITICAL") is replaced by this one plus the shared rules.
-_LEGACY_FIGURES_START = "Geometry figures (you CAN produce these"
-_FIGURES_END = "CRITICAL — solution_steps is a FULL REPLACEMENT"
+# The chat's figure section, put in at <<FIGURES>> (after formatting: the
+# shared rules carry literal braces).
 _CHAT_CONSTRUCTION_FIGURES = """\
 Geometry figures:
 
@@ -207,14 +119,8 @@ the sentence about it from what it actually drew.
 
 
 def _chat_system_prompt(professor_role: str) -> str:
-    if not construction_on():
-        return _CHAT_SYSTEM_TEMPLATE.format(professor_role=professor_role)
-    head, rest = _CHAT_SYSTEM_TEMPLATE.split(_LEGACY_FIGURES_START, 1)
-    tail = _FIGURES_END + rest.split(_FIGURES_END, 1)[1]
-    return (
-        head.format(professor_role=professor_role)
-        + _CHAT_CONSTRUCTION_FIGURES + CONSTRUCTION_FIGURE_RULES + "\n\n"
-        + tail.format(professor_role=professor_role)
+    return _CHAT_SYSTEM_TEMPLATE.format(professor_role=professor_role).replace(
+        "<<FIGURES>>", _CHAT_CONSTRUCTION_FIGURES + CONSTRUCTION_FIGURE_RULES + "\n\n",
     )
 
 
@@ -350,11 +256,9 @@ async def chat_with_bank_item(
 
     cfg = get_config(course.subject)
     system_prompt = _chat_system_prompt(str(cfg["professor_role"]))
-    reply_schema = BANK_CHAT_REPLY_CONSTRUCTION_SCHEMA if construction_on() else BANK_CHAT_REPLY_SCHEMA
+    reply_schema = BANK_CHAT_REPLY_CONSTRUCTION_SCHEMA
 
-    user_context = _build_user_context(item, unit_name, course.name)
-    if construction_on():
-        user_context += _figure_context(item)
+    user_context = _build_user_context(item, unit_name, course.name) + _figure_context(item)
 
     # Trim history for the call (uses the pending list including the new msg)
     history = _strip_internal_fields(pending_history[-CHAT_CONTEXT_WINDOW:])
@@ -579,9 +483,7 @@ async def chat_with_bank_item(
             construction_step_drops = {}
             any_construction_step = False
 
-    if top_construction or any_construction_step or (
-        construction_on() and figure_drop is None and not step_drops
-    ):
+    if top_construction or any_construction_step or (figure_drop is None and not step_drops):
         reply = _construction_reply(
             reply, proposal, item, teacher_message, top_text,
             top_construction=top_construction, top_issues=top_issues,

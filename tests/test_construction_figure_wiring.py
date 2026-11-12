@@ -1,11 +1,9 @@
 """Construction figures in the product: the one retry, step figures, what
 the teacher is told in the workshop chat, the missing-figure rule, and the
-release switch (off = the old prompts, byte for byte)."""
+prompts."""
 
 from __future__ import annotations
 
-import hashlib
-import json
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -14,8 +12,7 @@ import pytest
 from sqlalchemy import select
 
 import api.core.question_bank_generation as qbg
-from api.config import settings
-from api.core import assignment_generation, llm_schemas
+from api.core import assignment_generation
 from api.core.construction_figures import failure_sentence, figure_sentence, without_figure_talk
 from api.core.question_bank_chat import _chat_system_prompt, _construction_reply
 from api.database import get_session_factory
@@ -245,35 +242,13 @@ async def test_regenerate_refuses_a_problem_pointing_at_a_missing_figure() -> No
         assert item.question == "old"
 
 
-# ── The release switch ─────────────────────────────────────────────────
+# ── The prompts ────────────────────────────────────────────────────────
 
 
-def _h(text: str) -> str:
-    return hashlib.sha256(text.encode()).hexdigest()
-
-
-def test_switch_off_restores_the_old_prompts_and_schemas(monkeypatch: pytest.MonkeyPatch) -> None:
-    """sha256 of each prompt and schema as origin/main builds it."""
-    monkeypatch.setattr(settings, "geometry_construction_figures", False)
-    assert _h(_chat_system_prompt("math professor")) == (
-        "54ca7d9e2a34f7c60de7c8ff58add92e156cf89375ef045128d9e59717c9b89c"
-    )
-    assert _h(assignment_generation._build_question_generation_prompt("math")) == (
-        "0f04031a6d0440a487ff2b2b1ab118e3836188b1bc0694c0206e1eb70fbff410"
-    )
-    for name, digest in {
-        "GENERATE_QUESTIONS_SCHEMA": "29556db37a94b716f7ae7d375aff231fcf62292831180930307264b26906aa6f",
-        "BANK_CHAT_REPLY_SCHEMA": "8da56fa9dd745f7777382dddfbb88f1bc2aa28f47f92d8e16a0ee35c89f8e341",
-        "REGENERATE_QA_SCHEMA": "8170c5c1258df5cca6f967dea26ed353194677ca227ed67db111f8a7e095a25c",
-        "DECOMPOSITION_SCHEMA": "a8b2f3d54dd28c795d9821c0d90405d9772f3d0d849671ba43ba689fb3f56813",
-    }.items():
-        assert _h(json.dumps(getattr(llm_schemas, name), sort_keys=True, default=str)) == digest, name
-
-
-def test_switch_on_uses_the_construction_prompts() -> None:
-    assert settings.geometry_construction_figures is True
-    assert '"shape": "construction"' in _chat_system_prompt("math professor")
-    assert "construction" in assignment_generation._build_question_generation_prompt("math")
+def test_prompts_teach_the_construction_format() -> None:
+    chat = _chat_system_prompt("math professor")
+    assert '"shape": "construction"' in chat and "<<FIGURES>>" not in chat
+    assert '"shape": "construction"' in assignment_generation._build_question_generation_prompt("math")
 
 
 # ── The retry call itself ──────────────────────────────────────────────

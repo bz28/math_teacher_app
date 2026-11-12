@@ -22,7 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.assignment_generation import generate_questions, generate_solutions
-from api.core.construction_figures import CONSTRUCTION_FIGURE_RULES, construction_on, redraw_figure
+from api.core.construction_figures import CONSTRUCTION_FIGURE_RULES, redraw_figure
 from api.core.document_vision import (
     MAX_TOTAL_SOURCE_B64_BYTES,
     MAX_VISION_IMAGES,
@@ -39,7 +39,6 @@ from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_cl
 from api.core.llm_schemas import (
     GENERATE_QUESTIONS_SCHEMA,
     REGENERATE_QA_CONSTRUCTION_SCHEMA,
-    REGENERATE_QA_SCHEMA,
 )
 from api.core.part_labels import PRACTICE_SINGLE_ANSWER_RULE, is_multi_part
 from api.core.practice import generate_distractors
@@ -732,15 +731,9 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
                     images=images or None,
                     extra_instructions=(
                         (constraint_text + "\n\n" if constraint_text else "")
-                        + (
-                            "Every problem must be complete on its own. A problem that refers "
-                            "to a figure must include that figure's figure_spec, and every "
-                            "number on the figure must also be in the problem text."
-                            if construction_on()
-                            else "Every problem must be complete on its own. A problem that refers "
-                            "to a figure must include that figure's figure_spec, with every "
-                            "length it labels also given in side_lengths."
-                        )
+                        + "Every problem must be complete on its own. A problem that refers "
+                        "to a figure must include that figure's figure_spec, and every "
+                        "number on the figure must also be in the problem text."
                     ),
                     assignment_title=assignment_title,
                     params=job.params,
@@ -957,14 +950,12 @@ async def regenerate_one(
 
     cfg = get_config(course.subject)
     system_prompt = _REGENERATE_SYSTEM_TEMPLATE.format(professor_role=cfg["professor_role"])
-    construction = construction_on()
-    if construction:
-        system_prompt += (
-            "\nInclude a figure_spec when the problem needs a diagram (a geometry problem "
-            "that names points, segments, angles, lines or circles, or text that refers to "
-            "a figure); omit it otherwise.\n\n" + CONSTRUCTION_FIGURE_RULES + "\n"
-        )
-    qa_schema = REGENERATE_QA_CONSTRUCTION_SCHEMA if construction else REGENERATE_QA_SCHEMA
+    system_prompt += (
+        "\nInclude a figure_spec when the problem needs a diagram (a geometry problem "
+        "that names points, segments, angles, lines or circles, or text that refers to "
+        "a figure); omit it otherwise.\n\n" + CONSTRUCTION_FIGURE_RULES + "\n"
+    )
+    qa_schema = REGENERATE_QA_CONSTRUCTION_SCHEMA
 
     # User message: include the topic + original constraint always; only
     # include the original question + instructions when the teacher provided
@@ -1035,7 +1026,7 @@ async def regenerate_one(
         result.get("figure_spec"), new_question, mode=LLMMode.REGENERATE_BANK_ITEM,
         user_id=str(user_id), final_answer=new_final,
     )
-    if construction and not new_figure_svg and _FIGURE_REFERENCE.search(new_question):
+    if not new_figure_svg and _FIGURE_REFERENCE.search(new_question):
         reason = "; ".join(figure_issues) or "no figure was drawn"
         logger.warning("Regenerated item %s refers to a figure it doesn't have: %s", item.id, reason)
         raise RuntimeError(
@@ -1044,13 +1035,10 @@ async def regenerate_one(
         )
     new_steps_rendered: list[dict[str, Any]] | None = None
     if isinstance(new_steps, list):
-        if construction:
-            new_steps_rendered, _ = await _render_step_figures_with_retry(
-                new_steps, question_text=new_question, question_spec=new_figure_spec,
-                mode=LLMMode.REGENERATE_BANK_ITEM, user_id=str(user_id),
-            )
-        else:
-            new_steps_rendered = _render_step_figures(new_steps)
+        new_steps_rendered, _ = await _render_step_figures_with_retry(
+            new_steps, question_text=new_question, question_spec=new_figure_spec,
+            mode=LLMMode.REGENERATE_BANK_ITEM, user_id=str(user_id),
+        )
 
     snapshot_history(item)
     if new_title:

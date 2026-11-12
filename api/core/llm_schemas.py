@@ -390,9 +390,9 @@ _FIGURE_SCHEMA: dict[str, Any] = {
 
 # Construction figure (api/core/geometry/dsl.py ConstructionFigure): named
 # points at exact coordinates plus what to draw and mark. Code draws it and
-# checks it against the problem (api/core/geometry/figure_check.py). Used
-# instead of the shape forms above when settings.geometry_construction_figures
-# is on (the default).
+# checks it against the problem (api/core/geometry/figure_check.py). The
+# generation, regenerate and workshop-chat schemas below take it in place of
+# the shape forms above (those still validate figures already stored).
 _POINT_PAIR = "Two point names run together, e.g. 'AC' or \"A'C'\"."
 _ANGLE_REF = "Three point names 'XVY': the angle at V between rays VX and VY."
 _ARC_SCHEMA: dict[str, Any] = {
