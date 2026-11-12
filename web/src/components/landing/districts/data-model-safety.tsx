@@ -1,6 +1,3 @@
-import { Section } from "../section";
-import { Eyebrow } from "../eyebrow";
-
 type Topic = {
   heading: string;
   bullets: string[];
@@ -27,54 +24,38 @@ const TOPICS: Topic[] = [
 ];
 
 /**
- * Detailed operational section between the high-level compliance
- * grid (one-line cells) and the deployment timeline. Procurement
- * legal teams ask about data hosting, retention, and model-level
- * safety in concrete terms; this section answers those without
- * forcing them to email us first.
- *
- * Two cards, side-by-side on desktop, stacked on mobile.
+ * The two questions district counsel asks first, answered concretely:
+ * where the data lives, and how the model behaves. Two ruled columns on a
+ * white band, side by side from md up.
  */
 export function DataModelSafety() {
   return (
-    <Section variant="alt2" id="data-model-safety">
-      <div className="mx-auto max-w-3xl text-center">
-        <Eyebrow>Data hosting &amp; model safety</Eyebrow>
-        <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
-          Where the data lives. How the model behaves.
-        </h2>
-        <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-[color:var(--color-text-secondary)]">
-          The two questions district counsel asks first, in
-          plain&nbsp;English.
+    <section id="data-model-safety" className="border-y border-hairline bg-white">
+      <div className="mx-auto max-w-[1200px] px-4 py-20 md:px-8 md:py-24">
+        <h2 className="site-h2 max-w-[760px]">Where the data lives. How the model behaves.</h2>
+        <p className="m-0 mt-5 max-w-[36em] text-lg leading-relaxed text-ink-soft">
+          The two questions district counsel asks first, in plain&nbsp;English.
         </p>
-      </div>
 
-      <div className="mx-auto mt-14 grid max-w-5xl gap-6 md:grid-cols-2 md:gap-8">
-        {TOPICS.map((t) => (
-          <article
-            key={t.heading}
-            className="rounded-[--radius-lg] border border-[color:var(--color-border-light)] bg-[color:var(--color-surface)] p-8"
-          >
-            <h3 className="text-xl font-bold text-[color:var(--color-text)]">
-              {t.heading}
-            </h3>
-            <ul className="mt-5 space-y-4">
-              {t.bullets.map((b) => (
-                <li
-                  key={b}
-                  className="flex items-start gap-3 text-base leading-relaxed text-[color:var(--color-text-secondary)]"
-                >
-                  <span
-                    aria-hidden="true"
-                    className="mt-2.5 inline-block h-1 w-3 shrink-0 rounded-full bg-[color:var(--color-primary-light)]"
-                  />
-                  <span>{b}</span>
-                </li>
-              ))}
-            </ul>
-          </article>
-        ))}
+        <div className="mt-11 grid gap-12 md:grid-cols-2 md:gap-14">
+          {TOPICS.map((t) => (
+            <div key={t.heading} className="border-t-2 border-ink pt-5">
+              <h3 className="m-0 text-[22px] font-black tracking-[-0.02em]">{t.heading}</h3>
+              <ul className="m-0 mt-4 list-none p-0">
+                {t.bullets.map((b) => (
+                  <li
+                    key={b}
+                    className="flex gap-3 border-b border-rule py-3.5 text-base leading-[1.6] text-ink-soft last:border-b-0"
+                  >
+                    <span aria-hidden="true" className="mt-[11px] h-[2px] w-3 shrink-0 bg-veradic" />
+                    <span>{b}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
       </div>
-    </Section>
+    </section>
   );
 }

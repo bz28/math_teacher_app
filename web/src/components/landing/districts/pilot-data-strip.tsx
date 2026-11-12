@@ -1,38 +1,31 @@
-import { Section } from "../section";
-
 /**
- * The "honesty move" — a single editorial note where outcome data
- * will eventually live, signed and dated. Most ed-tech vendors fake
- * this; we'd rather show nothing real than show fabricated numbers.
+ * The honesty move: where outcome data will eventually live. Most ed-tech
+ * vendors fake this; we'd rather show nothing than show fabricated
+ * numbers. When real pilot data lands (hours saved, outcomes), this gets
+ * replaced with the data itself.
  *
- * When real pilot data lands (hours saved, integrity-flag rate,
- * outcome lift), this component gets replaced with the data strip.
- * The placeholder itself is a credibility asset until then.
+ * A white sheet laid slightly askew on the graph paper, with the point
+ * made in the margin in red pen.
  */
 export function PilotDataStrip() {
   return (
-    <Section variant="alt" id="pilot-data">
-      <div className="mx-auto max-w-3xl rounded-[--radius-lg] border border-[color:var(--color-border-light)] bg-[color:var(--color-surface)] px-10 py-12 text-center md:px-14">
-        <p className="text-sm font-bold uppercase tracking-[0.2em] text-[color:var(--color-primary)]">
-          Editorial note · Pilot data
-        </p>
-        <h2 className="mt-5 text-display-sm text-[color:var(--color-text)]">
-          Pilot results, published when they&rsquo;re real.
-        </h2>
-        <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-[color:var(--color-text-secondary)] md:text-lg">
-          Teachers are using Veradic with their classes now. Once there&rsquo;s
-          enough data to stand behind, we&rsquo;ll publish hours saved,
-          integrity-flag rate, and student outcomes here &mdash; with
-          sources, sample sizes, and the districts who let us name them.
-        </p>
-        {/* Closing punchline — uses text-secondary for AA contrast.
-            text-muted on white is only ~2:1, well below the 4.5:1
-            body-text threshold. */}
-        <p className="mx-auto mt-6 max-w-xl text-sm italic leading-relaxed text-[color:var(--color-text-secondary)]">
-          We&rsquo;d rather show you nothing than show you fabricated
-          numbers.
+    <section id="pilot-data" className="mx-auto max-w-[1200px] px-4 pb-20 md:px-8 md:pb-24">
+      <div className="flex -rotate-[0.4deg] flex-wrap items-center gap-x-8 gap-y-5 rounded-[4px] border border-hairline bg-white px-6 py-8 sm:px-10 md:px-12 md:py-11">
+        <div className="min-w-0 flex-[1_1_520px]">
+          <h2 className="m-0 text-[28px] font-black leading-[1.1] tracking-[-0.03em] text-balance md:text-[32px]">
+            Pilot results, published when they&rsquo;re real.
+          </h2>
+          <p className="m-0 mt-3.5 text-[17px] leading-[1.6] text-ink-soft">
+            Teachers are using Veradic with their classes now. Once there&rsquo;s
+            enough data to stand behind, we&rsquo;ll publish hours saved and
+            student outcomes here, with sources, sample sizes, and the
+            districts who let us name them.
+          </p>
+        </div>
+        <p className="m-0 flex-[0_1_260px] font-hand text-2xl leading-[1.3] text-redpen">
+          No made-up numbers.
         </p>
       </div>
-    </Section>
+    </section>
   );
 }
