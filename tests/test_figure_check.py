@@ -193,7 +193,7 @@ GIVENS = [
          "lines": [{"through": ["A", "B"]}, {"through": ["C", "D"]}], "angle_labels": {"AOC": "1", "BOC": "3"}},
     ),
     (
-        r"$\triangle ABC$ and $\triangle DBC$ have right angles at $A$ and $D$. Right angles at $A$ and $D$.",
+        r"$\triangle ABC$ and $\triangle DBC$. Right angles at $A$ and $D$.",
         {"points": {"A": (0, 3), "B": (0, 0), "C": (4, 3), "D": (4, 0)}, "segments": ["BA", "AC", "CD", "DB"]},
         {"points": {"A": (0, 3), "B": (0, 0), "C": (4, 3), "D": (5, 0)}, "segments": ["BA", "AC", "CD", "DB"]},
     ),

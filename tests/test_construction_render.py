@@ -110,6 +110,13 @@ def test_whole_angle_label_gets_its_own_arc() -> None:
     plain = render_figure(base)
     labelled = render_figure({**base, "angle_labels": {"JKL": "10x - 4"}})
     assert labelled.count("<path") == plain.count("<path") + 1
+    # Wide, not the small arc a measure label on an unsplit angle gets.
+    unsplit = render_figure({**base, "rays": ["KJ", "KL"], "angle_labels": {"JKL": "10x - 4"}})
+    assert max(_arc_radii(labelled)) > 3 * max(_arc_radii(unsplit))
+
+
+def _arc_radii(svg: str) -> list[float]:
+    return [float(r) for r in re.findall(r" A([0-9.]+),", svg)]
 
 
 def test_measure_label_gets_an_arc_but_angle_name_does_not() -> None:
