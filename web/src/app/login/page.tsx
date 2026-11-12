@@ -55,6 +55,21 @@ function LoginPageContent() {
   // store can't be read the same way on both).
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+
+  // The forgot-password dialog closes on Escape and hands focus back to the
+  // link that opened it.
+  useEffect(() => {
+    if (!showForgot) return;
+    const opener = document.activeElement as HTMLElement | null;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setShowForgot(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      opener?.focus();
+    };
+  }, [showForgot]);
   const checkingSession = !mounted || (loading && !signingIn && !pendingMfa);
   const toast = useToast();
 

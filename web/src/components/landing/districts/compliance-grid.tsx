@@ -38,7 +38,7 @@ const ITEMS: ComplianceItem[] = [
   },
   {
     label: "Never trained on",
-    body: "Student work, conversations with the AI tutor, understanding-check transcripts and grades are never used to train AI models, ours or anyone else's.",
+    body: "Student work, conversations with the AI tutor, integrity-check transcripts and grades are never used to train AI models, ours or anyone else's. Period.",
     implication: "Your students' data does not leave your control.",
     link: { label: "Trust & security", href: "/trust#data-handling" },
   },
