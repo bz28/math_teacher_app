@@ -22,7 +22,15 @@ from sqlalchemy.orm import undefer
 
 from api.core.late_policy import HOMEWORK_CLOSED_DETAIL, effective_due_dates
 from api.database import get_session_factory
-from api.models.assignment import Assignment, Submission, SubmissionAttempt, SubmissionGrade
+from api.models.assignment import (
+    Assignment,
+    AssignmentSection,
+    StudentDueDate,
+    Submission,
+    SubmissionAttempt,
+    SubmissionGrade,
+)
+from api.models.course import CourseTeacher
 from api.models.grading_job import GradingJob
 from api.models.integrity_check import IntegrityCheckSubmission, IntegrityConversationTurn
 from api.routes.school_student_practice import drain_integrity_background_tasks
@@ -147,8 +155,6 @@ async def test_a_personal_date_is_only_that_students(world: dict[str, Any]) -> N
     class_due = datetime.now(UTC) - DAY
     personal = datetime.now(UTC) + DAY
     async with get_session_factory()() as s:
-        from api.models.assignment import StudentDueDate
-
         s.add(StudentDueDate(
             assignment_id=world["assignment_id"], student_id=world["student_id"], due_at=personal,
         ))
@@ -319,6 +325,7 @@ async def test_a_reopen_past_its_date_closes_again(client: AsyncClient, world: d
             "UPDATE student_due_dates SET due_at = now() - interval '1 minute'"
         ))
         await s.commit()
+    await _set_hw(world["assignment_id"], due_at=datetime.now(UTC) - 2 * DAY)
     assert (await _detail(client, world))["can_resubmit"] is False
     r = await _submit(client, world)
     assert r.status_code == 403
@@ -393,3 +400,69 @@ async def test_only_the_homeworks_teacher_for_a_student_on_it(
 
     await _set_hw(world["assignment_id"], status="draft")
     assert (await _reopen(client, world, later)).status_code == 400
+
+
+async def test_two_resubmits_at_once_only_one_lands(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """A double tap: the row lock makes the second wait, then find the
+    reopen used up — one turn-in kept, one attempt archived."""
+    import asyncio
+
+    sid = uuid.UUID((await _submit(client, world)).json()["submission_id"])
+    await _reopen(client, world, datetime.now(UTC) + DAY)
+    r1, r2 = await asyncio.gather(_submit(client, world, [NEW_PAGE]), _submit(client, world, [NEW_PAGE]))
+    assert sorted([r1.status_code, r2.status_code]) == [200, 409]
+    assert [a.number for a in await _attempts(sid)] == [1]
+
+
+# ── A personal date only ever extends ────────────────────────────────
+
+
+async def test_a_class_date_moved_past_the_personal_one_wins(world: dict[str, Any]) -> None:
+    now = datetime.now(UTC)
+    personal = now + DAY
+    async with get_session_factory()() as s:
+        s.add(StudentDueDate(
+            assignment_id=world["assignment_id"], student_id=world["student_id"], due_at=personal,
+        ))
+        await s.commit()
+        a = (await s.execute(select(Assignment).where(Assignment.id == world["assignment_id"]))).scalar_one()
+        a.due_at = now + 3 * DAY  # the teacher gave the whole class longer
+        assert (await effective_due_dates(s, a, [world["student_id"]]))[world["student_id"]] == a.due_at
+        a.due_at = None  # no class date: nothing is due, for anyone
+        assert (await effective_due_dates(s, a, [world["student_id"]]))[world["student_id"]] is None
+
+
+async def test_not_missing_in_the_grades_before_the_personal_date(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    aid = world["assignment_id"]
+    await _set_hw(aid, due_at=datetime.now(UTC) - DAY)
+    async with get_session_factory()() as s:
+        hw = (await s.execute(select(Assignment).where(Assignment.id == aid))).scalar_one()
+        section_id = (await s.execute(
+            select(AssignmentSection.section_id).where(AssignmentSection.assignment_id == aid)
+        )).scalar_one()
+        course_id = hw.course_id
+        s.add(CourseTeacher(course_id=course_id, teacher_id=hw.teacher_id, role="owner"))
+        await s.commit()
+    headers = _auth(world["teacher_token"])
+    base = f"/v1/teacher/courses/{course_id}"
+    student = str(world["student_id"])
+
+    async def missing() -> tuple[int, str, int]:
+        roster = (await client.get(f"{base}/grades", headers=headers)).json()
+        book = (await client.get(f"{base}/sections/{section_id}/gradebook", headers=headers)).json()
+        detail = (await client.get(
+            f"{base}/sections/{section_id}/students/{student}/grades", headers=headers,
+        )).json()
+        [row] = [r for r in roster["students"] if r["student_id"] == student]
+        [cell] = [st["cells"][str(aid)] for st in book["students"] if st["student_id"] == student]
+        return row["missing_count"], cell["state"], detail["missing_count"]
+
+    assert await missing() == (1, "missing", 1)
+    await _reopen(client, world, datetime.now(UTC) + DAY)
+    assert await missing() == (0, "not_turned_in", 0)
+    await client.delete(_reopen_url(world), headers=headers)
+    assert await missing() == (1, "missing", 1)

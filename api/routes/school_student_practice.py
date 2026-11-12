@@ -160,6 +160,7 @@ async def _run_extraction_background(submission_id: uuid.UUID) -> None:
             )).scalar_one_or_none()
             if not sub:
                 return
+            read_from = sub.submitted_at
             assignment = (await db.execute(
                 select(Assignment).where(Assignment.id == sub.assignment_id)
             )).scalar_one_or_none()
@@ -181,7 +182,14 @@ async def _run_extraction_background(submission_id: uuid.UUID) -> None:
                 )
                 return
 
-            sub.extraction = extraction
+            # Only onto the photos it read: a retake or a turn-in after a
+            # reopen can replace them while the reader runs (each restamps
+            # submitted_at), and a stale reading must not land on new work.
+            await db.execute(
+                update(Submission)
+                .where(Submission.id == submission_id, Submission.submitted_at == read_from)
+                .values(extraction=extraction)
+            )
             await db.commit()
     except Exception:
         logger.exception(
@@ -1360,9 +1368,8 @@ async def list_homework(
             closed=a.id in closed_ids,
             can_resubmit=a.id in resubmit_ids,
             next_step=(
-                # A reopen's next step is the new turn-in, not the old one's.
                 next_steps.get(submission_by_aid[a.id])
-                if a.id in submission_by_aid and a.id not in resubmit_ids else None
+                if a.id in submission_by_aid else None
             ),
         )
         for a in rows
@@ -2319,8 +2326,9 @@ async def _resubmit_reopened(
     Lateness is the new turn-in's, against the student's due date — the
     personal one the reopen set.
 
-    One turn-in per reopen: it clears `reopened_at`, and the UPDATE is
-    conditional on it, so a double tap gets the one-shot 409. Refused
+    One turn-in per reopen: it clears `reopened_at`, read under a row lock
+    that requires it, so a double tap waits and then gets the one-shot 409.
+    Refused
     (409) while an AI grade of the old turn-in is mid-run — it would land
     on the new photos.
     """
@@ -2334,12 +2342,15 @@ async def _resubmit_reopened(
     )).scalar_one_or_none()
     if sub is None:
         raise HTTPException(status_code=409, detail="Already submitted")
-    grading = (await db.execute(
-        select(GradingJob.id).where(
-            GradingJob.submission_id == submission_id, GradingJob.status == STATUS_RUNNING,
-        )
+    # Locked too: a drain claims a job by updating this row, so its claim
+    # waits on this transaction and then finds the job gone — it can't
+    # start grading the old reading in the gap before `clear_grading`.
+    job_status = (await db.execute(
+        select(GradingJob.status)
+        .where(GradingJob.submission_id == submission_id)
+        .with_for_update()
     )).scalar_one_or_none()
-    if grading is not None:
+    if job_status == STATUS_RUNNING:
         await db.rollback()
         raise HTTPException(
             status_code=409,

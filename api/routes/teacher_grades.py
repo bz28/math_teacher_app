@@ -27,7 +27,13 @@ from api.core.audit_log import log_student_record_access
 from api.core.homework_points import problem_points
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
-from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
+from api.models.assignment import (
+    Assignment,
+    AssignmentSection,
+    StudentDueDate,
+    Submission,
+    SubmissionGrade,
+)
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.user import User
@@ -42,6 +48,23 @@ def _avg(vals: list[float]) -> float | None:
     # Unrounded: the page rounds once, to the whole percent it shows.
     # Rounding here too would double-round — 69.45 → 69.5 → "70%".
     return sum(vals) / len(vals) if vals else None
+
+
+async def _extended_open(
+    db: AsyncSession, assignment_ids: set[uuid.UUID],
+) -> set[tuple[uuid.UUID, uuid.UUID]]:
+    """(assignment_id, student_id) pairs whose personal due date — the
+    teacher reopened the homework for them — hasn't passed. Past the class
+    date, but not missing for that student yet (late_policy._extended)."""
+    if not assignment_ids:
+        return set()
+    rows = await db.execute(
+        select(StudentDueDate.assignment_id, StudentDueDate.student_id).where(
+            StudentDueDate.assignment_id.in_(assignment_ids),
+            StudentDueDate.due_at > datetime.now(UTC),
+        )
+    )
+    return {(aid, sid) for aid, sid in rows.all()}
 
 
 async def _published_and_past_due(
@@ -176,6 +199,7 @@ async def get_course_grades(
     for sr in submitted_rows:
         submitted_by_student.setdefault(sr.student_id, set()).add(sr.assignment_id)
 
+    extended = await _extended_open(db, set().union(*past_due_by_section.values()))
     students_out = []
     for e in enrollments:
         assigned = assigned_by_section.get(e.section_id, set())
@@ -188,7 +212,8 @@ async def get_course_grades(
         graded_ids = set(graded.keys()) & assigned
         # Missing is narrower — past-due and student didn't submit.
         # A future-due HW with no submission isn't "missing" yet.
-        missing_ids = past_due - submitted
+        # A reopen's personal date still ahead isn't missing either.
+        missing_ids = {a for a in past_due - submitted if (a, e.id) not in extended}
         students_out.append({
             "student_id": str(e.id),
             "name": e.name,
@@ -303,10 +328,13 @@ async def get_section_gradebook(
         for r in rows:
             work[(r.student_id, r.assignment_id)] = r
 
+    extended = await _extended_open(db, past_due)
+
     def cell(student_id: uuid.UUID, assignment_id: uuid.UUID) -> dict[str, Any]:
         r = work.get((student_id, assignment_id))
         if r is None:
-            return {"state": CELL_MISSING if assignment_id in past_due else CELL_NOT_TURNED_IN}
+            missing = assignment_id in past_due and (assignment_id, student_id) not in extended
+            return {"state": CELL_MISSING if missing else CELL_NOT_TURNED_IN}
         base: dict[str, Any] = {"submission_id": str(r.id), "is_late": r.is_late}
         if r.grade_published_at is not None and r.published_final_score is not None:
             return {
@@ -477,7 +505,10 @@ async def get_student_grades(
 
     # Missing = past-due AND student didn't submit. Computed first so
     # we can exclude those HWs from the main list (no double-display).
-    missing_aids = past_due_aids - submitted_aids
+    extended = await _extended_open(db, past_due_aids)
+    missing_aids = {
+        aid for aid in past_due_aids - submitted_aids if (aid, student_id) not in extended
+    }
 
     published_hws = []
     for aid in assigned_aids - missing_aids:

@@ -3112,7 +3112,6 @@ async def get_submission_detail(
         TeacherSubmissionAttempt(
             number=a.number,
             reason=a.reason,
-            # json_array_length raises on a non-array (JSON null).
             file_count=a.file_count or 0,
             submitted_at=a.submitted_at,
             is_late=a.is_late,
@@ -3126,6 +3125,7 @@ async def get_submission_detail(
             select(
                 att.number, att.reason, att.submitted_at, att.is_late,
                 att.extraction_flagged_at, att.extraction_flag_note, att.replaced_at, att.grade,
+                # json_array_length raises on a non-array (JSON null).
                 case(
                     (func.json_typeof(att.files) == "array", func.json_array_length(att.files)),
                     else_=0,
