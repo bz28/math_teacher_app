@@ -1,82 +1,74 @@
 import type { Metadata } from "next";
 import { SubjectPage } from "@/components/landing/subject-page";
-import { chemistryDemo } from "@/components/landing/demos/chemistry-demo";
 import { SITE_URL } from "@/lib/seo";
 
+// The root layout's title template adds "| Veradic AI".
+const TITLE = "AI Chemistry for Classrooms: Intro to AP Chemistry";
+const DESCRIPTION =
+  "Veradic reads every step of your students' handwritten chemistry homework, asks them to explain their own work, and drafts grades from your class rules for you to approve.";
+
 export const metadata: Metadata = {
-  title: "AI Chemistry Tutor for Schools: Stoichiometry to Organic | Veradic AI",
-  description:
-    "Veradic is the AI chemistry tutor built for classrooms. Integrity checks, AI grading, and endless practice across stoichiometry, bonding, equilibrium, thermodynamics, and organic.",
+  title: TITLE,
+  description: DESCRIPTION,
   keywords: [
+    "ai chemistry for classrooms",
+    "ai chemistry grading",
+    "chemistry homework grading",
     "ai chemistry tutor for schools",
-    "ai chemistry tutor",
-    "chemistry homework help",
-    "step by step chemistry",
-    "stoichiometry help",
-    "ap chemistry tutor",
-    "organic chemistry tutor",
-    "ai tutor for teachers",
     "classroom chemistry ai",
-    "chatgpt alternative chemistry",
+    "ap chemistry homework",
+    "stoichiometry practice",
     "balancing equations",
-    "veradic chemistry tutor",
+    "ai for chemistry teachers",
+    "veradic chemistry",
   ],
   openGraph: {
-    title: "AI Chemistry Tutor for Schools | Veradic AI",
-    description:
-      "Integrity checks, AI grading, and endless practice across stoichiometry, bonding, equilibrium, and organic chemistry.",
+    title: `${TITLE} | Veradic AI`,
+    description: DESCRIPTION,
     url: `${SITE_URL}/subjects/chemistry`,
   },
   twitter: {
-    title: "AI Chemistry Tutor for Schools | Veradic AI",
-    description:
-      "Integrity checks, AI grading, and endless practice across stoichiometry, bonding, equilibrium, and organic chemistry.",
+    title: `${TITLE} | Veradic AI`,
+    description: DESCRIPTION,
   },
   alternates: {
     canonical: `${SITE_URL}/subjects/chemistry`,
   },
 };
 
-const chemIcon = (
-  <svg
-    className="h-8 w-8"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-  >
-    <path d="M10 2v7.31" />
-    <path d="M14 9.3V2" />
-    <path d="M8.5 2h7" />
-    <path d="M14 9.3a6.5 6.5 0 1 1-4 0" />
-  </svg>
-);
-
-const whyReasons = [
-  "Covers the full chemistry curriculum from intro chem through AP Chemistry and organic. One tool for every section in your course.",
-  "Handles the unit gymnastics chemistry demands (grams to moles to molecules) without students giving up halfway through.",
-  "Renders real molecular structures so students understand bonding and reactivity instead of just memorizing names.",
-];
-
-const subjectProseBlock =
-  "Structures render as real molecules, not strings of letters. Every reaction step explains the electrons, the bonds, and the logic — not just memorized products. Students build intuition about why chemistry works, not just what to write down.";
-
 export default function ChemistryPage() {
   return (
     <SubjectPage
       name="Chemistry"
       slug="chemistry"
-      tagline="AI chemistry tutoring, built for classrooms."
-      description="From balancing equations through organic synthesis, Veradic walks every student through the chemistry, so they get the answer, and they actually understand the reaction behind it."
-      detailedDescription="Whether your students are just learning the periodic table or prepping for AP Chemistry, Veradic meets them where they are and guides them forward through stoichiometry, bonding, equilibrium, and beyond, one step at a time."
-      educationalProgramDescription="AI-powered chemistry tutoring for classrooms, covering atoms, bonding, stoichiometry, thermochemistry, equilibrium, acids and bases, electrochemistry, kinetics, and organic chemistry with step-by-step guidance and teacher-controlled content."
-      badgeColor="#00B894"
-      icon={chemIcon}
-      whyReasons={whyReasons}
-      subjectProseBlock={subjectProseBlock}
-      demoData={chemistryDemo}
+      kicker="Chemistry, from intro chemistry to AP Chemistry"
+      headline="Chemistry homework where the equation has to balance."
+      intro="Students photograph their handwritten work. Veradic asks each one about their own steps, drafts the grade from your class rules, and gives them more practice on what they missed. You approve every grade."
+      sheet={{
+        prompt: "How many moles of water form when 3.0 mol of O₂ reacts with hydrogen?",
+        lines: ["H₂ + O₂ → H₂O", "O₂ : H₂O = 1 : 1", "3.0 mol O₂ → 3.0 mol H₂O"],
+        circled: 0,
+        description:
+          "A student's handwritten work: H₂ + O₂ → H₂O, circled in red because it is not balanced. From it the student reads a one-to-one ratio of O₂ to H₂O and gets 3.0 mol H₂O.",
+      }}
+      question="Count the oxygen atoms on each side of your equation. Do they match?"
+      courses={["Intro Chemistry", "Chemistry", "AP Chemistry", "Organic Chemistry"]}
+      coursesNote="Stoichiometry, bonding, thermochemistry, equilibrium, acids and bases, electrochemistry and kinetics."
+      faqs={[
+        {
+          q: "Is chemistry as far along as math?",
+          a: "Not yet. Math is Veradic’s most complete subject. Chemistry classes use the same homework, grading and practice, and we’d rather you judge it on your own problems: bring a chapter to the demo and we’ll run it live.",
+        },
+        {
+          q: "Can students just get the answer from it?",
+          a: "No. When they’re stuck it asks for the next step and explains the idea behind it. It only talks about your class’s problems, and you can read every understanding-check conversation.",
+        },
+        {
+          q: "Who decides the grade?",
+          a: "You do. Veradic drafts it from your rules, and nothing reaches a student until you approve it.",
+        },
+      ]}
+      programDescription="Classroom chemistry for schools, from intro chemistry through AP Chemistry: handwritten homework read step by step, understanding checks, grades drafted from the teacher's rules for the teacher to approve, and practice from teacher-approved problems."
     />
   );
 }

@@ -4,17 +4,17 @@ import { SITE_URL } from "@/lib/seo";
 export const metadata: Metadata = {
   title: "Book a Demo",
   description:
-    "Bring Veradic AI to your classroom. 20-minute demo, no pitch, no pressure. We'll show you exactly how it fits your curriculum.",
+    "See Veradic on your own chapter: a 20-minute call with the team that builds it. Bring a chapter you're teaching and we'll run it live.",
   openGraph: {
     title: "Book a Demo | Veradic AI",
     description:
-      "Bring Veradic AI to your classroom. 20-minute demo, no pitch, no pressure.",
+      "See Veradic on your own chapter. A 20-minute call; bring a chapter you're teaching and we'll run it live.",
     url: `${SITE_URL}/demo`,
   },
   twitter: {
     title: "Book a Demo | Veradic AI",
     description:
-      "Bring Veradic AI to your classroom. 20-minute demo, no pitch, no pressure.",
+      "See Veradic on your own chapter. A 20-minute call; bring a chapter you're teaching and we'll run it live.",
   },
   alternates: {
     canonical: `${SITE_URL}/demo`,

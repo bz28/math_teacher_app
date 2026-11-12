@@ -1,13 +1,38 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { motion } from "framer-motion";
 import { Navbar } from "@/components/landing/navbar";
 import { Footer } from "@/components/landing/footer";
-import { Section } from "@/components/landing/section";
-import { Eyebrow } from "@/components/landing/eyebrow";
-import { FAQ } from "@/components/landing/faq";
 import { contact } from "@/lib/api";
+
+/**
+ * Book a demo, in the notebook design: what the call is on the left, the
+ * request form on a white sheet on the right.
+ *
+ * The form sends a contact lead (POST /contact/lead, api/routes/contact.py),
+ * which emails the team; the team then emails back to set a time. There is
+ * no calendar step, so the copy says exactly that.
+ */
+
+const STEPS = [
+  {
+    title: "We write homework from your chapter.",
+    body: "Problems and worked solutions, checked first.",
+  },
+  {
+    title: "You submit it as a student.",
+    body: "See the understanding check from their side.",
+  },
+  {
+    title: "You grade it with your rules.",
+    body: "Write a rule, watch the draft grade use it.",
+  },
+];
+
+const FIELD =
+  "mt-2 block w-full rounded-[6px] border-[1.5px] border-[#8A919C] bg-[#FBFAF6] px-3.5 py-[13px] text-base font-medium text-ink placeholder:text-[#6B7280] transition-colors hover:border-ink focus:border-veradic";
+const LABEL = "block text-[15px] font-bold";
+const OPTIONAL = "font-medium text-ink-soft";
 
 export default function DemoPage() {
   const [form, setForm] = useState({
@@ -51,270 +76,144 @@ export default function DemoPage() {
   }
 
   return (
-    <>
+    <div className="site graph-paper flex min-h-full flex-1 flex-col">
       <Navbar />
-      <main>
-        {/* ── Compact hero ── */}
-        <Section variant="default">
-          <div className="mx-auto max-w-3xl text-center">
-            <Eyebrow>Book a demo</Eyebrow>
-            <motion.h1
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="mt-6 text-display-lg text-[color:var(--color-text)]"
-            >
-              Bring Veradic to your classroom.
-            </motion.h1>
-            <motion.p
-              initial={{ opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.1 }}
-              className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-[color:var(--color-text-secondary)]"
-            >
-              20 minutes. We&rsquo;ll show you exactly how it fits your
-              curriculum. No pitch, no pressure.
-            </motion.p>
+      <main className="flex-1">
+        <section className="mx-auto flex max-w-[1200px] flex-wrap items-start gap-x-20 gap-y-14 px-4 pb-20 pt-12 md:px-8 md:pb-28 md:pt-14">
+          <div className="min-w-0 flex-[1_1_440px]">
+            <h1 className="site-h1">See Veradic on your own chapter.</h1>
+            <p className="mt-6 max-w-[30em] text-lg leading-[1.55] text-ink-soft md:text-xl">
+              A 20-minute call with the team that builds it. Bring a chapter
+              you&rsquo;re teaching and we&rsquo;ll run it live.
+            </p>
+            <ol className="m-0 mt-11 flex list-none flex-col gap-[22px] p-0">
+              {STEPS.map((s, i) => (
+                <li key={s.title} className="flex items-baseline gap-[18px]">
+                  {/* The number in red pen. */}
+                  <span aria-hidden="true" className="w-[26px] flex-none font-hand text-[32px] leading-none text-redpen">
+                    {i + 1}
+                  </span>
+                  <span className="text-lg leading-normal">
+                    <b>{s.title}</b> {s.body}
+                  </span>
+                </li>
+              ))}
+            </ol>
           </div>
-        </Section>
 
-        {/* ── Contact section — 2-col: timeline on left, form on right ── */}
-        <Section variant="alt" id="contact">
-          <div className="mx-auto max-w-5xl">
-            <div className="text-center">
-              <Eyebrow>Get started</Eyebrow>
-              <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
-                Tell us where you teach.
-              </h2>
-              <p className="mt-4 text-lg text-[color:var(--color-text-secondary)]">
-                We&rsquo;ll handle the rest.
-              </p>
-            </div>
-
-            {submitted ? (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="mx-auto mt-12 max-w-lg rounded-[--radius-md] border border-green-200 bg-green-50 p-10 text-center dark:border-green-500/20 dark:bg-green-500/5"
+          <div className="w-full min-w-0 max-w-[520px] flex-[1_1_440px]">
+            {submitted ? <Thanks /> : (
+              <form
+                onSubmit={handleSubmit}
+                aria-labelledby="demo-form-title"
+                className="rotate-[0.5deg] rounded-[4px] border border-hairline bg-white p-6 shadow-[0_30px_60px_-30px_rgba(29,38,51,0.45)] sm:p-9"
               >
-                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-100 dark:bg-green-500/10">
-                  <svg
-                    className="h-7 w-7 text-green-600"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    strokeWidth={2}
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="m4.5 12.75 6 6 9-13.5"
-                    />
-                  </svg>
-                </div>
-                <h3 className="text-xl font-bold text-[color:var(--color-text)]">
-                  Thank you!
-                </h3>
-                <p className="mt-2 text-[color:var(--color-text-secondary)]">
-                  We&rsquo;ll be in touch within 24 hours to schedule a demo.
-                </p>
-              </motion.div>
-            ) : (
-              <div className="mt-12 grid gap-12 md:grid-cols-2 md:items-start md:gap-16">
-                {/* Left column — "what happens next" timeline */}
-                <motion.div
-                  initial={{ opacity: 0, x: -20 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true }}
-                  className="space-y-8"
-                >
-                  {/* Phase 1: After you submit */}
-                  <div>
-                    <h3 className="text-lg font-bold text-[color:var(--color-text)]">
-                      After you reach out
-                    </h3>
-                    <div className="mt-5 space-y-5">
-                      <StepItem
-                        num="1"
-                        title="We respond within 24 hours"
-                        desc="A quick email to say hello and find a time that works."
-                      />
-                      <StepItem
-                        num="2"
-                        title="20-minute demo call"
-                        desc="We walk you through the platform and answer your questions. No pressure."
-                      />
-                    </div>
-                  </div>
-
-                  {/* Phase 2: Getting set up */}
-                  <div className="border-t border-[color:var(--color-border-light)] pt-6">
-                    <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
-                      Then we get you set up
-                    </h3>
-                    <div className="mt-5 space-y-5">
-                      <StepItem
-                        num="3"
-                        title="We create your school"
-                        desc="We handle the account setup and invite your teachers."
-                      />
-                      <StepItem
-                        num="4"
-                        title="Organize your classes"
-                        desc="Create courses and sections: Algebra I Period 3, Chemistry Block A."
-                      />
-                      <StepItem
-                        num="5"
-                        title="Students join with a code"
-                        desc="Share a 6-character code. No emails, no paperwork."
-                      />
-                      <StepItem
-                        num="6"
-                        title="You're live"
-                        desc="Students get step-by-step help. You focus on teaching."
-                      />
-                    </div>
-                  </div>
-
-                  <div className="rounded-[--radius-md] bg-[color:var(--color-primary-bg)] px-5 py-4">
-                    <p className="text-xs leading-relaxed text-[color:var(--color-text-secondary)]">
-                      No commitment required. No credit card. We just want to
-                      show you what&rsquo;s possible.
-                    </p>
-                  </div>
-                </motion.div>
-
-                {/* Right column — form */}
-                <motion.form
-                  initial={{ opacity: 0, x: 20 }}
-                  whileInView={{ opacity: 1, x: 0 }}
-                  viewport={{ once: true }}
-                  onSubmit={handleSubmit}
-                  className="space-y-5 rounded-[--radius-md] border border-[color:var(--color-border-light)] bg-[color:var(--color-surface)] p-8"
-                >
-                  <div>
-                    <label className="text-[13px] font-semibold tracking-wide text-[color:var(--color-text-secondary)]">
-                      Your Name
-                      <span className="ml-0.5 text-red-400">*</span>
-                    </label>
+                <h2 id="demo-form-title" className="m-0 mb-6 text-2xl font-black tracking-[-0.02em]">
+                  Request a demo
+                </h2>
+                <div className="space-y-[18px]">
+                  <label className={LABEL}>
+                    Your name
                     <input
                       type="text"
+                      name="name"
+                      autoComplete="name"
                       value={form.contact_name}
-                      onChange={(e) =>
-                        setForm({ ...form, contact_name: e.target.value })
-                      }
-                      placeholder="Jane Smith"
+                      onChange={(e) => setForm({ ...form, contact_name: e.target.value })}
+                      placeholder="Jordan Rivera"
                       required
-                      className="mt-1.5 w-full rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-4 py-3 text-sm text-[color:var(--color-text)] outline-none transition-colors placeholder:text-[color:var(--color-text-muted)] focus:border-[color:var(--color-primary)]"
+                      className={FIELD}
                     />
-                  </div>
-                  <div>
-                    <label className="text-[13px] font-semibold tracking-wide text-[color:var(--color-text-secondary)]">
-                      Work Email
-                      <span className="ml-0.5 text-red-400">*</span>
-                    </label>
+                  </label>
+                  <label className={LABEL}>
+                    Work email
                     <input
                       type="email"
+                      name="email"
+                      autoComplete="email"
                       value={form.contact_email}
-                      onChange={(e) =>
-                        setForm({ ...form, contact_email: e.target.value })
-                      }
-                      placeholder="jsmith@school.edu"
+                      onChange={(e) => setForm({ ...form, contact_email: e.target.value })}
+                      placeholder="jrivera@yourdistrict.org"
                       required
-                      className="mt-1.5 w-full rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-4 py-3 text-sm text-[color:var(--color-text)] outline-none transition-colors placeholder:text-[color:var(--color-text-muted)] focus:border-[color:var(--color-primary)]"
+                      className={FIELD}
                     />
-                  </div>
-                  <div>
-                    <label className="text-[13px] font-semibold tracking-wide text-[color:var(--color-text-secondary)]">
-                      School Name
-                      <span className="ml-0.5 text-red-400">*</span>
-                    </label>
+                  </label>
+                  <label className={LABEL}>
+                    School or district
                     <input
                       type="text"
+                      name="organization"
+                      autoComplete="organization"
                       value={form.school_name}
-                      onChange={(e) =>
-                        setForm({ ...form, school_name: e.target.value })
-                      }
+                      onChange={(e) => setForm({ ...form, school_name: e.target.value })}
                       placeholder="Lincoln High School"
                       required
-                      className="mt-1.5 w-full rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-4 py-3 text-sm text-[color:var(--color-text)] outline-none transition-colors placeholder:text-[color:var(--color-text-muted)] focus:border-[color:var(--color-primary)]"
+                      className={FIELD}
                     />
-                  </div>
-                  <div>
-                    <label className="text-[13px] font-semibold tracking-wide text-[color:var(--color-text-secondary)]">
-                      Approximate # of students
-                    </label>
+                  </label>
+                  <label className={LABEL}>
+                    About how many students? <span className={OPTIONAL}>(optional)</span>
                     <input
                       type="number"
+                      name="students"
                       min={0}
                       step={1}
                       inputMode="numeric"
                       value={form.approx_students}
-                      onChange={(e) =>
-                        setForm({ ...form, approx_students: e.target.value })
-                      }
+                      onChange={(e) => setForm({ ...form, approx_students: e.target.value })}
                       placeholder="e.g. 600"
-                      className="mt-1.5 w-full rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-4 py-3 text-sm text-[color:var(--color-text)] outline-none transition-colors placeholder:text-[color:var(--color-text-muted)] focus:border-[color:var(--color-primary)]"
+                      className={FIELD}
                     />
-                  </div>
-                  <div>
-                    <label className="text-[13px] font-semibold tracking-wide text-[color:var(--color-text-secondary)]">
-                      Anything else we should know?
-                    </label>
+                  </label>
+                  <label className={LABEL}>
+                    Anything else we should know? <span className={OPTIONAL}>(optional)</span>
                     <textarea
+                      name="message"
                       value={form.message}
-                      onChange={(e) =>
-                        setForm({ ...form, message: e.target.value })
-                      }
-                      placeholder="e.g. subjects, timeline, current solution…"
+                      onChange={(e) => setForm({ ...form, message: e.target.value })}
+                      placeholder="e.g. subjects, timeline, what you use now"
                       rows={3}
-                      className="mt-1.5 w-full resize-vertical rounded-xl border border-[color:var(--color-border)] bg-[color:var(--color-surface)] px-4 py-3 text-sm text-[color:var(--color-text)] outline-none transition-colors placeholder:text-[color:var(--color-text-muted)] focus:border-[color:var(--color-primary)]"
+                      className={`${FIELD} resize-y`}
                     />
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="w-full rounded-full bg-[color:var(--color-primary)] py-4 text-base font-bold text-white transition-colors hover:bg-[color:var(--color-primary-dark)] disabled:opacity-60"
+                  </label>
+                </div>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="mt-7 w-full rounded-[6px] bg-veradic p-[17px] text-[17px] font-extrabold text-white transition-colors hover:bg-veradic-dark disabled:opacity-60"
+                >
+                  {submitting ? "Sending…" : "Request a demo"}
+                </button>
+                <p className="m-0 mt-4 text-sm leading-normal text-ink-soft">
+                  We&rsquo;ll email you to set a time. Rather write to us?{" "}
+                  <a
+                    href="mailto:support@veradicai.com"
+                    className="font-bold text-veradic underline underline-offset-2 hover:text-veradic-dark"
                   >
-                    {submitting ? "Sending…" : "Request a Demo"}
-                  </button>
-                </motion.form>
-              </div>
+                    support@veradicai.com
+                  </a>
+                </p>
+              </form>
             )}
           </div>
-        </Section>
-
-        {/* ── FAQ — bottom fallback for hesitant readers ── */}
-        <FAQ />
+        </section>
       </main>
       <Footer />
-    </>
+    </div>
   );
 }
 
-/* ── Step item for the "what happens next" timeline ── */
-function StepItem({
-  num,
-  title,
-  desc,
-}: {
-  num: string;
-  title: string;
-  desc: string;
-}) {
+/** Shown in place of the form once it is sent. role="status" so it is announced. */
+function Thanks() {
   return (
-    <div className="flex gap-4">
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-primary-bg)] text-sm font-bold text-[color:var(--color-primary)]">
-        {num}
-      </div>
-      <div>
-        <div className="text-base font-semibold text-[color:var(--color-text)]">
-          {title}
-        </div>
-        <div className="mt-1 text-sm text-[color:var(--color-text-muted)]">
-          {desc}
-        </div>
-      </div>
+    <div
+      role="status"
+      className="rotate-[0.5deg] rounded-[4px] border border-hairline bg-white p-6 shadow-[0_30px_60px_-30px_rgba(29,38,51,0.45)] sm:p-9"
+    >
+      <h2 className="m-0 text-2xl font-black tracking-[-0.02em]">Thank you.</h2>
+      <p className="m-0 mt-3 text-lg leading-relaxed text-ink-soft">
+        We&rsquo;ll be in touch within 24 hours to set a time for your demo.
+      </p>
     </div>
   );
 }
