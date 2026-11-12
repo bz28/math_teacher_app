@@ -12,9 +12,14 @@ cassette dir (tests/test_construction_figure_eval.py runs it in CI).
 What it measures (the bar from the design doc):
   - correct-by-checker: the figure the teacher sees passed the checker;
   - honesty: no reply claims a figure that wasn't drawn;
-  - the by-eye verdict for each case (EXPECTED below), recorded after
-    looking at every rendered figure — a figure judged wrong that the
-    checker passed would be listed there and fail the run.
+  - the by-eye verdict for each case (EXPECTED below), and for each figure
+    the run drew (BY_EYE, keyed by the figure's fingerprint, so a figure
+    that changes must be looked at again): a figure judged wrong that the
+    checker passed fails the run;
+  - a known-wrong figure per case (NEGATIVES) that the checker must reject,
+    so the eval measures the checker rather than trusting it: with the
+    checker switched off, most cases fail
+    (tests/test_construction_figure_eval.py).
 
 Record (costs a few dollars; delete the cassette file first so stale
 entries don't linger) and render every figure to PNG:
@@ -47,7 +52,12 @@ CASSETTE_DIR = _HERE / "_cassettes" / "construction_figures"
 # By-eye verdict per case, after looking at every rendered figure:
 #   "figure"  — a correct figure must be drawn;
 #   "decline" — no faithful figure exists (the problem itself is broken or
-#               carries no numbers), so an honest "couldn't draw" is right.
+#               carries no numbers), so an honest "couldn't draw" is right;
+#   "unread"  — a figure should exist, but the problem states a relation
+#               the checker can't read yet, so it must fail closed and say
+#               so (counted as a figure that should exist and wasn't drawn).
+# A "figure" case that isn't drawn is a miss against the 80% bar; its
+# reply must still say honestly that it couldn't draw one.
 # Every case not listed expects a figure. Verdicts recorded 2026-11-12 after
 # looking at every rendered figure of the recorded run.
 EXPECTED: dict[str, str] = {
@@ -58,17 +68,101 @@ EXPECTED: dict[str, str] = {
     # the right angles, so △ABM ≅ △ECM would match right angle B with C.
     # (The true statement is △ABM ≅ △CEM.) No faithful figure exists.
     "ee6a495e": "decline",
+    # ∠NKL is a quarter of ∠JKL, so 2x + 13 = (10x − 4)/4 gives x = 28 and
+    # ∠JKL = 276°: the problem's own numbers have no figure.
+    "05b4947e": "decline",
+    # "The angle bisector of the acute angle at line m meets line n at point
+    # P" is a relation the checker can't read yet, so it fails closed and
+    # says so; counted as a figure that should exist and wasn't drawn.
+    "77195d48": "unread",
 }
 
-# Figures the checker passed that were judged wrong by eye. Must stay empty.
-WRONG_BUT_PASSED: dict[str, str] = {}
+# The by-eye verdict on every figure the recorded run drew, keyed by case
+# (or "<case>-step<n>") and the figure's fingerprint (`fingerprint`):
+# "right", or "wrong: <why>". A drawn figure with no verdict for its exact
+# fingerprint fails the run until someone looks at it; one judged wrong
+# that the checker passed is counted in `wrong_but_passed` and fails it.
+BY_EYE: dict[str, tuple[str, str]] = {
+    "985bff41": ("3f4524b6cd90", "right"),  # ∠AOB 61°, ∠BOC 36°, ∠COD 83° (x = 28)
+    "2d01d709": ("28cd5cfc4fd1", "right"),  # vertical angles 1 and 3, both 41°
+    "29be9c15": ("5ba90b8f65bb", "right"),  # p ∥ q; labels on alternate interior angles
+    "d9f94a62": ("b6e0257c1655", "right"),  # BD bisects ∠ABC and is ⊥ AC
+    "589e4a97": ("378716f8f218", "right"),  # two angle pairs marked; QT, ST unmarked
+    "dd7ab4c1": ("10300f68e180", "right"),  # BC ≅ DA, BC ∥ AD, diagonal AC
+    "7d8e403c": ("0078b7f2a7f0", "right"),  # right angles at X, Y; M midpoint; WX ≅ ZY
+    "f4ac1109": ("efb6673e0fa5", "right"),  # AB ∥ CD, BC ≅ DA, diagonal AC
+    "31f9bf18": ("6327b6597689", "right"),  # 24 × 7 rectangle, diagonal d unlabelled number
+    "d5a862d3": ("2d5194fc59d7", "right"),  # legs 5 and 12, hypotenuse 13, b unlabelled number
+    "6d780084": ("da2fe7c54e41", "right"),  # shared hypotenuse BC, right angles A and D, AB = DB
+    "7ef5c01b": ("29b59eee608d", "right"),  # AB ∥ CD, M midpoint of BC
+    "7450aa6e": ("f2e5f9fb3e4f", "right"),  # three pairs of equal sides
+    "12c77989": ("59e829a19347", "right"),  # similar, ratio 2:3, EF = 6 not printed
+    "e87bd653": ("1ef86293c0de", "right"),  # SAS marks
+    "b1768f86": ("ffb47bdbe15c", "right"),  # AC a diameter, AB 10, BC 6, ∠B 90°
+    "099d8962": ("3b9a91a607eb", "right"),  # WX ≅ YZ, ∠W ≅ ∠Y, ∠X ≅ ∠Z
+    "dd7ab4c1-step": ("bb17754f8333", "right"),
+    "dd7ab4c1-step-step3": ("e3779acca7ce", "right"),  # alternate interior angles at A and C
+    "7ef5c01b-step": ("4660d9138284", "right"),
+    "7ef5c01b-step-step4": ("2ac8625ec09c", "right"),  # vertical angles at M
+}
 
-# A sentence claiming a figure exists.
+# A known-wrong version of each case's figure (a point moved so a given is
+# false, a named part removed, the answer printed): the checker must reject
+# it. Keys are case ids; the mutation applies to the figure the run drew.
+NEGATIVES: dict[str, dict[str, Any]] = {
+    "985bff41": {"move": {"C": [3, 5]}},  # ∠BOC no longer 36°
+    "2d01d709": {"move": {"C": [3, 4]}},  # ∠1 no longer 41°, not vertical to ∠3
+    "29be9c15": {"move": {"D": [9, 3]}},  # p no longer ∥ q
+    "d9f94a62": {"move": {"D": [3, 0]}},  # BD neither bisects ∠ABC nor is ⊥ AC
+    "589e4a97": {"move": {"S": [9, 4]}},  # ∠QRT ≇ ∠SRT
+    "dd7ab4c1": {"move": {"D": [4.5, 0]}},  # BC ≇ DA
+    "7d8e403c": {"move": {"M": [2, 0]}},  # M not the midpoint of XY
+    "f4ac1109": {"move": {"D": [1.5, 3]}},  # BC ≇ DA
+    "31f9bf18": {"move": {"C": [24, 9]}},  # not a rectangle
+    "d5a862d3": {"side_label": {"BC": "b = 12"}},  # prints the answer
+    "6d780084": {"move": {"D": [1.5, -3.5]}},  # no right angle at D, AB ≠ DB
+    "7ef5c01b": {"move": {"M": [3.5, 1]}},  # M not the midpoint of BC
+    "7450aa6e": {"move": {"F": [6.5, 3.5]}},  # AC ≠ DF
+    "12c77989": {"move": {"F": [17, 4]}},  # ∠D ≠ ∠A
+    "e87bd653": {"move": {"F": [9.5, 0]}},  # BC ≠ EF
+    "b1768f86": {"move": {"C": [6, 11]}},  # ∠B not 90°, C off the circle
+    "099d8962": {"move": {"Z": [4, 6.5]}},  # ∠X ≇ ∠Z
+    "dd7ab4c1-step": {"move": {"D": [5, 0]}},  # BC ≇ DA
+    "7ef5c01b-step": {"move": {"M": [5, 1.5]}},  # M not the midpoint of BC
+}
+
+# A sentence claiming a figure exists, or that a part was drawn.
 _CLAIM = re.compile(
     r"\bI've (?:added|updated) (?:a|the) diagram\b"
-    r"|\b(?:added|drew|drawn|included|attached)\b[^.]*\b(?:diagram|figure)\b",
-    re.IGNORECASE,
+    r"|\b(?:added|drew|drawn|included|attached)\b[^.]*\b(?:diagram|figure)\b"
+    r"|\b(?:connect(?:ed|s)?|join(?:ed|s)?|drew|added|includ(?:ed|es)?|extended)\b[^.]*"
+    r"(?:\b[A-Z][0-9]*'*\s+(?:and|to|with)\s+[A-Z][0-9]*'*\b|\b(?:[A-Z][0-9]*'*){2,3}\b|\bdiagonals?\b)"
+    r"|\bdiagonals?\s+(?:[A-Z][0-9]*'*){2}\b[^.]*\b(?:appears?|drawn|shown|added|included)\b",
 )
+
+
+def fingerprint(spec: dict[str, Any] | None) -> str:
+    """Twelve hex digits that change whenever the figure does."""
+    import hashlib
+
+    return hashlib.sha256(json.dumps(spec, sort_keys=True).encode()).hexdigest()[:12]
+
+
+def mutate(spec: dict[str, Any], change: dict[str, Any]) -> dict[str, Any]:
+    """Apply a NEGATIVES entry: {"move": {"D": [x, y]}}, {"drop": ["BD"]}
+    (segments, rays or line names), {"label": {"ABC": "47°"}}."""
+    out = json.loads(json.dumps(spec))
+    for name, xy in (change.get("move") or {}).items():
+        out["points"][name] = xy
+    for ref in change.get("drop") or []:
+        for key in ("segments", "rays"):
+            out[key] = [r for r in out.get(key) or [] if r != ref and r[::-1] != ref]
+        out["lines"] = [ln for ln in out.get("lines") or [] if ln.get("name") != ref]
+    if change.get("label"):
+        out["angle_labels"] = {**(out.get("angle_labels") or {}), **change["label"]}
+    if change.get("side_label"):
+        out["side_labels"] = {**(out.get("side_labels") or {}), **change["side_label"]}
+    return out
 
 
 def load_cases() -> list[dict[str, Any]]:
@@ -100,6 +194,9 @@ async def run_case(case: dict[str, Any]) -> dict[str, Any]:
     steps = proposal.get("solution_steps") or []
     return {
         "id": case["id"],
+        "request": case["request"],
+        "final_answer": proposal.get("final_answer") or case["final_answer"] or "",
+        "error": "",
         "question": proposal.get("question") or case["question"],
         "reply": msg["text"],
         "figure_spec": proposal.get("figure_spec"),
@@ -133,7 +230,14 @@ async def run_all(cases: list[dict[str, Any]] | None = None) -> tuple[list[dict[
 
     async def one(c: dict[str, Any]) -> dict[str, Any]:
         async with sem:
-            return await run_case(c)
+            try:
+                return await run_case(c)
+            except Exception as e:  # a case that can't run fails its checks, not the whole run
+                return {
+                    "id": c["id"], "request": c["request"], "final_answer": "", "error": repr(e)[:200],
+                    "question": c["question"], "reply": "", "figure_spec": None, "figure_svg": None,
+                    "step_figures": [],
+                }
 
     try:
         results = await asyncio.gather(*(one(c) for c in cases))
@@ -146,27 +250,70 @@ async def run_all(cases: list[dict[str, Any]] | None = None) -> tuple[list[dict[
     return list(results), redraws
 
 
+def drawn_figures(result: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    """(BY_EYE key, spec) for every figure the case drew."""
+    out = [(result["id"], result["figure_spec"])] if result["figure_svg"] else []
+    return out + [(f"{result['id']}-step{sf['step']}", sf["spec"]) for sf in result["step_figures"]]
+
+
+def verdict(key: str, spec: dict[str, Any]) -> str:
+    """The by-eye verdict for this exact figure; "" when nobody looked."""
+    sha, said = BY_EYE.get(key, ("", ""))
+    return said if sha == fingerprint(spec) else ""
+
+
+def negative_rejected(result: dict[str, Any]) -> bool | None:
+    """The checker rejects the case's known-wrong figure (None: no negative)."""
+    import api.core.question_bank_generation as qbg
+
+    change = NEGATIVES.get(result["id"])
+    if change is None or not result["figure_spec"]:
+        return None
+    bad = mutate(result["figure_spec"], change)
+    _spec, svg, _issues = qbg._check_figure(
+        bad, result["question"], final_answer=result["final_answer"], request=result["request"],
+    )
+    return svg is None
+
+
+def _outcome_ok(result: dict[str, Any], expected: str) -> bool:
+    """The case ended the way the by-eye verdict says it should. A case that
+    expects a figure may still miss (the bar allows 20% misses) as long as
+    the reply says honestly that it couldn't draw one; a "decline" case
+    must draw nothing; an "unread" case must draw nothing and say the
+    checker can't read the problem."""
+    drew = bool(result["figure_svg"])
+    honest_miss = "couldn't draw" in result["reply"]
+    if expected == "figure":
+        return drew or honest_miss
+    if expected == "unread":
+        return not drew and "can't read" in result["reply"]
+    return not drew
+
+
 def checks(result: dict[str, Any]) -> list[CheckResult]:
     """The bar, for one case."""
     drew = bool(result["figure_svg"]) or bool(result["step_figures"])
     expected = EXPECTED.get(result["id"], "figure")
+    figures = drawn_figures(result)
+    unseen = [k for k, spec in figures if not verdict(k, spec)]
+    wrong = [f"{k}: {verdict(k, spec)}" for k, spec in figures if verdict(k, spec).startswith("wrong")]
     out = [
+        CheckResult("the case ran", not result["error"], result["error"]),
         CheckResult(
             "no reply claims a figure that wasn't drawn",
             drew or not _CLAIM.search(result["reply"]),
             result["reply"][:160],
         ),
-        CheckResult(
-            f"by-eye verdict holds ({expected})",
-            bool(result["figure_svg"]) == (expected == "figure"),
-            result["reply"][:160],
-        ),
-        CheckResult(
-            "no figure judged wrong by eye passed the checker",
-            not (result["figure_svg"] and result["id"] in WRONG_BUT_PASSED),
-            WRONG_BUT_PASSED.get(result["id"], ""),
-        ),
+        CheckResult(f"by-eye verdict holds ({expected})", _outcome_ok(result, expected), result["reply"][:160]),
+        CheckResult("every drawn figure was looked at", not unseen,
+                    ", ".join(f"{k} {fingerprint(s)}" for k, s in figures if k in unseen)),
+        CheckResult("no figure judged wrong by eye passed the checker", not wrong, "; ".join(wrong)),
     ]
+    rejected = negative_rejected(result)
+    if result["figure_svg"]:
+        out.append(CheckResult("the checker rejects the case's known-wrong figure", rejected is True,
+                               json.dumps(NEGATIVES.get(result["id"]))))
     if result["figure_svg"]:
         # The reply names only points that are drawn.
         named = re.search(r"with points ([A-Z0-9', ]+?)(?: and ([A-Z][0-9]*'*))?(?:,|;|\.)", result["reply"])
@@ -180,7 +327,7 @@ def checks(result: dict[str, Any]) -> list[CheckResult]:
 def summarize(results: list[dict[str, Any]], redraws: dict[str, int]) -> dict[str, Any]:
     """The eval table: how many figures were drawn, first try or after the
     one retry, the honest declines, and the step figures."""
-    want = [r for r in results if EXPECTED.get(r["id"], "figure") == "figure"]
+    want = [r for r in results if EXPECTED.get(r["id"], "figure") in ("figure", "unread")]
     drawn = [r for r in want if r["figure_svg"]]
     moved = [r["id"] for r in results if "is not where the question's figure puts it" in r["reply"]]
     return {
@@ -192,7 +339,11 @@ def summarize(results: list[dict[str, Any]], redraws: dict[str, int]) -> dict[st
         "declined_correctly": sum(
             1 for r in results if EXPECTED.get(r["id"]) == "decline" and not r["figure_svg"]
         ),
-        "wrong_but_passed": len(WRONG_BUT_PASSED),
+        "wrong_but_passed": sum(
+            1 for r in results for k, spec in drawn_figures(r) if verdict(k, spec).startswith("wrong")
+        ),
+        "not_looked_at": sum(1 for r in results for k, spec in drawn_figures(r) if not verdict(k, spec)),
+        "negatives_rejected": sum(1 for r in results if negative_rejected(r) is True),
         "false_claims": sum(
             1 for r in results if not (r["figure_svg"] or r["step_figures"]) and _CLAIM.search(r["reply"])
         ),
@@ -267,6 +418,7 @@ def main() -> None:
                 _png(sf["svg"], args.png_dir / f"{r['id']}-step{sf['step']}.png")
         report.append({
             "id": r["id"], "figure": bool(r["figure_svg"]), "steps_drawn": [s["step"] for s in r["step_figures"]],
+            "fingerprints": {k: fingerprint(spec) for k, spec in drawn_figures(r)},
             "redraws": redraws.get(r["id"], 0), "reply": r["reply"],
             "failed_checks": [c.name for c in verdicts if not c.passed], "spec": r["figure_spec"],
         })

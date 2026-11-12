@@ -1,21 +1,1246 @@
 {
-  "00ff89ba98cd42bae98f0bac5a095618": {
+  "101027b73d8beb00f6c2f239e1f49eac": {
     "meta": {
       "mode": "bank_chat",
       "model": "claude-sonnet-4-6",
-      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nLines $p$ and $q$ are parallel. A transv",
-      "recorded_at": 1794508013.759021
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\n**Given:** $\\overline{BE}$ bisects $\\ove",
+      "recorded_at": 1794512894.993005
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "points": {
+            "A": [
+              0,
+              3
+            ],
+            "B": [
+              0,
+              0
+            ],
+            "C": [
+              6,
+              3
+            ],
+            "E": [
+              6,
+              0
+            ],
+            "M": [
+              3,
+              3
+            ]
+          },
+          "right_angles": [
+            "ABM",
+            "ECM"
+          ],
+          "segments": [
+            "AB",
+            "BM",
+            "ME",
+            "EC",
+            "AM",
+            "MC"
+          ],
+          "shape": "construction",
+          "tick_groups": [
+            [
+              "AB",
+              "EC"
+            ],
+            [
+              "AM",
+              "MC"
+            ]
+          ],
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": null
+      },
+      "reply": "Here's a diagram added to the question. Points are placed so that AB \u22a5 BE, EC \u22a5 BE, and M is the exact midpoint of AC."
+    }
+  },
+  "17cc4ccdc7a706580672257e0bf4e323": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nIn the right triangle below, the hypoten",
+      "recorded_at": 1794512899.736031
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "points": {
+            "A": [
+              0,
+              0
+            ],
+            "B": [
+              5,
+              0
+            ],
+            "C": [
+              5,
+              12
+            ]
+          },
+          "right_angles": [
+            "ABC"
+          ],
+          "segments": [
+            "AB",
+            "BC",
+            "AC"
+          ],
+          "shape": "construction",
+          "side_labels": {
+            "AB": "a = 5",
+            "AC": "c = 13",
+            "BC": "b = 12"
+          },
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": null
+      },
+      "reply": "Here's a right triangle figure with the given measurements labeled \u2014 the right angle is at vertex B, with legs a = 5 and b = 12, and hypotenuse c = 13."
+    }
+  },
+  "1a315e9a233bfab5963b4e02785f743a": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\n$\\overrightarrow{KM}$ bisects $\\angle JKL$, and $\\overrightarrow{KN}$ bisects $\\angle MKL$. If $m\\angle JKL",
+      "recorded_at": 1794513356.624449
+    },
+    "response": {
+      "figure_spec": {
+        "angle_labels": {
+          "JKL": "10x \u2212 4",
+          "NKL": "2x + 13"
+        },
+        "arc_groups": [
+          [
+            "JKM",
+            "MKL"
+          ],
+          [
+            "MKN",
+            "NKL"
+          ]
+        ],
+        "points": {
+          "J": [
+            0.523,
+            -4.972
+          ],
+          "K": [
+            0,
+            0
+          ],
+          "L": [
+            5.0,
+            0.0
+          ],
+          "M": [
+            -3.716,
+            3.346
+          ],
+          "N": [
+            1.792,
+            4.668
+          ]
+        },
+        "rays": [
+          "KL",
+          "KN",
+          "KM",
+          "KJ"
+        ],
+        "segments": [
+          "KL",
+          "KN",
+          "KM",
+          "KJ"
+        ],
+        "shape": "construction",
+        "type": "geometry"
+      }
+    }
+  },
+  "2e589442b216cf91f1387bf0117c4c14": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn the figure below, $\\triangle ABC$ and $\\triangle DBC$ share hypotenuse $\\overline{BC}$, with right angle",
+      "recorded_at": 1794513454.811598
+    },
+    "response": {
+      "figure_spec": {
+        "points": {
+          "A": [
+            1.5,
+            2.598
+          ],
+          "B": [
+            0.0,
+            0.0
+          ],
+          "C": [
+            6.0,
+            0.0
+          ],
+          "D": [
+            1.5,
+            -2.598
+          ]
+        },
+        "right_angles": [
+          "BAC",
+          "BDC"
+        ],
+        "segments": [
+          "BA",
+          "AC",
+          "BC",
+          "BD",
+          "DC"
+        ],
+        "shape": "construction",
+        "tick_groups": [
+          [
+            "AB",
+            "DB"
+          ]
+        ],
+        "type": "geometry"
+      }
+    }
+  },
+  "2fb71842be294a848591a1602ced9300": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn the right triangle below, the hypotenuse has length $c = 13$ and one leg has length $a = 5$. Find the le",
+      "recorded_at": 1794512910.179739
+    },
+    "response": {
+      "figure_spec": {
+        "points": {
+          "A": [
+            0,
+            0
+          ],
+          "B": [
+            5,
+            0
+          ],
+          "C": [
+            5,
+            12
+          ]
+        },
+        "right_angles": [
+          "ABC"
+        ],
+        "segments": [
+          "AB",
+          "BC",
+          "AC"
+        ],
+        "shape": "construction",
+        "side_labels": {
+          "AB": "a = 5",
+          "AC": "c = 13",
+          "BC": "b"
+        },
+        "type": "geometry"
+      }
+    }
+  },
+  "3082e56930fd97833dce6d6c7253885b": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\n**Given:** $\\angle QRT \\cong \\angle SRT$",
+      "recorded_at": 1794512890.7654212
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "arc_groups": [
+            [
+              "QRT",
+              "SRT"
+            ],
+            [
+              "RQT",
+              "RST"
+            ]
+          ],
+          "points": {
+            "Q": [
+              1,
+              3
+            ],
+            "R": [
+              5,
+              0
+            ],
+            "S": [
+              9,
+              3
+            ],
+            "T": [
+              5,
+              6
+            ]
+          },
+          "segments": [
+            "QR",
+            "QT",
+            "RT",
+            "SR",
+            "ST"
+          ],
+          "shape": "construction",
+          "type": "geometry"
+        }
+      },
+      "reply": "Here's a figure for this problem. I've placed T at the top, R at the bottom, and Q and S symmetrically on either side so that RT is the shared side, the two given angle congruences are exactly satisfied, and QT \u2245 ST holds \u2014 ready for the student to prove."
+    }
+  },
+  "3382d16172723b8bbb4d5d9df3e333cf": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn the diagram below, $\\overline{WX} \\cong \\overline{YZ}$, $\\angle W \\cong \\angle Y$, and $\\angle X \\cong \\",
+      "recorded_at": 1794512998.394898
+    },
+    "response": {
+      "figure_spec": {
+        "arc_groups": [
+          [
+            "XWV",
+            "ZYV"
+          ],
+          [
+            "WXV",
+            "YZV"
+          ]
+        ],
+        "points": {
+          "V": [
+            2.369,
+            2.823
+          ],
+          "W": [
+            0.0,
+            0.0
+          ],
+          "X": [
+            4.0,
+            0.0
+          ],
+          "Y": [
+            0.0,
+            5.646
+          ],
+          "Z": [
+            4.0,
+            5.646
+          ]
+        },
+        "segments": [
+          "WX",
+          "WV",
+          "XV",
+          "YZ",
+          "YV",
+          "ZV"
+        ],
+        "shape": "construction",
+        "tick_groups": [
+          [
+            "WX",
+            "YZ"
+          ]
+        ],
+        "type": "geometry"
+      }
+    }
+  },
+  "4b93dbb34b23340e8cad97e37123ee19": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nIn the figure below, $\\angle A = \\angle ",
+      "recorded_at": 1794512934.387767
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "arc_groups": [
+            [
+              "BAC",
+              "EDF"
+            ],
+            [
+              "ABC",
+              "DEF"
+            ]
+          ],
+          "points": {
+            "A": [
+              0,
+              0
+            ],
+            "B": [
+              12,
+              0
+            ],
+            "C": [
+              9,
+              5
+            ],
+            "D": [
+              5,
+              0
+            ],
+            "E": [
+              13,
+              0
+            ],
+            "F": [
+              9.667,
+              3.333
+            ]
+          },
+          "segments": [
+            "AB",
+            "BC",
+            "CA",
+            "DE",
+            "EF",
+            "FD"
+          ],
+          "shape": "construction",
+          "side_labels": {
+            "AB": "12",
+            "BC": "9",
+            "DE": "8",
+            "EF": "EF"
+          },
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": null
+      },
+      "reply": "Here's a figure showing the two similar triangles with the given angle markings and side labels."
+    }
+  },
+  "54e59d8d3b548b6cc1221baa4a1d4c32": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nA rectangle has a width of $7$ inches an",
+      "recorded_at": 1794512899.075457
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "points": {
+            "A": [
+              0,
+              0
+            ],
+            "B": [
+              24,
+              0
+            ],
+            "C": [
+              24,
+              7
+            ],
+            "D": [
+              0,
+              7
+            ]
+          },
+          "right_angles": [
+            "DAB",
+            "ABC",
+            "BCD",
+            "CDA"
+          ],
+          "segments": [
+            "AB",
+            "BC",
+            "CD",
+            "DA",
+            "AC"
+          ],
+          "shape": "construction",
+          "side_labels": {
+            "AB": "24 in.",
+            "AC": "d",
+            "BC": "7 in."
+          },
+          "type": "geometry"
+        }
+      },
+      "reply": "Great call \u2014 I've added a figure showing the first rectangle with its diagonal labeled $d$, the width labeled 7, and the length labeled 24, so students can clearly see the right triangle formed."
+    }
+  },
+  "5b60c970d0c4712fea8cef4b13682bc1": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\n**Given:** $\\overline{BC} \\cong \\overlin",
+      "recorded_at": 1794512951.5074859
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "parallel_groups": [
+            [
+              "BC",
+              "DA"
+            ]
+          ],
+          "points": {
+            "A": [
+              0,
+              0
+            ],
+            "B": [
+              2,
+              3
+            ],
+            "C": [
+              6,
+              3
+            ],
+            "D": [
+              4,
+              0
+            ]
+          },
+          "segments": [
+            "AB",
+            "BC",
+            "CD",
+            "DA",
+            "AC"
+          ],
+          "shape": "construction",
+          "tick_groups": [
+            [
+              "BC",
+              "DA"
+            ]
+          ],
+          "type": "geometry"
+        },
+        "solution_steps": [
+          {
+            "description": "We have quadrilateral $ABCD$ with diagonal $\\overline{AC}$ drawn, splitting it into $\\triangle ABC$ and $\\triangle CDA$.\n\nThe key insight: $\\overline{AC}$ is **shared** by both triangles, and since $\\overline{BC} \\parallel \\overline{AD}$, the diagonal $\\overline{AC}$ acts as a **transversal** \u2014 creating a pair of alternate interior angles we can use.\n\nWith one shared side, one given pair of congruent sides, and one pair of congruent angles (from parallel lines), we'll have exactly what we need for **SAS** congruence.",
+            "title": "Understand the Setup"
+          },
+          {
+            "description": "Draw diagonal $\\overline{AC}$, which is a side of **both** triangles.\n\nBy the **Reflexive Property of Congruence**, any segment is congruent to itself:\n$$\\overline{AC} \\cong \\overline{AC}$$\n\nThis gives us one pair of congruent sides shared between the two triangles.",
+            "title": "Mark the Diagonal AC"
+          },
+          {
+            "description": "Since $\\overline{BC} \\parallel \\overline{AD}$, the diagonal $\\overline{AC}$ is a transversal cutting those parallel lines.\n\nBy the **Alternate Interior Angles Theorem**, the angles on opposite sides of the transversal between the parallel lines are congruent:\n$$\\angle BCA \\cong \\angle DAC$$\n\nNotice carefully which angles these are:\n- $\\angle BCA$ is at vertex $C$, inside $\\triangle ABC$, between sides $\\overline{BC}$ and $\\overline{AC}$\n- $\\angle DAC$ is at vertex $A$, inside $\\triangle CDA$, between sides $\\overline{DA}$ and $\\overline{AC}$\n\nThe angle sits **between** the two sides we're using \u2014 exactly what SAS requires.",
+            "figure_spec": {
+              "arc_groups": [
+                [
+                  "BCA",
+                  "DAC"
+                ]
+              ],
+              "parallel_groups": [
+                [
+                  "BC",
+                  "DA"
+                ]
+              ],
+              "points": {
+                "A": [
+                  0,
+                  0
+                ],
+                "B": [
+                  2,
+                  3
+                ],
+                "C": [
+                  6,
+                  3
+                ],
+                "D": [
+                  4,
+                  0
+                ]
+              },
+              "segments": [
+                "AB",
+                "BC",
+                "CD",
+                "DA",
+                "AC"
+              ],
+              "shape": "construction",
+              "tick_groups": [
+                [
+                  "BC",
+                  "DA"
+                ]
+              ],
+              "type": "geometry"
+            },
+            "title": "Identify Alternate Interior Angles"
+          },
+          {
+            "description": "Collect the three facts and match them to the **SAS (Side-Angle-Side)** pattern \u2014 two sides and the **included** angle (the angle sandwiched between those two sides):\n\n| $\\triangle ABC$ | $\\triangle CDA$ | Reason |\n|---|---|---|\n| $\\overline{BC}$ | $\\overline{DA}$ | Given |\n| $\\angle BCA$ | $\\angle DAC$ | Alternate Interior Angles |\n| $\\overline{AC}$ | $\\overline{CA}$ | Reflexive Property |\n\nIn $\\triangle ABC$: the included angle $\\angle BCA$ sits between $\\overline{BC}$ and $\\overline{AC}$. \u2713\nIn $\\triangle CDA$: the included angle $\\angle DAC$ sits between $\\overline{DA}$ and $\\overline{CA}$. \u2713\n\nAll three SAS conditions are met, so:\n$$\\triangle ABC \\cong \\triangle CDA \\quad \\blacksquare$$",
+            "title": "Apply SAS Congruence"
+          }
+        ]
+      },
+      "reply": "I've added a figure to the question showing quadrilateral ABCD with diagonal AC drawn, and added a matching diagram to the Alternate Interior Angles step that highlights the parallel lines and the transversal with the congruent angle arcs marked."
+    }
+  },
+  "67150211001a34f2930e4d78bd1f71f2": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nWrite a complete two-column proof.\n\n**Gi",
+      "recorded_at": 1794512891.1722791
     },
     "response": {
       "proposal": {
         "figure_spec": {
           "angle_labels": {
-            "AEF": "(7x - 3)\u00b0",
+            "AVC": "4",
+            "BVD": "2",
+            "CVB": "1",
+            "DVA": "3"
+          },
+          "arc_groups": [
+            [
+              "CVB",
+              "DVA"
+            ]
+          ],
+          "points": {
+            "A": [
+              -4,
+              -3
+            ],
+            "B": [
+              4,
+              3
+            ],
+            "C": [
+              -4,
+              3
+            ],
+            "D": [
+              4,
+              -3
+            ],
+            "V": [
+              0,
+              0
+            ]
+          },
+          "segments": [
+            "AV",
+            "VB",
+            "CV",
+            "VD"
+          ],
+          "shape": "construction",
+          "type": "geometry"
+        }
+      },
+      "reply": "Here's the diagram showing two intersecting lines with the four angles labeled \u2014 \u22201 and \u22203 are marked as vertical angles (opposite each other at the intersection)."
+    }
+  },
+  "678af12102d46dedd425b5d15c01da06": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nLines $m \\parallel n$ are cut by transversal $t$. The transversal forms an angle of $74\u00b0$ with line $m$. Th",
+      "recorded_at": 1794512966.036694
+    },
+    "response": {
+      "figure_spec": {
+        "angle_labels": {
+          "AP_n2": "\u03b8",
+          "_m2AB": "74\u00b0"
+        },
+        "arc_groups": [
+          [
+            "_m2AP",
+            "PAB"
+          ]
+        ],
+        "lines": [
+          {
+            "name": "m",
+            "through": [
+              "_m1",
+              "_m2"
+            ]
+          },
+          {
+            "name": "n",
+            "through": [
+              "_n1",
+              "_n2"
+            ]
+          },
+          {
+            "name": "t",
+            "through": [
+              "A",
+              "B"
+            ]
+          }
+        ],
+        "parallel_groups": [
+          [
+            "m",
+            "n"
+          ]
+        ],
+        "points": {
+          "A": [
+            2.0,
+            6.0
+          ],
+          "B": [
+            3.72,
+            0.0
+          ],
+          "P": [
+            9.961,
+            0.0
+          ],
+          "_m1": [
+            0.0,
+            6.0
+          ],
+          "_m2": [
+            12.0,
+            6.0
+          ],
+          "_n1": [
+            0.0,
+            0.0
+          ],
+          "_n2": [
+            12.0,
+            0.0
+          ]
+        },
+        "rays": [
+          "AP"
+        ],
+        "segments": [],
+        "shape": "construction",
+        "type": "geometry"
+      }
+    }
+  },
+  "6883c562c812c7bfd25f9971a570c0f6": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nIn the diagram below, $\\overline{AB} \\pa",
+      "recorded_at": 1794512957.9533792
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "arc_groups": [
+            [
+              "ABM",
+              "DCM"
+            ],
+            [
+              "AMB",
+              "DMC"
+            ]
+          ],
+          "parallel_groups": [
+            [
+              "AB",
+              "CD"
+            ]
+          ],
+          "points": {
+            "A": [
+              0.0,
+              3.0
+            ],
+            "B": [
+              3.0,
+              3.0
+            ],
+            "C": [
+              6.0,
+              0.0
+            ],
+            "D": [
+              9.0,
+              0.0
+            ],
+            "M": [
+              4.5,
+              1.5
+            ]
+          },
+          "segments": [
+            "AB",
+            "BC",
+            "CD",
+            "AM",
+            "DM"
+          ],
+          "shape": "construction",
+          "tick_groups": [
+            [
+              "BM",
+              "MC"
+            ]
+          ],
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": [
+          {
+            "description": "We have two parallel lines, $\\overline{AB} \\parallel \\overline{CD}$, connected by segment $\\overline{BC}$, with $M$ the midpoint of $\\overline{BC}$.\n\nThe key insight: $M$ sits **between** $B$ and $C$, making it the vertex where the two triangles \"meet.\" When parallel lines are cut by a transversal, they produce **alternate interior angles** \u2014 and any two lines crossing at a point create **vertical angles**. Those two angle facts, combined with the midpoint, give us exactly three congruent pairs.",
+            "title": "Understand the Setup"
+          },
+          {
+            "description": "Since $M$ is the **midpoint** of $\\overline{BC}$, it divides the segment into two equal halves:\n$$BM = MC$$\nThis is our **congruent side**, and it is the side shared between the two triangles (it lies between the two angles we'll identify next).",
+            "title": "Pair 1: Midpoint \u2192 Equal Sides"
+          },
+          {
+            "description": "Since $\\overline{AB} \\parallel \\overline{CD}$, and $\\overline{BC}$ acts as a **transversal** cutting across those parallel lines, the angles on opposite sides of the transversal between the parallels are **alternate interior angles** \u2014 and alternate interior angles are always equal:\n$$\\angle ABM = \\angle DCM$$\nThink of it as a \"Z\" shape formed by the parallel lines and the transversal \u2014 the angles inside the Z are equal.",
+            "title": "Pair 2: Alternate Interior Angles"
+          },
+          {
+            "description": "At point $M$, segments $\\overline{AM}$ and $\\overline{DM}$ cross. Any two straight lines that cross form **vertical angles** \u2014 the angles directly across from each other \u2014 and vertical angles are always equal:\n$$\\angle AMB = \\angle DMC$$\nThis is our second pair of congruent angles, at the other end of side $\\overline{BM}$.",
+            "figure_spec": {
+              "arc_groups": [
+                [
+                  "AMB",
+                  "DMC"
+                ]
+              ],
+              "parallel_groups": [
+                [
+                  "AB",
+                  "CD"
+                ]
+              ],
+              "points": {
+                "A": [
+                  0.0,
+                  3.0
+                ],
+                "B": [
+                  3.0,
+                  3.0
+                ],
+                "C": [
+                  6.0,
+                  0.0
+                ],
+                "D": [
+                  9.0,
+                  0.0
+                ],
+                "M": [
+                  4.5,
+                  1.5
+                ]
+              },
+              "segments": [
+                "AB",
+                "BC",
+                "CD",
+                "AM",
+                "DM"
+              ],
+              "shape": "construction",
+              "type": "geometry"
+            },
+            "title": "Pair 3: Vertical Angles"
+          },
+          {
+            "description": "Gathering our three pairs and matching them to $\\triangle ABM$ vs. $\\triangle DCM$:\n\n| Part | $\\triangle ABM$ | $\\triangle DCM$ | Reason |\n|---|---|---|---|\n| Angle | $\\angle ABM$ | $\\angle DCM$ | Alternate interior angles, $\\overline{AB} \\parallel \\overline{CD}$ |\n| **Side** | $BM$ | $MC$ | $M$ is the midpoint of $\\overline{BC}$ |\n| Angle | $\\angle AMB$ | $\\angle DMC$ | Vertical angles |\n\nThe pattern is **Angle\u2013Side\u2013Angle (ASA)**: one angle, the included side between those angles, then the other angle.\n\nThe **ASA Congruence Postulate** states: if two angles and the included side of one triangle are congruent to two angles and the included side of another triangle, the triangles are congruent.\n\nTherefore:\n$$\\triangle ABM \\cong \\triangle DCM \\quad (\\text{ASA})$$",
+            "title": "Apply ASA Postulate"
+          }
+        ]
+      },
+      "reply": "I've added the main diagram to the question and a focused diagram on the vertical angles step (Step 4), highlighting the angles at M where the two triangles meet."
+    }
+  },
+  "68c01b978c5999a1b0fb8cb9ef7b02e1": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nFind the length of the hypotenuse $c$ in",
+      "recorded_at": 1794512934.252765
+    },
+    "response": {
+      "proposal": null,
+      "reply": "I'd be happy to add a figure, but I need the leg lengths (or other given measurements) for the triangle to place the coordinates correctly. Could you share the values \u2014 for example, \"legs of length 3 and 4\" or similar?"
+    }
+  },
+  "6beae8c8ee466e81e83c15ae7857e3bb": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nWrite a complete two-column proof.\n\n**Given:** $\\angle 1$ and $\\angle 3$ are vertical angles; $m\\angle 1 = ",
+      "recorded_at": 1794513322.4811132
+    },
+    "response": {
+      "figure_spec": {
+        "angle_labels": {
+          "CVB": "1",
+          "DVA": "3"
+        },
+        "points": {
+          "A": [
+            -5,
+            0
+          ],
+          "B": [
+            5,
+            0
+          ],
+          "C": [
+            3.774,
+            3.281
+          ],
+          "D": [
+            -3.774,
+            -3.281
+          ],
+          "V": [
+            0,
+            0
+          ]
+        },
+        "segments": [
+          "AV",
+          "VB",
+          "CV",
+          "VD"
+        ],
+        "shape": "construction",
+        "type": "geometry"
+      }
+    }
+  },
+  "6c9666b2c53cbb06bb988c36526a728d": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\n**Given:** $\\overline{WX} \\perp \\overlin",
+      "recorded_at": 1794512895.948608
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "parallel_groups": [
+            [
+              "WX",
+              "ZY"
+            ]
+          ],
+          "points": {
+            "M": [
+              3,
+              0
+            ],
+            "W": [
+              0,
+              3
+            ],
+            "X": [
+              0,
+              0
+            ],
+            "Y": [
+              6,
+              0
+            ],
+            "Z": [
+              6,
+              3
+            ]
+          },
+          "right_angles": [
+            "WXM",
+            "ZYM"
+          ],
+          "segments": [
+            "WX",
+            "ZY",
+            "XY",
+            "WM",
+            "ZM",
+            "WX",
+            "ZY"
+          ],
+          "shape": "construction",
+          "tick_groups": [
+            [
+              "XM",
+              "YM"
+            ],
+            [
+              "WX",
+              "ZY"
+            ]
+          ],
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": null
+      },
+      "reply": "Here's the figure with all segments including WM and ZM drawn in. W and Z stand above X and Y respectively (since WX \u22a5 XY and ZY \u22a5 XY), and M is the exact midpoint of XY."
+    }
+  },
+  "7f7e403410bd37d1c37e0c72f28d2f79": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nIn the figure below, $AB = DE$, $BC = EF",
+      "recorded_at": 1794512908.0802
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "points": {
+            "A": [
+              0,
+              0
+            ],
+            "B": [
+              3,
+              0
+            ],
+            "C": [
+              1.5,
+              2.598
+            ],
+            "D": [
+              5,
+              0
+            ],
+            "E": [
+              8,
+              0
+            ],
+            "F": [
+              6.5,
+              2.598
+            ]
+          },
+          "segments": [
+            "AB",
+            "BC",
+            "AC",
+            "DE",
+            "EF",
+            "DF"
+          ],
+          "shape": "construction",
+          "tick_groups": [
+            [
+              "AB",
+              "DE"
+            ],
+            [
+              "BC",
+              "EF"
+            ],
+            [
+              "AC",
+              "DF"
+            ]
+          ],
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": null
+      },
+      "reply": "Here's a figure showing both triangles with the three pairs of congruent sides tick-marked to match the given information."
+    }
+  },
+  "834f8e9ca00fa29768524fa67e4287a3": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn the figure below, $\\angle A = \\angle D$ and $\\angle B = \\angle E$. If $AB = 12$, $DE = 8$, and $BC = 9$,",
+      "recorded_at": 1794512978.247375
+    },
+    "response": {
+      "figure_spec": {
+        "arc_groups": [
+          [
+            "BAC",
+            "EDF"
+          ],
+          [
+            "ABC",
+            "DEF"
+          ]
+        ],
+        "points": {
+          "A": [
+            0.0,
+            0.0
+          ],
+          "B": [
+            12.0,
+            0.0
+          ],
+          "C": [
+            3.896,
+            3.894
+          ],
+          "D": [
+            14.0,
+            0.0
+          ],
+          "E": [
+            22.0,
+            0.0
+          ],
+          "F": [
+            16.597,
+            2.596
+          ]
+        },
+        "segments": [
+          "AB",
+          "BC",
+          "CA",
+          "DE",
+          "EF",
+          "FD"
+        ],
+        "shape": "construction",
+        "side_labels": {
+          "AB": "12",
+          "BC": "9",
+          "DE": "8"
+        },
+        "type": "geometry"
+      }
+    }
+  },
+  "89883483e5e2fbebdd35594c025fc24e": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\n**Given:** $\\overline{AB} \\parallel \\ove",
+      "recorded_at": 1794512896.494142
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "arc_groups": [
+            [
+              "BAC",
+              "DCA"
+            ],
+            [
+              "BCA",
+              "DAC"
+            ]
+          ],
+          "parallel_groups": [
+            [
+              "AB",
+              "CD"
+            ]
+          ],
+          "points": {
+            "A": [
+              0,
+              0
+            ],
+            "B": [
+              4,
+              0
+            ],
+            "C": [
+              5,
+              3
+            ],
+            "D": [
+              1,
+              3
+            ]
+          },
+          "segments": [
+            "AB",
+            "BC",
+            "CD",
+            "DA",
+            "AC"
+          ],
+          "shape": "construction",
+          "tick_groups": [
+            [
+              "BC",
+              "DA"
+            ]
+          ],
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": null
+      },
+      "reply": "Here's the figure for this problem \u2014 a parallelogram ABCD with diagonal AC drawn, showing the two triangles and all the given markings (parallel sides and congruent sides BC \u2245 DA)."
+    }
+  },
+  "8b93650124cf8263be22cb717cfd1e94": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nLines $p$ and $q$ are parallel. A transv",
+      "recorded_at": 1794512891.625095
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "angle_labels": {
+            "CEF": "(7x - 3)\u00b0",
             "EFD": "(4x + 18)\u00b0"
           },
           "arc_groups": [
             [
-              "AEF",
+              "CEF",
               "EFD"
             ]
           ],
@@ -78,146 +1303,22 @@
           "type": "geometry"
         }
       },
-      "reply": "Here's a diagram showing parallel lines p and q cut by a transversal, with the two alternate interior angles labeled."
+      "reply": "Here's a figure showing parallel lines p and q cut by a transversal, with the two alternate interior angles labeled."
     }
   },
-  "029ad59b703dc5454763aba61071f151": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nFind the length of the hypotenuse $c$ in",
-      "recorded_at": 1794508026.568179
-    },
-    "response": {
-      "proposal": null,
-      "reply": "I'd be happy to add a figure, but I need the leg lengths (or other given measurements) for the triangle to place the coordinates correctly. Could you share the values \u2014 for example, \"legs of length 3 and 4\" or similar?"
-    }
-  },
-  "0a7b2b965690739c31a010d16d8d7fc8": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\n**Given:** $\\overline{BE}$ bisects $\\overline{AC}$ at point $M$, $\\overline{AB} \\perp \\overline{BE}$, $\\ove",
-      "recorded_at": 1794508110.895148
-    },
-    "response": {
-      "figure_spec": {
-        "points": {
-          "A": [
-            0,
-            3
-          ],
-          "B": [
-            0,
-            0
-          ],
-          "C": [
-            6,
-            -3
-          ],
-          "E": [
-            6,
-            0
-          ],
-          "M": [
-            3,
-            0
-          ]
-        },
-        "right_angles": [
-          "ABM",
-          "CEM"
-        ],
-        "segments": [
-          "AB",
-          "BM",
-          "ME",
-          "AM",
-          "MC",
-          "EC",
-          "AC"
-        ],
-        "shape": "construction",
-        "tick_groups": [
-          [
-            "AB",
-            "EC"
-          ],
-          [
-            "AM",
-            "MC"
-          ]
-        ],
-        "type": "geometry"
-      }
-    }
-  },
-  "15306fe8a19303a613e7ccd9e3883c1b": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn the figure below, $\\overline{DE} \\parallel \\overline{BC}$, where $D$ lies on $\\overline{AB}$ and $E$ lie",
-      "recorded_at": 1794508133.47051
-    },
-    "response": {
-      "figure_spec": {
-        "angle_labels": {
-          "ABC": "6x \u2212 12\u00b0",
-          "ADE": "4x + 8\u00b0",
-          "DAE": "38\u00b0"
-        },
-        "parallel_groups": [
-          [
-            "DE",
-            "BC"
-          ]
-        ],
-        "points": {
-          "A": [
-            5.0,
-            9.0
-          ],
-          "B": [
-            2.721,
-            2.381
-          ],
-          "C": [
-            6.699,
-            4.065
-          ],
-          "D": [
-            3.86,
-            5.69
-          ],
-          "E": [
-            5.85,
-            6.533
-          ]
-        },
-        "segments": [
-          "AB",
-          "AC",
-          "BC",
-          "DE"
-        ],
-        "shape": "construction",
-        "type": "geometry"
-      }
-    }
-  },
-  "1ae824a60d7901003f90c5606a7cb8bc": {
+  "95b6aeca11f1f22fd0c49e5833e0fe37": {
     "meta": {
       "mode": "bank_chat",
       "model": "claude-sonnet-4-6",
       "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nIn the figure below, $\\overline{DE} \\par",
-      "recorded_at": 1794508023.840492
+      "recorded_at": 1794512912.8236349
     },
     "response": {
       "proposal": {
         "figure_spec": {
           "angle_labels": {
-            "ABC": "6x \u2212 12\u00b0",
-            "ADE": "4x + 8\u00b0",
+            "ABC": "6x \u2212 12",
+            "ADE": "4x + 8",
             "DAE": "38\u00b0"
           },
           "parallel_groups": [
@@ -228,24 +1329,24 @@
           ],
           "points": {
             "A": [
-              5,
-              9
+              4,
+              8
             ],
             "B": [
-              1,
-              1
+              0,
+              0
             ],
             "C": [
-              9,
-              1
+              8,
+              0
             ],
             "D": [
-              3,
-              5
+              2.0,
+              4.0
             ],
             "E": [
-              7,
-              5
+              6.0,
+              4.0
             ]
           },
           "segments": [
@@ -261,73 +1362,32 @@
         "question": null,
         "solution_steps": null
       },
-      "reply": "Here's the figure for the problem, showing triangle ABC with DE parallel to BC, all given angle expressions labeled."
+      "reply": "Here's the figure for the problem \u2014 triangle ABC with DE drawn parallel to BC inside it, all angle measures placed correctly for x = 10."
     }
   },
-  "1c436ce11aac7e0943a7d37e2cb36419": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nTriangle $ABC$ is inscribed in a circle with center $O$ as shown. Given $AB = 10$, $BC = 6$, and $\\angle B ",
-      "recorded_at": 1794508032.5584881
-    },
-    "response": {
-      "figure_spec": {
-        "circles": [
-          {
-            "center": "O",
-            "through": "A"
-          }
-        ],
-        "points": {
-          "A": [
-            0,
-            0
-          ],
-          "B": [
-            0,
-            6
-          ],
-          "C": [
-            10,
-            6
-          ],
-          "O": [
-            5,
-            3
-          ]
-        },
-        "right_angles": [
-          "ABC"
-        ],
-        "segments": [
-          "AB",
-          "BC",
-          "AC"
-        ],
-        "shape": "construction",
-        "side_labels": {
-          "AB": "6",
-          "BC": "10"
-        },
-        "type": "geometry"
-      }
-    }
-  },
-  "1f33974901ff47ddaee4c6c00877f278": {
+  "a38975dfa83b36be5b649b08f945808e": {
     "meta": {
       "mode": "bank_chat",
       "model": "claude-sonnet-4-6",
       "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn the figure below, $\\overline{DE} \\parallel \\overline{BC}$, where $D$ lies on $\\overline{AB}$ and $E$ lie",
-      "recorded_at": 1794508026.593693
+      "recorded_at": 1794513366.758649
     },
     "response": {
       "figure_spec": {
         "angle_labels": {
-          "ABC": "6x \u2212 12\u00b0",
-          "ADE": "4x + 8\u00b0",
+          "ABC": "6x \u2212 12",
+          "ADE": "4x + 8",
           "DAE": "38\u00b0"
         },
+        "arc_groups": [
+          [
+            "DAE"
+          ],
+          [
+            "ADE",
+            "ABC"
+          ]
+        ],
         "parallel_groups": [
           [
             "DE",
@@ -336,24 +1396,24 @@
         ],
         "points": {
           "A": [
-            5,
-            9
+            8.676,
+            9.633
           ],
           "B": [
-            1.343,
-            1
+            0.0,
+            0.0
           ],
           "C": [
-            8.657,
-            1
+            8.0,
+            0.0
           ],
           "D": [
-            3.172,
-            5
+            4.338,
+            4.817
           ],
           "E": [
-            6.828,
-            5
+            8.338,
+            4.817
           ]
         },
         "segments": [
@@ -367,57 +1427,176 @@
       }
     }
   },
-  "258127ce9e5ed6162e314a162ea69dfe": {
+  "a524da28aa04dc3b268a833ba84b46c2": {
     "meta": {
       "mode": "bank_chat",
       "model": "claude-sonnet-4-6",
-      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nIn the diagram below, $\\overline{AB} \\pa",
-      "recorded_at": 1794508023.1128252
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nTriangle $ABC$ is inscribed in a circle ",
+      "recorded_at": 1794512938.6884558
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "circles": [
+            {
+              "center": "O",
+              "through": "A"
+            }
+          ],
+          "points": {
+            "A": [
+              0,
+              0
+            ],
+            "B": [
+              0,
+              10
+            ],
+            "C": [
+              6,
+              10
+            ],
+            "O": [
+              3,
+              5
+            ]
+          },
+          "right_angles": [
+            "ACB"
+          ],
+          "segments": [
+            "AB",
+            "BC",
+            "AC"
+          ],
+          "shape": "construction",
+          "side_labels": {
+            "AB": "10",
+            "BC": "6"
+          },
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": null
+      },
+      "reply": "Here's the figure with triangle ABC inscribed in its circumscribed circle, with the right angle at B marked and the given side lengths labeled."
+    }
+  },
+  "a9138bcf40221a3aed831b61e10e1a07": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\n$\\overrightarrow{KM}$ bisects $\\angle JK",
+      "recorded_at": 1794512890.983744
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "angle_labels": {
+            "JKL": "10x \u2212 4",
+            "NKL": "2x + 13"
+          },
+          "arc_groups": [
+            [
+              "JKM",
+              "MKL"
+            ],
+            [
+              "MKN",
+              "NKL"
+            ]
+          ],
+          "points": {
+            "J": [
+              -5.0,
+              3.214
+            ],
+            "K": [
+              0,
+              0
+            ],
+            "L": [
+              5.745,
+              1.0
+            ],
+            "M": [
+              0.0,
+              6.0
+            ],
+            "N": [
+              4.596,
+              3.857
+            ]
+          },
+          "rays": [
+            "KJ",
+            "KM",
+            "KN",
+            "KL"
+          ],
+          "segments": [
+            "KJ",
+            "KM",
+            "KN",
+            "KL"
+          ],
+          "shape": "construction",
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": null
+      },
+      "reply": "Here's a figure showing the four rays from K with the angle bisectors marked appropriately."
+    }
+  },
+  "aa184619f28da76cbf6f0ba2ea63519a": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\n**Given:** $\\overline{BC} \\cong \\overlin",
+      "recorded_at": 1794512894.485895
     },
     "response": {
       "proposal": {
         "figure_spec": {
           "parallel_groups": [
             [
-              "AB",
-              "CD"
+              "BC",
+              "DA"
             ]
           ],
           "points": {
             "A": [
               0,
-              4
+              0
             ],
             "B": [
-              4,
-              4
+              3,
+              3
             ],
             "C": [
-              2,
-              0
+              7,
+              3
             ],
             "D": [
-              6,
+              4,
               0
-            ],
-            "M": [
-              3,
-              2
             ]
           },
           "segments": [
             "AB",
-            "BM",
-            "MC",
+            "BC",
             "CD",
-            "AM",
-            "DM"
+            "DA",
+            "AC"
           ],
           "shape": "construction",
           "tick_groups": [
             [
-              "BM",
-              "MC"
+              "BC",
+              "DA"
             ]
           ],
           "type": "geometry"
@@ -426,131 +1605,23 @@
         "question": null,
         "solution_steps": null
       },
-      "reply": "Here's the diagram for the problem \u2014 it shows the two parallel segments AB and CD connected by BC, with M as the midpoint, and both triangles ABM and DCM drawn."
+      "reply": "Here's the figure for the quadrilateral ABCD with diagonal AC drawn, marking the given congruent sides and parallel lines."
     }
   },
-  "317fc0f64e7f654ca82981b69eb3c6d2": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nIn the figure below, $\\overrightarrow{OA",
-      "recorded_at": 1794508014.177922
-    },
-    "response": {
-      "proposal": {
-        "figure_spec": {
-          "angle_labels": {
-            "AOB": "2x + 5",
-            "BOC": "x + 8",
-            "COD": "3x - 1"
-          },
-          "arc_groups": [],
-          "points": {
-            "A": [
-              -5,
-              0
-            ],
-            "B": [
-              2.76,
-              4.772
-            ],
-            "C": [
-              4.695,
-              1.736
-            ],
-            "D": [
-              5,
-              0
-            ],
-            "O": [
-              0,
-              0
-            ]
-          },
-          "rays": [
-            "OA",
-            "OD",
-            "OB",
-            "OC"
-          ],
-          "segments": [],
-          "shape": "construction",
-          "type": "geometry"
-        },
-        "final_answer": null,
-        "question": null,
-        "solution_steps": null
-      },
-      "reply": "Here's the figure with O at the origin, opposite rays OA and OD forming a straight line, and rays OB and OC placed between them at the correct angles (61\u00b0 and 97\u00b0 from OA respectively)."
-    }
-  },
-  "32cb145a6bafbce5cbbe6fd0a55efa6a": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn the figure below, $\\triangle ABC$ and $\\triangle DBC$ share hypotenuse $\\overline{BC}$, with right angle",
-      "recorded_at": 1794508025.1821508
-    },
-    "response": {
-      "figure_spec": {
-        "points": {
-          "A": [
-            5.818,
-            3.273
-          ],
-          "B": [
-            0,
-            0
-          ],
-          "C": [
-            8,
-            0
-          ],
-          "D": [
-            5.818,
-            -3.273
-          ]
-        },
-        "right_angles": [
-          "BAC",
-          "BDC"
-        ],
-        "segments": [
-          "BA",
-          "AC",
-          "BC",
-          "BD",
-          "DC"
-        ],
-        "shape": "construction",
-        "tick_groups": [
-          [
-            "AB",
-            "DB"
-          ]
-        ],
-        "type": "geometry"
-      }
-    }
-  },
-  "3a927804f668d470e8800589a179d180": {
+  "aae4c4632c34f4f9e498f40575e6440b": {
     "meta": {
       "mode": "bank_chat",
       "model": "claude-sonnet-4-6",
       "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nIn the diagram below, $\\overline{WX} \\co",
-      "recorded_at": 1794508031.756608
+      "recorded_at": 1794512940.057853
     },
     "response": {
       "proposal": {
         "figure_spec": {
           "arc_groups": [
             [
-              "XVW",
-              "YVZ"
-            ],
-            [
-              "VWX",
-              "VYZ"
+              "XWV",
+              "ZYV"
             ],
             [
               "WXV",
@@ -560,7 +1631,7 @@
           "points": {
             "V": [
               1.5,
-              -2.5
+              2.598
             ],
             "W": [
               0,
@@ -595,146 +1666,85 @@
             ]
           ],
           "type": "geometry"
-        },
-        "final_answer": null,
-        "question": null,
-        "solution_steps": null
+        }
       },
-      "reply": "Here's a diagram for the question \u2014 two triangles sharing vertex V, with the given congruence markings for the sides and angles."
+      "reply": "Here's a figure for the problem \u2014 V is placed at the center where the two triangles share their vertex, with W, X on one side and Y, Z on the other, so that WX \u2245 YZ, \u2220W \u2245 \u2220Y, and \u2220X \u2245 \u2220Z are all exactly true in the drawing."
     }
   },
-  "3b5015152bd9f176789137aeec1874e5": {
+  "ad5263f4baa8abb8baa279b91208350d": {
     "meta": {
       "mode": "bank_chat",
       "model": "claude-sonnet-4-6",
-      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nIn the figure below, $AB = DE$, $BC = EF",
-      "recorded_at": 1794508023.247516
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nIn the diagram below, $\\overline{AB} \\pa",
+      "recorded_at": 1794512903.497418
     },
     "response": {
       "proposal": {
         "figure_spec": {
+          "arc_groups": [
+            [
+              "ABM",
+              "DCM"
+            ],
+            [
+              "AMB",
+              "DMC"
+            ]
+          ],
+          "parallel_groups": [
+            [
+              "AB",
+              "CD"
+            ]
+          ],
           "points": {
             "A": [
               0,
-              0
+              2
             ],
             "B": [
               4,
-              0
+              2
             ],
             "C": [
-              1.5,
-              3
+              2,
+              0
             ],
             "D": [
-              5.5,
-              0
-            ],
-            "E": [
-              9.5,
-              0
-            ],
-            "F": [
-              7.0,
-              3
-            ]
-          },
-          "segments": [
-            "AB",
-            "BC",
-            "AC",
-            "DE",
-            "EF",
-            "DF"
-          ],
-          "shape": "construction",
-          "tick_groups": [
-            [
-              "AB",
-              "DE"
-            ],
-            [
-              "BC",
-              "EF"
-            ],
-            [
-              "AC",
-              "DF"
-            ]
-          ],
-          "type": "geometry"
-        }
-      },
-      "reply": "Here's a figure with two triangles where all three pairs of corresponding sides are equal (marked with tick marks), matching the SSS setup of the problem."
-    }
-  },
-  "3bb899dbc20bfdc450e7b84e29215480": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\n**Given:** $\\overline{BE}$ bisects $\\ove",
-      "recorded_at": 1794508017.993098
-    },
-    "response": {
-      "proposal": {
-        "figure_spec": {
-          "points": {
-            "A": [
-              0,
-              3
-            ],
-            "B": [
-              0,
-              0
-            ],
-            "C": [
-              3,
-              -3
-            ],
-            "E": [
               6,
               0
             ],
             "M": [
               3,
-              0
+              1
             ]
           },
-          "right_angles": [
-            "ABM",
-            "CEM"
-          ],
           "segments": [
             "AB",
-            "BM",
-            "ME",
+            "CD",
+            "BC",
             "AM",
-            "MC",
-            "EC"
+            "DM"
           ],
           "shape": "construction",
           "tick_groups": [
             [
-              "AB",
-              "EC"
-            ],
-            [
-              "AM",
+              "BM",
               "MC"
             ]
           ],
           "type": "geometry"
         }
       },
-      "reply": "I've added a diagram to the problem statement with the two right triangles sharing point M, perpendicularity marks at B and E, tick marks on AB \u2245 EC, and double tick marks on AM = MC."
+      "reply": "Here's the diagram for the problem \u2014 it shows the two parallel segments AB and CD connected by BC with midpoint M, and the two triangles meeting at M."
     }
   },
-  "3caa7600b7885e4ab64729eefd01417a": {
+  "c03e9b585f9efeb58a91807c65b7fe21": {
     "meta": {
       "mode": "bank_chat",
       "model": "claude-sonnet-4-6",
       "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nGiven: $\\overline{BD}$ bisects $\\angle A",
-      "recorded_at": 1794508013.832223
+      "recorded_at": 1794512890.419081
     },
     "response": {
       "proposal": {
@@ -742,7 +1752,7 @@
           "arc_groups": [
             [
               "ABD",
-              "DBC"
+              "CBD"
             ]
           ],
           "points": {
@@ -775,6 +1785,7 @@
           "shape": "construction",
           "tick_groups": [
             [
+              "BD",
               "BD"
             ]
           ],
@@ -784,223 +1795,207 @@
         "question": null,
         "solution_steps": null
       },
-      "reply": "Here's the figure for this problem \u2014 it shows triangle ABC with D on AC, segment BD drawn, the right-angle mark at D, and arc marks indicating the bisected angle at B."
+      "reply": "Here's the figure for this problem \u2014 BD is drawn perpendicular to AC with the bisected angles marked at B and the right angle box at D."
     }
   },
-  "4a96832b83fb0ba6a48a6bca98bb22bd": {
+  "c2f51adaeb6799429b976ad24e82278c": {
     "meta": {
       "mode": "bank_chat",
       "model": "claude-sonnet-4-6",
-      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nWrite a complete two-column proof.\n\n**Gi",
-      "recorded_at": 1794508014.147406
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nLines $p$ and $q$ are parallel. A transversal forms alternate interior angles measuring $(7x - 3)\u00b0$ and $(4",
+      "recorded_at": 1794513326.1930811
     },
     "response": {
-      "proposal": {
-        "figure_spec": {
-          "angle_labels": {
-            "_a1O_b2": "2",
-            "_a2O_b1": "4",
-            "_b1O_a1": "1",
-            "_b2O_a2": "3"
-          },
-          "lines": [
-            {
-              "through": [
-                "_a1",
-                "_a2"
-              ]
-            },
-            {
-              "through": [
-                "_b1",
-                "_b2"
-              ]
-            }
-          ],
-          "points": {
-            "O": [
-              5,
-              5
-            ],
-            "_a1": [
-              1.5,
-              7.5
-            ],
-            "_a2": [
-              8.5,
-              2.5
-            ],
-            "_b1": [
-              1.5,
-              2.5
-            ],
-            "_b2": [
-              8.5,
-              7.5
-            ]
-          },
-          "segments": [],
-          "shape": "construction",
-          "type": "geometry"
+      "figure_spec": {
+        "angle_labels": {
+          "AEF": "(7x \u2212 3)\u00b0",
+          "EFD": "(4x + 18)\u00b0"
         },
-        "final_answer": null,
-        "question": null,
-        "solution_steps": null
-      },
-      "reply": "Here's the diagram showing two intersecting lines with the four angles labeled \u2014 \u22201 and \u22203 are the vertical pair given in the problem."
+        "arc_groups": [
+          [
+            "AEF",
+            "EFD"
+          ]
+        ],
+        "lines": [
+          {
+            "name": "p",
+            "through": [
+              "A",
+              "B"
+            ]
+          },
+          {
+            "name": "q",
+            "through": [
+              "C",
+              "D"
+            ]
+          },
+          {
+            "through": [
+              "E",
+              "F"
+            ]
+          }
+        ],
+        "parallel_groups": [
+          [
+            "p",
+            "q"
+          ]
+        ],
+        "points": {
+          "A": [
+            1,
+            6
+          ],
+          "B": [
+            9,
+            6
+          ],
+          "C": [
+            1,
+            2
+          ],
+          "D": [
+            9,
+            2
+          ],
+          "E": [
+            3,
+            6
+          ],
+          "F": [
+            7,
+            2
+          ]
+        },
+        "segments": [],
+        "shape": "construction",
+        "type": "geometry"
+      }
     }
   },
-  "4c187e3ad7f9d7e737ee6303bf706878": {
+  "ca66afdc6df117499fe3a092db012cf4": {
     "meta": {
       "mode": "bank_chat",
       "model": "claude-sonnet-4-6",
-      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nIn the diagram below, $\\overline{AB} \\pa",
-      "recorded_at": 1794508041.3396108
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\n**Given:** $\\overline{BE}$ bisects $\\overline{AC}$ at point $M$, $\\overline{AB} \\perp \\overline{BE}$, $\\ove",
+      "recorded_at": 1794512944.705049
+    },
+    "response": {
+      "figure_spec": {
+        "points": {
+          "A": [
+            0,
+            3
+          ],
+          "B": [
+            0,
+            0
+          ],
+          "C": [
+            6,
+            -3
+          ],
+          "E": [
+            6,
+            0
+          ],
+          "M": [
+            3,
+            0
+          ]
+        },
+        "right_angles": [
+          "ABM",
+          "CEM"
+        ],
+        "segments": [
+          "AB",
+          "BE",
+          "EC",
+          "AM",
+          "MC"
+        ],
+        "shape": "construction",
+        "tick_groups": [
+          [
+            "AB",
+            "EC"
+          ],
+          [
+            "AM",
+            "MC"
+          ]
+        ],
+        "type": "geometry"
+      }
+    }
+  },
+  "d40ffe689e9a0ae27a7c4212f9b765a5": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nIn the figure below, $\\triangle ABC$ and",
+      "recorded_at": 1794512900.5586188
     },
     "response": {
       "proposal": {
         "figure_spec": {
-          "arc_groups": [
-            [
-              "ABM",
-              "DCM"
-            ],
-            [
-              "AMB",
-              "DMC"
-            ]
-          ],
-          "parallel_groups": [
-            [
-              "AB",
-              "CD"
-            ]
-          ],
           "points": {
             "A": [
               0,
-              2
+              3
             ],
             "B": [
-              4,
-              2
+              0,
+              0
             ],
             "C": [
-              2,
-              -2
+              6,
+              0
             ],
             "D": [
-              6,
-              -2
-            ],
-            "M": [
-              3,
-              0
+              0,
+              -3
             ]
           },
+          "right_angles": [
+            "ABC",
+            "DBC"
+          ],
           "segments": [
-            "AB",
-            "CD",
+            "BA",
+            "AC",
             "BC",
-            "AM",
-            "DM"
+            "BD",
+            "DC"
           ],
           "shape": "construction",
           "tick_groups": [
             [
-              "BM",
-              "MC"
+              "AB",
+              "DB"
+            ],
+            [
+              "BC",
+              "BC"
             ]
           ],
           "type": "geometry"
-        },
-        "solution_steps": [
-          {
-            "description": "We have two parallel lines, $\\overline{AB} \\parallel \\overline{CD}$, connected by segment $\\overline{BC}$, with $M$ the midpoint of $\\overline{BC}$.\n\nThe key insight: $M$ sits **between** $B$ and $C$, making it the vertex where the two triangles \"meet.\" When parallel lines are cut by a transversal, they produce **alternate interior angles** \u2014 and any two lines crossing at a point create **vertical angles**. Those two angle facts, combined with the midpoint, give us exactly three congruent pairs.",
-            "title": "Understand the Setup"
-          },
-          {
-            "description": "Since $M$ is the **midpoint** of $\\overline{BC}$, it divides the segment into two equal halves:\n$$BM = MC$$\nThis is our **congruent side**, and it is the side shared between the two triangles (it lies between the two angles we'll identify next).",
-            "title": "Pair 1: Midpoint \u2192 Equal Sides"
-          },
-          {
-            "description": "Since $\\overline{AB} \\parallel \\overline{CD}$, and $\\overline{BC}$ acts as a **transversal** cutting across those parallel lines, the angles on opposite sides of the transversal between the parallels are **alternate interior angles** \u2014 and alternate interior angles are always equal:\n$$\\angle ABM = \\angle DCM$$\nThink of it as a \"Z\" shape formed by the parallel lines and the transversal \u2014 the angles inside the Z are equal.",
-            "title": "Pair 2: Alternate Interior Angles"
-          },
-          {
-            "description": "At point $M$, segments $\\overline{AM}$ and $\\overline{DM}$ cross $\\overline{BC}$. Any two straight lines that cross form **vertical angles** \u2014 the angles directly across from each other \u2014 and vertical angles are always equal:\n$$\\angle AMB = \\angle DMC$$\nThis is our second pair of congruent angles, at the other end of side $\\overline{BM}$.",
-            "figure_spec": {
-              "arc_groups": [
-                [
-                  "ABM",
-                  "DCM"
-                ],
-                [
-                  "AMB",
-                  "DMC"
-                ]
-              ],
-              "parallel_groups": [
-                [
-                  "AB",
-                  "CD"
-                ]
-              ],
-              "points": {
-                "A": [
-                  0,
-                  2
-                ],
-                "B": [
-                  4,
-                  2
-                ],
-                "C": [
-                  2,
-                  -2
-                ],
-                "D": [
-                  6,
-                  -2
-                ],
-                "M": [
-                  3,
-                  0
-                ]
-              },
-              "segments": [
-                "AB",
-                "CD",
-                "BC",
-                "AM",
-                "DM"
-              ],
-              "shape": "construction",
-              "tick_groups": [
-                [
-                  "BM",
-                  "MC"
-                ]
-              ],
-              "type": "geometry"
-            },
-            "title": "Pair 3: Vertical Angles"
-          },
-          {
-            "description": "Gathering our three pairs and matching them to $\\triangle ABM$ vs. $\\triangle DCM$:\n\n| Part | $\\triangle ABM$ | $\\triangle DCM$ | Reason |\n|---|---|---|---|\n| Angle | $\\angle ABM$ | $\\angle DCM$ | Alternate interior angles, $\\overline{AB} \\parallel \\overline{CD}$ |\n| **Side** | $BM$ | $MC$ | $M$ is the midpoint of $\\overline{BC}$ |\n| Angle | $\\angle AMB$ | $\\angle DMC$ | Vertical angles |\n\nThe pattern is **Angle\u2013Side\u2013Angle (ASA)**: one angle, the included side between those angles, then the other angle.\n\nThe **ASA Congruence Postulate** states: if two angles and the included side of one triangle are congruent to two angles and the included side of another triangle, the triangles are congruent.\n\nTherefore:\n$$\\triangle ABM \\cong \\triangle DCM \\quad (\\text{ASA})$$",
-            "title": "Apply ASA Postulate"
-          }
-        ]
+        }
       },
-      "reply": "I've added the main diagram to the question and a matching diagram to the vertical angles step (Step 4) with the vertical angle pair highlighted using arc marks."
+      "reply": "Here's a figure with both right triangles sharing hypotenuse BC, right angles marked at A and D, and the equal legs AB = DB ticked."
     }
   },
-  "56550f9e2fdce880299e2e265bf4d894": {
+  "d59d1908e82dc8f53c492c09d4c6defc": {
     "meta": {
       "mode": "bank_chat",
       "model": "claude-sonnet-4-6",
       "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nIn the figure below, $AB = DE$, $\\angle ",
-      "recorded_at": 1794508028.1162581
+      "recorded_at": 1794512934.9907358
     },
     "response": {
       "proposal": {
@@ -1021,19 +2016,19 @@
               0
             ],
             "C": [
-              2.5,
+              3,
               0
             ],
             "D": [
-              5,
+              5.5,
               3
             ],
             "E": [
-              5,
+              5.5,
               0
             ],
             "F": [
-              7.5,
+              8.5,
               0
             ]
           },
@@ -1062,683 +2057,75 @@
         "question": null,
         "solution_steps": null
       },
-      "reply": "Here's a figure with two triangles where AB = DE, \u2220B = \u2220E, and BC = EF, laid out side by side to match the problem's SAS setup."
+      "reply": "Here's a figure with two triangles where AB = DE, \u2220B = \u2220E, and BC = EF, laid out side by side to match the SAS configuration."
     }
   },
-  "5bb90d8ff3e7a83f3d895bd993fffb23": {
+  "da447670f4f12ef5f23a05b80ed57fa4": {
     "meta": {
       "mode": "bank_chat",
       "model": "claude-sonnet-4-6",
-      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn the figure below, $\\triangle ABC$ and $\\triangle DBC$ share hypotenuse $\\overline{BC}$, with right angle",
-      "recorded_at": 1794508090.934856
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn the figure below, $\\overrightarrow{OA}$, $\\overrightarrow{OB}$, $\\overrightarrow{OC}$, and $\\overrightar",
+      "recorded_at": 1794513312.980287
     },
     "response": {
       "figure_spec": {
+        "angle_labels": {
+          "AOB": "2x + 5",
+          "BOC": "x + 8",
+          "COD": "3x \u2212 1"
+        },
         "points": {
           "A": [
-            2,
-            3.464
+            -6,
+            0
           ],
           "B": [
-            0,
-            0
+            -2.909,
+            5.248
           ],
           "C": [
-            8,
-            0
+            0.731,
+            5.955
           ],
           "D": [
-            2,
-            -3.464
-          ]
-        },
-        "right_angles": [
-          "BAC",
-          "BDC"
-        ],
-        "segments": [
-          "BA",
-          "AC",
-          "BC",
-          "BD",
-          "DC"
-        ],
-        "shape": "construction",
-        "tick_groups": [
-          [
-            "AB",
-            "DB"
-          ]
-        ],
-        "type": "geometry"
-      }
-    }
-  },
-  "5e976a02921758788b6fc447576d606a": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nLines $m \\parallel n$ are cut by transversal $t$. The transversal forms an angle of $74\u00b0$ with line $m$. Th",
-      "recorded_at": 1794508137.762851
-    },
-    "response": {
-      "figure_spec": {
-        "angle_labels": {
-          "AP_n1": "\u03b8",
-          "_m2AB": "74\u00b0"
-        },
-        "arc_groups": [
-          [
-            "_m2AP",
-            "PAB"
-          ]
-        ],
-        "lines": [
-          {
-            "name": "m",
-            "through": [
-              "_m1",
-              "_m2"
-            ]
-          },
-          {
-            "name": "n",
-            "through": [
-              "_n1",
-              "_n2"
-            ]
-          },
-          {
-            "name": "t",
-            "through": [
-              "_t1",
-              "_t2"
-            ]
-          }
-        ],
-        "parallel_groups": [
-          [
-            "m",
-            "n"
-          ]
-        ],
-        "points": {
-          "A": [
-            1.0,
-            6.0
-          ],
-          "B": [
-            2.723,
-            0.0
-          ],
-          "P": [
-            8.963,
-            0.0
-          ],
-          "_m1": [
-            0.0,
-            6.0
-          ],
-          "_m2": [
-            11.0,
-            6.0
-          ],
-          "_n1": [
-            0.0,
-            0.0
-          ],
-          "_n2": [
-            11.0,
-            0.0
-          ],
-          "_t1": [
-            0.724,
-            6.961
-          ],
-          "_t2": [
-            2.999,
-            -0.961
-          ]
-        },
-        "segments": [
-          "AP"
-        ],
-        "shape": "construction",
-        "type": "geometry"
-      }
-    }
-  },
-  "5f395d7c246e5162c0d1924d8ebec53a": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nIn the right triangle below, the hypoten",
-      "recorded_at": 1794508021.4881978
-    },
-    "response": {
-      "proposal": {
-        "figure_spec": {
-          "points": {
-            "A": [
-              0,
-              0
-            ],
-            "B": [
-              5,
-              0
-            ],
-            "C": [
-              5,
-              12
-            ]
-          },
-          "right_angles": [
-            "ABC"
-          ],
-          "segments": [
-            "AB",
-            "BC",
-            "AC"
-          ],
-          "shape": "construction",
-          "side_labels": {
-            "AB": "a = 5",
-            "AC": "c = 13",
-            "BC": "b = ?"
-          },
-          "type": "geometry"
-        },
-        "final_answer": null,
-        "question": null,
-        "solution_steps": null
-      },
-      "reply": "Here's a right triangle figure with the given labels \u2014 the right angle is at vertex B, with legs a = 5 (AB) and b = 12 (BC), and hypotenuse c = 13 (AC)."
-    }
-  },
-  "6fa35b00848294971b77d70849dd0138": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nLines $m \\parallel n$ are cut by transversal $t$. The transversal forms an angle of $74\u00b0$ with line $m$. Th",
-      "recorded_at": 1794508032.5620952
-    },
-    "response": {
-      "figure_spec": {
-        "angle_labels": {
-          "APn": "\u03b8",
-          "BAP": "74\u00b0"
-        },
-        "arc_groups": [
-          [
-            "BAQ",
-            "QAP"
-          ]
-        ],
-        "lines": [
-          {
-            "name": "m",
-            "through": [
-              "_m1",
-              "_m2"
-            ]
-          },
-          {
-            "name": "n",
-            "through": [
-              "_n1",
-              "_n2"
-            ]
-          },
-          {
-            "name": "t",
-            "through": [
-              "_t1",
-              "_t2"
-            ]
-          }
-        ],
-        "parallel_groups": [
-          [
-            "m",
-            "n"
-          ]
-        ],
-        "points": {
-          "A": [
-            3,
-            6
-          ],
-          "B": [
-            5.618,
-            6
-          ],
-          "P": [
-            4.309,
+            6,
             0
           ],
-          "Q": [
-            3.655,
-            3
-          ],
-          "_m1": [
-            0,
-            6
-          ],
-          "_m2": [
-            9,
-            6
-          ],
-          "_n1": [
+          "O": [
             0,
             0
-          ],
-          "_n2": [
-            9,
-            0
-          ],
-          "_t1": [
-            1.764,
-            10
-          ],
-          "_t2": [
-            7.0,
-            -2
           ]
         },
         "rays": [
-          "AQ"
+          "OA",
+          "OD",
+          "OB",
+          "OC"
         ],
-        "segments": [
-          "AP"
-        ],
+        "segments": [],
         "shape": "construction",
         "type": "geometry"
       }
     }
   },
-  "75a4190088486fc5f99811f4203bc6c7": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn the figure below, $\\angle A = \\angle D$ and $\\angle B = \\angle E$. If $AB = 12$, $DE = 8$, and $BC = 9$,",
-      "recorded_at": 1794508109.5626922
-    },
-    "response": {
-      "figure_spec": {
-        "arc_groups": [
-          [
-            "BAC",
-            "EDF"
-          ],
-          [
-            "ABC",
-            "DEF"
-          ]
-        ],
-        "points": {
-          "A": [
-            0.0,
-            0.0
-          ],
-          "B": [
-            12.0,
-            0.0
-          ],
-          "C": [
-            7.5,
-            7.794
-          ],
-          "D": [
-            15.0,
-            0.0
-          ],
-          "E": [
-            23.0,
-            0.0
-          ],
-          "F": [
-            20.0,
-            5.196
-          ]
-        },
-        "segments": [
-          "AB",
-          "BC",
-          "CA",
-          "DE",
-          "EF",
-          "FD"
-        ],
-        "shape": "construction",
-        "side_labels": {
-          "AB": "12",
-          "BC": "9",
-          "DE": "8"
-        },
-        "type": "geometry"
-      }
-    }
-  },
-  "794f36206e83c814771158dd862a2db4": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nA rectangle has a width of $7$ inches an",
-      "recorded_at": 1794508018.63256
-    },
-    "response": {
-      "proposal": {
-        "figure_spec": {
-          "points": {
-            "A": [
-              0,
-              0
-            ],
-            "B": [
-              24,
-              0
-            ],
-            "C": [
-              24,
-              7
-            ],
-            "D": [
-              0,
-              7
-            ]
-          },
-          "right_angles": [
-            "DAB",
-            "ABC",
-            "BCD",
-            "CDA"
-          ],
-          "segments": [
-            "AB",
-            "BC",
-            "CD",
-            "DA",
-            "AC"
-          ],
-          "shape": "construction",
-          "side_labels": {
-            "AB": "24 in.",
-            "AC": "d",
-            "BC": "7 in."
-          },
-          "type": "geometry"
-        }
-      },
-      "reply": "Great call \u2014 I've added a diagram showing the first rectangle with its diagonal, labeled with the width (7), length (24), and diagonal (d), so students can visualize the right triangle setup before diving into the algebra."
-    }
-  },
-  "7b98faa1d5d76a3b43b87f6e9511557e": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn the diagram below, $\\overline{WX} \\cong \\overline{YZ}$, $\\angle W \\cong \\angle Y$, and $\\angle X \\cong \\",
-      "recorded_at": 1794508034.2920609
-    },
-    "response": {
-      "figure_spec": {
-        "arc_groups": [
-          [
-            "VWX",
-            "VYZ"
-          ],
-          [
-            "WXV",
-            "YZV"
-          ]
-        ],
-        "points": {
-          "V": [
-            1.5,
-            -2.598
-          ],
-          "W": [
-            0,
-            0
-          ],
-          "X": [
-            3,
-            0
-          ],
-          "Y": [
-            5,
-            0
-          ],
-          "Z": [
-            8,
-            0
-          ]
-        },
-        "segments": [
-          "WX",
-          "WV",
-          "XV",
-          "YZ",
-          "YV",
-          "ZV"
-        ],
-        "shape": "construction",
-        "tick_groups": [
-          [
-            "WX",
-            "YZ"
-          ]
-        ],
-        "type": "geometry"
-      }
-    }
-  },
-  "7fe36aabfec955203d84055c5aed64af": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nTriangle $ABC$ is inscribed in a circle ",
-      "recorded_at": 1794508029.889766
-    },
-    "response": {
-      "proposal": {
-        "figure_spec": {
-          "circles": [
-            {
-              "center": "O",
-              "through": "A"
-            }
-          ],
-          "points": {
-            "A": [
-              0,
-              0
-            ],
-            "B": [
-              0,
-              6
-            ],
-            "C": [
-              11.662,
-              0
-            ],
-            "O": [
-              5.831,
-              0
-            ]
-          },
-          "right_angles": [
-            "ABC"
-          ],
-          "segments": [
-            "AB",
-            "BC",
-            "AC"
-          ],
-          "shape": "construction",
-          "side_labels": {
-            "AB": "10",
-            "BC": "6"
-          },
-          "type": "geometry"
-        },
-        "final_answer": null,
-        "question": null,
-        "solution_steps": null
-      },
-      "reply": "Here's the figure with triangle ABC inscribed in its circumscribed circle, with the right angle at B marked and the given side lengths labeled."
-    }
-  },
-  "81f07382968713e0c97c0632699221f4": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nIn the figure below, $\\angle A = \\angle ",
-      "recorded_at": 1794508026.3321102
-    },
-    "response": {
-      "proposal": {
-        "figure_spec": {
-          "arc_groups": [
-            [
-              "BAC",
-              "EDF"
-            ],
-            [
-              "ABC",
-              "DEF"
-            ]
-          ],
-          "points": {
-            "A": [
-              0,
-              0
-            ],
-            "B": [
-              12,
-              0
-            ],
-            "C": [
-              9,
-              5
-            ],
-            "D": [
-              15,
-              0
-            ],
-            "E": [
-              23,
-              0
-            ],
-            "F": [
-              21,
-              3.333
-            ]
-          },
-          "segments": [
-            "AB",
-            "BC",
-            "CA",
-            "DE",
-            "EF",
-            "FD"
-          ],
-          "shape": "construction",
-          "side_labels": {
-            "AB": "12",
-            "BC": "9",
-            "DE": "8",
-            "EF": "EF"
-          },
-          "type": "geometry"
-        },
-        "final_answer": null,
-        "question": null,
-        "solution_steps": null
-      },
-      "reply": "Here's a figure showing the two similar triangles with the given angle markings and side labels."
-    }
-  },
-  "88001c461b5bd76a61863bf3965fba2d": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\n**Given:** $\\overline{BC} \\cong \\overlin",
-      "recorded_at": 1794508018.524123
-    },
-    "response": {
-      "proposal": {
-        "figure_spec": {
-          "arc_groups": [
-            [
-              "BCA",
-              "DAC"
-            ]
-          ],
-          "parallel_groups": [
-            [
-              "BC",
-              "DA"
-            ]
-          ],
-          "points": {
-            "A": [
-              0,
-              0
-            ],
-            "B": [
-              2,
-              3
-            ],
-            "C": [
-              6,
-              3
-            ],
-            "D": [
-              4,
-              0
-            ]
-          },
-          "segments": [
-            "AB",
-            "BC",
-            "CD",
-            "DA",
-            "AC"
-          ],
-          "shape": "construction",
-          "tick_groups": [
-            [
-              "BC",
-              "DA"
-            ]
-          ],
-          "type": "geometry"
-        },
-        "final_answer": null,
-        "question": null,
-        "solution_steps": null
-      },
-      "reply": "Here's the diagram for the question \u2014 quadrilateral ABCD with diagonal AC drawn, parallel marks on BC and AD, tick marks on the congruent sides BC and DA, and the two alternate interior angles marked."
-    }
-  },
-  "890b987a74d36ac6f7afbce61f7fc90e": {
+  "f44ff4609c0b42d15de60978584190d9": {
     "meta": {
       "mode": "bank_chat",
       "model": "claude-sonnet-4-6",
       "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nLines $m \\parallel n$ are cut by transve",
-      "recorded_at": 1794508028.716293
+      "recorded_at": 1794512919.0620449
     },
     "response": {
       "proposal": {
         "figure_spec": {
           "angle_labels": {
-            "_m1AB": "74\u00b0",
-            "_n1PA": "\u03b8"
+            "BPN": "\u03b8",
+            "_m1AB": "74\u00b0"
           },
           "arc_groups": [
             [
-              "_m1AB_bisect_left",
-              "_m1AB_bisect_right"
+              "_m1AA_bis1",
+              "_m1AA_bis2"
             ]
           ],
           "lines": [
@@ -1759,8 +2146,8 @@
             {
               "name": "t",
               "through": [
-                "_t1",
-                "_t2"
+                "A",
+                "B"
               ]
             }
           ],
@@ -1772,642 +2159,36 @@
           ],
           "points": {
             "A": [
-              3,
-              6
+              3.0,
+              6.0
             ],
             "B": [
-              5.618,
-              0
-            ],
-            "P": [
-              4.309,
-              0
-            ],
-            "_m1": [
-              0,
-              6
-            ],
-            "_m2": [
-              9,
-              6
-            ],
-            "_n1": [
-              0,
-              0
-            ],
-            "_n2": [
-              9,
-              0
-            ],
-            "_t1": [
-              1.764,
-              10
-            ],
-            "_t2": [
-              7.0,
-              -2
-            ]
-          },
-          "rays": [],
-          "segments": [
-            "AP"
-          ],
-          "shape": "construction",
-          "type": "geometry"
-        },
-        "final_answer": null,
-        "question": null,
-        "solution_steps": null
-      },
-      "reply": "Here's the diagram added to the question \u2014 it shows lines m and n (parallel, with arrows), transversal t, the 74\u00b0 angle at A, the bisector ray AP, and point P on line n with angle \u03b8 marked."
-    }
-  },
-  "9249f033f863625777199ec3c24f221a": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn the figure below, $\\angle A = \\angle D$ and $\\angle B = \\angle E$. If $AB = 12$, $DE = 8$, and $BC = 9$,",
-      "recorded_at": 1794508028.899137
-    },
-    "response": {
-      "figure_spec": {
-        "arc_groups": [
-          [
-            "BAC",
-            "EDF"
-          ],
-          [
-            "ABC",
-            "DEF"
-          ]
-        ],
-        "points": {
-          "A": [
-            0,
-            0
-          ],
-          "B": [
-            12,
-            0
-          ],
-          "C": [
-            9,
-            5.196
-          ],
-          "D": [
-            15,
-            0
-          ],
-          "E": [
-            23,
-            0
-          ],
-          "F": [
-            21,
-            3.464
-          ]
-        },
-        "segments": [
-          "AB",
-          "BC",
-          "CA",
-          "DE",
-          "EF",
-          "FD"
-        ],
-        "shape": "construction",
-        "side_labels": {
-          "AB": "12",
-          "BC": "9",
-          "DE": "8"
-        },
-        "type": "geometry"
-      }
-    }
-  },
-  "93c2e12ab2cfbd40b1aab4f037d5e7eb": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nTriangle $ABC$ is inscribed in a circle with center $O$ as shown. Given $AB = 10$, $BC = 6$, and $\\angle B ",
-      "recorded_at": 1794508107.4920309
-    },
-    "response": {
-      "figure_spec": {
-        "circles": [
-          {
-            "center": "O",
-            "through": "A"
-          }
-        ],
-        "points": {
-          "A": [
-            0.0,
-            10.0
-          ],
-          "B": [
-            0.0,
-            0.0
-          ],
-          "C": [
-            6.0,
-            0.0
-          ],
-          "O": [
-            3.0,
-            5.0
-          ]
-        },
-        "right_angles": [
-          "ABC"
-        ],
-        "segments": [
-          "AB",
-          "BC",
-          "AC",
-          "OA",
-          "OB",
-          "OC"
-        ],
-        "shape": "construction",
-        "side_labels": {
-          "AB": "10",
-          "BC": "6"
-        },
-        "type": "geometry"
-      }
-    }
-  },
-  "95b5d146ac17120ab1d05481ea741b1b": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\n**Given:** $\\overline{WX} \\perp \\overlin",
-      "recorded_at": 1794508018.668971
-    },
-    "response": {
-      "proposal": {
-        "figure_spec": {
-          "points": {
-            "M": [
-              4,
-              0
-            ],
-            "W": [
-              0,
-              4
-            ],
-            "X": [
-              0,
-              0
-            ],
-            "Y": [
-              8,
-              0
-            ],
-            "Z": [
-              8,
-              4
-            ]
-          },
-          "right_angles": [
-            "WXM",
-            "ZYM"
-          ],
-          "segments": [
-            "WX",
-            "XY",
-            "ZY",
-            "WM",
-            "ZM",
-            "XM",
-            "YM"
-          ],
-          "shape": "construction",
-          "tick_groups": [
-            [
-              "XM",
-              "YM"
-            ],
-            [
-              "WX",
-              "ZY"
-            ]
-          ],
-          "type": "geometry"
-        },
-        "final_answer": null,
-        "question": null,
-        "solution_steps": null
-      },
-      "reply": "Here's the figure with all segments including WM and ZM drawn in. M is the midpoint of XY, WX \u22a5 XY, and ZY \u22a5 XY, so the two right triangles are clearly visible."
-    }
-  },
-  "a55e649bf16172939fef7aeaf9f2217d": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\n**Given:** $\\overline{BC} \\cong \\overlin",
-      "recorded_at": 1794508039.350307
-    },
-    "response": {
-      "proposal": {
-        "figure_spec": {
-          "parallel_groups": [
-            [
-              "BC",
-              "DA"
-            ]
-          ],
-          "points": {
-            "A": [
-              0,
-              0
-            ],
-            "B": [
-              3,
-              3
-            ],
-            "C": [
-              7,
-              3
-            ],
-            "D": [
-              4,
-              0
-            ]
-          },
-          "segments": [
-            "AB",
-            "BC",
-            "CD",
-            "DA",
-            "AC"
-          ],
-          "shape": "construction",
-          "tick_groups": [
-            [
-              "BC",
-              "DA"
-            ]
-          ],
-          "type": "geometry"
-        },
-        "final_answer": null,
-        "question": null,
-        "solution_steps": [
-          {
-            "description": "We have quadrilateral $ABCD$ with diagonal $\\overline{AC}$ drawn, splitting it into $\\triangle ABC$ and $\\triangle CDA$.\n\nThe key insight: $\\overline{AC}$ is **shared** by both triangles, and since $\\overline{BC} \\parallel \\overline{AD}$, the diagonal $\\overline{AC}$ acts as a **transversal** \u2014 creating a pair of alternate interior angles we can use.\n\nWith one shared side, one given pair of congruent sides, and one pair of congruent angles (from parallel lines), we'll have exactly what we need for **SAS** congruence.",
-            "title": "Understand the Setup"
-          },
-          {
-            "description": "Draw diagonal $\\overline{AC}$, which is a side of **both** triangles.\n\nBy the **Reflexive Property of Congruence**, any segment is congruent to itself:\n$$\\overline{AC} \\cong \\overline{AC}$$\n\nThis gives us one pair of congruent sides shared between the two triangles.",
-            "title": "Mark the Diagonal AC"
-          },
-          {
-            "description": "Since $\\overline{BC} \\parallel \\overline{AD}$, the diagonal $\\overline{AC}$ is a transversal cutting those parallel lines.\n\nBy the **Alternate Interior Angles Theorem**, the angles on opposite sides of the transversal between the parallel lines are congruent:\n$$\\angle BCA \\cong \\angle DAC$$\n\nNotice carefully which angles these are:\n- $\\angle BCA$ is at vertex $C$, inside $\\triangle ABC$, between sides $\\overline{BC}$ and $\\overline{AC}$\n- $\\angle DAC$ is at vertex $A$, inside $\\triangle CDA$, between sides $\\overline{DA}$ and $\\overline{AC}$\n\nThe angle sits **between** the two sides we're using \u2014 exactly what SAS requires.",
-            "figure_spec": {
-              "angle_labels": {
-                "BCA": "\u2220BCA",
-                "DAC": "\u2220DAC"
-              },
-              "arc_groups": [
-                [
-                  "BCA",
-                  "DAC"
-                ]
-              ],
-              "parallel_groups": [
-                [
-                  "BC",
-                  "DA"
-                ]
-              ],
-              "points": {
-                "A": [
-                  0,
-                  0
-                ],
-                "B": [
-                  3,
-                  3
-                ],
-                "C": [
-                  7,
-                  3
-                ],
-                "D": [
-                  4,
-                  0
-                ]
-              },
-              "segments": [
-                "AB",
-                "BC",
-                "CD",
-                "DA",
-                "AC"
-              ],
-              "shape": "construction",
-              "tick_groups": [
-                [
-                  "BC",
-                  "DA"
-                ]
-              ],
-              "type": "geometry"
-            },
-            "title": "Identify Alternate Interior Angles"
-          },
-          {
-            "description": "Collect the three facts and match them to the **SAS (Side-Angle-Side)** pattern \u2014 two sides and the **included** angle (the angle sandwiched between those two sides):\n\n| $\\triangle ABC$ | $\\triangle CDA$ | Reason |\n|---|---|---|\n| $\\overline{BC}$ | $\\overline{DA}$ | Given |\n| $\\angle BCA$ | $\\angle DAC$ | Alternate Interior Angles |\n| $\\overline{AC}$ | $\\overline{CA}$ | Reflexive Property |\n\nIn $\\triangle ABC$: the included angle $\\angle BCA$ sits between $\\overline{BC}$ and $\\overline{AC}$. \u2713\nIn $\\triangle CDA$: the included angle $\\angle DAC$ sits between $\\overline{DA}$ and $\\overline{CA}$. \u2713\n\nAll three SAS conditions are met, so:\n$$\\triangle ABC \\cong \\triangle CDA \\quad \\blacksquare$$",
-            "title": "Apply SAS Congruence"
-          }
-        ]
-      },
-      "reply": "I've added a diagram to the main question and a focused diagram on Step 3 that highlights the alternate interior angles formed by the transversal AC with the parallel lines BC and AD."
-    }
-  },
-  "ac16a45712d151438791099ba05b475b": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\n$\\overrightarrow{KM}$ bisects $\\angle JKL$, and $\\overrightarrow{KN}$ bisects $\\angle MKL$. If $m\\angle JKL",
-      "recorded_at": 1794508017.09349
-    },
-    "response": {
-      "figure_spec": {
-        "angle_labels": {
-          "JKL": "10x \u2212 4",
-          "NKL": "2x + 13"
-        },
-        "arc_groups": [
-          [
-            "JKM",
-            "MKL"
-          ],
-          [
-            "MKN",
-            "NKL"
-          ]
-        ],
-        "points": {
-          "J": [
-            -4.698,
-            1.71
-          ],
-          "K": [
-            0,
-            0
-          ],
-          "L": [
-            5.5,
-            0.0
-          ],
-          "M": [
-            0.0,
-            5.5
-          ],
-          "N": [
-            3.536,
-            3.536
-          ]
-        },
-        "rays": [
-          "KJ",
-          "KM",
-          "KN",
-          "KL"
-        ],
-        "segments": [],
-        "shape": "construction",
-        "type": "geometry"
-      }
-    }
-  },
-  "af4aa0337c9b3fba3791d03dbc0a613b": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nIn the figure below, $\\triangle ABC$ and",
-      "recorded_at": 1794508022.6901178
-    },
-    "response": {
-      "proposal": {
-        "figure_spec": {
-          "points": {
-            "A": [
-              0,
-              3
-            ],
-            "B": [
-              0,
-              0
-            ],
-            "C": [
-              8,
-              0
-            ],
-            "D": [
-              0,
-              -3
-            ]
-          },
-          "right_angles": [
-            "ABC",
-            "DBC"
-          ],
-          "segments": [
-            "BA",
-            "AC",
-            "BC",
-            "BD",
-            "DC"
-          ],
-          "shape": "construction",
-          "tick_groups": [
-            [
-              "AB",
-              "DB"
-            ]
-          ],
-          "type": "geometry"
-        },
-        "final_answer": null,
-        "question": null,
-        "solution_steps": null
-      },
-      "reply": "Here's the figure: two right triangles sharing hypotenuse BC, with right angles at A and D, and the equal legs AB = DB marked with tick marks."
-    }
-  },
-  "b7ce4872b304273914b2cff10d54a6ac": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn the diagram below, $\\overline{WX} \\cong \\overline{YZ}$, $\\angle W \\cong \\angle Y$, and $\\angle X \\cong \\",
-      "recorded_at": 1794508152.372318
-    },
-    "response": {
-      "figure_spec": {
-        "arc_groups": [
-          [
-            "VWX",
-            "VYZ"
-          ],
-          [
-            "WXV",
-            "YZV"
-          ]
-        ],
-        "points": {
-          "V": [
-            2.791,
-            3.325
-          ],
-          "W": [
-            0,
-            0
-          ],
-          "X": [
-            4,
-            0
-          ],
-          "Y": [
-            4.962,
-            -0.434
-          ],
-          "Z": [
-            6.329,
-            3.325
-          ]
-        },
-        "segments": [
-          "WX",
-          "WV",
-          "XV",
-          "YZ",
-          "YV",
-          "ZV"
-        ],
-        "shape": "construction",
-        "tick_groups": [
-          [
-            "WX",
-            "YZ"
-          ]
-        ],
-        "type": "geometry"
-      }
-    }
-  },
-  "bfa835da1aef06d4f208f6928d7c0e4e": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\n$\\overrightarrow{KM}$ bisects $\\angle JKL$, and $\\overrightarrow{KN}$ bisects $\\angle MKL$. If $m\\angle JKL",
-      "recorded_at": 1794508107.129357
-    },
-    "response": {
-      "figure_spec": {
-        "angle_labels": {
-          "JKL": "10x \u2212 4",
-          "NKL": "2x + 13"
-        },
-        "arc_groups": [
-          [
-            "JKM",
-            "MKL"
-          ],
-          [
-            "MKN",
-            "NKL"
-          ]
-        ],
-        "points": {
-          "J": [
-            1.042,
-            5.909
-          ],
-          "K": [
-            0,
-            0
-          ],
-          "L": [
-            6.0,
-            0.0
-          ],
-          "M": [
-            4.596,
-            3.857
-          ],
-          "N": [
-            5.638,
-            2.052
-          ]
-        },
-        "rays": [
-          "KL",
-          "KN",
-          "KM",
-          "KJ"
-        ],
-        "segments": [],
-        "shape": "construction",
-        "type": "geometry"
-      }
-    }
-  },
-  "c074ddedde4ffada35aabd28a5184ae7": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\n$\\overrightarrow{KM}$ bisects $\\angle JK",
-      "recorded_at": 1794508014.297798
-    },
-    "response": {
-      "proposal": {
-        "figure_spec": {
-          "angle_labels": {
-            "JKL": "10x \u2212 4",
-            "NKL": "2x + 13"
-          },
-          "arc_groups": [
-            [
-              "JKM",
-              "MKL"
-            ],
-            [
-              "MKN",
-              "NKL"
-            ]
-          ],
-          "points": {
-            "J": [
-              -5.0,
-              3.064
-            ],
-            "K": [
-              0,
-              0
-            ],
-            "L": [
-              5.5,
+              5.567,
               0.0
             ],
-            "M": [
-              0.0,
-              5.5
+            "P": [
+              4.284,
+              0.0
             ],
-            "N": [
-              3.536,
-              3.536
+            "_m1": [
+              0.0,
+              6.0
+            ],
+            "_m2": [
+              9.0,
+              6.0
+            ],
+            "_n1": [
+              0.0,
+              0.0
+            ],
+            "_n2": [
+              9.0,
+              0.0
             ]
           },
           "rays": [
-            "KJ",
-            "KM",
-            "KN",
-            "KL"
+            "AP"
           ],
           "segments": [],
           "shape": "construction",
@@ -2417,242 +2198,58 @@
         "question": null,
         "solution_steps": null
       },
-      "reply": "Here's a diagram showing the four rays from K, with the bisector arcs marked to reflect the given relationships."
+      "reply": "Here's the diagram added to the question \u2014 it shows lines m and n cut by transversal t, the 74\u00b0 angle at A, the angle bisector from A meeting line n at P, and the resulting angle \u03b8 at P."
     }
   },
-  "d295aeff62fc928cee8ef14c369c2962": {
+  "f709c0173249cd96c566a00658ed014f": {
     "meta": {
       "mode": "bank_chat",
       "model": "claude-sonnet-4-6",
-      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn the diagram below, $\\overline{WX} \\cong \\overline{YZ}$, $\\angle W \\cong \\angle Y$, and $\\angle X \\cong \\",
-      "recorded_at": 1794508440.249093
-    },
-    "response": {
-      "figure_spec": {
-        "arc_groups": [
-          [
-            "VWX",
-            "VYZ"
-          ],
-          [
-            "WXV",
-            "YZV"
-          ]
-        ],
-        "points": {
-          "V": [
-            2.371,
-            2.823
-          ],
-          "W": [
-            0.0,
-            0.0
-          ],
-          "X": [
-            4.0,
-            0.0
-          ],
-          "Y": [
-            4.742,
-            0.0
-          ],
-          "Z": [
-            0.742,
-            0.0
-          ]
-        },
-        "segments": [
-          "WX",
-          "WV",
-          "XV",
-          "YZ",
-          "YV",
-          "ZV"
-        ],
-        "shape": "construction",
-        "tick_groups": [
-          [
-            "WX",
-            "YZ"
-          ]
-        ],
-        "type": "geometry"
-      }
-    }
-  },
-  "e9b71dc30c1f145315fb9efd24e8c00f": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\n**Given:** $\\overline{AB} \\parallel \\ove",
-      "recorded_at": 1794508018.7480052
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nIn the figure below, $\\overrightarrow{OA",
+      "recorded_at": 1794512890.328044
     },
     "response": {
       "proposal": {
         "figure_spec": {
-          "parallel_groups": [
-            [
-              "AB",
-              "CD"
-            ]
-          ],
+          "angle_labels": {
+            "AOB": "2x + 5",
+            "BOC": "x + 8",
+            "COD": "3x \u2212 1"
+          },
           "points": {
             "A": [
-              0,
+              -6,
               0
             ],
             "B": [
-              5,
-              0
+              1.788,
+              5.878
             ],
             "C": [
-              6.5,
-              2.5
+              4.772,
+              4.254
             ],
             "D": [
-              1.5,
-              2.5
+              6,
+              0
+            ],
+            "O": [
+              0,
+              0
             ]
           },
-          "segments": [
-            "AB",
-            "BC",
-            "CD",
-            "DA",
-            "AC"
+          "rays": [
+            "OA",
+            "OD",
+            "OB",
+            "OC"
           ],
+          "segments": [],
           "shape": "construction",
-          "tick_groups": [
-            [
-              "BC",
-              "DA"
-            ]
-          ],
-          "type": "geometry"
-        },
-        "final_answer": null,
-        "question": null,
-        "solution_steps": null
-      },
-      "reply": "Here's the figure for this problem \u2014 parallelogram ABCD with diagonal AC drawn as the transversal, tick marks on the congruent sides BC and DA, and parallel arrows on AB and CD."
-    }
-  },
-  "f2732739a483e0881a5fc1f9a8eda364": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\n**Given:** $\\angle QRT \\cong \\angle SRT$",
-      "recorded_at": 1794508013.563801
-    },
-    "response": {
-      "proposal": {
-        "figure_spec": {
-          "arc_groups": [
-            [
-              "QRT",
-              "SRT"
-            ],
-            [
-              "RQT",
-              "RST"
-            ]
-          ],
-          "points": {
-            "Q": [
-              1,
-              0
-            ],
-            "R": [
-              5,
-              0
-            ],
-            "S": [
-              9,
-              0
-            ],
-            "T": [
-              5,
-              8
-            ]
-          },
-          "segments": [
-            "TQ",
-            "TR",
-            "TS",
-            "QR",
-            "RS"
-          ],
-          "shape": "construction",
-          "tick_groups": [],
           "type": "geometry"
         }
       },
-      "reply": "Here's a figure for this problem \u2014 T sits at the top, Q and S are symmetric on either side, and R is at the bottom center, so RT is the shared side and the two given angle congruences are clearly visible."
-    }
-  },
-  "f4b0a60734ca751ce898f6781dbca4dd": {
-    "meta": {
-      "mode": "bank_chat",
-      "model": "claude-sonnet-4-6",
-      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\n**Given:** $\\overline{BE}$ bisects $\\overline{AC}$ at point $M$, $\\overline{AB} \\perp \\overline{BE}$, $\\ove",
-      "recorded_at": 1794508021.003293
-    },
-    "response": {
-      "figure_spec": {
-        "parallel_groups": [
-          [
-            "AB",
-            "EC"
-          ]
-        ],
-        "points": {
-          "A": [
-            0,
-            3
-          ],
-          "B": [
-            0,
-            0
-          ],
-          "C": [
-            6,
-            3
-          ],
-          "E": [
-            6,
-            0
-          ],
-          "M": [
-            3,
-            1.5
-          ]
-        },
-        "right_angles": [
-          "ABM",
-          "CEM"
-        ],
-        "segments": [
-          "AB",
-          "BM",
-          "ME",
-          "EC",
-          "AC",
-          "AM",
-          "MC"
-        ],
-        "shape": "construction",
-        "tick_groups": [
-          [
-            "AB",
-            "EC"
-          ],
-          [
-            "AM",
-            "MC"
-          ]
-        ],
-        "type": "geometry"
-      }
+      "reply": "Here's the figure with all four rays from O, with OA and OD as opposite rays forming a straight line, and OB and OC placed between them at the correct angles."
     }
   }
 }

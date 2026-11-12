@@ -19,7 +19,7 @@ import re
 from typing import Any
 
 from api.core.geometry.dsl import ConstructionFigure, is_hidden, split_points
-from api.core.geometry.figure_check import parse_problem
+from api.core.geometry.figure_check import givens_marked, parse_problem
 from api.core.llm_client import MODEL_REASON, call_claude_json
 from api.core.llm_schemas import FIGURE_REDRAW_SCHEMA
 
@@ -56,18 +56,21 @@ Rules:
    - stated lengths: place them at those lengths, or all scaled by one factor.
    Give coordinates to 3 decimals.
 3. Draw every segment the problem names, every side of every triangle it
-   names, both sides of every angle it names, rays as `rays`, named lines
+   names, both sides of every angle it names, a ray as a `rays` entry
+   starting at its endpoint ("AB" is the ray from A through B), a line
+   through two points (line AB) as a `lines` entry through them, named lines
    (p, q, t, ell_1) as named `lines`, a transversal when there is one, and
    anything the teacher asks for. Draw nothing else.
 4. Mark the givens as a textbook does: `tick_groups` on congruent segments
    (each congruent pair its own group), `arc_groups` on congruent angles,
    `right_angles` where lines are perpendicular, `parallel_groups` on
-   parallel segments or lines. NEVER mark the statement to prove — the
-   student has to prove it.
+   parallel segments or lines. Each group lists at least two parts. NEVER
+   mark the statement to prove — the student has to prove it.
 5. Labels come only from the problem: numbered angles (∠1 →
    `angle_labels` {"AEB": "1"}), and measures or lengths the problem states.
-   Never print an answer or any value the student has to find; a variable
-   the problem uses (x) may be shown. Every number on the figure must also
+   Never print an answer or any value the student has to find (nothing on
+   the angle or segment the problem asks for); a variable the problem uses
+   (x) may be shown. Every number on the figure must also
    be in the problem text.
 6. It cannot draw 3D solids, curves other than circles (graphs of
    functions, parabolas), coordinate grids, or pictures of real objects.
@@ -157,10 +160,11 @@ def _join(items: list[str]) -> str:
     return ", ".join(items[:-1]) + " and " + items[-1]
 
 
-def figure_sentence(spec: dict[str, Any], request: str, *, updated: bool) -> str:
+def figure_sentence(spec: dict[str, Any], request: str, *, updated: bool, problem_text: str = "") -> str:
     """One sentence about a figure that passed its check, written from what
-    was drawn: its visible points, the parts the teacher asked about, and
-    whether the givens are marked."""
+    was drawn: its visible points, the parts the teacher asked about, and —
+    only when every given with a textbook mark is marked — that the givens
+    are marked."""
     fig = ConstructionFigure.model_validate(spec)
     names = [n for n in fig.points if not is_hidden(n)]
     asked = parse_problem("", extra=request)
@@ -181,8 +185,7 @@ def figure_sentence(spec: dict[str, Any], request: str, *, updated: bool) -> str
     if asked_angles:
         extras.append(f"{_join(asked_angles)} labelled")
     detail = f", with {' and '.join(extras)}" if extras else ""
-    marked = fig.tick_groups or fig.arc_groups or fig.right_angles or fig.parallel_groups
-    tail = "; the givens are marked." if marked else "."
+    tail = "; the givens are marked." if givens_marked(fig, problem_text) else "."
     return f"{lead}{pts}{detail}{tail}"
 
 
@@ -235,13 +238,25 @@ def failure_sentence(issues: list[str], *, step: int | None = None) -> str:
 
 _FIGURE_TALK = re.compile(
     r"\b(?:diagram|figure|drawing|drew|draw|drawn|sketch|picture|illustration"
-    r"|labell?ed|labels?|tick|marks?|marked|segments?)\b",
+    r"|labell?ed|labels?|tick|marks?|marked|segments?|rays?|lines?|sides?|diagonals?|vertex|vertices"
+    r"|points?|angles?|triangles?|circles?|arcs?|radius|radii|chords?|tangents?"
+    r"|connect(?:s|ed|ing)?|join(?:s|ed|ing)?|includ(?:e|es|ed|ing)|show(?:s|n|ed|ing)?|added|extend(?:s|ed)?"
+    r"|split(?:s|ting)?|divid(?:e|es|ed|ing)|appears?)\b"
+    r"|[∠△⊥∥≅]|\\(?:angle|triangle|overline|overrightarrow|overleftrightarrow|perp|parallel|cong)\b",
     re.IGNORECASE,
 )
+# A point or part named by capitals: "B", "BD", "A'B'" (not "I", not the
+# article "A").
+_NAMED_PART = re.compile(r"(?<![A-Za-z])(?!I\b)(?!A\s+[a-z])[A-Z][0-9]*'*(?:[A-Z][0-9]*'*)*(?![a-z])")
 
 
 def without_figure_talk(reply: str) -> str:
     """The model's reply minus any sentence about a figure — code writes
-    that sentence from what was drawn."""
+    that sentence from what was drawn. The model wrote its reply before
+    anything was drawn, so a sentence naming points, segments or angles, or
+    saying it connected / included / showed something, describes intent,
+    not the result: it goes."""
     sentences = re.split(r"(?<=[.!?])\s+", reply.strip())
-    return " ".join(s for s in sentences if s and not _FIGURE_TALK.search(s)).strip()
+    return " ".join(
+        s for s in sentences if s and not _FIGURE_TALK.search(s) and not _NAMED_PART.search(s)
+    ).strip()

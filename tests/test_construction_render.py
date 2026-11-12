@@ -179,3 +179,19 @@ def test_split_points() -> None:
 def test_invalid_specs_rejected(bad: dict[str, Any], why: str) -> None:
     with pytest.raises(ValidationError, match=re.escape(why)):
         ConstructionFigure.model_validate(spec(**bad))
+
+
+def test_labels_of_nearby_points_dont_overlap() -> None:
+    """Found by eye in the round-1 eval (12c77989): B and D two units apart
+    had their labels drawn on top of each other."""
+    svg = render_figure(spec(
+        points={"A": [0, 0], "B": [12, 0], "C": [3.896, 3.894], "D": [14, 0], "E": [22, 0], "F": [16.597, 2.596]},
+        segments=["AB", "BC", "CA", "DE", "EF", "FD"],
+    ))
+    at = {
+        t.text: (float(t.get("x") or 0), float(t.get("y") or 0))
+        for t in ET.fromstring(svg).iter("{http://www.w3.org/2000/svg}text")
+    }
+    (bx, by), (dx, dy) = at["B"], at["D"]
+    font = 0.28  # the vertex labels' font size in the canonical frame
+    assert abs(bx - dx) > font or abs(by - dy) > font, (at["B"], at["D"])

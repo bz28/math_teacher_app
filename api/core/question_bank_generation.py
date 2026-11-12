@@ -32,7 +32,7 @@ from api.core.document_vision import (
 )
 from api.core.drawing_requirement import combine_requires_drawing
 from api.core.geometry import FigureSpecError, figure_point_names, render_figure, render_figure_or_none
-from api.core.geometry.dsl import ConstructionFigure
+from api.core.geometry.dsl import ConstructionFigure, split_points
 from api.core.geometry.figure_check import check_construction, unbacked_marks
 from api.core.image_utils import to_content_block
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
@@ -186,10 +186,15 @@ def _check_figure(
     if not isinstance(raw_spec, dict):
         return None, None, []
     if _is_construction(raw_spec):
+        raw_spec = _without_empty_mark_groups(raw_spec)
         try:
             fig = ConstructionFigure.model_validate(raw_spec)
             if step_text is None:
-                raw_spec = _without_unbacked_marks(raw_spec, fig, text)
+                try:
+                    raw_spec = _without_unbacked_marks(raw_spec, fig, text)
+                except Exception:
+                    logger.exception("figure checker crashed on marks; spec=%r", raw_spec)
+                    return None, None, [_CHECK_CRASHED]
                 fig = ConstructionFigure.model_validate(raw_spec)
             svg = render_figure(raw_spec)
         except ValidationError as e:
@@ -204,12 +209,18 @@ def _check_figure(
                 base_fig = ConstructionFigure.model_validate(base)
             except ValidationError:
                 base_fig = None
-        issues = [
-            i.message for i in check_construction(
-                fig, text, final_answer=final_answer, request_text=request,
-                step_text=step_text, base=base_fig,
-            )
-        ]
+        try:
+            issues = [
+                i.message for i in check_construction(
+                    fig, text, final_answer=final_answer, request_text=request,
+                    step_text=step_text, base=base_fig,
+                )
+            ]
+        except Exception:
+            # A checker bug must never pass a figure, nor crash generation,
+            # the chat or accept: the figure is dropped with a reason.
+            logger.exception("figure checker crashed; spec=%r", raw_spec)
+            issues = [_CHECK_CRASHED]
         if issues:
             logger.warning("construction figure dropped: %s", "; ".join(issues))
             return None, None, issues
@@ -222,6 +233,44 @@ def _check_figure(
         logger.warning("figure_spec dropped: problem names %s, which the figure doesn't draw", sorted(missing))
         return None, None, [_figure_drop_reason(raw_spec, text)]
     return raw_spec, shape_svg, []
+
+
+def _without_empty_mark_groups(raw_spec: dict[str, Any]) -> dict[str, Any]:
+    """Mark groups that tie fewer than two different parts ([], ["BD"],
+    ["BD", "DB"]) claim nothing: they are dropped before the figure is
+    validated (the model emits them; removing a mark never makes a figure
+    false). The DSL rejects any that reach it."""
+    out = dict(raw_spec)
+    lines = {ln.get("name") for ln in raw_spec.get("lines") or [] if isinstance(ln, dict)}
+    for name, size in (("tick_groups", 2), ("arc_groups", 3), ("parallel_groups", 2)):
+        groups = raw_spec.get(name)
+        if not isinstance(groups, list):
+            continue
+        kept = []
+        for g in groups:
+            if not isinstance(g, list):
+                kept.append(g)
+                continue
+            try:
+                firsts: dict[Any, Any] = {}  # one reference per part, the first given
+                for ref in g:
+                    if name == "parallel_groups" and ref in lines:
+                        firsts.setdefault(ref, ref)
+                        continue
+                    pts = split_points(str(ref), size)
+                    firsts.setdefault(frozenset(pts) if size == 2 else (pts[1], frozenset((pts[0], pts[2]))), ref)
+            except ValueError:
+                kept.append(g)  # malformed: validation says why
+                continue
+            if len(firsts) >= 2:
+                kept.append(list(firsts.values()))
+        if kept != groups:
+            logger.info("construction figure: dropping %s that tie fewer than two parts", name)
+            out[name] = kept
+    return out
+
+
+_CHECK_CRASHED = "the figure checker hit an error on this figure, so it can't confirm it"
 
 
 def _without_unbacked_marks(raw_spec: dict[str, Any], fig: ConstructionFigure, text: str) -> dict[str, Any]:
@@ -265,7 +314,7 @@ async def _resolve_figure_with_retry(
     spec, svg, issues = _check_figure(
         raw_spec, text, final_answer=final_answer, request=request, step_text=step_text, base=base,
     )
-    if not issues or not _is_construction(raw_spec):
+    if not issues or not _is_construction(raw_spec) or all(_not_redrawable(i) for i in issues):
         return spec, svg, issues
     redrawn = await redraw_figure(
         text, raw_spec, issues, mode=mode, user_id=user_id, request=request,
@@ -277,6 +326,12 @@ async def _resolve_figure_with_retry(
     return _check_figure(
         redrawn, text, final_answer=final_answer, request=request, step_text=step_text, base=base,
     )
+
+
+def _not_redrawable(issue: str) -> bool:
+    """A reason no redraw can fix: the checker can't read the problem, or
+    it crashed."""
+    return issue == _CHECK_CRASHED or issue.startswith("the checker can't read ")
 
 
 async def _render_step_figures_with_retry(
@@ -761,6 +816,7 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
         user_id=str(job.created_by_id),
         generation_job_id=str(job.id),
     )
+    lost_figure: list[str] = []
     for q_text_only, s in zip(question_dicts, solutions):
         q = cast(dict[str, Any], q_text_only)
         if s.get("final_answer"):
@@ -774,10 +830,27 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
             if issues:
                 logger.warning("Job %s: figure dropped after solving: %s", job.id, "; ".join(issues))
             q["figure_spec"], q["figure_svg"] = kept_spec, kept_svg
+            # The missing-figure rule again: a problem that points at a
+            # figure it no longer has is left out, as before solving.
+            if issues and _missing_figure(q):
+                lost_figure.append("; ".join(issues))
         if isinstance(s.get("steps"), list):
             s["steps"] = _render_step_figures(
                 s["steps"], question_text=q.get("text") or "", question_spec=q.get("figure_spec"),
             )
+    if lost_figure:
+        logger.warning(
+            "Job %s: left out %d problem(s) whose figure gave away the answer: %s",
+            job.id, len(lost_figure), " | ".join(lost_figure),
+        )
+        kept_pairs = [(q, s) for q, s in zip(question_dicts, solutions) if not _missing_figure(cast(dict[str, Any], q))]
+        if not kept_pairs:
+            raise TeacherFacingGenerationError(
+                "Every generated problem refers to a figure, and each figure gave away its answer, "
+                "so none could be kept. Try again."
+            )
+        question_dicts = [q for q, _s in kept_pairs]
+        solutions = [s for _q, s in kept_pairs]
 
     # 2b. Generate 3 MCQ distractors per question. Stored on the bank
     # item so the school-student practice loop can serve MCQs with

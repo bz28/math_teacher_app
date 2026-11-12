@@ -572,6 +572,7 @@ def _construction_reply(
             assert proposal is not None
             notes.append(figure_sentence(
                 proposal["figure_spec"], teacher_message, updated=bool(item.figure_spec),
+                problem_text=question_text,
             ))
         elif top_construction:
             notes.append(failure_sentence(top_issues or ["the figure didn't pass its check"]))
@@ -613,10 +614,16 @@ def _sentences(text: str) -> list[str]:
     return [s for s in re.split(r"(?<=[.!?])\s+", text.strip()) if s]
 
 
-# A sentence saying a figure was made or changed.
+# A sentence saying a figure was made or changed: "I added a diagram",
+# "I connected B to D", "I've included the diagonal BD", "BD now appears".
+_PART = r"(?!(?:SAS|ASA|AAS|SSS|HL|AA|SSA|CPCTC|OK)(?![A-Za-z]))(?:[A-Z][0-9]*'*){2,3}(?![A-Za-z])"
 _CLAIMS_FIGURE = re.compile(
     r"\b(?:add(?:ed)?|drew|drawn|draw|includ(?:e|ed)|attach(?:ed)?|label(?:l)?ed|mark(?:ed)?|updat(?:e|ed)|creat(?:e|ed))\b"
     r"[^.!?]*\b(?:diagram|figure|drawing|sketch|picture)s?\b"
-    r"|\b(?:diagram|figure|drawing|sketch|picture)s?\b[^.!?]*\b(?:added|drawn|included|attached|updated|created|labell?ed|marked)\b",
-    re.IGNORECASE,
+    r"|\b(?:diagram|figure|drawing|sketch|picture)s?\b[^.!?]*\b(?:added|drawn|included|attached|updated|created|labell?ed|marked)\b"
+    r"|\b(?:connect(?:ed|s)?|join(?:ed|s)?|drew|drawn|add(?:ed)?|includ(?:e|ed|es)|extend(?:ed|s)?|show(?:s|n|ed)?"
+    r"|label(?:l)?ed|mark(?:ed)?)\b[^.!?]*"
+    rf"(?:(?<![A-Za-z])[A-Z][0-9]*'*\s+(?:and|to|with)\s+[A-Z][0-9]*'*(?![A-Za-z])|(?<![A-Za-z]){_PART}"
+    r"|\b(?:diagonals?|segments?|rays?|lines?|angles?)\b)"
+    rf"|\b(?:diagonals?|segments?|rays?)\s+{_PART}[^.!?]*\b(?:appears?|drawn|shown|added|included|connects?)\b",
 )

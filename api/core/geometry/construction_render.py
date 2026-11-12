@@ -147,6 +147,10 @@ def _between(a: Point, b: Point, q: Point, tol: float) -> float | None:
     return ((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / n2
 
 
+# Another point's label is in the way within this many label offsets.
+_NEIGHBOUR = 4.0
+
+
 def _incident_directions(
     spec: ConstructionFigure, p: dict[str, Point], radii: list[float], name: str,
 ) -> list[float]:
@@ -183,6 +187,11 @@ def _incident_directions(
             u = _unit(c, q)
             add((-u[1], u[0]))
             add((u[1], -u[0]))
+    # A labelled point close by takes that direction too, so two labels
+    # never land on each other (B and D 2 units apart: "B" over "D").
+    for other, r in p.items():
+        if other != name and not is_hidden(other) and 1e-9 < math.dist(q, r) < _NEIGHBOUR * _LABEL_OFFSET:
+            add(_unit(q, r))
     return out
 
 
