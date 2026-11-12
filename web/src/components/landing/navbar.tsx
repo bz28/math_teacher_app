@@ -9,7 +9,7 @@ export function Navbar() {
           <LogoMark size={32} />
           {/* Wordmark alone — the audience-named italic sub ("for
               teachers") was inconsistent with the product-mode
-              labels in the footer (Classroom / Self-study) and was
+              labels in the footer (Classroom / Subjects) and was
               doing tagline work that doesn't belong in nav chrome.
               The footer keeps "classroom AI, teacher-controlled"
               where a tagline can breathe. */}
