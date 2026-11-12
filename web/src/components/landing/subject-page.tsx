@@ -141,7 +141,11 @@ function HomeworkSheet({ prompt, lines, circled, description }: SubjectPageProps
     <figure className="ruled-paper relative m-0 max-w-[470px] -rotate-1 rounded-[4px] py-[22px] pl-[60px] pr-5 shadow-[0_2px_0_rgba(0,0,0,0.04),0_30px_60px_-30px_rgba(29,38,51,0.45)] sm:pl-[72px] sm:pr-7">
       {/* The red margin line. */}
       <span aria-hidden="true" className="absolute inset-y-0 left-[44px] w-[2px] bg-margin-line sm:left-[54px]" />
-      <figcaption className="sr-only">{description}</figcaption>
+      {/* The sheet itself is aria-hidden, so the caption carries the printed
+          problem and the circled line's number (Veradic's note cites it). */}
+      <figcaption className="sr-only">
+        {`${prompt} ${description} The circled step is line ${circled + 1}.`}
+      </figcaption>
       <div aria-hidden="true">
         <p className="m-0 text-[15px] font-extrabold leading-[34px]">{prompt}</p>
         {lines.map((line, i) => (
