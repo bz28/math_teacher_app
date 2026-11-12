@@ -172,7 +172,7 @@ function OneProblem() {
     <section id="one-problem" className="scroll-mt-20 border-y border-hairline bg-white md:scroll-mt-24">
       <div className="mx-auto max-w-[1200px] px-4 py-20 md:px-8 md:py-24">
         <h2 className="site-h2 max-w-[760px]">What happens to one homework problem.</h2>
-        <ol className="m-0 mt-12 grid list-none gap-9 p-0 [grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr))]">
+        <ol className="m-0 mt-12 grid list-none grid-cols-1 gap-9 p-0 sm:grid-cols-2 lg:grid-cols-4">
           {STEPS.map((s, i) => (
             <li key={s.title} className="border-t-2 border-ink pt-[18px]">
               {/* The number in red pen. */}
