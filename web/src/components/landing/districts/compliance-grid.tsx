@@ -1,42 +1,46 @@
-import { Section } from "../section";
-import { Eyebrow } from "../eyebrow";
-
 type ComplianceItem = {
   label: string;
   /** One paragraph in plain English describing what we do. */
   body: string;
-  /** "What this means for you" line — the operational implication
-   *  for a procurement director. */
+  /** What this means for a procurement director, in one line. */
   implication: string;
+  /** Where to read more or ask, when there is one place for it. */
+  link?: { label: string; href: string };
 };
+
+const mailto = (subject: string) =>
+  `mailto:support@veradicai.com?subject=${encodeURIComponent(`Veradic — ${subject}`)}`;
 
 const ITEMS: ComplianceItem[] = [
   {
     label: "FERPA",
     body: "We act as a school official under your district's direction. Student work and records stay under your control; we access them only to provide the service you've contracted for.",
-    implication:
-      "No separate parental consent required for FERPA-covered use.",
+    implication: "No separate parental consent required for FERPA-covered use.",
+    link: { label: "Trust & security", href: "/trust#data-handling" },
   },
   {
     label: "COPPA",
-    body: "We rely on the school-consent exception that all classroom-deployed ed-tech uses for students under 13 — your district consents on parents' behalf for educational use.",
+    body: "We rely on the school-consent exception that classroom-deployed ed-tech uses for students under 13: your district consents on parents' behalf for educational use.",
     implication: "Standard for K-12 classroom deployments.",
+    link: { label: "Privacy policy", href: "/privacy#childrens-privacy" },
   },
   {
     label: "NDPA standard template",
     body: "We sign the National Data Privacy Agreement template most US districts already use. Send us your filled version and we'll countersign.",
     implication: "No bespoke negotiation needed for most districts.",
+    link: { label: "Request the DPA", href: mailto("DPA request") },
   },
   {
     label: "State-specific addenda",
     body: "We work through state-specific data-privacy laws on request: NY Education Law §2-d, CA SOPIPA, IL SOPPA, and others.",
-    implication:
-      "Send us the addendum your state requires; we'll redline it.",
+    implication: "Send us the addendum your state requires; we'll redline it.",
+    link: { label: "Send your addendum", href: mailto("State addendum") },
   },
   {
     label: "Never trained on",
-    body: "Student work, conversations with the AI tutor, integrity-check transcripts, and grades are never used to train AI models — ours or anyone else's. Period.",
+    body: "Student work, conversations with the AI tutor, understanding-check transcripts and grades are never used to train AI models, ours or anyone else's.",
     implication: "Your students' data does not leave your control.",
+    link: { label: "Trust & security", href: "/trust#data-handling" },
   },
   {
     label: "School-controlled record",
@@ -46,42 +50,45 @@ const ITEMS: ComplianceItem[] = [
 ];
 
 /**
- * Six-cell compliance grid. Visual is intentionally paperwork-aesthetic:
- * white cards on cream bg, hairline borders, no badges or pills. Looks
- * like a district legal summary, not a marketing chip strip.
+ * The laws a district lawyer asks about, one ruled row each: the law,
+ * what we do and what it means for you, and where to check. Reads like a
+ * legal summary on a white sheet, not a strip of marketing badges.
  */
 export function ComplianceGrid() {
   return (
-    <Section variant="alt" id="compliance">
-      <div className="mx-auto max-w-3xl text-center">
-        <Eyebrow>Compliance & data isolation</Eyebrow>
-        <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
-          Every law your district lawyer asks about — answered.
-        </h2>
-        <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-[color:var(--color-text-secondary)]">
-          We&rsquo;ve done the paperwork before. Here&rsquo;s what we do
-          and what it means for you, in plain English.
+    <section id="compliance" className="scroll-mt-20 border-y border-hairline bg-white md:scroll-mt-24">
+      <div className="mx-auto max-w-[1200px] px-4 py-20 md:px-8 md:py-24">
+        <h2 className="site-h2 max-w-[760px]">Every law your district lawyer asks about, answered.</h2>
+        <p className="m-0 mt-5 max-w-[36em] text-lg leading-relaxed text-ink-soft">
+          We&rsquo;ve done the paperwork before. Here&rsquo;s what we do and
+          what it means for you, in plain English.
         </p>
-      </div>
 
-      <div className="mx-auto mt-14 grid max-w-5xl gap-5 md:grid-cols-2 lg:grid-cols-3 lg:gap-6">
-        {ITEMS.map((item) => (
-          <article
-            key={item.label}
-            className="rounded-[--radius-lg] border border-[color:var(--color-border-light)] bg-[color:var(--color-surface)] p-7"
-          >
-            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[color:var(--color-primary)]">
-              {item.label}
-            </div>
-            <p className="mt-4 text-base leading-relaxed text-[color:var(--color-text)]">
-              {item.body}
-            </p>
-            <p className="mt-4 border-t border-[color:var(--color-border-light)] pt-4 text-sm italic leading-relaxed text-[color:var(--color-text-secondary)]">
-              {item.implication}
-            </p>
-          </article>
-        ))}
+        <ul className="m-0 mt-11 list-none border-t-2 border-ink p-0">
+          {ITEMS.map((item) => (
+            <li
+              key={item.label}
+              className="grid gap-x-8 gap-y-2 border-b border-rule py-5 md:grid-cols-[220px_minmax(0,1fr)_170px]"
+            >
+              <h3 className="m-0 text-[17px] font-extrabold">{item.label}</h3>
+              <div>
+                <p className="m-0 text-base leading-[1.55] text-ink-soft">{item.body}</p>
+                <p className="m-0 mt-1.5 text-[15px] font-semibold leading-[1.5] text-ink">
+                  {item.implication}
+                </p>
+              </div>
+              {item.link && (
+                <a
+                  href={item.link.href}
+                  className="self-start text-[15px] font-bold text-veradic underline underline-offset-2 hover:text-veradic-dark"
+                >
+                  {item.link.label}
+                </a>
+              )}
+            </li>
+          ))}
+        </ul>
       </div>
-    </Section>
+    </section>
   );
 }
