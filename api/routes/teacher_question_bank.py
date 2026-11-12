@@ -1151,6 +1151,7 @@ async def accept_chat_proposal(
         # regenerate does — unless the teacher has set it themselves.
         if text_changed:
             await _rederive_requires_drawing(db, item, user_id=str(current_user.user_id))
+    accepted_steps: list[dict[str, Any]] | None = None
     if proposal.get("solution_steps") is not None:
         # Belt-and-suspenders: defense against malformed steps lingering
         # in old chat_messages written before question_bank_chat.py
@@ -1174,7 +1175,7 @@ async def accept_chat_proposal(
                 if isinstance(s.get("figure_spec"), dict):
                     step["figure_spec"] = s["figure_spec"]
                 cleaned_steps.append(step)
-            item.solution_steps = _render_step_figures(cleaned_steps)
+            accepted_steps = cleaned_steps
     if proposal.get("final_answer") is not None:
         # Stripped, matching the PATCH path and the question field beside
         # it. Whitespace-only difference is not a repair, and recording it
@@ -1192,7 +1193,9 @@ async def accept_chat_proposal(
     #   3. Proposal touches neither question nor figure_spec → leave
     #      the existing figure alone.
     if proposal.get("figure_spec") is not None:
-        new_figure_spec, new_figure_svg = _resolve_figure(proposal["figure_spec"], item.question)
+        new_figure_spec, new_figure_svg = _resolve_figure(
+            proposal["figure_spec"], item.question, final_answer=item.final_answer or "",
+        )
         item.figure_spec = new_figure_spec
         item.figure_svg = new_figure_svg
     elif proposal.get("question") is not None:
@@ -1201,6 +1204,12 @@ async def accept_chat_proposal(
         # Match what the preview showed (no figure).
         item.figure_spec = None
         item.figure_svg = None
+    # Steps last: a construction step figure is checked against the
+    # figure the question has now (the chat checked it against the same).
+    if accepted_steps is not None:
+        item.solution_steps = _render_step_figures(
+            accepted_steps, question_text=item.question, question_spec=item.figure_spec,
+        )
 
     # Build a NEW list with NEW dict copies for any modified message.
     # In-place dict mutation (e.g. `m["accepted"] = True`) would be a

@@ -67,6 +67,12 @@ class Settings(BaseSettings):
     # alternatives (Triangle Sum, AAS), 6 of 6 runs on each case.
     llm_model_opus: str = "claude-opus-5-5"
 
+    # Geometry figures: the AI places named points and lists what to draw
+    # ("construction" figures); code draws them, checks them against the
+    # problem, and writes the chat's sentence about the figure. Off restores
+    # the triangle / circle / polygon prompts and schemas. On by default.
+    geometry_construction_figures: bool = True
+
     # Cost Alerting
     daily_cost_limit_usd: float = 50.0
 

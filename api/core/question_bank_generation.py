@@ -15,12 +15,14 @@ import logging
 import re
 import uuid
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.assignment_generation import generate_questions, generate_solutions
+from api.core.construction_figures import CONSTRUCTION_FIGURE_RULES, construction_on, redraw_figure
 from api.core.document_vision import (
     MAX_TOTAL_SOURCE_B64_BYTES,
     MAX_VISION_IMAGES,
@@ -30,9 +32,15 @@ from api.core.document_vision import (
 )
 from api.core.drawing_requirement import combine_requires_drawing
 from api.core.geometry import FigureSpecError, figure_point_names, render_figure, render_figure_or_none
+from api.core.geometry.dsl import ConstructionFigure
+from api.core.geometry.figure_check import check_construction, unbacked_marks
 from api.core.image_utils import to_content_block
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
-from api.core.llm_schemas import GENERATE_QUESTIONS_SCHEMA, REGENERATE_QA_SCHEMA
+from api.core.llm_schemas import (
+    GENERATE_QUESTIONS_SCHEMA,
+    REGENERATE_QA_CONSTRUCTION_SCHEMA,
+    REGENERATE_QA_SCHEMA,
+)
 from api.core.part_labels import PRACTICE_SINGLE_ANSWER_RULE, is_multi_part
 from api.core.practice import generate_distractors
 from api.core.subjects import get_config
@@ -77,8 +85,15 @@ def real_newlines(text: str) -> str:
     )
 
 
+def _step_text(step: dict[str, Any]) -> str:
+    return f"{step.get('title') or ''}: {step.get('description') or ''}"
+
+
 def _render_step_figures(
     steps: list[Any],
+    *,
+    question_text: str = "",
+    question_spec: Any = None,
 ) -> list[dict[str, Any]]:
     """Render any per-step figure_spec into figure_svg in-place.
 
@@ -89,13 +104,23 @@ def _render_step_figures(
     _parse_decomposition. Centralizing the spec→svg conversion at
     persistence time means downstream readers never need to know
     about the geometry module.
+
+    A construction step figure is also checked (`_check_figure` with the
+    step's text, against `question_text` and the question's figure
+    `question_spec`) and dropped when it fails.
     """
     out: list[dict[str, Any]] = []
     for step in steps:
         if not isinstance(step, dict):
             continue
         rendered: dict[str, Any] = dict(step)
-        svg = render_figure_or_none(step.get("figure_spec"), context="step figure_spec")
+        spec = step.get("figure_spec")
+        if _is_construction(spec):
+            _, svg, _ = _check_figure(
+                spec, question_text, step_text=_step_text(step), base=question_spec,
+            )
+        else:
+            svg = render_figure_or_none(spec, context="step figure_spec")
         if svg:
             rendered["figure_svg"] = svg
         else:
@@ -131,29 +156,162 @@ def _named_points(text: str) -> set[str]:
     return names
 
 
-def _resolve_figure(
-    raw_spec: Any, text: str,
-) -> tuple[dict[str, Any] | None, str | None]:
-    """Validate + render a figure spec emitted by the LLM for the
-    problem `text`.
+def _is_construction(spec: Any) -> bool:
+    return isinstance(spec, dict) and spec.get("shape") == "construction"
 
-    Returns (spec, svg) — both None if the model didn't emit one, if
-    rendering failed (see `render_figure_or_none` for the degrade
-    contract), or if the figure leaves out a point the problem names.
-    The last is the model squeezing a figure the DSL can't draw into
-    one it can (prod, 2026-10-21: "DE ∥ BC, D on AB, E on AC" drawn as
-    a bare triangle ABC). The spec is only returned alongside a
-    successful svg so a persisted question never carries a spec
-    without its rendering.
+
+def _check_figure(
+    raw_spec: Any,
+    text: str,
+    *,
+    final_answer: str = "",
+    request: str = "",
+    step_text: str | None = None,
+    base: Any = None,
+) -> tuple[dict[str, Any] | None, str | None, list[str]]:
+    """Validate, render and check a figure spec for the problem `text`.
+
+    Returns (spec, svg, issues): spec and svg when the figure is kept,
+    else (None, None, why). No spec at all is (None, None, []).
+
+    Construction figures go through the checker (geometry/figure_check.py):
+    the teacher's `request` names parts that must be drawn, `final_answer`
+    catches an answer printed on the figure, and a step figure passes its
+    `step_text` and the question's figure as `base`. The shape forms keep
+    their own rule: drop a figure that leaves out a point the problem names
+    — the model squeezing a figure the DSL can't draw into one it can (prod,
+    2026-10-21: "DE ∥ BC, D on AB, E on AC" drawn as a bare triangle ABC).
+    The spec is only returned alongside a successful svg so a persisted
+    question never carries a spec without its rendering.
     """
-    svg = render_figure_or_none(raw_spec, context="figure_spec")
-    if not svg:
-        return None, None
+    if not isinstance(raw_spec, dict):
+        return None, None, []
+    if _is_construction(raw_spec):
+        try:
+            fig = ConstructionFigure.model_validate(raw_spec)
+            if step_text is None:
+                raw_spec = _without_unbacked_marks(raw_spec, fig, text)
+                fig = ConstructionFigure.model_validate(raw_spec)
+            svg = render_figure(raw_spec)
+        except ValidationError as e:
+            reasons = "; ".join(str(err["msg"]).removeprefix("Value error, ") for err in e.errors()[:3])
+            return None, None, [f"the figure is malformed ({reasons})"]
+        except Exception:
+            logger.exception("unexpected error rendering construction figure; spec=%r", raw_spec)
+            return None, None, ["the figure couldn't be drawn"]
+        base_fig = None
+        if _is_construction(base):
+            try:
+                base_fig = ConstructionFigure.model_validate(base)
+            except ValidationError:
+                base_fig = None
+        issues = [
+            i.message for i in check_construction(
+                fig, text, final_answer=final_answer, request_text=request,
+                step_text=step_text, base=base_fig,
+            )
+        ]
+        if issues:
+            logger.warning("construction figure dropped: %s", "; ".join(issues))
+            return None, None, issues
+        return raw_spec, svg, []
+    shape_svg = render_figure_or_none(raw_spec, context="figure_spec")
+    if not shape_svg:
+        return None, None, [_figure_drop_reason(raw_spec, text)]
     missing = _named_points(text) - {_canon_point(n) for n in figure_point_names(raw_spec)}
     if missing:
         logger.warning("figure_spec dropped: problem names %s, which the figure doesn't draw", sorted(missing))
-        return None, None
-    return raw_spec, svg
+        return None, None, [_figure_drop_reason(raw_spec, text)]
+    return raw_spec, shape_svg, []
+
+
+def _without_unbacked_marks(raw_spec: dict[str, Any], fig: ConstructionFigure, text: str) -> dict[str, Any]:
+    """The question's figure minus marks no given backs (a derived fact
+    marked would hand the student a step). A step's figure keeps its marks:
+    showing what the step derives is its job."""
+    drop = unbacked_marks(fig, text)
+    if not drop:
+        return raw_spec
+    logger.info("construction figure: dropping marks the problem doesn't give: %s", drop)
+    out = dict(raw_spec)
+    for name, indexes in drop.items():
+        out[name] = [g for i, g in enumerate(raw_spec.get(name) or []) if i not in indexes]
+    return out
+
+
+def _resolve_figure(
+    raw_spec: Any, text: str, *, final_answer: str = "",
+) -> tuple[dict[str, Any] | None, str | None]:
+    """(spec, svg) from `_check_figure`; both None when the figure is dropped."""
+    spec, svg, _ = _check_figure(raw_spec, text, final_answer=final_answer)
+    return spec, svg
+
+
+async def _resolve_figure_with_retry(
+    raw_spec: Any,
+    text: str,
+    *,
+    mode: str,
+    user_id: str | None,
+    final_answer: str = "",
+    request: str = "",
+    step_text: str | None = None,
+    base: Any = None,
+    generation_job_id: str | None = None,
+) -> tuple[dict[str, Any] | None, str | None, list[str]]:
+    """`_check_figure`, plus ONE retry for a construction figure that fails:
+    the same model and mode are shown the checker's exact errors (the eval
+    found most mistakes are fixed once named). A second failure keeps no
+    figure and returns the second attempt's reasons."""
+    spec, svg, issues = _check_figure(
+        raw_spec, text, final_answer=final_answer, request=request, step_text=step_text, base=base,
+    )
+    if not issues or not _is_construction(raw_spec):
+        return spec, svg, issues
+    redrawn = await redraw_figure(
+        text, raw_spec, issues, mode=mode, user_id=user_id, request=request,
+        step_text=step_text, base_spec=base if _is_construction(base) else None,
+        generation_job_id=generation_job_id,
+    )
+    if redrawn is None:
+        return None, None, issues
+    return _check_figure(
+        redrawn, text, final_answer=final_answer, request=request, step_text=step_text, base=base,
+    )
+
+
+async def _render_step_figures_with_retry(
+    steps: list[Any],
+    *,
+    question_text: str,
+    question_spec: Any,
+    mode: str,
+    user_id: str | None,
+) -> tuple[list[dict[str, Any]], dict[int, list[str]]]:
+    """Render steps; a construction step figure that fails its check gets
+    the one retry, then the step is kept without a figure. Returns the
+    steps and, per 1-based step number, why its figure was dropped."""
+    out = _render_step_figures(steps, question_text=question_text, question_spec=question_spec)
+    # _render_step_figures keeps every dict step, in order.
+    raw_steps = [s for s in steps if isinstance(s, dict)]
+    drops: dict[int, list[str]] = {}
+
+    async def fix(i: int, raw: dict[str, Any]) -> None:
+        spec, svg, issues = await _resolve_figure_with_retry(
+            raw["figure_spec"], question_text, mode=mode, user_id=user_id,
+            step_text=_step_text(raw), base=question_spec,
+        )
+        if svg:
+            out[i] = {**out[i], "figure_spec": spec, "figure_svg": svg}
+        else:
+            drops[i + 1] = issues
+            logger.warning("step %d figure dropped after its retry: %s", i + 1, "; ".join(issues))
+
+    await asyncio.gather(*(
+        fix(i, raw) for i, raw in enumerate(raw_steps)
+        if _is_construction(raw.get("figure_spec")) and "figure_svg" not in out[i]
+    ))
+    return out, drops
 
 
 _CANT_DRAW = "The diagram tool can't draw this setup yet — it can draw one triangle, circle, or polygon."
@@ -189,7 +347,7 @@ def _figure_drop_reason(raw_spec: dict[str, Any], text: str) -> str:
 # graph" or bare "as shown": "use the graph paper to plot y = 2x" and
 # "as shown in the table" are complete without a drawing.
 _FIGURE_REFERENCE = re.compile(
-    r"\b(?:in|from|use|using|see|on) the (?:figure|diagram|drawing|picture)\b"
+    r"\b(?:in|from|use|using|see|on|to|of|refer to|according to|based on) the (?:figure|diagram|drawing|picture)\b"
     r"|\b(?:figure|diagram|drawing|picture|triangle|circle|graph|quadrilateral|polygon"
     r"|rectangle|trapezoid|parallelogram)\s+(?:below|above|shown)\b"
     r"|\b(?:shown|pictured|drawn) (?:below|above|here)\b",
@@ -197,13 +355,27 @@ _FIGURE_REFERENCE = re.compile(
 )
 
 
-def _draw_figures(questions: list[dict[str, Any]]) -> None:
+async def _draw_figures(
+    questions: list[dict[str, Any]], *, user_id: str | None, generation_job_id: str | None,
+) -> None:
     """Render each question's figure in place. A spec that fails to
-    render is dropped, so a question only ever carries a figure the
-    student will actually see — and the solver is only shown that."""
-    for q in questions:
-        spec, svg = _resolve_figure(q.get("figure_spec"), q.get("text") or "")
+    render (or, for a construction, its check after one retry) is
+    dropped, so a question only ever carries a figure the student will
+    actually see — and the solver is only shown that."""
+
+    async def draw(q: dict[str, Any]) -> None:
+        spec, svg, issues = await _resolve_figure_with_retry(
+            q.get("figure_spec"), q.get("text") or "", mode=LLMMode.GENERATE_QUESTIONS,
+            user_id=user_id, generation_job_id=generation_job_id,
+        )
         q["figure_spec"], q["figure_svg"] = spec, svg
+        if issues and _FIGURE_REFERENCE.search(q.get("text") or ""):
+            logger.warning(
+                "Job %s: problem refers to a figure that wasn't drawn (%s): %.80s",
+                generation_job_id, "; ".join(issues), q.get("text"),
+            )
+
+    await asyncio.gather(*(draw(q) for q in questions))
 
 
 def _missing_figure(q: dict[str, Any]) -> bool:
@@ -546,7 +718,7 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
         # A problem that refers to a figure it doesn't have can't be
         # done. Replace each one once; a replacement with the same flaw
         # is left out rather than handed to the teacher broken.
-        _draw_figures(question_dicts)
+        await _draw_figures(question_dicts, user_id=str(job.created_by_id), generation_job_id=str(job.id))
         missing = sum(map(_missing_figure, question_dicts))
         if missing:
             logger.warning("Job %s: replacing %d problem(s) that cite a missing figure", job.id, missing)
@@ -560,9 +732,15 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
                     images=images or None,
                     extra_instructions=(
                         (constraint_text + "\n\n" if constraint_text else "")
-                        + "Every problem must be complete on its own. A problem that refers "
-                        "to a figure must include that figure's figure_spec, with every "
-                        "length it labels also given in side_lengths."
+                        + (
+                            "Every problem must be complete on its own. A problem that refers "
+                            "to a figure must include that figure's figure_spec, and every "
+                            "number on the figure must also be in the problem text."
+                            if construction_on()
+                            else "Every problem must be complete on its own. A problem that refers "
+                            "to a figure must include that figure's figure_spec, with every "
+                            "length it labels also given in side_lengths."
+                        )
                     ),
                     assignment_title=assignment_title,
                     params=job.params,
@@ -574,7 +752,7 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
                 # cleanup call must not cost the teacher the whole job.
                 logger.exception("Job %s: replacement call failed; keeping the rest", job.id)
                 replacements = []
-            _draw_figures(replacements)
+            await _draw_figures(replacements, user_id=str(job.created_by_id), generation_job_id=str(job.id))
             question_dicts = [q for q in question_dicts if not _missing_figure(q)] + [
                 q for q in replacements if not _missing_figure(q)
             ][:missing]
@@ -590,9 +768,23 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
         user_id=str(job.created_by_id),
         generation_job_id=str(job.id),
     )
-    for s in solutions:
+    for q_text_only, s in zip(question_dicts, solutions):
+        q = cast(dict[str, Any], q_text_only)
         if s.get("final_answer"):
             s["final_answer"] = real_newlines(s["final_answer"])
+        # The answer is known only now: a construction figure that prints
+        # it is dropped (it was drawn before the problem was solved).
+        if _is_construction(q.get("figure_spec")):
+            kept_spec, kept_svg, issues = _check_figure(
+                q["figure_spec"], q.get("text") or "", final_answer=s.get("final_answer") or "",
+            )
+            if issues:
+                logger.warning("Job %s: figure dropped after solving: %s", job.id, "; ".join(issues))
+            q["figure_spec"], q["figure_svg"] = kept_spec, kept_svg
+        if isinstance(s.get("steps"), list):
+            s["steps"] = _render_step_figures(
+                s["steps"], question_text=q.get("text") or "", question_spec=q.get("figure_spec"),
+            )
 
     # 2b. Generate 3 MCQ distractors per question. Stored on the bank
     # item so the school-student practice loop can serve MCQs with
@@ -765,6 +957,14 @@ async def regenerate_one(
 
     cfg = get_config(course.subject)
     system_prompt = _REGENERATE_SYSTEM_TEMPLATE.format(professor_role=cfg["professor_role"])
+    construction = construction_on()
+    if construction:
+        system_prompt += (
+            "\nInclude a figure_spec when the problem needs a diagram (a geometry problem "
+            "that names points, segments, angles, lines or circles, or text that refers to "
+            "a figure); omit it otherwise.\n\n" + CONSTRUCTION_FIGURE_RULES + "\n"
+        )
+    qa_schema = REGENERATE_QA_CONSTRUCTION_SCHEMA if construction else REGENERATE_QA_SCHEMA
 
     # User message: include the topic + original constraint always; only
     # include the original question + instructions when the teacher provided
@@ -800,7 +1000,7 @@ async def regenerate_one(
             result = await call_claude_vision(
                 content,
                 mode=LLMMode.REGENERATE_BANK_ITEM,
-                tool_schema=REGENERATE_QA_SCHEMA,
+                tool_schema=qa_schema,
                 user_id=str(user_id),
                 model=MODEL_REASON,
                 max_tokens=4096,
@@ -811,7 +1011,7 @@ async def regenerate_one(
                 system_prompt,
                 user_message,
                 mode=LLMMode.REGENERATE_BANK_ITEM,
-                tool_schema=REGENERATE_QA_SCHEMA,
+                tool_schema=qa_schema,
                 user_id=str(user_id),
                 model=MODEL_REASON,
                 max_tokens=4096,
@@ -827,25 +1027,47 @@ async def regenerate_one(
     if not new_question:
         raise RuntimeError("AI revision returned no question text")
 
+    new_question = str(new_question)
+    new_final = real_newlines(str(new_answer)) if new_answer else ""
+    # Figure first, so a problem that points at a figure it can't have is
+    # refused before anything is overwritten.
+    new_figure_spec, new_figure_svg, figure_issues = await _resolve_figure_with_retry(
+        result.get("figure_spec"), new_question, mode=LLMMode.REGENERATE_BANK_ITEM,
+        user_id=str(user_id), final_answer=new_final,
+    )
+    if construction and not new_figure_svg and _FIGURE_REFERENCE.search(new_question):
+        reason = "; ".join(figure_issues) or "no figure was drawn"
+        logger.warning("Regenerated item %s refers to a figure it doesn't have: %s", item.id, reason)
+        raise RuntimeError(
+            f"The new version of this problem refers to a figure that couldn't be drawn ({reason}). "
+            "Nothing was changed — try again.",
+        )
+    new_steps_rendered: list[dict[str, Any]] | None = None
+    if isinstance(new_steps, list):
+        if construction:
+            new_steps_rendered, _ = await _render_step_figures_with_retry(
+                new_steps, question_text=new_question, question_spec=new_figure_spec,
+                mode=LLMMode.REGENERATE_BANK_ITEM, user_id=str(user_id),
+            )
+        else:
+            new_steps_rendered = _render_step_figures(new_steps)
+
     snapshot_history(item)
     if new_title:
         item.title = str(new_title)[:120]
-    item.question = str(new_question)
+    item.question = new_question
     # A regenerated question is new AI text, so its drawing requirement is
     # re-derived — the same call's answer (REGENERATE_QA_SCHEMA) OR'd with
     # the regex — unless the teacher set it themselves.
     if not item.requires_drawing_teacher_set:
         item.requires_drawing = combine_requires_drawing(item.question, result.get("requires_drawing"))
-    item.solution_steps = (
-        _render_step_figures(new_steps) if isinstance(new_steps, list) else None
-    )
-    item.final_answer = real_newlines(str(new_answer)) if new_answer else ""
-    # Re-resolve the figure from the regenerated payload. If the new
+    item.solution_steps = new_steps_rendered
+    item.final_answer = new_final
+    # The figure resolved above, from the regenerated payload. If the new
     # question no longer needs a figure (LLM omitted the spec), we
     # clear the stale one — otherwise the diagram on disk would
     # contradict the rewritten prose. If rendering fails we drop both
     # (graceful degradation: teacher reviews + manually retries).
-    new_figure_spec, new_figure_svg = _resolve_figure(result.get("figure_spec"), item.question)
     item.figure_spec = new_figure_spec
     item.figure_svg = new_figure_svg
     # Regenerate distractors to match the new question/answer. The old

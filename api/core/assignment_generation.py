@@ -6,9 +6,10 @@ import logging
 from typing import Any
 
 from api.core.constants import SOLUTION_FAILED_SENTINEL
+from api.core.construction_figures import CONSTRUCTION_FIGURE_RULES, construction_on
 from api.core.document_vision import build_vision_content
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
-from api.core.llm_schemas import GENERATE_QUESTIONS_SCHEMA
+from api.core.llm_schemas import GENERATE_QUESTIONS_CONSTRUCTION_SCHEMA, GENERATE_QUESTIONS_SCHEMA
 from api.core.step_decomposition import decompose_problem
 from api.core.subjects import Subject, get_config
 
@@ -145,8 +146,29 @@ the two stay perfectly consistent.
   whatever shape you specify."""
 
 
+# With construction figures on, the "# Figures" section above is replaced:
+# everything before it is shared.
+_FIGURES_HEADING = "# Figures (diagrams)"
+_CONSTRUCTION_FIGURES_SECTION = """\
+# Figures (diagrams)
+
+Some problems genuinely need a diagram to be understood — congruence and
+similarity setups, parallel lines and transversals, angle relationships,
+right-triangle trigonometry, circles with chords, tangents or inscribed
+angles. Emit `figure_spec` for those, NOT for algebra, word problems, or
+anything where the prose already carries the full picture. A problem
+that says "in the figure below" MUST carry its figure_spec.
+
+"""
+
+
 def _build_question_generation_prompt(subject: str) -> str:
     cfg = get_config(subject)
+    if construction_on():
+        head = _GENERATE_QUESTIONS_TEMPLATE.split(_FIGURES_HEADING)[0]
+        return head.format(professor_role=cfg["professor_role"]) + (
+            _CONSTRUCTION_FIGURES_SECTION + CONSTRUCTION_FIGURE_RULES
+        )
     return _GENERATE_QUESTIONS_TEMPLATE.format(
         professor_role=cfg["professor_role"],
     )
@@ -306,6 +328,7 @@ async def generate_questions(
         return []
 
     system_prompt = _build_question_generation_prompt(subject)
+    schema = GENERATE_QUESTIONS_CONSTRUCTION_SCHEMA if construction_on() else GENERATE_QUESTIONS_SCHEMA
     # Order the user message to match the prompt's priority hierarchy:
     # teacher's brief first (intent), structured constraints next, then
     # unit name + course + count.
@@ -337,7 +360,7 @@ async def generate_questions(
             result = await call_claude_vision(
                 content,
                 mode=LLMMode.GENERATE_QUESTIONS,
-                tool_schema=GENERATE_QUESTIONS_SCHEMA,
+                tool_schema=schema,
                 user_id=user_id,
                 model=MODEL_REASON,
                 max_tokens=4096,
@@ -349,7 +372,7 @@ async def generate_questions(
                 system_prompt,
                 user_message,
                 mode=LLMMode.GENERATE_QUESTIONS,
-                tool_schema=GENERATE_QUESTIONS_SCHEMA,
+                tool_schema=schema,
                 user_id=user_id,
                 model=MODEL_REASON,
                 max_tokens=4096,

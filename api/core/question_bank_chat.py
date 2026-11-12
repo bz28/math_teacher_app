@@ -10,7 +10,9 @@ rewrites a question, and a bad proposal is one click away from being
 discarded.
 """
 
+import json
 import logging
+import re
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -18,9 +20,17 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.construction_figures import (
+    CONSTRUCTION_FIGURE_RULES,
+    _join,
+    construction_on,
+    failure_sentence,
+    figure_sentence,
+    without_figure_talk,
+)
 from api.core.document_vision import MAX_VISION_IMAGES, build_vision_content, fetch_source_documents
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
-from api.core.llm_schemas import BANK_CHAT_REPLY_SCHEMA
+from api.core.llm_schemas import BANK_CHAT_REPLY_CONSTRUCTION_SCHEMA, BANK_CHAT_REPLY_SCHEMA
 from api.core.subjects import get_config
 from api.models.course import Course
 from api.models.question_bank import QuestionBankItem
@@ -174,6 +184,40 @@ Reply text:
 """
 
 
+# With construction figures on, the chat's figure section (from "Geometry
+# figures" up to "CRITICAL") is replaced by this one plus the shared rules.
+_LEGACY_FIGURES_START = "Geometry figures (you CAN produce these"
+_FIGURES_END = "CRITICAL — solution_steps is a FULL REPLACEMENT"
+_CHAT_CONSTRUCTION_FIGURES = """\
+Geometry figures:
+
+The question and EACH solution step can carry a `figure_spec`. Emit one when
+the teacher asks for a drawing or diagram, or when the question refers to a
+figure it doesn't have. To change an existing figure (add a segment, a
+label), return the WHOLE new figure_spec: keep every point where it is and
+change only what was asked. A step's figure must keep the question figure's
+points where they are and keep everything it draws; it may add what that
+step introduces. If you rewrite the question and it has a figure, return a
+new figure_spec that matches the new question.
+
+Do NOT describe a figure in your reply: code checks the figure and writes
+the sentence about it from what it actually drew.
+
+"""
+
+
+def _chat_system_prompt(professor_role: str) -> str:
+    if not construction_on():
+        return _CHAT_SYSTEM_TEMPLATE.format(professor_role=professor_role)
+    head, rest = _CHAT_SYSTEM_TEMPLATE.split(_LEGACY_FIGURES_START, 1)
+    tail = _FIGURES_END + rest.split(_FIGURES_END, 1)[1]
+    return (
+        head.format(professor_role=professor_role)
+        + _CHAT_CONSTRUCTION_FIGURES + CONSTRUCTION_FIGURE_RULES + "\n\n"
+        + tail.format(professor_role=professor_role)
+    )
+
+
 def _strip_figure_svg_on_supersede(msg: dict[str, Any]) -> dict[str, Any]:
     """Drop the pre-rendered figure_svg from a superseded proposal —
     same shape as the route-layer helper in teacher_question_bank.
@@ -238,6 +282,29 @@ def _build_user_context(item: QuestionBankItem, unit_name: str, course_name: str
     return "\n".join(parts)
 
 
+def _figure_context(item: QuestionBankItem) -> str:
+    """The figures the model is editing, as data: the question's current
+    figure and the one in its own pending proposal. Without them a
+    follow-up ("now label angle 1") redraws from scratch and moves things."""
+    parts: list[str] = []
+    if isinstance(item.figure_spec, dict):
+        parts.append(f"\nCurrent figure (figure_spec):\n{json.dumps(item.figure_spec)}")
+    pending = next(
+        (
+            m["proposal"] for m in reversed(item.chat_messages or [])
+            if m.get("role") == "ai" and isinstance(m.get("proposal"), dict)
+            and not m.get("accepted") and not m.get("discarded") and not m.get("superseded")
+        ),
+        None,
+    )
+    if pending and isinstance(pending.get("figure_spec"), dict):
+        parts.append(
+            "\nYour pending proposal's figure (not accepted yet):\n"
+            + json.dumps(pending["figure_spec"]),
+        )
+    return "".join(parts)
+
+
 async def chat_with_bank_item(
     db: AsyncSession,
     item: QuestionBankItem,
@@ -282,9 +349,12 @@ async def chat_with_bank_item(
             unit_name = unit.name
 
     cfg = get_config(course.subject)
-    system_prompt = _CHAT_SYSTEM_TEMPLATE.format(professor_role=cfg["professor_role"])
+    system_prompt = _chat_system_prompt(str(cfg["professor_role"]))
+    reply_schema = BANK_CHAT_REPLY_CONSTRUCTION_SCHEMA if construction_on() else BANK_CHAT_REPLY_SCHEMA
 
     user_context = _build_user_context(item, unit_name, course.name)
+    if construction_on():
+        user_context += _figure_context(item)
 
     # Trim history for the call (uses the pending list including the new msg)
     history = _strip_internal_fields(pending_history[-CHAT_CONTEXT_WINDOW:])
@@ -321,7 +391,7 @@ async def chat_with_bank_item(
             result = await call_claude_vision(
                 content,
                 mode=LLMMode.BANK_CHAT,
-                tool_schema=BANK_CHAT_REPLY_SCHEMA,
+                tool_schema=reply_schema,
                 user_id=str(user_id),
                 model=MODEL_REASON,
                 max_tokens=4096,
@@ -331,7 +401,7 @@ async def chat_with_bank_item(
                 system_prompt,
                 seed,
                 mode=LLMMode.BANK_CHAT,
-                tool_schema=BANK_CHAT_REPLY_SCHEMA,
+                tool_schema=reply_schema,
                 user_id=str(user_id),
                 model=MODEL_REASON,
                 max_tokens=4096,
@@ -347,9 +417,13 @@ async def chat_with_bank_item(
     # figure_svg=None (since the proposal carries raw figure_spec)
     # and the diagram only appears post-accept — confusing UX.
     from api.core.question_bank_generation import (
+        _check_figure,
         _figure_drop_reason,
+        _is_construction,
         _render_step_figures,
+        _render_step_figures_with_retry,
         _resolve_figure,
+        _resolve_figure_with_retry,
     )
 
     reply = str(result.get("reply") or "").strip()
@@ -360,8 +434,35 @@ async def chat_with_bank_item(
     # note the teacher reads a promise and sees nothing (prod, 2026-11-01).
     figure_drop: str | None = None
     step_drops: list[str] = []
+    # Construction figures: what was asked of the figure and what came of
+    # it, so the sentence about it is written here from what was drawn.
+    top_construction = False
+    top_issues: list[str] = []
+    construction_step_drops: dict[int, list[str]] = {}
+    any_construction_step = False
+    top_text = item.question
     if isinstance(proposal_raw, dict):
         steps_raw = proposal_raw.get("solution_steps")
+        top_spec_raw = proposal_raw.get("figure_spec")
+        top_text = proposal_raw.get("question") or item.question
+        rewrites_question = bool(proposal_raw.get("question"))
+
+        # Top-level question figure: pass through + pre-render so the
+        # preview UI shows the diagram alongside the question text. A
+        # construction is checked against the problem (and the teacher's
+        # request), with one retry on the checker's errors.
+        top_construction = _is_construction(top_spec_raw)
+        if top_construction:
+            answer = str(proposal_raw.get("final_answer") or ("" if rewrites_question else item.final_answer or ""))
+            top_figure_spec, top_figure_svg, top_issues = await _resolve_figure_with_retry(
+                top_spec_raw, top_text, mode=LLMMode.BANK_CHAT, user_id=str(user_id),
+                final_answer=answer, request=teacher_message,
+            )
+        else:
+            top_figure_spec, top_figure_svg = _resolve_figure(top_spec_raw, top_text)
+            if isinstance(top_spec_raw, dict) and top_figure_svg is None:
+                figure_drop = f"I couldn't draw the diagram. {_figure_drop_reason(top_spec_raw, top_text)}"
+
         # Filter to well-formed steps. Required: title (str) +
         # description (str). Optional pass-through: figure_spec when
         # the AI emitted one (dict — rendered by accept_chat_proposal
@@ -383,25 +484,29 @@ async def chat_with_bank_item(
                 if isinstance(s.get("figure_spec"), dict):
                     step["figure_spec"] = s["figure_spec"]
                 tmp.append(step)
+            # A step figure is checked against the figure the question
+            # will have: the proposal's new one, else (question unchanged)
+            # the current one.
+            step_base = top_figure_spec if top_figure_spec is not None else (
+                None if rewrites_question else item.figure_spec
+            )
             # Pre-render any per-step figures so the preview can
             # display them; accept_chat_proposal re-runs the same
             # path to write the final state.
-            cleaned_steps = _render_step_figures(tmp) if tmp else None
+            if tmp:
+                cleaned_steps, construction_step_drops = await _render_step_figures_with_retry(
+                    tmp, question_text=top_text, question_spec=step_base,
+                    mode=LLMMode.BANK_CHAT, user_id=str(user_id),
+                )
+            any_construction_step = any(_is_construction(s.get("figure_spec")) for s in tmp)
             # _render_step_figures keeps every (dict) step, in order.
             step_drops = [
                 f"I couldn't draw the diagram for step {i}. "
                 f"{_figure_drop_reason(raw['figure_spec'], '')}"
                 for i, (raw, out) in enumerate(zip(tmp, cleaned_steps or []), start=1)
                 if "figure_spec" in raw and "figure_svg" not in out
+                and not _is_construction(raw["figure_spec"])
             ]
-
-        # Top-level question figure: pass through + pre-render so the
-        # preview UI shows the diagram alongside the question text.
-        top_spec_raw = proposal_raw.get("figure_spec")
-        top_text = proposal_raw.get("question") or item.question
-        top_figure_spec, top_figure_svg = _resolve_figure(top_spec_raw, top_text)
-        if isinstance(top_spec_raw, dict) and top_figure_svg is None:
-            figure_drop = f"I couldn't draw the diagram. {_figure_drop_reason(top_spec_raw, top_text)}"
 
         proposal = {
             "question": proposal_raw.get("question") if proposal_raw.get("question") else None,
@@ -445,9 +550,21 @@ async def chat_with_bank_item(
         ):
             steps = sol.get("steps")
             proposal["solution_steps"] = (
-                _render_step_figures(steps) if isinstance(steps, list) and steps else None
+                _render_step_figures(
+                    steps, question_text=proposal["question"], question_spec=proposal["figure_spec"],
+                )
+                if isinstance(steps, list) and steps else None
             )
             proposal["final_answer"] = str(sol.get("final_answer") or "") or None
+            # The answer is the solver's now: a construction figure must
+            # not print it.
+            if _is_construction(proposal["figure_spec"]):
+                spec, svg, issues = _check_figure(
+                    proposal["figure_spec"], proposal["question"],
+                    final_answer=proposal["final_answer"] or "", request=teacher_message,
+                )
+                proposal["figure_spec"], proposal["figure_svg"] = spec, svg
+                top_issues = issues
             # Replace (not append) the chat's prose: its narrative may assert a
             # specific answer it computed free-hand, which can disagree with the
             # solver's verified one (we saw the reply claim 118° while the
@@ -459,7 +576,17 @@ async def chat_with_bank_item(
                 "re-derived independently rather than written by hand."
             )
             step_drops = []  # the chat's steps (and their figures) were replaced
+            construction_step_drops = {}
+            any_construction_step = False
 
+    if top_construction or any_construction_step or (
+        construction_on() and figure_drop is None and not step_drops
+    ):
+        reply = _construction_reply(
+            reply, proposal, item, teacher_message, top_text,
+            top_construction=top_construction, top_issues=top_issues,
+            step_drops=construction_step_drops,
+        )
     if figure_drop and not proposal:
         # The figure was the whole edit: the reply describes a change that
         # isn't there, so say what actually happened instead.
@@ -508,3 +635,86 @@ async def chat_with_bank_item(
     await db.commit()
 
     return ai_msg
+
+
+def _construction_reply(
+    reply: str,
+    proposal: dict[str, Any] | None,
+    item: QuestionBankItem,
+    teacher_message: str,
+    question_text: str,
+    *,
+    top_construction: bool,
+    top_issues: list[str],
+    step_drops: dict[int, list[str]],
+) -> str:
+    """The reply with its figure sentence written by code.
+
+    The model writes its reply before anything is drawn, so whatever it
+    says about a figure describes intent, not the result (prod: "with
+    diagonal AC drawn" on a figure without AC). When the proposal carries
+    a construction figure, the model's figure sentences are dropped and
+    replaced with one built from what was drawn — or with the checker's
+    reasons when nothing could be drawn. When no figure was drawn at all,
+    a sentence claiming one is dropped and the teacher is told plainly."""
+    from api.core.question_bank_generation import _FIGURE_REFERENCE, _is_construction
+
+    drew_top = bool(proposal and proposal.get("figure_svg"))
+    drew_step = bool(proposal and any(
+        isinstance(s, dict) and s.get("figure_svg") for s in (proposal.get("solution_steps") or [])
+    ))
+    notes: list[str] = []
+    if top_construction or step_drops or (drew_step and _proposal_has_construction_step(proposal)):
+        kept = without_figure_talk(reply)
+        if top_construction and drew_top:
+            assert proposal is not None
+            notes.append(figure_sentence(
+                proposal["figure_spec"], teacher_message, updated=bool(item.figure_spec),
+            ))
+        elif top_construction:
+            notes.append(failure_sentence(top_issues or ["the figure didn't pass its check"]))
+        drawn_steps = [
+            str(n) for n, s in enumerate((proposal or {}).get("solution_steps") or [], start=1)
+            if isinstance(s, dict) and s.get("figure_svg") and _is_construction(s.get("figure_spec"))
+        ]
+        if drawn_steps:
+            plural = "s" if len(drawn_steps) > 1 else ""
+            notes.append(f"I've added a diagram to step{plural} {_join(drawn_steps)}.")
+        notes += [
+            f"{failure_sentence(issues, step=n)} That step is shown without one."
+            for n, issues in sorted(step_drops.items())
+        ]
+        if top_construction and not drew_top and proposal is None:
+            return f"{notes[0]} Nothing was changed."
+        reply = kept
+    elif not drew_top and not drew_step and _CLAIMS_FIGURE.search(reply):
+        reply = " ".join(s for s in _sentences(reply) if not _CLAIMS_FIGURE.search(s))
+        notes.append("No diagram was added.")
+    # A problem that points at a figure must have one.
+    rewrites = bool(proposal and proposal.get("question"))
+    has_figure = drew_top or (not rewrites and bool(item.figure_svg))
+    if not has_figure and _FIGURE_REFERENCE.search(question_text or "") and not (top_construction and not drew_top):
+        notes.append("This problem refers to a figure, and it doesn't have one yet.")
+    return "\n\n".join(filter(None, [reply, *notes])).strip()
+
+
+def _proposal_has_construction_step(proposal: dict[str, Any] | None) -> bool:
+    from api.core.question_bank_generation import _is_construction
+
+    return bool(proposal) and any(
+        isinstance(s, dict) and _is_construction(s.get("figure_spec"))
+        for s in (proposal or {}).get("solution_steps") or []
+    )
+
+
+def _sentences(text: str) -> list[str]:
+    return [s for s in re.split(r"(?<=[.!?])\s+", text.strip()) if s]
+
+
+# A sentence saying a figure was made or changed.
+_CLAIMS_FIGURE = re.compile(
+    r"\b(?:add(?:ed)?|drew|drawn|draw|includ(?:e|ed)|attach(?:ed)?|label(?:l)?ed|mark(?:ed)?|updat(?:e|ed)|creat(?:e|ed))\b"
+    r"[^.!?]*\b(?:diagram|figure|drawing|sketch|picture)s?\b"
+    r"|\b(?:diagram|figure|drawing|sketch|picture)s?\b[^.!?]*\b(?:added|drawn|included|attached|updated|created|labell?ed|marked)\b",
+    re.IGNORECASE,
+)
