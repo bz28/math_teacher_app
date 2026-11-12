@@ -23,7 +23,8 @@ export function Hero() {
         <p className="mt-7 max-w-[31em] text-lg leading-[1.55] text-ink-soft md:text-xl">
           Veradic checks who really understands their homework, grades it by
           your rules, and gives every student more practice on the problems
-          they missed. You approve every grade.
+          they missed. Along the way, students learn to use AI to ask why, not
+          to get the answer. You approve every grade.
         </p>
         <div className="mt-9 flex flex-wrap items-center gap-3">
           <ButtonLink href="/demo">Book a 20-minute demo</ButtonLink>
