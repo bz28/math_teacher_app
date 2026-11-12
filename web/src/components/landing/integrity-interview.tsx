@@ -12,9 +12,18 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion, useInView, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion, useInView } from "framer-motion";
+import { useReducedMotionSafe } from "./use-reduced-motion";
 
-const SERIF = "var(--font-instrument-serif)";
+// Notebook palette (see the marketing tokens in app/globals.css). Inline
+// styles keep the animation code readable; the values are the same tokens.
+const INK = "#1D2633";
+const INK_SOFT = "#4A5565";
+const GREEN = "#0E5238";
+const GREEN_TINT = "#9FD0B6";
+const HAIRLINE = "#E3DFD2";
+const PAPER = "#F6F4EC";
+const HAND = "var(--font-kalam), cursive";
 const EASE = [0.22, 1, 0.36, 1] as const;
 
 type Turn = { who: "veradic" | "maya"; text: string; think: number };
@@ -32,7 +41,7 @@ type Phase = "chat" | "scoring" | "card";
 export function IntegrityInterview() {
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, { once: true, margin: "-15%" });
-  const reduce = useReducedMotion();
+  const reduce = useReducedMotionSafe();
   const [phase, setPhase] = useState<Phase>("chat");
   const [run, setRun] = useState(0);
 
@@ -75,8 +84,8 @@ export function IntegrityInterview() {
               onAnimationComplete={() => window.setTimeout(() => setPhase("card"), 1100)}
               style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, paddingTop: 80 }}
             >
-              <motion.div style={{ width: 30, height: 30, borderRadius: "50%", border: "2.5px solid #1E4636", borderTopColor: "#7FC4A0" }} animate={{ rotate: 360 }} transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }} />
-              <span style={{ color: "#8FB7A4", fontSize: 14 }}>Veradic is scoring this submission…</span>
+              <motion.div style={{ width: 30, height: 30, borderRadius: "50%", border: `2.5px solid ${HAIRLINE}`, borderTopColor: GREEN }} animate={{ rotate: 360 }} transition={{ duration: 0.9, repeat: Infinity, ease: "linear" }} />
+              <span style={{ color: INK_SOFT, fontSize: 14 }}>Veradic is scoring this submission…</span>
             </motion.div>
           ) : (
             <motion.div key={`card-${run}`} initial={{ opacity: 0, y: 16, scale: 0.97 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: reduce ? 0 : 0.5, ease: EASE }} style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
@@ -163,16 +172,17 @@ function Interview({ run, onDone }: { run: number; onDone: () => void }) {
 
 function SubmissionHeader() {
   return (
-    <div style={{ background: "#0E2C21", border: "1px solid #1E4636", borderRadius: 16, padding: "18px 20px", boxShadow: "0 24px 60px -28px rgba(0,0,0,0.7)" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-        <span style={{ color: "#E9E5D8", fontWeight: 600, fontSize: 15 }}>Maya R.</span>
-        <span style={{ color: "#6E9684", fontSize: 12.5 }}>Algebra II · Period 3</span>
+    <div style={{ background: "#FFFFFF", border: `1px solid ${HAIRLINE}`, borderRadius: 10, padding: "16px 20px", boxShadow: "0 24px 50px -32px rgba(29,38,51,0.4)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 8, flexWrap: "wrap" }}>
+        <span style={{ color: INK, fontWeight: 800, fontSize: 15 }}>Maya R.</span>
+        <span style={{ color: INK_SOFT, fontSize: 13 }}>Algebra II, period 3</span>
       </div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-        <span style={{ color: "#AFC9BC", fontSize: 14 }}>Problem 4 · 3x + 7 = 22</span>
-        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#7FC4A0", fontWeight: 600, fontSize: 14 }}>
+        <span style={{ color: INK_SOFT, fontSize: 14 }}>Problem 4: 3x + 7 = 22</span>
+        {/* Her answer, in her own hand. */}
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 8, color: "#2B3440", fontFamily: HAND, fontSize: 21, lineHeight: 1 }}>
           x = 5
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="8" fill="#1F7A4D" /><path d="M4.5 8.2l2.2 2.2 4.8-4.8" stroke="#EAF6EF" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="8" fill={GREEN} /><path d="M4.5 8.2l2.2 2.2 4.8-4.8" stroke="#FFFFFF" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
         </span>
       </div>
     </div>
@@ -182,62 +192,66 @@ function SubmissionHeader() {
 function Divider() {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0 4px" }}>
-      <span style={{ flex: 1, height: 1, background: "#1C4334" }} />
-      <span style={{ color: "#5F8C78", fontSize: 11.5, letterSpacing: "0.04em" }}>Veradic asks Maya to explain her work</span>
-      <span style={{ flex: 1, height: 1, background: "#1C4334" }} />
+      <span style={{ flex: 1, height: 1, background: HAIRLINE }} />
+      <span style={{ color: INK_SOFT, fontSize: 12.5, fontWeight: 600 }}>Veradic asks Maya to explain her work</span>
+      <span style={{ flex: 1, height: 1, background: HAIRLINE }} />
     </div>
   );
 }
 
 function VerdictCard({ onReplay }: { onReplay?: () => void }) {
-  const META = { fontSize: 10, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "#A89F8C" };
+  // Sentence-case labels, not tracked-out caps.
+  const META = { fontSize: 12.5, fontWeight: 700, color: INK_SOFT };
+  const RULE = `1px solid ${HAIRLINE}`;
   return (
-    <div style={{ width: "100%", maxWidth: 600, margin: "0 auto", background: "#FBF9F3", borderRadius: 18, overflow: "hidden", boxShadow: "0 28px 70px -24px rgba(0,0,0,0.55)", border: "1px solid #ECE7DA" }}>
-      <div style={{ borderBottom: "1px solid #EFEADD", padding: "16px 24px" }}>
-        <div style={META}>Submission review · Algebra II · Period 3</div>
+    <div style={{ width: "100%", maxWidth: 600, margin: "0 auto", background: "#FFFFFF", borderRadius: 10, overflow: "hidden", boxShadow: "0 30px 60px -30px rgba(29,38,51,0.4)", border: RULE }}>
+      <div style={{ borderBottom: RULE, padding: "16px 24px" }}>
+        <div style={META}>Submission review, Algebra II, period 3</div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginTop: 4, gap: 12, flexWrap: "wrap" }}>
-          <div style={{ fontSize: 16, fontWeight: 600, color: "#23201A" }}>Maya R.<span style={{ fontWeight: 400, color: "#6B6457", fontSize: 14 }}> · Problem 4 — Radical equations</span></div>
-          <div style={{ fontSize: 12, color: "#A89F8C" }}>submitted 2 hours ago</div>
+          <div style={{ fontSize: 16, fontWeight: 800, color: INK }}>Maya R.<span style={{ fontWeight: 400, color: INK_SOFT, fontSize: 14 }}>, problem 4</span></div>
+          <div style={{ fontSize: 12.5, color: INK_SOFT }}>submitted 2 hours ago</div>
         </div>
       </div>
-      <div style={{ display: "flex", borderBottom: "1px solid #EFEADD" }}>
-        <div style={{ flex: 1, padding: "18px 24px", borderRight: "1px solid #EFEADD" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", borderBottom: RULE }}>
+        <div style={{ flex: "1 1 150px", padding: "18px 24px", borderRight: RULE }}>
           <div style={META}>Homework grade</div>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 6 }}>
-            <span style={{ fontSize: 34, fontWeight: 700, color: "#23201A", lineHeight: 1 }}>100<span style={{ fontSize: 20, color: "#A89F8C" }}>%</span></span>
-            <span style={{ color: "#4A6B3A", fontWeight: 600, fontSize: 13 }}>✓ answer correct</span>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 34, fontWeight: 900, color: INK, lineHeight: 1, letterSpacing: "-0.03em" }}>100<span style={{ fontSize: 20, color: INK_SOFT }}>%</span></span>
+            <span style={{ color: GREEN, fontWeight: 700, fontSize: 13 }}>✓ answer correct</span>
           </div>
         </div>
-        <div style={{ flex: 1, padding: "18px 24px" }}>
+        <div style={{ flex: "1 1 150px", padding: "18px 24px" }}>
           <div style={META}>Integrity</div>
-          <div style={{ marginTop: 6 }}>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#F0D7D1", color: "#8A2317", fontWeight: 700, fontSize: 12, letterSpacing: "0.04em", padding: "5px 11px", borderRadius: 999 }}>⚑ Flagged for review</span>
+          <div style={{ marginTop: 8 }}>
+            {/* Amber, not red: red is the teacher's pen. A flag asks the
+                teacher to look; it isn't a verdict. */}
+            <span style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "#FBEBCB", color: "#7A4507", fontWeight: 700, fontSize: 13, padding: "5px 11px", borderRadius: 6 }}>⚑ Flagged for review</span>
           </div>
         </div>
       </div>
       <div style={{ padding: "20px 24px", display: "flex", flexDirection: "column", gap: 18 }}>
         <div>
           <div style={META}>Why</div>
-          <p style={{ fontFamily: SERIF, fontStyle: "italic", fontSize: 21, lineHeight: 1.3, color: "#23201A", margin: "8px 0 0" }}>&ldquo;Right answer, but she couldn&rsquo;t explain her own method.&rdquo;</p>
+          <p style={{ fontSize: 19, fontWeight: 800, lineHeight: 1.3, letterSpacing: "-0.01em", color: INK, margin: "6px 0 0" }}>&ldquo;Right answer, but she couldn&rsquo;t explain her own method.&rdquo;</p>
         </div>
         <div>
           <div style={META}>Key moments from the conversation</div>
           <ul style={{ margin: "10px 0 0", padding: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 8 }}>
             {["Solved 3x + 7 = 22 → x = 5 correctly.", "Couldn’t say why she divided by 3, not 22.", "Went silent when asked to justify her steps."].map((b) => (
-              <li key={b} style={{ display: "flex", gap: 11, fontSize: 14.5, lineHeight: 1.5, color: "#6B6457" }}>
-                <span style={{ marginTop: 9, width: 12, height: 2, borderRadius: 2, background: "#2F8F66", flexShrink: 0 }} />
+              <li key={b} style={{ display: "flex", gap: 11, fontSize: 14.5, lineHeight: 1.5, color: INK_SOFT }}>
+                <span style={{ marginTop: 10, width: 12, height: 2, borderRadius: 2, background: GREEN, flexShrink: 0 }} />
                 <span>{b}</span>
               </li>
             ))}
           </ul>
         </div>
       </div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderTop: "1px solid #EFEADD", background: "#F4F1E9", padding: "14px 24px" }}>
-        <span style={{ color: "#0E5238", fontWeight: 600, fontSize: 14 }}>See full conversation →</span>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", borderTop: RULE, background: PAPER, padding: "14px 24px" }}>
+        <span style={{ color: GREEN, fontWeight: 700, fontSize: 14 }}>See full conversation</span>
         {onReplay ? (
-          <button type="button" onClick={onReplay} style={{ display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid #D8D0BF", background: "#FBF9F3", color: "#23201A", fontWeight: 600, fontSize: 13, padding: "7px 15px", borderRadius: 999, cursor: "pointer", fontFamily: "inherit" }}>↻ Replay</button>
+          <button type="button" onClick={onReplay} style={{ display: "inline-flex", alignItems: "center", gap: 6, border: "1px solid #C9C3B3", background: "#FFFFFF", color: INK, fontWeight: 700, fontSize: 13.5, padding: "8px 14px", borderRadius: 6, cursor: "pointer", fontFamily: "inherit" }}>↻ Replay</button>
         ) : (
-          <span style={{ border: "1px solid #D8D0BF", background: "#FBF9F3", color: "#23201A", fontWeight: 600, fontSize: 13, padding: "7px 15px", borderRadius: 999 }}>Dismiss flag</span>
+          <span style={{ border: "1px solid #C9C3B3", background: "#FFFFFF", color: INK, fontWeight: 700, fontSize: 13.5, padding: "8px 14px", borderRadius: 6 }}>Dismiss flag</span>
         )}
       </div>
     </div>
@@ -253,7 +267,7 @@ function VerdictCard({ onReplay }: { onReplay?: () => void }) {
  * Numbers count up on reveal; reduced-motion jumps to the resolved values.
  */
 function ProcessEvidence({ reduce }: { reduce: boolean | null }) {
-  const META = { fontSize: 10, fontWeight: 700, letterSpacing: "0.16em", textTransform: "uppercase" as const, color: "#8FB7A4" };
+  const META = { fontSize: 12.5, fontWeight: 700, color: INK_SOFT };
   return (
     <motion.div
       initial={reduce ? false : { opacity: 0, y: 14 }}
@@ -263,24 +277,23 @@ function ProcessEvidence({ reduce }: { reduce: boolean | null }) {
         width: "100%",
         maxWidth: 600,
         margin: "0 auto",
-        background: "linear-gradient(180deg, #0E2C21 0%, #0B2419 100%)",
-        border: "1px solid #1E4636",
-        borderRadius: 18,
+        background: PAPER,
+        border: `1px solid ${HAIRLINE}`,
+        borderRadius: 10,
         overflow: "hidden",
-        boxShadow: "0 26px 64px -30px rgba(0,0,0,0.7)",
       }}
     >
-      <div style={{ padding: "16px 22px 14px", borderBottom: "1px solid #173A2C" }}>
+      <div style={{ padding: "16px 22px 14px", borderBottom: `1px solid ${HAIRLINE}` }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <EyeGlyph />
           <span style={META}>Corroborating signals her teacher sees</span>
         </div>
-        <p style={{ margin: "9px 0 0", fontFamily: SERIF, fontStyle: "italic", fontSize: 19, lineHeight: 1.3, color: "#E9E5D8" }}>
+        <p style={{ margin: "8px 0 0", fontSize: 18, fontWeight: 800, letterSpacing: "-0.01em", lineHeight: 1.3, color: INK }}>
           And while she worked&hellip;
         </p>
       </div>
 
-      <div style={{ display: "flex", borderBottom: "1px solid #173A2C" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", borderBottom: `1px solid ${HAIRLINE}` }}>
         <SignalTile
           icon={<TabOutGlyph />}
           value={<CountUp to={4} reduce={reduce} suffix="×" />}
@@ -296,7 +309,7 @@ function ProcessEvidence({ reduce }: { reduce: boolean | null }) {
         />
       </div>
 
-      <p style={{ margin: 0, padding: "13px 22px", fontSize: 12, lineHeight: 1.5, color: "#7FA593" }}>
+      <p style={{ margin: 0, padding: "13px 22px", fontSize: 13, lineHeight: 1.5, color: INK_SOFT }}>
         Context the teacher reviews alongside the conversation. It doesn&rsquo;t
         drive the flag &mdash; that came from Maya not being able to explain her
         own method.
@@ -307,13 +320,13 @@ function ProcessEvidence({ reduce }: { reduce: boolean | null }) {
 
 function SignalTile({ icon, value, label, detail, border }: { icon: React.ReactNode; value: React.ReactNode; label: string; detail: string; border?: boolean }) {
   return (
-    <div style={{ flex: 1, padding: "18px 22px", borderRight: border ? "1px solid #173A2C" : undefined, display: "flex", flexDirection: "column", gap: 4 }}>
+    <div style={{ flex: "1 1 150px", padding: "18px 22px", borderRight: border ? `1px solid ${HAIRLINE}` : undefined, display: "flex", flexDirection: "column", gap: 4 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-        <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, borderRadius: 9, background: "#143427", border: "1px solid #21503C", color: "#7FC4A0", flexShrink: 0 }}>{icon}</span>
-        <span style={{ fontSize: 30, fontWeight: 700, color: "#F4F1E8", lineHeight: 1, letterSpacing: "-0.01em", fontVariantNumeric: "tabular-nums" }}>{value}</span>
+        <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 30, height: 30, borderRadius: 6, background: "#FFFFFF", border: `1px solid ${HAIRLINE}`, color: GREEN, flexShrink: 0 }}>{icon}</span>
+        <span style={{ fontSize: 30, fontWeight: 900, color: INK, lineHeight: 1, letterSpacing: "-0.03em", fontVariantNumeric: "tabular-nums" }}>{value}</span>
       </div>
-      <span style={{ fontSize: 13.5, fontWeight: 600, color: "#CFE3D8", marginTop: 6 }}>{label}</span>
-      <span style={{ fontSize: 12, color: "#6E9684" }}>{detail}</span>
+      <span style={{ fontSize: 14, fontWeight: 700, color: INK, marginTop: 6 }}>{label}</span>
+      <span style={{ fontSize: 13, color: INK_SOFT }}>{detail}</span>
     </div>
   );
 }
@@ -348,16 +361,16 @@ function CountUp({ to, reduce, suffix = "" }: { to: number; reduce: boolean | nu
 
 function EyeGlyph() {
   return (
-    <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-      <path d="M1 8s2.6-4.5 7-4.5S15 8 15 8s-2.6 4.5-7 4.5S1 8 1 8Z" stroke="#7FC4A0" strokeWidth="1.3" strokeLinejoin="round" />
-      <circle cx="8" cy="8" r="1.9" fill="#7FC4A0" />
+    <svg aria-hidden="true" width="15" height="15" viewBox="0 0 16 16" fill="none">
+      <path d="M1 8s2.6-4.5 7-4.5S15 8 15 8s-2.6 4.5-7 4.5S1 8 1 8Z" stroke={GREEN} strokeWidth="1.3" strokeLinejoin="round" />
+      <circle cx="8" cy="8" r="1.9" fill={GREEN} />
     </svg>
   );
 }
 
 function TabOutGlyph() {
   return (
-    <svg width="17" height="17" viewBox="0 0 18 18" fill="none">
+    <svg aria-hidden="true" width="17" height="17" viewBox="0 0 18 18" fill="none">
       <rect x="1.5" y="3.5" width="11" height="9" rx="1.6" stroke="currentColor" strokeWidth="1.3" />
       <path d="M1.5 6.3h11" stroke="currentColor" strokeWidth="1.3" />
       <path d="M11 11.5l5-5m0 0h-3.4m3.4 0v3.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
@@ -367,7 +380,7 @@ function TabOutGlyph() {
 
 function PasteGlyph() {
   return (
-    <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 18 18" fill="none">
       <rect x="3.5" y="2.5" width="11" height="13" rx="1.8" stroke="currentColor" strokeWidth="1.3" />
       <rect x="6.5" y="1.2" width="5" height="3" rx="1" fill="currentColor" />
       <path d="M6.3 8.2h5.4M6.3 11h3.4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
@@ -375,11 +388,19 @@ function PasteGlyph() {
   );
 }
 
+/**
+ * Veradic speaks in its green note style; Maya answers in her own
+ * handwriting on white, the same pairing as the hero's note.
+ */
 function Bubble({ who, children }: { who: "veradic" | "maya"; children: React.ReactNode }) {
   const isMaya = who === "maya";
-  return (
-    <div style={{ maxWidth: "78%", padding: "10px 14px", borderRadius: 14, fontSize: 14.5, lineHeight: 1.45, background: isMaya ? "#1B3A2C" : "#102A20", border: `1px solid ${isMaya ? "#2A5743" : "#1C4030"}`, color: isMaya ? "#E9E5D8" : "#A9C6B8" }}>
-      {!isMaya && <span style={{ display: "block", fontSize: 10.5, letterSpacing: "0.08em", color: "#5FAE89", marginBottom: 3, textTransform: "uppercase" }}>Veradic</span>}
+  return isMaya ? (
+    <div style={{ maxWidth: "78%", padding: "6px 14px", borderRadius: 10, background: "#FFFFFF", border: `1px solid ${HAIRLINE}`, color: "#2B3440", fontFamily: HAND, fontSize: 19, lineHeight: 1.35 }}>
+      {children}
+    </div>
+  ) : (
+    <div style={{ maxWidth: "78%", padding: "10px 14px", borderRadius: 10, background: GREEN, color: "#F2F7F4", fontSize: 15, lineHeight: 1.4 }}>
+      <span style={{ display: "block", fontSize: 12, fontWeight: 700, color: GREEN_TINT, marginBottom: 3 }}>Veradic</span>
       {children}
     </div>
   );
@@ -389,7 +410,7 @@ function TypingDots() {
   return (
     <span style={{ display: "inline-flex", gap: 4, padding: "2px 2px" }}>
       {[0, 1, 2].map((i) => (
-        <motion.span key={i} style={{ width: 6, height: 6, borderRadius: 999, background: "#6E9684", display: "inline-block" }} animate={{ opacity: [0.3, 1, 0.3], y: [0, -2, 0] }} transition={{ duration: 1, repeat: Infinity, delay: i * 0.18, ease: "easeInOut" }} />
+        <motion.span key={i} style={{ width: 6, height: 6, borderRadius: 999, background: "currentColor", opacity: 0.6, display: "inline-block" }} animate={{ opacity: [0.3, 1, 0.3], y: [0, -2, 0] }} transition={{ duration: 1, repeat: Infinity, delay: i * 0.18, ease: "easeInOut" }} />
       ))}
     </span>
   );

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Instrument_Serif, Fraunces, Geist_Mono } from "next/font/google";
+import { Inter, Instrument_Serif, Fraunces, Geist_Mono, Schibsted_Grotesk, Kalam } from "next/font/google";
 import Script from "next/script";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
@@ -46,6 +46,29 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
   display: "swap",
+});
+
+// Marketing site ("the student's page" design). Only exposed as CSS
+// variables here; nothing uses them until a marketing surface opts in with
+// the `site` class or the font-site / font-hand utilities, so the logged-in
+// app keeps Inter. Kalam is reserved for student handwriting and the
+// teacher's red-pen marks.
+const schibsted = Schibsted_Grotesk({
+  variable: "--font-schibsted",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800", "900"],
+  display: "swap",
+  // Not preloaded: only marketing pages use it, so app pages shouldn't
+  // download it. Marketing pages fetch it on first use (display: swap).
+  preload: false,
+});
+
+const kalam = Kalam({
+  variable: "--font-kalam",
+  subsets: ["latin"],
+  weight: ["400", "700"],
+  display: "swap",
+  preload: false,
 });
 
 export const metadata: Metadata = {
@@ -117,7 +140,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${instrumentSerif.variable} ${fraunces.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${inter.variable} ${instrumentSerif.variable} ${fraunces.variable} ${geistMono.variable} ${schibsted.variable} ${kalam.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <head>

@@ -1,5 +1,3 @@
-import { Section } from "./section";
-
 /**
  * Grading by the teacher's own rules — the class rubric (PRs #935–#937).
  * A teacher writes grading rules once per class; every homework inherits
@@ -7,104 +5,67 @@ import { Section } from "./section";
  * it was Veradic's own judgment; nothing reaches a student until the
  * teacher approves.
  *
- * Mirror of the integrity section: demo LEFT, argument RIGHT, so the page
- * alternates sides instead of stacking centred columns. The demo is static
- * on purpose — the integrity interview and the homework flow carry the
- * page's motion; this card just has to be legible at a glance.
- *
- * The one visual device here carries information: the rule that was
- * applied is marked in the rules list with the same green tag the
- * deduction wears, so the eye can follow a lost point back to the rule.
+ * Two objects side by side: the teacher's rules, written in red pen on an
+ * index card, and the draft grade Veradic made from them. The draft follows
+ * Jordan's homework from the hero: the "distribute the 2" mark there is the
+ * first deduction here. The second deduction is Veradic's judgment, so the
+ * card shows both sources a lost point can have.
  */
 
-type Rule = { text: string; points: number; applied: boolean };
-
-const RULES: Rule[] = [
-  { text: "Name the theorem you used.", points: 1, applied: true },
-  { text: "Final answers need units.", points: 1, applied: false },
-  { text: "Show work for full credit.", points: 2, applied: false },
+const RULES = [
+  "Show the distribution — 1 pt",
+  "Units on final answers — 1 pt",
+  "Name the theorem — 1 pt",
 ];
 
-type Deduction = { points: number; reason: string; source: "rule" | "judgment" };
+type Deduction = { points: number; reason: string; source: string | null };
 
+// `source` is the class rule a point came from, or null for Veradic's own
+// judgment.
 const DEDUCTIONS: Deduction[] = [
-  { points: 1, reason: "Name the theorem you used.", source: "rule" },
-  { points: 1, reason: "Arithmetic slip: 3k is 27, not 9.", source: "judgment" },
+  { points: 1, reason: "Problem 5: distributed the 2 to x only.", source: "Show the distribution" },
+  { points: 1, reason: "Problem 7: arithmetic slip, 4 × 6 is 24, not 18.", source: null },
 ];
 
-const CARD = {
-  background: "#FFFFFF",
-  borderRadius: 18,
-  boxShadow: "0 36px 90px -40px rgba(0,0,0,0.5)",
-  border: "1px solid #ECE7DA",
-} as const;
-
-function SourceTag({ source }: { source: Deduction["source"] }) {
-  return source === "rule" ? (
-    <span className="inline-flex shrink-0 items-center rounded-full bg-[#E6F0EA] px-2 py-0.5 text-[11.5px] font-semibold text-[#0E5238]">
-      Class rule
-    </span>
-  ) : (
-    <span className="inline-flex shrink-0 items-center rounded-full bg-[#F2EFE8] px-2 py-0.5 text-[11.5px] font-semibold text-[#5C554C]">
-      Veradic&rsquo;s judgment
-    </span>
+function RulesCard() {
+  return (
+    <div className="min-w-0 flex-[1_1_240px] rotate-[0.8deg] rounded-[3px] border border-[#E8E2CF] border-t-[3px] border-t-margin-line bg-[#FFFDF6] bg-[linear-gradient(transparent_31px,#D6E4EE_31px,#D6E4EE_32px,transparent_32px)] bg-[length:100%_32px] px-[18px] pb-[18px] pt-3.5">
+      <p className="m-0 text-[13px] font-extrabold leading-8">Ms. Rivera&rsquo;s rules</p>
+      <ul className="m-0 list-none p-0">
+        {RULES.map((r) => (
+          <li key={r} className="font-hand text-[19px] leading-8 text-redpen">
+            {r}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
-function GradingDemo() {
+function DraftGrade() {
   return (
-    <div className="w-full max-w-[600px]" aria-label="Example: a class's grading rules and a draft grade that follows them" role="img">
-      {/* The class's rules — written once, inherited by every homework. */}
-      <div style={CARD} className="p-5 sm:p-6">
-        <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
-          <p className="text-[15px] font-semibold text-[#23201A]">Class rules</p>
-          <p className="text-[12.5px] text-[#6B6457]">Applies to every Geometry homework</p>
-        </div>
-        <ul className="mt-4 space-y-2">
-          {RULES.map((r) => (
-            <li
-              key={r.text}
-              className={`flex items-center justify-between gap-3 rounded-[10px] border px-3 py-2.5 text-[14px] ${
-                r.applied ? "border-[#C8DCCF] bg-[#EFF4F0] text-[#0E3A28]" : "border-[#E4DFD2] bg-[#FBF9F3] text-[#23201A]"
-              }`}
-            >
-              <span>{r.text}</span>
-              <span className={`shrink-0 text-[12.5px] font-semibold ${r.applied ? "text-[#0E5238]" : "text-[#6B6457]"}`}>
-                &minus;{r.points} pt
-              </span>
-            </li>
-          ))}
-        </ul>
+    <div className="min-w-0 flex-[1_1_260px] rounded-[10px] border border-hairline bg-paper p-[18px]">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="text-[15px] font-extrabold">Jordan P. &mdash; HW 5.2</span>
+        <span className="text-[22px] font-black">8/10</span>
       </div>
-
-      {/* One draft grade made under those rules, waiting for the teacher. */}
-      <div style={CARD} className="relative mt-4 p-5 sm:ml-10 sm:p-6">
-        <div className="flex items-baseline justify-between gap-4">
-          <p className="text-[15px] font-semibold text-[#23201A]">
-            Maya R.<span className="ml-2 font-normal text-[#6B6457]">Problem 3</span>
-          </p>
-          <p className="text-[15px] font-semibold text-[#23201A]">
-            8<span className="text-[#6B6457]">/10</span>
-          </p>
-        </div>
-        <p className="mt-1 text-[12.5px] text-[#6B6457]">Draft. Maya can&rsquo;t see it until you approve.</p>
-
-        <ul className="mt-4 space-y-2.5">
-          {DEDUCTIONS.map((d) => (
-            <li key={d.reason} className="flex items-start gap-3 text-[14px] leading-snug text-[#23201A]">
-              <span className="w-8 shrink-0 font-semibold text-[#8A2317]">&minus;{d.points}</span>
-              <span className="flex min-w-0 flex-1 flex-col items-start gap-1.5 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
-                <span>{d.reason}</span>
-                <SourceTag source={d.source} />
-              </span>
-            </li>
-          ))}
-        </ul>
-
-        <div className="mt-5 flex items-center justify-end gap-2">
-          <span className="rounded-full border border-[#E4DFD2] px-4 py-1.5 text-[13px] font-semibold text-[#5C554C]">Edit</span>
-          <span className="rounded-full bg-[#0E5238] px-4 py-1.5 text-[13px] font-semibold text-white">Approve</span>
-        </div>
+      <p className="m-0 mt-1 text-[13px] text-ink-soft">Draft. Jordan can&rsquo;t see it until you approve.</p>
+      <ul className="m-0 mt-3.5 list-none space-y-3 p-0">
+        {DEDUCTIONS.map((d) => (
+          <li key={d.reason}>
+            <p className="m-0 text-[14.5px] leading-[1.45]">
+              <b className="text-redpen">&minus;{d.points}</b> {d.reason}
+            </p>
+            <p className={`m-0 mt-1 text-[12.5px] font-bold ${d.source ? "text-veradic" : "text-ink-soft"}`}>
+              {d.source ? `From your rule: ${d.source}` : "Veradic’s judgment"}
+            </p>
+          </li>
+        ))}
+      </ul>
+      {/* Pictures of the review buttons, not controls: this is an example. */}
+      <div aria-hidden="true" className="mt-[18px] flex justify-end gap-2">
+        <span className="rounded-[6px] border border-[#C9C3B3] px-3.5 py-2 text-sm font-bold">Edit</span>
+        <span className="rounded-[6px] bg-veradic px-3.5 py-2 text-sm font-bold text-white">Approve</span>
       </div>
     </div>
   );
@@ -112,27 +73,28 @@ function GradingDemo() {
 
 export function HomeGrading() {
   return (
-    <Section variant="alt" id="grading">
-      <div className="grid items-center gap-12 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)] xl:gap-16">
-        <div className="order-2 min-w-0 xl:order-1">
-          <GradingDemo />
-        </div>
-        <div className="order-1 max-w-xl xl:order-2">
-          <h2 className="text-display-md text-[color:var(--color-text)]">
-            Graded by your rules.
-          </h2>
-          <p className="mt-6 text-lg leading-relaxed text-[color:var(--color-text-secondary)] md:text-xl">
-            Write your grading rules once for the class &mdash; &ldquo;name the
-            theorem,&rdquo; &ldquo;units on final answers.&rdquo; Every homework
-            follows them, and you can skip a rule for one assignment.
-          </p>
-          <p className="mt-4 text-lg leading-relaxed text-[color:var(--color-text-secondary)] md:text-xl">
-            Each point Veradic takes off says why, and whether it came from your
-            rule or its own judgment. Nothing reaches a student until you
-            approve it.
-          </p>
-        </div>
+    <section id="grading" className="mx-auto flex max-w-[1200px] flex-wrap items-start gap-x-[72px] gap-y-12 px-4 py-20 md:px-8 md:py-[104px]">
+      <div className="min-w-0 flex-[1_1_380px]">
+        <h2 className="site-h2">Graded by your rules.</h2>
+        <p className="mt-5 text-lg leading-relaxed text-ink-soft md:text-[19px] md:leading-[1.6]">
+          Write your grading rules once for the class &mdash; &ldquo;name the
+          theorem,&rdquo; &ldquo;units on final answers.&rdquo; Every homework
+          follows them, and you can skip a rule for one assignment.
+        </p>
+        <p className="mt-4 text-lg leading-relaxed text-ink-soft md:text-[19px] md:leading-[1.6]">
+          Each point Veradic takes off says why, and whether it came from your
+          rule or its own judgment. Nothing reaches a student until you
+          approve it.
+        </p>
       </div>
-    </Section>
+      <div
+        role="img"
+        aria-label="Example: a teacher's three grading rules, and a draft grade of 8 out of 10. One point lost under the rule 'show the distribution', one for an arithmetic slip, marked as Veradic's judgment. It waits for the teacher to approve."
+        className="flex min-w-0 flex-[1_1_520px] flex-wrap gap-5"
+      >
+        <RulesCard />
+        <DraftGrade />
+      </div>
+    </section>
   );
 }
