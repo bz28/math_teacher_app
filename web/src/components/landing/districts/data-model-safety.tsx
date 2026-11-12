@@ -19,8 +19,8 @@ const TOPICS: Topic[] = [
   {
     heading: "Model safety & content moderation",
     bullets: [
-      "Veradic runs on top of Anthropic’s Claude with a classroom-safety system prompt layered on. The model is instructed to never hand students the final answer directly, refuse off-topic conversations, and decline requests that would help a student cheat.",
-      "In school mode, students cannot upload arbitrary photos or chat freely with the AI. They can only work on problems from their teacher’s approved bank.",
+      "Veradic runs on top of Anthropic’s Claude with a classroom-safety system prompt layered on. The model is instructed not to do students’ homework for them, to refuse off-topic conversations, and to decline requests that would help a student cheat.",
+      "In school mode, students only work on what their teacher assigned: they photograph their own homework for grading, and practice on problems their teacher approved. They can ask about a step of a practice problem, but they can’t chat freely with the AI.",
       "This closes the common jailbreak vectors you see with consumer chatbots — there’s no general-purpose chat surface for students to misuse.",
     ],
   },

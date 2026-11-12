@@ -141,7 +141,7 @@ export default function DemoPage() {
                       />
                       <StepItem
                         num="2"
-                        title="15-minute demo call"
+                        title="20-minute demo call"
                         desc="We walk you through the platform and answer your questions. No pressure."
                       />
                     </div>

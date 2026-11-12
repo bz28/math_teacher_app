@@ -42,10 +42,9 @@ export function Hero() {
             </motion.span>
           </h1>
           <motion.p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-[color:var(--color-text-secondary)] md:text-xl" variants={rise}>
-            See who actually understands &mdash; not just who got the right
-            answer. Veradic checks real understanding, drafts every grade for
-            your approval, and writes next week&rsquo;s homework &mdash; before
-            you leave the building.
+            Veradic checks who really understands their homework, grades it by
+            your rules, and gives every student more practice on the problems
+            they missed. You approve every grade.
           </motion.p>
 
           <motion.div className="mt-10 flex flex-col items-center gap-4" variants={rise}>
@@ -63,13 +62,10 @@ export function Hero() {
                 href="#integrity"
                 className="inline-flex h-12 items-center justify-center gap-2 rounded-[--radius-pill] border border-[color:var(--color-border)] bg-transparent px-8 text-[15px] font-semibold tracking-[0.01em] text-[color:var(--color-text)] transition-colors hover:border-[color:var(--color-text)]"
               >
-                See it check who really understands
+                See how it works
                 <span aria-hidden="true">&darr;</span>
               </a>
             </div>
-            <p className="text-xs font-medium text-[color:var(--color-text-secondary)]">
-              Built for teachers &middot; Sold to schools
-            </p>
           </motion.div>
         </motion.div>
       </MotionConfig>

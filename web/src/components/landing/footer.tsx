@@ -27,6 +27,7 @@ const accountLinks: LinkItem[] = [
 ];
 
 const legalLinks: LinkItem[] = [
+  { label: "Trust & security", href: "/trust" },
   { label: "Privacy", href: "/privacy" },
   { label: "Terms", href: "/terms" },
 ];

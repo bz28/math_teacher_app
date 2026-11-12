@@ -17,13 +17,13 @@ export function PilotDataStrip() {
           Editorial note · Pilot data
         </p>
         <h2 className="mt-5 text-display-sm text-[color:var(--color-text)]">
-          Real pilot data coming Fall 2026.
+          Pilot results, published when they&rsquo;re real.
         </h2>
         <p className="mx-auto mt-6 max-w-xl text-base leading-relaxed text-[color:var(--color-text-secondary)] md:text-lg">
-          We&rsquo;re running pilots with select classrooms now. We&rsquo;ll
-          publish hours-saved, integrity-flag rate, and student-outcome
-          data here as it lands — with sources, sample sizes, and the
-          districts who let us name them.
+          Teachers are using Veradic with their classes now. Once there&rsquo;s
+          enough data to stand behind, we&rsquo;ll publish hours saved,
+          integrity-flag rate, and student outcomes here &mdash; with
+          sources, sample sizes, and the districts who let us name them.
         </p>
         {/* Closing punchline — uses text-secondary for AA contrast.
             text-muted on white is only ~2:1, well below the 4.5:1
