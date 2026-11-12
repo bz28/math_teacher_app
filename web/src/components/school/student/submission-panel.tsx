@@ -61,6 +61,10 @@ interface Props {
    *  submission instead of turning in for the first time. Same staging,
    *  checks and validation; the copy says what's different. */
   retake?: { submissionId: string; onCancel: () => void };
+  /** The teacher reopened this homework after the student turned it in:
+   *  this turn-in replaces that one (the server keeps it). Same flow as
+   *  a first turn-in; the copy says what's different. */
+  resubmit?: boolean;
   /** Called when the turn-in was refused because the homework closed
    *  while the page was open, so the parent can show it closed. */
   onClosed: () => void;
@@ -176,6 +180,7 @@ export function SubmissionPanel({
   latePolicy,
   onSubmitted,
   retake,
+  resubmit = false,
   onClosed,
 }: Props) {
   const [stagedFiles, setStagedFiles] = useState<StagedFile[]>([]);
@@ -496,12 +501,22 @@ export function SubmissionPanel({
     <div className="mt-8 overflow-hidden rounded-[--radius-lg] border border-border bg-surface shadow-[0_1px_2px_rgba(20,19,15,0.04)]">
       <div className="border-b border-border-light bg-primary-bg/30 px-6 py-5">
         <p className="eyebrow text-primary/80">
-          {retake ? "Retake your photos" : "Turn in your work"}
+          {retake ? "Retake your photos" : resubmit ? "Reopened by your teacher" : "Turn in your work"}
         </p>
         <h2 className="mt-1.5 font-serif text-[1.75rem] leading-tight text-text-primary">
-          {retake ? "New photos of the same homework" : "Submit your homework"}
+          {retake ? "New photos of the same homework" : resubmit ? "Turn it in again" : "Submit your homework"}
         </h2>
-        {retake ? (
+        {resubmit && !retake ? (
+          <p className="mt-2 max-w-prose text-sm leading-relaxed text-text-secondary">
+            Your teacher reopened this homework for you
+            {dueAt
+              ? `, until ${new Date(dueAt).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`
+              : ""}
+            . Add every page of your work. What you turn in now replaces your
+            earlier turn-in and is graded fresh — your teacher still has the
+            earlier one. You can turn it in again once.
+          </p>
+        ) : retake ? (
           <p className="mt-2 max-w-prose text-sm leading-relaxed text-text-secondary">
             Add every page again, upright, in a bright spot. We&apos;ll read
             them fresh for you to check. Your teacher still sees your first

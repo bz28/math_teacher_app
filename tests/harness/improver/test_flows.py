@@ -52,7 +52,8 @@ def test_flow_names_cover_all_journeys() -> None:
     names = flows.flow_names()
     assert {
         "login", "logout", "join_class", "submit_homework", "grade_publish",
-        "workshop_steps", "student_insights", "confirm_reading",
+        "workshop_steps", "student_insights", "confirm_reading", "retake_photos",
+        "reopen_resubmit",
     } <= set(names)
     assert len(names) == len(set(names))  # no dup selectors
 

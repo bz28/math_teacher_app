@@ -173,19 +173,19 @@ class Submission(Base):
     # they left it blank, and on every flag from before notes existed. Any
     # lines they fixed before flagging land on `extraction_edits` as usual.
     extraction_flag_note: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # A student who flagged the reading may replace their photos once,
-    # before anything is graded, for a fresh reading (POST
-    # /submissions/{id}/retake). `retaken_at` is when; null = never.
+    # A student who flagged the reading may replace their photos once
+    # per attempt, before anything is graded, for a fresh reading (POST
+    # /submissions/{id}/retake). `retaken_at` is when; null = not on this
+    # attempt. The turn-in it replaced is a `SubmissionAttempt`.
     retaken_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True,
     )
-    # The turn-in a retake replaced — its files, reading, edits, flag,
-    # note, submitted_at and is_late — kept so the teacher can still see
-    # the original. Deferred: it can carry a second set of base64 pages,
-    # and nothing but the teacher's submission detail reads it (load it
-    # with `undefer` or an explicit column select).
-    retake_original: Mapped[dict[str, Any] | None] = mapped_column(
-        JSON, nullable=True, deferred=True,
+    # The teacher reopened this homework for this student after they had
+    # turned it in: they may turn it in once more, by their personal due
+    # date (`StudentDueDate`). Cleared when they do — the turn-in it
+    # replaces, with its grade, is kept as a `SubmissionAttempt`.
+    reopened_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
     )
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     is_late: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
@@ -264,3 +264,80 @@ class SubmissionGrade(Base):
     # review surfaces it as "couldn't read this — needs manual grading"; the
     # teacher can still grade by hand (breakdown/final_score stay null).
     ai_grading_status: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class StudentDueDate(Base):
+    """A personal due date for one student on one homework — the teacher
+    reopened it for them. It replaces the class due date everywhere that
+    date counts for this student: closing, `is_late` and the late penalty
+    (late_policy.effective_due_at)."""
+    __tablename__ = "student_due_dates"
+    __table_args__ = (
+        UniqueConstraint("assignment_id", "student_id", name="uq_student_due_dates_assignment_student"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    assignment_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("assignments.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    student_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    set_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(),
+    )
+
+
+SUBMISSION_ATTEMPT_RETAKE = "retake"
+SUBMISSION_ATTEMPT_REOPEN = "reopen"
+
+
+class SubmissionAttempt(Base):
+    """An earlier turn-in of a submission, kept when a newer one replaced
+    it: a retake of flagged photos (`reason` "retake"), or a turn-in after
+    the teacher reopened the homework (`reason` "reopen"). Nothing a
+    teacher graded or a student wrote is lost — the files, the reading
+    and the student's edits and flag, when it was turned in, and, for a
+    reopen, the grade it had and the understanding check it ran, as they
+    were.
+
+    `number` is the attempt's place in order (1 = the first turn-in). The
+    live `Submission` row is always the latest attempt."""
+    __tablename__ = "submission_attempts"
+    __table_args__ = (
+        UniqueConstraint("submission_id", "number", name="uq_submission_attempts_submission_number"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    submission_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("submissions.id", ondelete="CASCADE"), nullable=False, index=True,
+    )
+    number: Mapped[int] = mapped_column(Integer, nullable=False)
+    reason: Mapped[str] = mapped_column(String(20), nullable=False)
+    # The pages, base64 like Submission.files. Deferred: only the
+    # originals endpoint reads them.
+    files: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True, deferred=True)
+    extraction: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True, deferred=True)
+    extraction_edits: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True, deferred=True)
+    extraction_edited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    extraction_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    extraction_flagged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    extraction_flag_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    is_late: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # The attempt's `submission_grades` row as it was (every column), and
+    # its understanding check (`integrity_check_submissions` + problems +
+    # turns). Null when it had none — always, for a retake.
+    grade: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    integrity: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True, deferred=True)
+    # When a newer attempt replaced it, and the teacher whose reopen
+    # allowed that (null for a retake, which the student starts).
+    replaced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reopened_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+    )

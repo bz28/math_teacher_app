@@ -30,6 +30,7 @@ import { Skeleton } from "@/components/ui";
 import { isFlaggedSubmission } from "@/components/school/teacher/roster-flagged";
 import { PdfView } from "@/components/ui/pdf-view";
 import { WorkGalleryModal } from "@/components/school/teacher/_pieces/work-gallery";
+import { ReopenControl } from "@/components/school/teacher/_pieces/reopen-control";
 import {
   teacher,
   type AiGradeBlock,
@@ -38,6 +39,7 @@ import {
   type GradeDeduction,
   type IntegrityDisposition,
   type IntegrityResolutionOutcome,
+  type SubmissionAttempt,
   type SubmissionFile,
   type TeacherIntegrityDetail,
   type TeacherIntegrityTranscriptTurn,
@@ -129,6 +131,8 @@ type RosterEntry = {
   student_email: string;
   /** Present if the student has submitted; null if they haven't. */
   submission: TeacherSubmissionRow | null;
+  /** Their personal due date, when the teacher reopened it for them. */
+  personal_due_at: string | null;
 };
 
 type RosterFilter = "all" | "needs_me" | "flagged" | "low_confidence";
@@ -302,6 +306,8 @@ function HomeworkSectionReview({
   >(() => parseProblemFocus(searchParams.get("student"), searchParams.get("problem")));
 
   const [hwTitle, setHwTitle] = useState<string>("");
+  // The class due date — a reopen's personal date can't be before it.
+  const [hwDueAt, setHwDueAt] = useState<string | null>(null);
   const [sectionName, setSectionName] = useState<string>("");
   // Teacher's rubric for this HW — rendered as an expandable panel at
   // the top of the Problems card so the teacher can sanity-check the
@@ -542,6 +548,7 @@ function HomeworkSectionReview({
         if (cancelled) return;
         setError(null);
         setHwTitle(a.title);
+        setHwDueAt(a.due_at);
         setSectionName(s.name);
         setHwRubric(a.rubric);
         // Join submissions to roster by student_id. Email would work
@@ -571,6 +578,7 @@ function HomeworkSectionReview({
                 student_name: r.student_name || r.student_email,
                 student_email: r.student_email,
                 submission: r,
+                personal_due_at: null,
               };
             } else {
               submissionByStudent.set(r.student_id, r);
@@ -629,6 +637,7 @@ function HomeworkSectionReview({
             student_name: st.name || st.email,
             student_email: st.email,
             submission: submissionByStudent.get(st.id) ?? null,
+            personal_due_at: subs.personal_due_dates[st.id] ?? null,
           }))
           .sort((a, b) => a.student_name.localeCompare(b.student_name));
         // Appended last, and TriageRoster keeps it there: it is pulled
@@ -1724,6 +1733,38 @@ function HomeworkSectionReview({
     }
   }, []);
 
+  // A reopen (or its undo) moves this student's due date, which re-prices
+  // their lateness and possibly their score on the server. Refetch their
+  // row and, if it's open, their detail, rather than guessing the result.
+  const handleReopenChanged = useCallback(
+    async (studentId: string) => {
+      try {
+        const res = await teacher.submissions(assignmentId);
+        const row = res.submissions.find((r) => r.student_id === studentId) ?? null;
+        setRoster((prev) =>
+          prev
+            ? prev.map((e) =>
+                e.student_id === studentId
+                  ? {
+                      ...e,
+                      submission: row ?? e.submission,
+                      personal_due_at: res.personal_due_dates[studentId] ?? null,
+                    }
+                  : e,
+              )
+            : prev,
+        );
+        if (row) {
+          const d = await teacher.submissionDetail(row.id);
+          setDetail((cur) => (cur?.submission_id === d.submission_id ? d : cur));
+        }
+      } catch {
+        // The reopen itself landed; a stale row corrects on the next load.
+      }
+    },
+    [assignmentId],
+  );
+
   // Re-run AI grading with the assignment's current rubric. Overrides
   // any manual edits (this is the teacher's explicit ask) and leaves
   // the published snapshot untouched so students keep seeing the old
@@ -2022,7 +2063,21 @@ function HomeworkSectionReview({
               </div>
             )}
             {selectedEntry && !selectedEntry.submission && (
-              <NotSubmittedCard entry={selectedEntry} />
+              <NotSubmittedCard
+                entry={selectedEntry}
+                reopen={
+                  <ReopenControl
+                    assignmentId={assignmentId}
+                    studentId={selectedEntry.student_id}
+                    studentName={selectedEntry.student_name}
+                    submitted={false}
+                    classDueAt={hwDueAt}
+                    personalDueAt={selectedEntry.personal_due_at}
+                    reopenedAt={null}
+                    onChanged={() => void handleReopenChanged(selectedEntry.student_id)}
+                  />
+                }
+              />
             )}
             {selectedEntry?.submission && detailLoading && (
               <DetailSkeleton />
@@ -2079,6 +2134,20 @@ function HomeworkSectionReview({
                   void handleLatePenaltyWaived(selectedEntry.submission!.id, waived)
                 }
                 waivingLate={waivingLateId === selectedEntry.submission.id}
+                reopen={
+                  selectedEntry.submission.is_preview ? null : (
+                    <ReopenControl
+                      assignmentId={assignmentId}
+                      studentId={selectedEntry.student_id}
+                      studentName={selectedEntry.student_name}
+                      submitted
+                      classDueAt={hwDueAt}
+                      personalDueAt={selectedEntry.personal_due_at}
+                      reopenedAt={detail.reopened_at}
+                      onChanged={() => void handleReopenChanged(selectedEntry.student_id)}
+                    />
+                  )
+                }
                 marking={markingReviewedId === selectedEntry.submission.id}
                 savingGrade={savingGradeIds.has(selectedEntry.submission.id)}
                 regrading={regradingSubmissionId === selectedEntry.submission.id}
@@ -2968,11 +3037,14 @@ function ReviewLoadingSkeleton() {
 // path from here — we can't grade missing work.
 // ────────────────────────────────────────────────────────────────────
 
-function NotSubmittedCard({ entry }: { entry: RosterEntry }) {
+function NotSubmittedCard({ entry, reopen }: { entry: RosterEntry; reopen: React.ReactNode }) {
   return (
     <div className="rounded-[--radius-xl] border border-border-light bg-surface p-6 shadow-sm">
       <h2 className="text-lg font-bold text-text-primary">{entry.student_name}</h2>
       <p className="text-xs text-text-muted">{entry.student_email}</p>
+      {/* Reopening is the one thing to do for missing work: give them
+          their own due date (a closed homework takes it again). */}
+      {reopen}
       <div className="mt-5 rounded-[--radius-md] border border-border-light bg-[color:var(--color-surface-alt-2)]/60 px-6 py-10 text-center">
         <p className="text-sm font-bold text-text-primary">Not submitted</p>
         <p className="mt-1 text-xs text-text-muted">
@@ -3229,6 +3301,9 @@ function StudentRow({
           className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${statusLabel.dotClass}`}
         />
         <span className="truncate">{statusLabel.text}</span>
+        {entry.personal_due_at && (
+          <span className="ml-1 shrink-0 font-semibold text-primary">· reopened</span>
+        )}
         {sub?.is_late && (
           <span className="ml-1 shrink-0 font-semibold text-[color:var(--color-error)]">
             · {lateLabel(sub.days_late)}
@@ -3476,6 +3551,7 @@ function SubmissionDetailPanel({
   graphBusy,
   onLatePenaltyWaivedChange,
   waivingLate,
+  reopen,
   marking,
   savingGrade,
   regrading,
@@ -3531,6 +3607,8 @@ function SubmissionDetailPanel({
   /** Waive (true) or restore (false) this turn-in's late penalty. */
   onLatePenaltyWaivedChange: (waived: boolean) => void;
   waivingLate: boolean;
+  /** The reopen control for this student; null on her own rehearsal. */
+  reopen: React.ReactNode;
   marking: boolean;
   savingGrade: boolean;
   regrading: boolean;
@@ -3789,32 +3867,50 @@ function SubmissionDetailPanel({
   // the same one the header strip and pinned rail use — instead of each
   // row growing its own modal.
   const [galleryPage, setGalleryPage] = useState<number | null>(null);
-  // The photos a student's retake replaced, opened from the retake
-  // callout. Fetched on first open (not with the detail, which reloads
-  // often) and kept per submission so reopening is instant.
+  // The photos of an earlier turn-in (a retake's original, or the one a
+  // reopen replaced), opened from its callout. Fetched on first open
+  // (not with the detail, which reloads often) and kept per attempt so
+  // opening it again is instant.
   const [originalPage, setOriginalPage] = useState<number | null>(null);
   const [originals, setOriginals] = useState<
-    { sid: string; files: SubmissionFile[] } | null
+    { key: string; files: SubmissionFile[] } | null
   >(null);
   const [originalsState, setOriginalsState] = useState<
-    { sid: string; status: "loading" | "error" } | null
+    { key: string; status: "loading" | "error" } | null
   >(null);
-  const openOriginals = useCallback(async () => {
+  const openOriginals = useCallback(async (attemptNumber: number) => {
     const sid = detail.submission_id;
-    if (originals?.sid === sid) {
+    const key = `${sid}:${attemptNumber}`;
+    if (originals?.key === key) {
       setOriginalPage(0);
       return;
     }
-    setOriginalsState({ sid, status: "loading" });
+    setOriginalsState({ key, status: "loading" });
     try {
-      const { files } = await teacher.retakeOriginalFiles(sid);
-      setOriginals({ sid, files });
+      const { files } = await teacher.attemptFiles(sid, attemptNumber);
+      setOriginals({ key, files });
       setOriginalsState(null);
       setOriginalPage(0);
     } catch {
-      setOriginalsState({ sid, status: "error" });
+      setOriginalsState({ key, status: "error" });
     }
   }, [detail.submission_id, originals]);
+  const attemptState = useCallback(
+    (n: number) =>
+      originalsState?.key === `${detail.submission_id}:${n}` ? originalsState.status : null,
+    [originalsState, detail.submission_id],
+  );
+  // A retake replaced this turn-in's first photos: the newest attempt.
+  // Every attempt before it came before a reopen — the earlier turn-ins,
+  // and any photos a retake replaced on one of them.
+  const { retakeOriginal, earlierAttempts } = useMemo(() => {
+    const last = detail.attempts.at(-1);
+    const retake = detail.retaken_at && last?.reason === "retake" ? last : null;
+    return {
+      retakeOriginal: retake,
+      earlierAttempts: detail.attempts.filter((a) => a !== retake),
+    };
+  }, [detail.attempts, detail.retaken_at]);
   const onOpenWork = useCallback(() => setGalleryPage(0), []);
   // Live DOM handles to each problem row, indexed by position in
   // detail.problems, so keyboard nav can move real focus.
@@ -4206,6 +4302,7 @@ function SubmissionDetailPanel({
               onWaivedChange={onLatePenaltyWaivedChange}
             />
           )}
+          {reopen}
           {aiGradeError && (
             <p
               role="alert"
@@ -4524,16 +4621,22 @@ function SubmissionDetailPanel({
           the student fixing their own photos, not a problem — but the
           teacher should know the work she's grading isn't the first
           thing that came in. */}
-      {detail.retaken_at && detail.retake_original && (
+      {detail.retaken_at && retakeOriginal && (
         <RetakeCallout
           retakenAt={detail.retaken_at}
-          original={detail.retake_original}
-          onViewOriginal={openOriginals}
-          state={
-            originalsState?.sid === detail.submission_id
-              ? originalsState.status
-              : null
-          }
+          original={retakeOriginal}
+          onViewOriginal={() => void openOriginals(retakeOriginal.number)}
+          state={attemptState(retakeOriginal.number)}
+        />
+      )}
+
+      {/* Earlier turn-ins a reopen replaced — this page grades the new
+          one; what came before, and the grade it had, stay in view. */}
+      {earlierAttempts.length > 0 && (
+        <EarlierTurnInsCallout
+          attempts={earlierAttempts}
+          onView={(n) => void openOriginals(n)}
+          stateFor={attemptState}
         />
       )}
 
@@ -4757,10 +4860,10 @@ function SubmissionDetailPanel({
       />
       <WorkGalleryModal
         files={
-          originals?.sid === detail.submission_id ? originals.files : []
+          originals?.key.startsWith(`${detail.submission_id}:`) ? originals.files : []
         }
         studentName={detail.student_name}
-        note="first photos"
+        note="earlier photos"
         openAt={originalPage}
         onClose={() => setOriginalPage(null)}
       />
@@ -4782,7 +4885,7 @@ function RetakeCallout({
   state,
 }: {
   retakenAt: string;
-  original: NonNullable<TeacherSubmissionDetail["retake_original"]>;
+  original: SubmissionAttempt;
   onViewOriginal: () => void;
   /** Fetching the original photos, or that fetch failed. */
   state: "loading" | "error" | null;
@@ -4806,9 +4909,7 @@ function RetakeCallout({
           </p>
           <p className="mt-1.5 text-xs leading-relaxed text-text-secondary">
             They sent the first reading to you as misread
-            {original.submitted_at
-              ? ` (turned in ${new Date(original.submitted_at).toLocaleString(undefined, RETAKE_TIME)}${original.is_late ? ", late" : ""})`
-              : ""}
+            {` (turned in ${new Date(original.submitted_at).toLocaleString(undefined, RETAKE_TIME)}${original.is_late ? ", late" : ""})`}
             , then replaced the photos on{" "}
             {new Date(retakenAt).toLocaleString(undefined, RETAKE_TIME)}, before
             anything was graded. This page shows the new photos and their
@@ -4844,6 +4945,79 @@ function RetakeCallout({
             )}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * What came before a reopen, oldest first: each earlier turn-in — when it
+ * came in, the grade it had (and whether the student had seen it) — and
+ * any photos a retake replaced, each with its photos one click away. Calm, like the retake callout — the student turning it in
+ * again is what she asked for.
+ */
+function EarlierTurnInsCallout({
+  attempts,
+  onView,
+  stateFor,
+}: {
+  attempts: SubmissionAttempt[];
+  onView: (attemptNumber: number) => void;
+  stateFor: (attemptNumber: number) => "loading" | "error" | null;
+}) {
+  return (
+    <div className="rounded-[--radius-xl] border border-primary/25 bg-primary-bg/50 p-3" role="status">
+      <div className="flex items-start gap-3">
+        <span
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-bold text-white"
+          aria-hidden
+        >
+          ↺
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-text-primary">
+            Turned in again after you reopened it
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-text-secondary">
+            This page shows the new work, read and graded fresh. The earlier{" "}
+            {attempts.length === 1 ? "turn-in is kept as it was" : "turn-ins are kept as they were"}, below.
+          </p>
+          <ul className="mt-2 space-y-1.5">
+            {attempts.map((a) => {
+              const state = stateFor(a.number);
+              return (
+                <li key={a.number} className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs">
+                  <span className="font-semibold text-text-primary">
+                    Turned in {new Date(a.submitted_at).toLocaleString(undefined, RETAKE_TIME)}
+                    {a.is_late ? ", late" : ""}
+                  </span>
+                  <span className="text-text-secondary">
+                    {a.reason === "retake"
+                      ? "· photos the student replaced with a retake"
+                      : a.final_score === null
+                      ? "· not graded"
+                      : `· graded ${formatPercent(a.final_score)}%${a.grade_published ? ", shown to the student" : ", not published"}`}
+                  </span>
+                  {a.file_count > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => onView(a.number)}
+                      disabled={state === "loading"}
+                      className="rounded-[--radius-sm] font-semibold text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-60"
+                    >
+                      {state === "loading" ? "Opening…" : `View photos (${a.file_count})`}
+                    </button>
+                  )}
+                  {state === "error" && (
+                    <span role="alert" className="text-[11px] text-error">
+                      Couldn&apos;t load them. Try again.
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       </div>
     </div>
   );

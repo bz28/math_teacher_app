@@ -13,8 +13,11 @@
   this policy or moves the due date earlier after it came in.
 
 The due date that counts is the student's *effective* one (`effective_due_at`
-and friends): the class due date. A homework with no due date is never late
-and never closes.
+and friends): the later of the class due date and their personal due date
+when the teacher reopened the homework for them (`StudentDueDate`). A
+personal date is only ever an extension — work turned in before it is on
+time, and a turn-in already in is re-priced against it. A homework with no
+class due date is never late and never closes, personal date or not.
 
 The penalty is applied in exactly one place, `set_final_score`, which every
 writer of `SubmissionGrade.final_score` goes through. `final_score` is the
@@ -39,7 +42,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only
 
-from api.models.assignment import Assignment, Submission, SubmissionGrade
+from api.models.assignment import Assignment, StudentDueDate, Submission, SubmissionGrade
 
 LATE_POLICY_NONE = "none"
 LATE_POLICY_PENALTY_PER_DAY = "penalty_per_day"
@@ -55,6 +58,16 @@ _DAY = timedelta(hours=24)
 # ── Effective due date ──
 
 
+def _extended(class_due: datetime | None, personal: datetime | None) -> datetime | None:
+    """A personal date only ever extends: the later of it and the class
+    date. With no class date nothing is due, so nothing is late — a
+    personal date can't give one student a deadline the class doesn't
+    have, and a class date moved past it wins."""
+    if class_due is None or personal is None:
+        return class_due
+    return max(class_due, personal)
+
+
 async def effective_due_at(
     db: AsyncSession, assignment: Assignment, student_id: uuid.UUID,
 ) -> datetime | None:
@@ -66,7 +79,17 @@ async def effective_due_dates(
     db: AsyncSession, assignment: Assignment, student_ids: Iterable[uuid.UUID],
 ) -> dict[uuid.UUID, datetime | None]:
     """`effective_due_at` for several students on one homework."""
-    return dict.fromkeys(student_ids, assignment.due_at)
+    ids = set(student_ids)
+    due: dict[uuid.UUID, datetime | None] = dict.fromkeys(ids, assignment.due_at)
+    if ids:
+        rows = await db.execute(
+            select(StudentDueDate.student_id, StudentDueDate.due_at).where(
+                StudentDueDate.assignment_id == assignment.id,
+                StudentDueDate.student_id.in_(ids),
+            )
+        )
+        due.update({sid: _extended(assignment.due_at, at) for sid, at in rows.all()})
+    return due
 
 
 async def student_due_dates(
@@ -74,7 +97,17 @@ async def student_due_dates(
 ) -> dict[uuid.UUID, datetime | None]:
     """`effective_due_at` for one student across several homeworks, keyed
     by assignment id."""
-    return {a.id: a.due_at for a in assignments}
+    by_id = {a.id: a for a in assignments}
+    due: dict[uuid.UUID, datetime | None] = {aid: a.due_at for aid, a in by_id.items()}
+    if due:
+        rows = await db.execute(
+            select(StudentDueDate.assignment_id, StudentDueDate.due_at).where(
+                StudentDueDate.student_id == student_id,
+                StudentDueDate.assignment_id.in_(list(due)),
+            )
+        )
+        due.update({aid: _extended(by_id[aid].due_at, at) for aid, at in rows.all()})
+    return due
 
 
 # ── The rule ──

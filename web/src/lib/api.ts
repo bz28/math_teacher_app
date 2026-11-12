@@ -1734,8 +1734,28 @@ export const teacher = {
       body: JSON.stringify({ section_ids: sectionIds }),
     });
   },
+  /** The homework's turn-ins, plus every personal due date on it
+   *  (student id → ISO date) so the roster can show one on a student who
+   *  hasn't turned anything in. */
   submissions(assignmentId: string) {
-    return apiFetch<{ submissions: TeacherSubmissionRow[] }>(`/teacher/assignments/${assignmentId}/submissions`);
+    return apiFetch<{ submissions: TeacherSubmissionRow[]; personal_due_dates: Record<string, string> }>(
+      `/teacher/assignments/${assignmentId}/submissions`,
+    );
+  },
+  /** Reopen this homework for one student until `dueAt` (ISO, with a
+   *  time zone): their personal due date. If they'd turned it in, they
+   *  may turn it in once more; their grade stands until they do. */
+  reopenForStudent(assignmentId: string, studentId: string, dueAt: string) {
+    return apiFetch<StudentReopen>(`/teacher/assignments/${assignmentId}/students/${studentId}/reopen`, {
+      method: "POST",
+      body: JSON.stringify({ due_at: dueAt }),
+    });
+  },
+  /** Undo a reopen: the class due date applies to them again. */
+  cancelReopenForStudent(assignmentId: string, studentId: string) {
+    return apiFetch<StudentReopen>(`/teacher/assignments/${assignmentId}/students/${studentId}/reopen`, {
+      method: "DELETE",
+    });
   },
   /** Inbox feed for the Submissions tab — one row per (published
    *  HW × section) pair with aggregate counts. See backend comment
@@ -2160,10 +2180,10 @@ export const teacher = {
   submissionDetail(submissionId: string) {
     return apiFetch<TeacherSubmissionDetail>(`/teacher/submissions/${submissionId}`);
   },
-  /** The photos a student's retake replaced, for "View original photos". */
-  retakeOriginalFiles(submissionId: string) {
+  /** The photos of an earlier turn-in, for "View original photos". */
+  attemptFiles(submissionId: string, attemptNumber: number) {
     return apiFetch<{ files: SubmissionFile[] }>(
-      `/teacher/submissions/${submissionId}/retake-original-files`,
+      `/teacher/submissions/${submissionId}/attempts/${attemptNumber}/files`,
     );
   },
   integrityDetail(submissionId: string) {
@@ -2224,6 +2244,33 @@ export interface IntegrityOverview {
   incomplete_reason: IntegrityIncompleteReason | "unreadable" | null;
 }
 
+/** An earlier turn-in of a submission (`TeacherSubmissionDetail.attempts`). */
+export interface SubmissionAttempt {
+  number: number;
+  /** "retake": the student replaced flagged photos. "reopen": they
+   *  turned it in again after the teacher reopened it. */
+  reason: "retake" | "reopen";
+  /** Pages in it. The photos load on demand — `teacher.attemptFiles`. */
+  file_count: number;
+  submitted_at: string;
+  is_late: boolean;
+  extraction_flagged_at: string | null;
+  extraction_flag_note: string | null;
+  replaced_at: string;
+  /** The grade it had when it was replaced (reopen only), after any late
+   *  penalty, and whether the student had been shown it. */
+  final_score: number | null;
+  grade_published: boolean;
+}
+
+export interface StudentReopen {
+  student_id: string;
+  /** The personal due date in force; null once removed. */
+  due_at: string | null;
+  /** Set when they'd turned it in: one more turn-in is owed. */
+  reopened_at: string | null;
+}
+
 export interface TeacherSubmissionRow {
   id: string;
   section_id: string;
@@ -2244,6 +2291,9 @@ export interface TeacherSubmissionRow {
   late_penalty_percent: number;
   late_penalty: number;
   late_penalty_waived: boolean;
+  /** Reopened for this student, who hasn't turned it in again yet;
+   *  `due_at` is their personal date. */
+  reopened_at: string | null;
   ai_score: number | null;
   ai_breakdown: unknown;
   teacher_score: number | null;
@@ -2447,19 +2497,15 @@ export interface TeacherSubmissionDetail {
    *  `edited`). On a flagged reading, these are the fixes they made
    *  before sending it to the teacher. */
   extraction_edit_count: number;
-  /** The student flagged the first reading and retook their photos.
-   *  Everything else here is the NEW turn-in; `retake_original` is the
-   *  one it replaced. Null when there was no retake. */
+  /** The student flagged this turn-in's first reading and retook their
+   *  photos. Null when there was no retake of this turn-in. */
   retaken_at: string | null;
-  retake_original: {
-    /** Pages in the replaced turn-in. The photos themselves load on
-     *  demand — `teacher.retakeOriginalFiles`. */
-    file_count: number;
-    submitted_at: string | null;
-    is_late: boolean;
-    extraction_flagged_at: string | null;
-    extraction_flag_note: string | null;
-  } | null;
+  /** Earlier turn-ins a newer one replaced, oldest first. Everything
+   *  else here is the live turn-in. */
+  attempts: SubmissionAttempt[];
+  /** Reopened for the student, who hasn't turned it in again yet. The
+   *  grade here stands until they do; `due_at` is their date. */
+  reopened_at: string | null;
   breakdown: GradeBreakdownEntry[] | null;
   ai_breakdown: AiGradeEntry[] | null;
   final_score: number | null;
@@ -2673,6 +2719,9 @@ export interface StudentHomeworkSummary {
   status: string;
   /** Not turned in, and the late policy closed it at the due date. */
   closed: boolean;
+  /** Turned in, then reopened for this student: they may turn it in
+   *  once more, by `due_at`. */
+  can_resubmit: boolean;
   /** What's left on turned-in work: confirm the AI's reading, or finish
    *  the understanding check. Null when there's nothing to do. A nudge
    *  only — grading never waits on it. */
@@ -2771,6 +2820,9 @@ export interface StudentHomeworkDetail {
   /** Not turned in, and the late policy closed it at the due date: no
    *  upload panel, and a turn-in would be refused. */
   closed: boolean;
+  /** Turned in, and the teacher reopened it for this student: they may
+   *  turn it in once more, by `due_at` (their personal date). */
+  can_resubmit: boolean;
   course_id: string;
   course_name: string;
   /** Course subject ("math" | "physics" | "chemistry"). Seeds the
@@ -2888,6 +2940,9 @@ export interface DashboardAssignment {
    *  the understanding check. Null when there's nothing to do. A nudge
    *  only — grading never waits on it. */
   next_step: StudentNextStep | null;
+  /** Turned in, then reopened for this student: listed as to do again
+   *  (status "not_started"), since they may turn it in once more. */
+  can_resubmit?: boolean;
 }
 
 export interface DashboardGrade {

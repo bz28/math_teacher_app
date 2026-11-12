@@ -67,11 +67,20 @@ from api.core.late_policy import (
     student_due_dates,
 )
 from api.core.part_labels import is_multi_part
+from api.core.submission_attempts import archive_attempt, clear_grading
 from api.core.tutor import completed_chat, step_chat
 from api.database import get_db, get_session_factory
 from api.middleware.auth import get_current_user_full
 from api.middleware.rate_limit import limiter
-from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
+from api.models.assignment import (
+    SUBMISSION_ATTEMPT_REOPEN,
+    SUBMISSION_ATTEMPT_RETAKE,
+    Assignment,
+    AssignmentSection,
+    StudentDueDate,
+    Submission,
+    SubmissionGrade,
+)
 from api.models.course import Course, CourseTeacher
 from api.models.integrity_check import IntegrityCheckSubmission
 from api.models.practice_activity import (
@@ -151,6 +160,7 @@ async def _run_extraction_background(submission_id: uuid.UUID) -> None:
             )).scalar_one_or_none()
             if not sub:
                 return
+            read_from = sub.submitted_at
             assignment = (await db.execute(
                 select(Assignment).where(Assignment.id == sub.assignment_id)
             )).scalar_one_or_none()
@@ -172,7 +182,14 @@ async def _run_extraction_background(submission_id: uuid.UUID) -> None:
                 )
                 return
 
-            sub.extraction = extraction
+            # Only onto the photos it read: a retake or a turn-in after a
+            # reopen can replace them while the reader runs (each restamps
+            # submitted_at), and a stale reading must not land on new work.
+            await db.execute(
+                update(Submission)
+                .where(Submission.id == submission_id, Submission.submitted_at == read_from)
+                .values(extraction=extraction)
+            )
             await db.commit()
     except Exception:
         logger.exception(
@@ -390,6 +407,9 @@ class StudentHomeworkSummary(BaseModel):
     # Not turned in, and the late policy closed it at the due date: it
     # can no longer be turned in. Shown as "Closed", never "Overdue".
     closed: bool
+    # Turned in, and the teacher reopened it for this student: they may
+    # turn it in once more, by `due_at` (StudentHomeworkDetail.can_resubmit).
+    can_resubmit: bool = False
     # What's left for the student on turned-in work: "confirm_reading"
     # (the AI's reading is waiting for their OK) or "finish_check" (the
     # understanding check is open). Null when there's nothing to do. A
@@ -502,6 +522,11 @@ class StudentHomeworkDetail(BaseModel):
     # Not turned in, and the policy closed it at the due date: the page
     # shows that instead of the upload panel, and submit would be refused.
     closed: bool
+    # Turned in, and the teacher reopened it for this student: they may
+    # turn it in once more, by `due_at` (their personal date). The page
+    # shows the upload panel above their turned-in work. False once that
+    # date has passed on a homework that closes at it.
+    can_resubmit: bool = False
     course_id: str
     course_name: str
     # Course subject ("math" | "physics" | "chemistry"). Threaded to the
@@ -698,6 +723,10 @@ class DashboardAssignment(BaseModel):
     # understanding check is open). Null when there's nothing to do. A
     # nudge only — nothing waits on it. See student_next_step.
     next_step: NextStep | None = None
+    # Turned in, then reopened for this student: in Due or Overdue (with
+    # status "not_started") because they may turn it in once more, by
+    # `due_at` (StudentHomeworkDetail.can_resubmit).
+    can_resubmit: bool = False
 
 
 class DashboardGrade(BaseModel):
@@ -1302,24 +1331,27 @@ async def list_homework(
 
     # Single query to find which of these the student already submitted.
     submission_by_aid: dict[uuid.UUID, uuid.UUID] = {}
+    reopened_aids: set[uuid.UUID] = set()
     if rows:
         submitted_rows = (await db.execute(
-            select(Submission.assignment_id, Submission.id).where(
+            select(Submission.assignment_id, Submission.id, Submission.reopened_at).where(
                 Submission.student_id == user.id,
                 Submission.assignment_id.in_([a.id for a in rows]),
             )
         )).all()
-        submission_by_aid = {aid: sid for aid, sid in submitted_rows}
+        submission_by_aid = {aid: sid for aid, sid, _ in submitted_rows}
+        reopened_aids = {aid for aid, _, at in submitted_rows if at is not None}
     next_steps = await _next_steps(db, list(submission_by_aid.values()))
     due = await student_due_dates(db, user.id, rows)
     now = datetime.now(UTC)
     # A teacher's preview is never closed: she checks the homework as a
     # student would, whatever its policy and due date.
-    closed_ids = {
+    shut_ids = {
         a.id for a in rows
-        if not user.is_preview and a.id not in submission_by_aid
-        and is_closed(a.late_policy, due[a.id], now)
+        if not user.is_preview and is_closed(a.late_policy, due[a.id], now)
     }
+    closed_ids = {aid for aid in shut_ids if aid not in submission_by_aid}
+    resubmit_ids = reopened_aids - shut_ids
     # Closed and never turned in sorts last: it's missed, not to do, so it
     # stays in view without sitting among the work still open. `sorted` is
     # stable, so each group keeps the due-date order.
@@ -1334,6 +1366,7 @@ async def list_homework(
             problem_count=len(problem_ids_in_content(a.content)),
             status="submitted" if a.id in submission_by_aid else "not_started",
             closed=a.id in closed_ids,
+            can_resubmit=a.id in resubmit_ids,
             next_step=(
                 next_steps.get(submission_by_aid[a.id])
                 if a.id in submission_by_aid else None
@@ -1521,17 +1554,19 @@ async def get_dashboard(
             Submission.id,
             Submission.assignment_id,
             Submission.submitted_at,
+            Submission.reopened_at,
         ).where(
             Submission.student_id == user.id,
             Submission.assignment_id.in_(assignments_by_id.keys()),
         )
     )).all()
     submission_by_aid: dict[uuid.UUID, uuid.UUID] = {
-        sub_aid: sub_id for sub_id, sub_aid, _ in submitted_rows
+        sub_aid: sub_id for sub_id, sub_aid, _, _ in submitted_rows
     }
     submitted_at_by_aid: dict[uuid.UUID, datetime] = {
-        sub_aid: sub_at for _, sub_aid, sub_at in submitted_rows
+        sub_aid: sub_at for _, sub_aid, sub_at, _ in submitted_rows
     }
+    reopened_aids = {sub_aid for _, sub_aid, _, at in submitted_rows if at is not None}
     next_steps = await _next_steps(db, list(submission_by_aid.values()))
 
     # Published grades keyed by submission_id for the dedupe below.
@@ -1567,7 +1602,13 @@ async def get_dashboard(
         meta = section_meta[sid]
         due_at = due_by_aid[aid]
         submission_id = submission_by_aid.get(aid)
-        is_submitted = submission_id is not None
+        shut = not user.is_preview and is_closed(a.late_policy, due_at, now)
+        # Reopened for this student and still open to them: it's to do
+        # again — Due or Overdue against their personal date — whatever
+        # its grade. That grade stands (under Recently graded) unless
+        # they turn it in again.
+        can_resubmit = aid in reopened_aids and not shut
+        is_submitted = submission_id is not None and not can_resubmit
         is_published = is_submitted and submission_id in published_by_sid
 
         # A published grade removes the HW from every active bucket —
@@ -1596,7 +1637,7 @@ async def get_dashboard(
         # policy shut it at the due date. HWs with no due date go into
         # Due (sorted last, nullslast) so students can still see them;
         # they're never "overdue" without a deadline, and never close.
-        if not user.is_preview and is_closed(a.late_policy, due_at, now):
+        if shut:
             closed.append(DashboardAssignment(
                 assignment_id=str(a.id),
                 title=a.title,
@@ -1619,8 +1660,11 @@ async def get_dashboard(
                 section_name=meta["section_name"],
                 status="not_started",
                 is_late=True,
+                can_resubmit=can_resubmit,
             ))
-        elif due_at is None or due_at <= week_from_now:
+        # Reopened work shows however far off its date is: it was in
+        # their list as turned in, and must not drop out of view.
+        elif due_at is None or due_at <= week_from_now or can_resubmit:
             due_this_week.append(DashboardAssignment(
                 assignment_id=str(a.id),
                 title=a.title,
@@ -1631,6 +1675,7 @@ async def get_dashboard(
                 section_name=meta["section_name"],
                 status="not_started",
                 is_late=False,
+                can_resubmit=can_resubmit,
             ))
 
     # Sort: Due soonest first (null due_at last); Overdue most-overdue
@@ -1836,7 +1881,7 @@ async def homework_detail(
     # render branch (submit form vs submitted read-only view), and
     # feeds the assignment-timeline's Submitted / Graded stages.
     sub = (await db.execute(
-        select(Submission.id, Submission.submitted_at).where(
+        select(Submission.id, Submission.submitted_at, Submission.reopened_at).where(
             Submission.assignment_id == assignment_id,
             Submission.student_id == user.id,
         )
@@ -1901,6 +1946,7 @@ async def homework_detail(
                     ))
 
     due_at = await effective_due_at(db, assignment, user.id)
+    closed_now = not user.is_preview and is_closed(assignment.late_policy, due_at, datetime.now(UTC))
     return StudentHomeworkDetail(
         assignment_id=str(assignment.id),
         title=assignment.title,
@@ -1908,10 +1954,8 @@ async def homework_detail(
         type=assignment.type,
         due_at=due_at,
         late_policy=assignment.late_policy,
-        closed=(
-            sub is None and not user.is_preview
-            and is_closed(assignment.late_policy, due_at, datetime.now(UTC))
-        ),
+        closed=sub is None and closed_now,
+        can_resubmit=sub is not None and sub.reopened_at is not None and not closed_now,
         course_id=str(course.id),
         course_name=course.name,
         course_subject=course.subject,
@@ -2261,6 +2305,109 @@ async def _validated_upload_files(body: SubmitHomeworkRequest) -> list[dict[str,
     return validated_files
 
 
+async def _resubmit_reopened(
+    db: AsyncSession,
+    user: User,
+    assignment: Assignment,
+    submission_id: uuid.UUID,
+    body: SubmitHomeworkRequest,
+    now: datetime,
+    due_at: datetime | None,
+) -> SubmitHomeworkResponse:
+    """Turn in a homework the teacher reopened for this student.
+
+    The turn-in it replaces is kept whole — photos, reading, edits, flag,
+    and the grade and understanding check it had (`archive_attempt`) —
+    and then cleared off the live submission, so the new photos walk the
+    normal path from nothing: reading, confirm, check, grade. The teacher
+    approves the new grade before the student sees it; until then the
+    student's grade for this homework is not published.
+
+    Lateness is the new turn-in's, against the student's due date — the
+    personal one the reopen set.
+
+    One turn-in per reopen: it clears `reopened_at`, read under a row lock
+    that requires it, so a double tap waits and then gets the one-shot 409.
+    Refused
+    (409) while an AI grade of the old turn-in is mid-run — it would land
+    on the new photos.
+    """
+    from api.models.grading_job import STATUS_RUNNING, GradingJob
+
+    validated_files = await _validated_upload_files(body)
+    sub = (await db.execute(
+        select(Submission)
+        .where(Submission.id == submission_id, Submission.reopened_at.is_not(None))
+        .with_for_update().execution_options(populate_existing=True)
+    )).scalar_one_or_none()
+    if sub is None:
+        raise HTTPException(status_code=409, detail="Already submitted")
+    # Locked too: a drain claims a job by updating this row, so its claim
+    # waits on this transaction and then finds the job gone — it can't
+    # start grading the old reading in the gap before `clear_grading`.
+    job_status = (await db.execute(
+        select(GradingJob.status)
+        .where(GradingJob.submission_id == submission_id)
+        .with_for_update()
+    )).scalar_one_or_none()
+    if job_status == STATUS_RUNNING:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Your last turn-in is being graded right now — try again in a minute",
+        )
+    reopened_by = (await db.execute(
+        select(StudentDueDate.set_by).where(
+            StudentDueDate.assignment_id == assignment.id,
+            StudentDueDate.student_id == user.id,
+        )
+    )).scalar_one_or_none()
+    previous_file_count = len(sub.files or [])
+    await archive_attempt(
+        db, sub, reason=SUBMISSION_ATTEMPT_REOPEN, replaced_at=now,
+        reopened_by=reopened_by, with_grade=True,
+    )
+    await clear_grading(db, submission_id)
+    is_late = days_late(now, due_at) > 0
+    sub.files = validated_files
+    sub.final_answers = None
+    sub.extraction = None
+    sub.extraction_edits = None
+    sub.extraction_edited_at = None
+    sub.extraction_confirmed_at = None
+    sub.extraction_flagged_at = None
+    sub.extraction_flag_note = None
+    sub.retaken_at = None
+    sub.reopened_at = None
+    sub.status = "submitted"
+    sub.submitted_at = now
+    sub.is_late = is_late
+    await db.commit()
+
+    # Spawned and logged exactly as submit does it (see submit_homework).
+    if assignment.integrity_check_enabled or assignment.ai_grading_enabled:
+        _spawn_background_task(_run_extraction_background(submission_id))
+    try:
+        metadata: dict[str, Any] = {
+            "assignment_id": str(assignment.id),
+            "file_count": len(validated_files),
+            "previous_file_count": previous_file_count,
+            "is_late": is_late,
+        }
+        orientations = _orientation_report(body.orientations, len(validated_files))
+        if orientations is not None:
+            metadata["page_orientations"] = orientations
+        await record_student_activity(
+            db, user, "submission.resubmit", "submission", submission_id, metadata,
+            school_id=await _school_id_for(db, course_id=assignment.course_id),
+        )
+        await db.commit()
+    except Exception:
+        logger.exception("submission.resubmit activity write failed")
+
+    return SubmitHomeworkResponse(submission_id=str(submission_id), submitted_at=now, is_late=is_late)
+
+
 @router.post("/homework/{assignment_id}/submit")
 async def submit_homework(
     assignment_id: uuid.UUID,
@@ -2268,11 +2415,13 @@ async def submit_homework(
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
 ) -> SubmitHomeworkResponse:
-    """Insert a submission for this student/HW. One-shot — resubmission
-    is not allowed in v1; a second call returns 409. A late turn-in is
+    """Insert a submission for this student/HW. One-shot — a second call
+    returns 409 — unless the teacher reopened the homework for this
+    student after they turned it in (`Submission.reopened_at`): then this
+    turns it in once more (`_resubmit_reopened`). A late turn-in is
     accepted and marked late, unless the homework's late policy closes it
-    at the due date (`no_credit`), which refuses it with a 403 — except for
-    a teacher's preview, which always goes through.
+    at the student's due date (`no_credit`), which refuses it with a 403 —
+    except for a teacher's preview, which always goes through.
     """
     assignment = await _load_assignment_for_student(db, assignment_id, user)
     # One instant for "when was this turned in": the closed check, is_late
@@ -2281,19 +2430,23 @@ async def submit_homework(
     due_at = await effective_due_at(db, assignment, user.id)
 
     # Already submitted? One-shot enforcement.
-    existing = (await db.execute(
-        select(Submission.id).where(
+    existing_row = (await db.execute(
+        select(Submission.id, Submission.reopened_at).where(
             Submission.assignment_id == assignment_id,
             Submission.student_id == user.id,
         )
         .limit(1)
-    )).scalar_one_or_none()
-    if existing is not None and not user.is_preview:
+    )).one_or_none()
+    existing = existing_row.id if existing_row else None
+    reopened = existing_row is not None and existing_row.reopened_at is not None
+    if existing is not None and not user.is_preview and not reopened:
         raise HTTPException(status_code=409, detail="Already submitted")
     # After the one-shot check, so work already in reads as "already
     # submitted", not "closed"; before the preview's rehearsal is cleared.
     if not user.is_preview and is_closed(assignment.late_policy, due_at, now):
         raise HTTPException(status_code=403, detail=HOMEWORK_CLOSED_DETAIL)
+    if existing is not None and reopened and not user.is_preview:
+        return await _resubmit_reopened(db, user, assignment, existing, body, now, due_at)
     if existing is not None:
         # A teacher's preview is a rehearsal, not a turn-in. One-shot
         # exists so a student can't resubmit after seeing feedback —
@@ -2675,8 +2828,9 @@ async def _retake_block(db: AsyncSession, sub: Submission) -> str | None:
 
     - flagged, and not since confirmed — the reading was rejected, so
       neither the understanding check nor AI grading ever started;
-    - not already retaken — once, so the original stays the one kept
-      (`retake_original`) and a student can't cycle through photos;
+    - not already retaken on this turn-in — once, so a student can't
+      cycle through photos (the original is kept as a `SubmissionAttempt`;
+      a turn-in after a reopen is a new turn-in, with its own retake);
     - no grade data of any kind (`has_any_grade`) — not an AI grade, not
       a teacher's partial hand grade, nothing published. Once the
       teacher starts grading from the photos, those are the photos;
@@ -2708,10 +2862,6 @@ async def _retake_block(db: AsyncSession, sub: Submission) -> str | None:
     return None
 
 
-def _iso(value: datetime | None) -> str | None:
-    return value.isoformat() if value else None
-
-
 @router.post("/submissions/{submission_id}/retake")
 async def retake_submission(
     submission_id: uuid.UUID,
@@ -2730,12 +2880,13 @@ async def retake_submission(
     the new reading, confirms or flags it.
 
     Nothing is destroyed: the turn-in it replaces — files, reading, edits,
-    flag and note, original submitted_at and is_late — is kept on
-    `retake_original` and shown to the teacher.
+    flag and note, original submitted_at and is_late — is kept as a
+    `SubmissionAttempt` and shown to the teacher.
 
     Lateness follows submit's rule — work is late when it was turned in
-    after the due date — and a retake can't launder it: the new photos
-    are late if they arrive past due, and a late original stays late.
+    after the student's due date — measured on the new photos, which
+    always arrive after the ones they replace: a retake can't launder
+    lateness, only add it.
 
     Rejects: 404 / 403 (not found / not yours, or the homework no longer
     takes turn-ins), 409 when a retake isn't allowed (with why), and
@@ -2761,18 +2912,16 @@ async def retake_submission(
     # Measured against the student's effective due date, like submit
     # and the late policy (late_policy.effective_due_at).
     due_at = await effective_due_at(db, assignment, user.id)
-    is_late = sub.is_late or days_late(now, due_at) > 0
-    original = {
-        "files": sub.files,
-        "extraction": sub.extraction,
-        "extraction_edits": sub.extraction_edits,
-        "extraction_edited_at": _iso(sub.extraction_edited_at),
-        "extraction_flagged_at": _iso(sub.extraction_flagged_at),
-        "extraction_flag_note": sub.extraction_flag_note,
-        "submitted_at": _iso(sub.submitted_at),
-        "is_late": sub.is_late,
-    }
+    is_late = days_late(now, due_at) > 0
+    # Locked and re-read now that the photos are validated (that can take
+    # seconds), so the attempt kept is the turn-in being replaced and a
+    # double tap waits here instead of numbering a second copy of it.
+    sub = (await db.execute(
+        select(Submission).where(Submission.id == submission_id)
+        .with_for_update().execution_options(populate_existing=True)
+    )).scalar_one()
     previous_file_count = len(sub.files or [])
+    await archive_attempt(db, sub, reason=SUBMISSION_ATTEMPT_RETAKE, replaced_at=now)
     # Conditional on every rule `_retake_block` approved, re-checked in
     # the same statement — validating the photos above can take seconds.
     # So a double tap, a confirm racing in from another tab, a teacher's
@@ -2805,7 +2954,6 @@ async def retake_submission(
             submitted_at=now,
             is_late=is_late,
             retaken_at=now,
-            retake_original=original,
         )
     )
     if result.rowcount == 0:  # type: ignore[attr-defined]

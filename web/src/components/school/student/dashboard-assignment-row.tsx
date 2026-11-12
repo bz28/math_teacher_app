@@ -35,6 +35,12 @@ export function DashboardAssignmentRow({
         <div className="truncate text-xs text-text-muted">
           {assignment.course_name} · {assignment.section_name}
         </div>
+        {/* Already turned in once: say why it's back in the list. */}
+        {assignment.can_resubmit && (
+          <div className="mt-0.5 truncate text-xs font-semibold text-primary">
+            Reopened by your teacher · turn it in again
+          </div>
+        )}
         {/* On phones the chip would squeeze the title to a few letters,
             so the step sits under it instead. */}
         {assignment.next_step && (

@@ -301,6 +301,91 @@ async def _drive_retake(
     return None
 
 
+async def _reopen_resubmit_flow(
+    browser: HarnessBrowser, web_base: str, api_base: str, seed: Seed,
+) -> FlowResult:
+    """Teacher reopens a turned-in homework for one student, who turns it
+    in again. The reopen is the API call the review page makes; the
+    student half is the browser, because the bugs worth catching are
+    routing ones (the page still showing the old turn-in instead of the
+    upload panel). The end state comes from the API: the old turn-in kept
+    as attempt 1, the reopen used up, and a third turn-in refused."""
+    import shutil
+    import tempfile
+    from datetime import UTC, datetime, timedelta
+    from pathlib import Path
+
+    name, title = "reopen_resubmit", "Teacher reopens a homework; the student turns it in again"
+    issues: list[str] = []
+    assignment_id, token, refresh = await seed_confirmable_submission(
+        seed, page_b64=_PAGE_PNG_B64, integrity_check_enabled=False,
+    )
+    base = api_base.rstrip("/")
+    teacher = _auth(seed.teacher_token)
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_S) as client:
+        sub_url = f"{base}/school/student/homework/{assignment_id}/submission"
+        sid = (await client.get(sub_url, headers=_auth(token))).json()["submission_id"]
+        student_id = (await client.get(f"{base}/teacher/submissions/{sid}", headers=teacher)).json()["student_id"]
+        reopened = await client.post(
+            f"{base}/teacher/assignments/{assignment_id}/students/{student_id}/reopen",
+            json={"due_at": (datetime.now(UTC) + timedelta(days=2)).isoformat()}, headers=teacher,
+        )
+        if reopened.status_code != 200 or not reopened.json().get("reopened_at"):
+            issues.append(f"reopening for the student returned {reopened.status_code}: {reopened.text[:200]}")
+            return FlowResult(name, title, False, issues)
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix="harness_reopen_"))
+    page_file = tmp_dir / "page.png"
+    page_file.write_bytes(base64.b64decode(_PAGE_PNG_B64))
+    try:
+        issue = await _drive_resubmit(browser, web_base, seed.course_id, assignment_id,
+                                      token, refresh, str(page_file))
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+    if issue:
+        return FlowResult(name, title, False, [issue])
+
+    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_S) as client:
+        detail = (await client.get(f"{base}/teacher/submissions/{sid}", headers=teacher)).json()
+        again = await client.post(
+            f"{base}/school/student/homework/{assignment_id}/submit",
+            json={"files": [_PAGE_PNG_B64]}, headers=_auth(token),
+        )
+    attempts = detail.get("attempts") or []
+    if [a.get("reason") for a in attempts] != ["reopen"]:
+        issues.append(f"after turning it in again the earlier turn-in wasn't kept as one attempt: {attempts}")
+    if detail.get("reopened_at") is not None:
+        issues.append("the reopen was still open after the student turned it in again")
+    if again.status_code != 409:
+        issues.append(f"a further turn-in returned {again.status_code}, expected 409 — one per reopen")
+    return FlowResult(name, title, not issues, issues)
+
+
+async def _drive_resubmit(
+    browser: HarnessBrowser, web_base: str, course_id: str, assignment_id: str,
+    token: str, refresh: str, page_file: str,
+) -> str | None:
+    """The browser half of `_reopen_resubmit_flow`: the first broken step, or None."""
+    async with browser.authed_page(token, refresh) as page:
+        await page.goto(
+            f"{web_base.rstrip('/')}/school/student/courses/{course_id}"
+            f"/homework/{assignment_id}",
+            wait_until="domcontentloaded", timeout=_TIMEOUT_MS,
+        )
+        try:
+            await page.get_by_role("heading", name="Turn it in again").wait_for(timeout=_TIMEOUT_MS)
+        except PlaywrightTimeoutError:
+            return "a reopened homework never showed the 'Turn it in again' panel"
+        try:
+            await page.locator("input[type=file]").first.set_input_files(page_file)
+            await page.get_by_role("button", name="Review & turn in").click(timeout=_TIMEOUT_MS)
+            await page.get_by_role("button", name="Turn it in", exact=True).click(timeout=_TIMEOUT_MS)
+            await page.get_by_role("heading", name="Turn it in again").wait_for(state="detached", timeout=_TIMEOUT_MS)
+        except PlaywrightTimeoutError:
+            return "uploading a page and pressing 'Turn it in' never left the reopened panel"
+    return None
+
+
 # ── API-layer journeys (see module docstring for why these aren't browser
 # flows). Each hits the same endpoints the web app calls, with seeded tokens,
 # and asserts on a deterministic response. A wrong status/body is a real
@@ -504,7 +589,7 @@ async def _workshop_steps_flow(
 # multi-page entry — a real build + a per-scan cost decision, not a quick add.)
 _FLOWS = (
     _login_flow, _logout_flow, _student_insights_flow, _confirm_reading_flow,
-    _retake_photos_flow,
+    _retake_photos_flow, _reopen_resubmit_flow,
     _join_class_flow, _submit_homework_flow, _grade_publish_flow,
     _workshop_steps_flow,
 )

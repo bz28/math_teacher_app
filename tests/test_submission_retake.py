@@ -20,7 +20,7 @@ from PIL import Image
 from sqlalchemy import select, text
 
 from api.database import get_session_factory
-from api.models.assignment import Submission, SubmissionGrade
+from api.models.assignment import Submission, SubmissionAttempt, SubmissionGrade
 from api.models.integrity_check import IntegrityCheckSubmission
 from api.routes.school_student_practice import drain_integrity_background_tasks
 from tests.conftest import PAGE_PNG
@@ -73,14 +73,28 @@ async def _retake(
 
 
 async def _row(sid: str) -> Submission:
+    async with get_session_factory()() as s:
+        return (await s.execute(
+            select(Submission).where(Submission.id == uuid.UUID(sid))
+        )).scalar_one()
+
+
+async def _attempts(sid: str) -> list[SubmissionAttempt]:
+    """The turn-ins kept for this submission, oldest first, pages and all."""
     from sqlalchemy.orm import undefer
 
     async with get_session_factory()() as s:
-        return (await s.execute(
-            select(Submission)
-            .options(undefer(Submission.retake_original))
-            .where(Submission.id == uuid.UUID(sid))
-        )).scalar_one()
+        return list((await s.execute(
+            select(SubmissionAttempt)
+            .options(
+                undefer(SubmissionAttempt.files),
+                undefer(SubmissionAttempt.extraction),
+                undefer(SubmissionAttempt.extraction_edits),
+                undefer(SubmissionAttempt.integrity),
+            )
+            .where(SubmissionAttempt.submission_id == uuid.UUID(sid))
+            .order_by(SubmissionAttempt.number)
+        )).scalars().all())
 
 
 async def _can_retake(client: AsyncClient, world: dict[str, Any]) -> bool:
@@ -120,14 +134,20 @@ async def test_retake_replaces_the_photos_reads_them_again_and_keeps_the_origina
     # The page turned on the upload screen is stored turned, as at submit.
     turned = Image.open(io.BytesIO(base64.b64decode((after.files or [])[0]["data"])))
     assert turned.size == (1600, 1200)
-    # Nothing destroyed: the original turn-in, whole.
-    original = after.retake_original or {}
-    assert original["files"] == before.files
-    assert original["extraction"] == before.extraction
-    assert original["extraction_flag_note"] == "Page 1 was sideways"
-    assert original["extraction_flagged_at"] is not None
-    assert original["submitted_at"] == before.submitted_at.isoformat()
-    assert original["is_late"] is False
+    # Nothing destroyed: the original turn-in, whole, as attempt 1.
+    [original] = await _attempts(sid)
+    assert original.number == 1
+    assert original.reason == "retake"
+    assert original.files == before.files
+    assert original.extraction == before.extraction
+    assert original.extraction_flag_note == "Page 1 was sideways"
+    assert original.extraction_flagged_at == before.extraction_flagged_at
+    assert original.submitted_at == before.submitted_at
+    assert original.is_late is False
+    assert original.replaced_at == after.retaken_at
+    # Nothing was graded, so there's no grade to keep.
+    assert original.grade is None
+    assert original.integrity is None
 
     # Once only.
     assert await _can_retake(client, world) is False
@@ -291,7 +311,7 @@ async def _assert_untouched(sid: str) -> None:
     row = await _row(sid)
     assert row.extraction_flagged_at is not None
     assert row.retaken_at is None
-    assert row.retake_original is None
+    assert await _attempts(sid) == []
     assert len(row.files or []) == 1
 
 
@@ -381,8 +401,8 @@ async def test_two_retakes_at_once_only_one_lands(
     before = await _row(sid)
     r1, r2 = await asyncio.gather(_retake(client, world, sid), _retake(client, world, sid))
     assert sorted([r1.status_code, r2.status_code]) == [200, 409]
-    after = await _row(sid)
-    assert (after.retake_original or {})["files"] == before.files
+    [original] = await _attempts(sid)
+    assert original.files == before.files
 
 
 async def test_held_to_submits_file_rules(client: AsyncClient, world: dict[str, Any]) -> None:
@@ -440,9 +460,12 @@ async def test_not_offered_to_a_student_who_left_the_class(
     assert (await _retake(client, world, sid)).status_code == 403
 
 
-async def test_a_retake_past_due_is_late_and_cant_launder_a_late_original(
+async def test_a_retake_past_due_is_late_against_the_current_due_date(
     client: AsyncClient, world: dict[str, Any],
 ) -> None:
+    """Lateness is the new photos' own, against the due date as it is now.
+    They always arrive after the ones they replace, so a retake can only
+    add lateness, never launder it."""
     sid = await _submit_and_flag(client, world)
     async with get_session_factory()() as s:
         await s.execute(
@@ -455,22 +478,8 @@ async def test_a_retake_past_due_is_late_and_cant_launder_a_late_original(
     assert r.json()["is_late"] is True
     row = await _row(sid)
     assert row.is_late is True
-    assert (row.retake_original or {})["is_late"] is False
-
-    # A late original stays late, even if the due date has since moved.
-    async with get_session_factory()() as s:
-        await s.execute(text(
-            "UPDATE submissions SET is_late = true, retaken_at = NULL, retake_original = NULL, "
-            "extraction_flagged_at = now() WHERE id = :id"
-        ), {"id": sid})
-        await s.execute(
-            text("UPDATE assignments SET due_at = :d WHERE id = :id"),
-            {"d": datetime.now(UTC) + timedelta(days=1), "id": world["assignment_id"]},
-        )
-        await s.commit()
-    r = await _retake(client, world, sid)
-    assert r.status_code == 200
-    assert r.json()["is_late"] is True
+    [original] = await _attempts(sid)
+    assert original.is_late is False
 
 
 async def test_the_teacher_sees_the_retake_and_the_original(
@@ -479,8 +488,8 @@ async def test_the_teacher_sees_the_retake_and_the_original(
     sid = await _submit_and_flag(client, world)
     r = await client.get(f"/v1/teacher/submissions/{sid}", headers=_auth(world["teacher_token"]))
     assert r.json()["retaken_at"] is None
-    assert r.json()["retake_original"] is None
-    originals_url = f"/v1/teacher/submissions/{sid}/retake-original-files"
+    assert r.json()["attempts"] == []
+    originals_url = f"/v1/teacher/submissions/{sid}/attempts/1/files"
     r = await client.get(originals_url, headers=_auth(world["teacher_token"]))
     assert r.status_code == 404
 
@@ -490,7 +499,10 @@ async def test_the_teacher_sees_the_retake_and_the_original(
     body = r.json()
     assert body["retaken_at"] is not None
     assert len(body["files"]) == 2
-    original = body["retake_original"]
+    [original] = body["attempts"]
+    assert original["number"] == 1
+    assert original["reason"] == "retake"
+    assert original["final_score"] is None
     # The detail carries the callout's facts, not a second set of pages —
     # it's re-fetched often; the photos load when she opens them.
     assert original["file_count"] == 1
@@ -508,15 +520,20 @@ async def test_the_teacher_sees_the_retake_and_the_original(
     r = await client.get(originals_url, headers=_auth(world["student_token"]))
     assert r.status_code in (401, 403)
 
-    # A snapshot whose files came out JSON null still loads: 0 pages, no 500.
+    # An attempt whose files are JSON null still loads: 0 pages, no 500.
     async with get_session_factory()() as s:
         await s.execute(text(
-            "UPDATE submissions SET retake_original = CAST(:o AS json) WHERE id = :id"
-        ), {"o": '{"files": null, "is_late": false}', "id": sid})
+            "UPDATE submission_attempts SET files = CAST('null' AS json) WHERE submission_id = :id"
+        ), {"id": sid})
         await s.commit()
     r = await client.get(f"/v1/teacher/submissions/{sid}", headers=_auth(world["teacher_token"]))
     assert r.status_code == 200, r.text
-    assert r.json()["retake_original"]["file_count"] == 0
+    assert r.json()["attempts"][0]["file_count"] == 0
+    # And an attempt that doesn't exist is a 404.
+    r = await client.get(
+        f"/v1/teacher/submissions/{sid}/attempts/2/files", headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 404
 
 
 async def test_another_teacher_cant_see_the_originals_or_whether_there_are_any(
@@ -541,7 +558,7 @@ async def test_another_teacher_cant_see_the_originals_or_whether_there_are_any(
         other_token = create_access_token(str(other.id), "teacher")
 
     sid = await _submit_and_flag(client, world)
-    url = f"/v1/teacher/submissions/{sid}/retake-original-files"
+    url = f"/v1/teacher/submissions/{sid}/attempts/1/files"
     r = await client.get(url, headers=_auth(other_token))
     assert r.status_code == 403, r.text  # not retaken: still 403, not 404
     assert (await _retake(client, world, sid)).status_code == 200
@@ -552,7 +569,7 @@ async def test_another_teacher_cant_see_the_originals_or_whether_there_are_any(
     assert r.status_code == 200, r.text
     # And an unknown submission is a plain 404.
     r = await client.get(
-        f"/v1/teacher/submissions/{uuid.uuid4()}/retake-original-files",
+        f"/v1/teacher/submissions/{uuid.uuid4()}/attempts/1/files",
         headers=_auth(world["teacher_token"]),
     )
     assert r.status_code == 404

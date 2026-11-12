@@ -9,6 +9,7 @@ from typing import Annotated, Any, Literal, Protocol
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 from sqlalchemy import Integer, and_, case, func, or_, select
+from sqlalchemy import delete as sql_delete
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -55,7 +56,14 @@ from api.core.question_bank_generation import schedule_generation_job
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user_full, require_teacher
 from api.middleware.rate_limit import limiter
-from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
+from api.models.assignment import (
+    Assignment,
+    AssignmentSection,
+    StudentDueDate,
+    Submission,
+    SubmissionAttempt,
+    SubmissionGrade,
+)
 from api.models.course import Course
 from api.models.grading_job import STATUS_RUNNING, GradingJob
 from api.models.integrity_check import (
@@ -1710,6 +1718,9 @@ async def list_submissions(
             "is_late": sub.is_late,
             # How late, and what the late policy takes off for it.
             **lateness_out(a, sub, due_by_student[sub.student_id], grade),
+            # Reopened for this student and not turned in again yet
+            # (Submission.reopened_at); `due_at` above is their date.
+            "reopened_at": sub.reopened_at.isoformat() if sub.reopened_at else None,
             "ai_score": grade.ai_score if grade else None,
             "ai_breakdown": grade.ai_breakdown if grade else None,
             "teacher_score": grade.teacher_score if grade else None,
@@ -1759,7 +1770,16 @@ async def list_submissions(
             "grading_job_status": job_status,
         })
 
-    return {"submissions": submissions}
+    # Every personal due date on this homework (reopens), so the roster
+    # can show one on a student who hasn't turned anything in too.
+    personal_due_dates = {
+        str(student_id): due_at.isoformat()
+        for student_id, due_at in (await db.execute(
+            select(StudentDueDate.student_id, StudentDueDate.due_at)
+            .where(StudentDueDate.assignment_id == a.id)
+        )).all()
+    }
+    return {"submissions": submissions, "personal_due_dates": personal_due_dates}
 
 
 class _PublishableGrade(Protocol):
@@ -2083,6 +2103,133 @@ async def set_late_penalty_waived(
         "grade_dirty": _is_grade_dirty(grade),
         **lateness_out(assignment, sub, due_at, grade),
     }
+
+
+class ReopenRequest(BaseModel):
+    # The student's personal due date. Timezone-aware, in the future, and
+    # not before the class due date.
+    due_at: datetime
+
+
+class ReopenResponse(BaseModel):
+    student_id: str
+    # The personal due date now in force; null after it was removed.
+    due_at: datetime | None
+    # Set when the student had turned it in: they may turn it in once
+    # more. Null for a student who hadn't (the date alone reopens it).
+    reopened_at: datetime | None
+
+
+async def _student_on_assignment(
+    db: AsyncSession, assignment: Assignment, student_id: uuid.UUID,
+) -> None:
+    """404 unless the student is enrolled in a section this homework is
+    assigned to — the same rule that decides who sees it."""
+    enrolled = (await db.execute(
+        select(SectionEnrollment.student_id)
+        .join(AssignmentSection, AssignmentSection.section_id == SectionEnrollment.section_id)
+        .where(
+            AssignmentSection.assignment_id == assignment.id,
+            SectionEnrollment.student_id == student_id,
+        )
+        .limit(1)
+    )).scalar_one_or_none()
+    if enrolled is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student not on this homework")
+
+
+@router.post("/assignments/{assignment_id}/students/{student_id}/reopen")
+async def reopen_for_student(
+    assignment_id: uuid.UUID, student_id: uuid.UUID, body: ReopenRequest,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> ReopenResponse:
+    """Reopen this homework for one student, until `due_at`.
+
+    That date becomes the student's due date (late_policy.effective_due_at):
+    a homework that closed at the class date takes their turn-in again,
+    and work turned in by the new date is on time — including work they
+    already turned in, which is re-priced against it at once.
+
+    If they had turned it in, they may turn it in once more
+    (`Submission.reopened_at`). Their current turn-in and its grade stand
+    until they do; when they do, both are kept as an attempt and the new
+    one is read and graded from scratch, for her to approve. Reopening
+    again (a new date, or after they resubmitted) grants another turn-in.
+    """
+    a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
+    if a.status != "published":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Publish the homework first")
+    await _student_on_assignment(db, a, student_id)
+    if body.due_at.tzinfo is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="due_at needs a time zone")
+    now = datetime.now(UTC)
+    if body.due_at <= now:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Pick a due date in the future")
+    if a.due_at is not None and body.due_at < a.due_at:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Pick a date on or after the class due date",
+        )
+    stmt = pg_insert(StudentDueDate).values(
+        assignment_id=a.id, student_id=student_id, due_at=body.due_at, set_by=current_user.user_id,
+    )
+    await db.execute(stmt.on_conflict_do_update(
+        constraint="uq_student_due_dates_assignment_student",
+        set_={"due_at": stmt.excluded.due_at, "set_by": stmt.excluded.set_by, "updated_at": now},
+    ))
+    sub = (await db.execute(
+        select(Submission)
+        .where(Submission.assignment_id == a.id, Submission.student_id == student_id)
+        .with_for_update()
+    )).scalar_one_or_none()
+    if sub is not None:
+        sub.reopened_at = now
+    await db.flush()
+    await refresh_lateness(db, a)
+    await record_activity(
+        db, current_user, "assignment.reopen_student", "assignment", a.id,
+        {"student_id": str(student_id), "due_at": body.due_at.isoformat(),
+         "submission_id": str(sub.id) if sub else None},
+    )
+    await db.commit()
+    return ReopenResponse(
+        student_id=str(student_id), due_at=body.due_at, reopened_at=sub.reopened_at if sub else None,
+    )
+
+
+@router.delete("/assignments/{assignment_id}/students/{student_id}/reopen")
+async def cancel_reopen_for_student(
+    assignment_id: uuid.UUID, student_id: uuid.UUID,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> ReopenResponse:
+    """Undo a reopen: the student's due date is the class date again, and
+    a turn-in still owed by the reopen is no longer taken. Work already in
+    is re-priced against the class date (late, if it was); nothing is
+    deleted. Idempotent."""
+    a = await get_teacher_assignment(db, assignment_id, current_user.user_id)
+    await _student_on_assignment(db, a, student_id)
+    await db.execute(
+        sql_delete(StudentDueDate).where(
+            StudentDueDate.assignment_id == a.id, StudentDueDate.student_id == student_id,
+        )
+    )
+    sub = (await db.execute(
+        select(Submission)
+        .where(Submission.assignment_id == a.id, Submission.student_id == student_id)
+        .with_for_update()
+    )).scalar_one_or_none()
+    if sub is not None:
+        sub.reopened_at = None
+    await db.flush()
+    await refresh_lateness(db, a)
+    await record_activity(
+        db, current_user, "assignment.reopen_student_cancel", "assignment", a.id,
+        {"student_id": str(student_id)},
+    )
+    await db.commit()
+    return ReopenResponse(student_id=str(student_id), due_at=None, reopened_at=None)
 
 
 class GraphItemVerdictRequest(BaseModel):
@@ -2770,20 +2917,29 @@ class TeacherSubmissionDetailProblem(BaseModel):
     graph: TeacherGraphCheck | None = None
 
 
-class TeacherRetakeOriginal(BaseModel):
-    """The turn-in a student's retake replaced — what the teacher needs to
-    see it was the same work: how many pages, when they came in, and what
-    the student said was wrong with that reading. The photos themselves
-    are fetched only when she opens them (`GET /submissions/{id}/
-    retake-original-files`), so every detail load doesn't carry a second
-    set of pages. The original reading stays on the row for audit but
-    isn't rendered."""
+class TeacherSubmissionAttempt(BaseModel):
+    """An earlier turn-in of this submission, which a newer one replaced
+    (`SubmissionAttempt`): a retake of flagged photos ("retake"), or a
+    turn-in after the teacher reopened the homework ("reopen"). What the
+    teacher needs to see what changed: how many pages, when they came in,
+    what the student said was wrong with that reading, and — for a reopen
+    — the grade it had. The photos are fetched only when she opens them
+    (`GET /submissions/{id}/attempts/{number}/files`), so a detail load
+    doesn't carry every set of pages. The reading, the whole grade row
+    and the understanding check are kept on the attempt for audit."""
 
+    number: int
+    reason: Literal["retake", "reopen"]
     file_count: int = 0
-    submitted_at: datetime | None = None
+    submitted_at: datetime
     is_late: bool = False
     extraction_flagged_at: datetime | None = None
     extraction_flag_note: str | None = None
+    replaced_at: datetime
+    # The grade the attempt had when it was replaced (a reopen only): the
+    # score after any late penalty, and whether the student had seen it.
+    final_score: float | None = None
+    grade_published: bool = False
 
 
 class TeacherSubmissionDetail(BaseModel):
@@ -2838,11 +2994,16 @@ class TeacherSubmissionDetail(BaseModel):
     # rows marked `edited` below. Lets the flagged callout say "they
     # fixed 2 lines first" without the client re-counting every bucket.
     extraction_edit_count: int = 0
-    # Set when the student flagged the first reading and replaced their
-    # photos for a fresh one. Everything above describes the NEW turn-in;
-    # the one it replaced is in `retake_original`.
+    # Set when the student flagged this turn-in's first reading and
+    # replaced their photos for a fresh one. Everything above describes
+    # the live turn-in; the ones it replaced — by a retake, or a reopen —
+    # are `attempts`, oldest first.
     retaken_at: datetime | None = None
-    retake_original: TeacherRetakeOriginal | None = None
+    attempts: list[TeacherSubmissionAttempt] = []
+    # The teacher reopened this homework for the student after they
+    # turned it in, and they haven't turned it in again yet: they may, by
+    # `due_at` (their personal date). The grade above stands until then.
+    reopened_at: datetime | None = None
     # Current grading state. None when the teacher hasn't touched this
     # submission yet. `breakdown` + `final_score` are teacher-draft
     # until `grade_published_at` is set, at which point the student
@@ -2871,33 +3032,36 @@ class TeacherSubmissionDetail(BaseModel):
     reviewed_at: datetime | None = None
 
 
-class TeacherRetakeOriginalFiles(BaseModel):
+class TeacherAttemptFiles(BaseModel):
     files: list[dict[str, str]]
 
 
-@router.get("/submissions/{submission_id}/retake-original-files")
-async def get_retake_original_files(
+@router.get("/submissions/{submission_id}/attempts/{number}/files")
+async def get_attempt_files(
     submission_id: uuid.UUID,
+    number: int,
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
-) -> TeacherRetakeOriginalFiles:
-    """The photos a student's retake replaced — opened from the review
-    page's "View original photos". Ownership is checked first, the same
-    rule as the detail, so another teacher can't tell from the status
-    whether a submission was retaken. 404 when it wasn't."""
+) -> TeacherAttemptFiles:
+    """The photos of an earlier turn-in — opened from the review page's
+    "View original photos". Ownership is checked first, the same rule as
+    the detail, so another teacher can't tell from the status whether a
+    submission has earlier attempts. 404 when there's no such attempt."""
+    assignment_id = (await db.execute(
+        select(Submission.assignment_id).where(Submission.id == submission_id)
+    )).scalar_one_or_none()
+    if assignment_id is None:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    await get_teacher_assignment(db, assignment_id, current_user.user_id)
     row = (await db.execute(
-        select(Submission.assignment_id, Submission.retaken_at)
-        .where(Submission.id == submission_id)
+        select(SubmissionAttempt.files).where(
+            SubmissionAttempt.submission_id == submission_id,
+            SubmissionAttempt.number == number,
+        )
     )).one_or_none()
     if row is None:
-        raise HTTPException(status_code=404, detail="Submission not found")
-    await get_teacher_assignment(db, row[0], current_user.user_id)
-    if row[1] is None:
-        raise HTTPException(status_code=404, detail="No retake on this submission")
-    files = (await db.execute(
-        select(Submission.retake_original["files"]).where(Submission.id == submission_id)
-    )).scalar_one_or_none()
-    return TeacherRetakeOriginalFiles(files=files or [])
+        raise HTTPException(status_code=404, detail="No such attempt")
+    return TeacherAttemptFiles(files=row[0] or [])
 
 
 @router.get("/submissions/{submission_id}")
@@ -2940,33 +3104,37 @@ async def get_submission_detail(
         select(SubmissionGrade).where(SubmissionGrade.submission_id == sub.id)
     )).scalar_one_or_none()
 
-    # The callout's facts only, picked out of the JSON in SQL, so the
-    # original pages never leave the database on a detail load (they can
-    # be megabytes, and the review page re-fetches detail often).
-    retake_original: TeacherRetakeOriginal | None = None
-    if sub.retaken_at is not None:
-        ro = Submission.retake_original
-        facts = (await db.execute(
+    # The callout's facts only, the page count taken in SQL, so earlier
+    # pages never leave the database on a detail load (they can be
+    # megabytes, and the review page re-fetches detail often).
+    att = SubmissionAttempt
+    attempts = [
+        TeacherSubmissionAttempt(
+            number=a.number,
+            reason=a.reason,
+            file_count=a.file_count or 0,
+            submitted_at=a.submitted_at,
+            is_late=a.is_late,
+            extraction_flagged_at=a.extraction_flagged_at,
+            extraction_flag_note=a.extraction_flag_note,
+            replaced_at=a.replaced_at,
+            final_score=(a.grade or {}).get("final_score"),
+            grade_published=bool((a.grade or {}).get("grade_published_at")),
+        )
+        for a in (await db.execute(
             select(
+                att.number, att.reason, att.submitted_at, att.is_late,
+                att.extraction_flagged_at, att.extraction_flag_note, att.replaced_at, att.grade,
                 # json_array_length raises on a non-array (JSON null).
                 case(
-                    (func.json_typeof(ro["files"]) == "array",
-                     func.json_array_length(ro["files"])),
+                    (func.json_typeof(att.files) == "array", func.json_array_length(att.files)),
                     else_=0,
-                ),
-                ro["submitted_at"].as_string(),
-                ro["is_late"].as_boolean(),
-                ro["extraction_flagged_at"].as_string(),
-                ro["extraction_flag_note"].as_string(),
-            ).where(Submission.id == sub.id)
-        )).one()
-        retake_original = TeacherRetakeOriginal(
-            file_count=facts[0],
-            submitted_at=facts[1],
-            is_late=bool(facts[2]),
-            extraction_flagged_at=facts[3],
-            extraction_flag_note=facts[4],
-        )
+                ).label("file_count"),
+            )
+            .where(att.submission_id == sub.id)
+            .order_by(att.number)
+        )).all()
+    ]
 
     # Build a lookup of AI-extracted student answers by problem_id.
     # The AI grading step writes `student_answer` into each breakdown
@@ -3396,7 +3564,8 @@ async def get_submission_detail(
         extraction_flag_note=sub.extraction_flag_note,
         extraction_edit_count=len(sub.extraction_edits or {}),
         retaken_at=sub.retaken_at,
-        retake_original=retake_original,
+        attempts=attempts,
+        reopened_at=sub.reopened_at,
         submission_id=str(sub.id),
         assignment_id=str(assignment.id),
         assignment_title=assignment.title,
