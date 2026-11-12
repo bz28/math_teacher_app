@@ -283,6 +283,36 @@
   --radius-pill: 100px;
 }
 
+/* ── Marketing site tokens ("the student's page") ──
+   Fixed values, not the app's theme variables: the marketing site keeps
+   one look in every subject and theme. Tailwind only emits a utility when
+   a class uses it, so these add nothing to the logged-in app.
+     paper      page background, under the graph grid
+     ink        headings and body text; also the dark CTA band
+     ink-soft   secondary text (7:1 on paper)
+     veradic    Veradic's own voice: its notes and the primary buttons
+     veradic-tint  light green text on a veradic background
+     redpen     the teacher's red pen, and nothing else
+     pencil     student handwriting
+     rule       notebook rule lines;  margin-line  the red margin
+     hairline   card and section borders */
+@theme {
+  --color-paper: #F6F4EC;
+  --color-ink: #1D2633;
+  --color-ink-soft: #4A5565;
+  --color-veradic: #0E5238;
+  --color-veradic-dark: #0A3D2A;
+  --color-veradic-tint: #9FD0B6;
+  --color-redpen: #B3261E;
+  --color-pencil: #2B3440;
+  --color-rule: #C9DCEB;
+  --color-margin-line: #E8A3A0;
+  --color-hairline: #E3DFD2;
+
+  --font-site: var(--font-schibsted), system-ui, sans-serif;
+  --font-hand: var(--font-kalam), cursive;
+}
+
 /* ── Base styles ── */
 body {
   background-color: var(--color-bg);
@@ -481,4 +511,75 @@ html {
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--color-text-secondary);
+}
+
+/* ── Marketing site: "the student's page" ──
+   In the components layer so Tailwind utilities on the same element still
+   win (a section can override .site-h2's size with a class). */
+@layer components {
+  /* `.site` is the root of every marketing surface (the homepage, and the
+     shared navbar and footer). It sets the type and ink; the app never
+     carries it, so app pages keep their own look. */
+  .site {
+    font-family: var(--font-site);
+    color: var(--color-ink);
+    /* Proportional figures read better in prose; the app's global tabular
+       setting is for its tables and counters. */
+    font-variant-numeric: normal;
+    font-feature-settings: normal;
+  }
+  
+  /* Graph paper: the page itself. */
+  .graph-paper {
+    background-color: var(--color-paper);
+    background-image:
+      linear-gradient(rgba(61, 108, 150, 0.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(61, 108, 150, 0.07) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+  
+  /* A ruled notebook sheet. --rule-gap is the line pitch, so text set at
+     line-height: var(--rule-gap) sits on the lines. */
+  .ruled-paper {
+    --rule-gap: 34px;
+    background-color: #FFFFFF;
+    background-image: linear-gradient(
+      transparent calc(var(--rule-gap) - 1px),
+      var(--color-rule) calc(var(--rule-gap) - 1px),
+      var(--color-rule) var(--rule-gap),
+      transparent var(--rule-gap)
+    );
+    background-size: 100% var(--rule-gap);
+  }
+  
+  /* Headings: heavy and tight, balanced so they never leave a widow. */
+  .site-h1,
+  .site-h2 {
+    font-weight: 900;
+    text-wrap: balance;
+    margin: 0;
+  }
+  .site-h1 {
+    font-size: clamp(2.5rem, 4.4vw, 3.875rem);
+    line-height: 0.98;
+    letter-spacing: -0.04em;
+  }
+  .site-h2 {
+    font-size: clamp(2rem, 3.6vw, 3rem);
+    line-height: 1.04;
+    letter-spacing: -0.035em;
+  }
+}
+
+/* Focus rings stay unlayered: they must beat the global *:focus-visible
+   rule above, which is unlayered too. */
+.site *:focus-visible {
+  outline: 2px solid var(--color-veradic);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+/* On the dark band and on green notes the green ring would vanish. */
+.site .on-dark *:focus-visible,
+.site .on-dark:focus-visible {
+  outline-color: var(--color-paper);
 }
