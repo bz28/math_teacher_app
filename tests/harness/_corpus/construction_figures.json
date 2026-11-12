@@ -1,0 +1,596 @@
+{
+ "about": "Construction-figure eval: geometry problems from prod where a teacher asked the workshop chat for a drawing, or whose text points at a figure (Nov 2026). Problem text, solution and answer only; no student data. The two -step cases ask for a step diagram too.",
+ "cases": [
+  {
+   "id": "985bff41",
+   "source": "prod question_bank_items 985bff41",
+   "question": "In the figure below, $\\overrightarrow{OA}$, $\\overrightarrow{OB}$, $\\overrightarrow{OC}$, and $\\overrightarrow{OD}$ all share endpoint $O$. Given that $m\\angle AOB = 2x + 5$, $m\\angle BOC = x + 8$, $m\\angle COD = 3x - 1$, and $\\overrightarrow{OA}$ and $\\overrightarrow{OD}$ are opposite rays, find the measure of each angle.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "Since $\\overrightarrow{OA}$ and $\\overrightarrow{OD}$ are **opposite rays**, they form a straight line. Rays $\\overrightarrow{OB}$ and $\\overrightarrow{OC}$ sit between them, splitting the straight angle into three adjacent pieces:\n\n$$m\\angle AOB + m\\angle BOC + m\\angle COD = 180°$$\n\nThis is our key equation — a straight angle always measures exactly $180°$."
+    },
+    {
+     "title": "Set Up the Equation",
+     "description": "Substitute the three angle expressions into the straight-angle equation:\n\n$$(2x + 5) + (x + 8) + (3x - 1) = 180$$\n\nCombine all like terms on the left side — add the $x$ terms and the constants separately:\n\n$$6x + 12 = 180$$"
+    },
+    {
+     "title": "Solve for x",
+     "description": "Subtract $12$ from both sides:\n\n$$6x = 168$$\n\nDivide both sides by $6$:\n\n$$x = 28$$"
+    },
+    {
+     "title": "Find Each Angle",
+     "description": "Plug $x = 28$ back into each expression:\n\n**Angle AOB:** $2(28) + 5 = 56 + 5 = \\mathbf{61°}$\n\n**Angle BOC:** $28 + 8 = \\mathbf{36°}$\n\n**Angle COD:** $3(28) - 1 = 84 - 1 = \\mathbf{83°}$\n\n**Quick check:** $61 + 36 + 83 = 180°$ ✓"
+    }
+   ],
+   "final_answer": "$m\\angle AOB = 61°, \\quad m\\angle BOC = 36°, \\quad m\\angle COD = 83°$",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "05b4947e",
+   "source": "prod question_bank_items 05b4947e",
+   "question": "$\\overrightarrow{KM}$ bisects $\\angle JKL$, and $\\overrightarrow{KN}$ bisects $\\angle MKL$. If $m\\angle JKL = 10x - 4$ and $m\\angle NKL = 2x + 13$, find $m\\angle JKM$ and $m\\angle JKN$.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "We have three rays from point $K$: $\\overrightarrow{KJ}$, $\\overrightarrow{KM}$, $\\overrightarrow{KN}$, and $\\overrightarrow{KL}$, arranged so that:\n- $\\overrightarrow{KM}$ cuts $\\angle JKL$ exactly in half\n- $\\overrightarrow{KN}$ cuts $\\angle MKL$ (the right half) exactly in half again\n\nSo $N$ sits between $M$ and $L$, making $\\angle NKL$ a **quarter** of $\\angle JKL$.\n\n**Key insight:** Because each bisector cuts the previous angle in half, $\\angle NKL = \\frac{1}{4} \\angle JKL$. We'll use this to build one clean equation and solve for $x$."
+    },
+    {
+     "title": "Express Each Angle via Bisection",
+     "description": "Since $\\overrightarrow{KM}$ bisects $\\angle JKL$:\n$$m\\angle MKL = \\frac{1}{2} \\cdot m\\angle JKL = \\frac{10x-4}{2} = 5x - 2$$\n\nSince $\\overrightarrow{KN}$ bisects $\\angle MKL$:\n$$m\\angle NKL = \\frac{1}{2} \\cdot m\\angle MKL = \\frac{5x-2}{2}$$"
+    },
+    {
+     "title": "Solve for x",
+     "description": "Set the expression for $m\\angle NKL$ equal to the given value $2x + 13$:\n$$\\frac{5x-2}{2} = 2x + 13$$\n\nMultiply both sides by $2$:\n$$5x - 2 = 4x + 26$$\n\nSubtract $4x$ and add $2$ to both sides:\n$$x = 28$$"
+    },
+    {
+     "title": "Find m∠JKM",
+     "description": "Since $\\overrightarrow{KM}$ bisects $\\angle JKL$, we have $m\\angle JKM = m\\angle MKL$, each equal to half of $\\angle JKL$.\n$$m\\angle JKL = 10(28) - 4 = 276°$$\n$$m\\angle JKM = \\frac{276}{2} = \\mathbf{138°}$$"
+    },
+    {
+     "title": "Find m∠JKN",
+     "description": "$\\angle JKN$ spans from $\\overrightarrow{KJ}$ all the way to $\\overrightarrow{KN}$, which is $\\angle JKM$ plus $\\angle MKN$.\n\nSince $\\overrightarrow{KN}$ bisects $\\angle MKL = 138°$:\n$$m\\angle MKN = \\frac{138}{2} = 69°$$\n\nVerify: $m\\angle NKL = 2(28)+13 = 69°$ ✓\n\nTherefore:\n$$m\\angle JKN = m\\angle JKM + m\\angle MKN = 138° + 69° = \\mathbf{207°}$$"
+    }
+   ],
+   "final_answer": "$x = 28, \\quad m\\angle JKM = 138°, \\quad m\\angle JKN = 207°$",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "2d01d709",
+   "source": "prod question_bank_items 2d01d709",
+   "question": "Write a complete two-column proof.\n\n**Given:** $\\angle 1$ and $\\angle 3$ are vertical angles; $m\\angle 1 = 4x + 9$ and $m\\angle 3 = 7x - 15$.\n\n**Prove:** $m\\angle 1 = m\\angle 3 = 41°$\n\n*(Hint: Use the Vertical Angles Theorem, then set up and solve an algebraic equation as part of your proof.)*",
+   "solution_steps": [
+    {
+     "title": "Understand the Problem",
+     "description": "We have two intersecting lines forming two pairs of vertical angles. We're told $\\angle 1$ and $\\angle 3$ are **vertical angles**, meaning they sit directly across the intersection from each other.\n\nThe key insight: the **Vertical Angles Theorem** tells us vertical angles are always equal in measure. So instead of two unknowns, we immediately get one equation with one unknown $x$. Solve for $x$, plug back in, and we're done.\n\nThe proof will be built in this order:\n1. State that $\\angle 1 = \\angle 3$ (by the Vertical Angles Theorem)\n2. Substitute the expressions and solve for $x$\n3. Substitute $x$ back to find the actual angle measures"
+    },
+    {
+     "title": "Apply Vertical Angles Theorem",
+     "description": "The **Vertical Angles Theorem** states: if two angles are vertical angles, then they are congruent — their measures are equal.\n\nSince $\\angle 1$ and $\\angle 3$ are given to be vertical angles:\n$$m\\angle 1 = m\\angle 3$$\n\nThis is the engine of the entire proof — one theorem does all the logical heavy lifting."
+    },
+    {
+     "title": "Set Up & Solve the Equation",
+     "description": "Substitute the given expressions into $m\\angle 1 = m\\angle 3$:\n$$4x + 9 = 7x - 15$$\n\nSubtract $4x$ from both sides:\n$$9 = 3x - 15$$\n\nAdd $15$ to both sides:\n$$24 = 3x$$\n\nDivide both sides by $3$:\n$$x = 8$$"
+    },
+    {
+     "title": "Compute the Angle Measures",
+     "description": "Substitute $x = 8$ into each expression:\n\n$$m\\angle 1 = 4(8) + 9 = 32 + 9 = 41°$$\n\n$$m\\angle 3 = 7(8) - 15 = 56 - 15 = 41°$$\n\nBoth angles equal $41°$, confirming our equation was set up correctly."
+    },
+    {
+     "title": "Write the Two-Column Proof",
+     "description": "| # | **Statement** | **Reason** |\n|---|---|---|\n| 1 | $\\angle 1$ and $\\angle 3$ are vertical angles | Given |\n| 2 | $m\\angle 1 = m\\angle 3$ | Vertical Angles Theorem |\n| 3 | $m\\angle 1 = 4x+9$; $\\quad m\\angle 3 = 7x - 15$ | Given |\n| 4 | $4x + 9 = 7x - 15$ | Substitution (from statements 2 & 3) |\n| 5 | $x = 8$ | Subtraction & Division Properties of Equality |\n| 6 | $m\\angle 1 = 4(8)+9 = 41°$ | Substitution |\n| 7 | $m\\angle 3 = 7(8)-15 = 41°$ | Substitution |\n| 8 | $m\\angle 1 = m\\angle 3 = 41°$ $\\quad\\blacksquare$ | Transitive Property of Equality |"
+    }
+   ],
+   "final_answer": "$m\\angle 1 = m\\angle 3 = 41°$ $\\quad$ (proved via the Vertical Angles Theorem and solving $4x+9 = 7x-15$, which gives $x = 8$)",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "29be9c15",
+   "source": "prod question_bank_items 29be9c15",
+   "question": "Lines $p$ and $q$ are parallel. A transversal forms alternate interior angles measuring $(7x - 3)°$ and $(4x + 18)°$. Find the value of $x$ and the measure of each angle.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "Two parallel lines $p$ and $q$ are cut by a transversal, creating two **alternate interior angles**: $(7x - 3)°$ and $(4x + 18)°$.\n\nAlternate interior angles sit on **opposite sides** of the transversal, between the two parallel lines. The key property: **when lines are parallel, alternate interior angles are always equal.** So we simply set the two expressions equal to each other and solve."
+    },
+    {
+     "title": "Set Angles Equal",
+     "description": "Since alternate interior angles are equal:\n$$7x - 3 = 4x + 18$$"
+    },
+    {
+     "title": "Solve for x",
+     "description": "Subtract $4x$ from both sides to collect the variable terms on the left:\n$$3x - 3 = 18$$\nThen add $3$ to both sides:\n$$3x = 21$$\nDivide both sides by $3$:\n$$x = 7$$"
+    },
+    {
+     "title": "Find the Angle Measure",
+     "description": "Substitute $x = 7$ into either expression — both must give the same result:\n\n$(7x - 3)° = 7(7) - 3 = 49 - 3 = \\mathbf{46°}$\n\n$(4x + 18)° = 4(7) + 18 = 28 + 18 = \\mathbf{46°}$ ✓\n\nBoth expressions give $46°$, confirming our answer."
+    }
+   ],
+   "final_answer": "$x = 7$ and each alternate interior angle measures $46°$.",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "d9f94a62",
+   "source": "prod question_bank_items d9f94a62",
+   "question": "Given: $\\overline{BD}$ bisects $\\angle ABC$, and $\\overline{BD} \\perp \\overline{AC}$. Prove that $\\triangle ABD \\cong \\triangle CBD$ using a two-column proof. Clearly state each statement and its corresponding reason.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "We have $\\triangle ABC$ with point $D$ on $\\overline{AC}$, and segment $\\overline{BD}$ drawn from vertex $B$ to $D$. This creates two smaller triangles: $\\triangle ABD$ and $\\triangle CBD$.\n\nWe're given **two facts** about $\\overline{BD}$:\n- It **bisects** $\\angle ABC$ → splits it into two equal halves\n- It is **perpendicular** to $\\overline{AC}$ → forms two right angles at $D$\n\nThe key insight: $\\overline{BD}$ is a **shared side** between the two triangles. With two pairs of equal angles and a shared side between them, we can use **ASA** (Angle-Side-Angle) congruence."
+    },
+    {
+     "title": "Mark Point D and BD",
+     "description": "Point $D$ lies on $\\overline{AC}$ (the midpoint, since $\\overline{BD} \\perp \\overline{AC}$ and bisects $\\angle ABC$ forces the triangle to be isosceles, but we don't need that here). The segment $\\overline{BD}$ divides $\\triangle ABC$ into $\\triangle ABD$ and $\\triangle CBD$.\n\nWe will now build the two-column proof by extracting three matching parts — two angle pairs and one shared side."
+    },
+    {
+     "title": "Two-Column Proof",
+     "description": "| # | **Statement** | **Reason** |\n|---|---|---|\n| 1 | $\\overline{BD}$ bisects $\\angle ABC$ | Given |\n| 2 | $\\angle ABD \\cong \\angle CBD$ | Definition of Angle Bisector |\n| 3 | $\\overline{BD} \\perp \\overline{AC}$ | Given |\n| 4 | $\\angle BDA$ and $\\angle BDC$ are right angles | Perpendicular lines form right angles |\n| 5 | $\\angle BDA \\cong \\angle BDC$ | All right angles are congruent |\n| 6 | $\\overline{BD} \\cong \\overline{BD}$ | Reflexive Property |\n| 7 | $\\triangle ABD \\cong \\triangle CBD$ | ASA (Statements 2, 6, 5) |\n\n**Why ASA?** In each triangle, $\\overline{BD}$ is the side **between** the two congruent angle pairs:\n- $\\angle ABD \\cong \\angle CBD$ (angle at $B$, one endpoint of $\\overline{BD}$)\n- $\\angle BDA \\cong \\angle BDC$ (angle at $D$, the other endpoint of $\\overline{BD}$)\n\nThe shared side $\\overline{BD}$ sits directly **between** both pairs of angles → **ASA** applies perfectly."
+    }
+   ],
+   "final_answer": "$$\\triangle ABD \\cong \\triangle CBD \\quad \\text{(by ASA)}$$\n\n**Proof Summary:**\n$$\\angle ABD \\cong \\angle CBD \\quad \\text{(Angle Bisector)}$$\n$$\\overline{BD} \\cong \\overline{BD} \\quad \\text{(Reflexive)}$$\n$$\\angle BDA \\cong \\angle BDC = 90° \\quad \\text{(Perpendicular lines)}$$\n$$\\therefore\\ \\triangle ABD \\cong \\triangle CBD \\quad \\blacksquare$$",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "589e4a97",
+   "source": "prod question_bank_items 589e4a97",
+   "question": "**Given:** $\\angle QRT \\cong \\angle SRT$, $\\angle RQT \\cong \\angle RST$\n\n**Prove:** $\\overline{QT} \\cong \\overline{ST}$\n\nWrite a complete proof. (*Hint:* First prove that $\\triangle QRT \\cong \\triangle SRT$ using AAS, then apply CPCTC.)",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "We have two triangles, $\\triangle QRT$ and $\\triangle SRT$, that **share side $\\overline{RT}$**. The two given angle congruences tell us two pairs of angles match up. Our goal is to show the two triangles are fully congruent, then extract $\\overline{QT} \\cong \\overline{ST}$ as a consequence.\n\nThe shared side $\\overline{RT}$ is the key — it gives us a free \"third piece\" of information via the **Reflexive Property**, setting us up perfectly for **AAS** (two Angles and a non-included Side)."
+    },
+    {
+     "title": "State the Given",
+     "description": "From the problem statement, we are directly given:\n\n$$\\angle QRT \\cong \\angle SRT \\quad \\text{(Given)}$$\n$$\\angle RQT \\cong \\angle RST \\quad \\text{(Given)}$$\n\nThese are two pairs of **corresponding angles** between $\\triangle QRT$ and $\\triangle SRT$."
+    },
+    {
+     "title": "Reflexive Side RT",
+     "description": "Any segment is congruent to itself — this is the **Reflexive Property of Congruence**:\n\n$$\\overline{RT} \\cong \\overline{RT}$$\n\nThis gives us a shared side that belongs to **both** triangles. Notice that $\\overline{RT}$ is **not** between the two given angles in either triangle, so our three pieces (angle, angle, non-included side) satisfy the **AAS** criterion."
+    },
+    {
+     "title": "Prove Triangles ≅ by AAS",
+     "description": "We now have two angles and a non-included side matching in both triangles:\n\n| Piece | $\\triangle QRT$ | $\\triangle SRT$ | Reason |\n|---|---|---|---|\n| Angle | $\\angle RQT$ | $\\angle RST$ | Given |\n| Angle | $\\angle QRT$ | $\\angle SRT$ | Given |\n| Non-included Side | $\\overline{RT}$ | $\\overline{RT}$ | Reflexive Property |\n\nBy the **AAS Congruence Theorem**:\n$$\\triangle QRT \\cong \\triangle SRT$$"
+    },
+    {
+     "title": "Conclude QT ≅ ST by CPCTC",
+     "description": "Once two triangles are proven congruent, **every** pair of corresponding parts is congruent — this is **CPCTC** (Corresponding Parts of Congruent Triangles are Congruent).\n\n$\\overline{QT}$ and $\\overline{ST}$ are corresponding sides in $\\triangle QRT$ and $\\triangle SRT$, so:\n$$\\overline{QT} \\cong \\overline{ST} \\qquad \\blacksquare$$"
+    }
+   ],
+   "final_answer": "$\\overline{QT} \\cong \\overline{ST}$, proved by:\\n1. $\\angle RQT \\cong \\angle RST$ (Given)\\n2. $\\angle QRT \\cong \\angle SRT$ (Given)\\n3. $\\overline{RT} \\cong \\overline{RT}$ (Reflexive Property)\\n4. $\\triangle QRT \\cong \\triangle SRT$ (AAS)\\n5. $\\overline{QT} \\cong \\overline{ST}$ (CPCTC) $\\blacksquare$",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "ee6a495e",
+   "source": "prod question_bank_items ee6a495e",
+   "question": "**Given:** $\\overline{BE}$ bisects $\\overline{AC}$ at point $M$, $\\overline{AB} \\perp \\overline{BE}$, $\\overline{EC} \\perp \\overline{BE}$, and $\\overline{AB} \\cong \\overline{EC}$.\n\n**Prove:** $\\triangle ABM \\cong \\triangle ECM$\n\nWrite a two-column proof. State which theorem you use to conclude the triangles are congruent.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "We have two triangles — $\\triangle ABM$ and $\\triangle ECM$ — that share a common point $M$ on segment $\\overline{BE}$. The key observation: both triangles have a **right angle** (from the perpendicularity conditions), **equal legs** ($AB \\cong EC$, given), and **equal hypotenuses** ($AM = MC$, from the bisector). This is the perfect setup for the **Hypotenuse-Leg (HL) Theorem**, which works exclusively on right triangles.\n\nGoal: Build the two-column proof by establishing right angles, equal hypotenuses, and equal legs — in that order."
+    },
+    {
+     "title": "Two-Column Proof",
+     "description": "| # | **Statement** | **Reason** |\n|---|---|---|\n| 1 | $\\overline{BE}$ bisects $\\overline{AC}$ at $M$ | Given |\n| 2 | $AM = MC$ | Definition of **segment bisector** (a bisector divides a segment into two congruent parts) |\n| 3 | $\\overline{AB} \\perp \\overline{BE}$ and $\\overline{EC} \\perp \\overline{BE}$ | Given |\n| 4 | $\\angle ABM = 90°$ and $\\angle ECM = 90°$ | Definition of **perpendicular lines** (perpendicular lines form right angles) |\n| 5 | $\\triangle ABM$ and $\\triangle ECM$ are right triangles | Definition of **right triangle** (a triangle containing a $90°$ angle) |\n| 6 | $\\overline{AB} \\cong \\overline{EC}$ | Given |\n| 7 | $\\triangle ABM \\cong \\triangle ECM$ | **Hypotenuse-Leg (HL) Theorem** — the hypotenuses are equal ($AM = MC$, from Step 2), and one pair of legs is equal ($AB = EC$, from Step 6) |\n\n**Why HL applies here:** In $\\triangle ABM$, the right angle is at $B$, making $\\overline{AM}$ the hypotenuse. In $\\triangle ECM$, the right angle is at $E$, making $\\overline{CM}$ the hypotenuse. Steps 2 and 6 give us equal hypotenuses and equal legs, which is exactly what HL requires."
+    }
+   ],
+   "final_answer": "$\\triangle ABM \\cong \\triangle ECM$ by the **Hypotenuse-Leg (HL) Theorem**: both triangles are right triangles (from $\\overline{AB} \\perp \\overline{BE}$ and $\\overline{EC} \\perp \\overline{BE}$), their hypotenuses are equal ($AM = MC$ since $M$ bisects $\\overline{AC}$), and one pair of legs is equal ($\\overline{AB} \\cong \\overline{EC}$, given). $\\blacksquare$",
+   "request": "Add a diagram into the problem statement"
+  },
+  {
+   "id": "dd7ab4c1",
+   "source": "prod question_bank_items dd7ab4c1",
+   "question": "**Given:** $\\overline{BC} \\cong \\overline{DA}$, $\\overline{BC} \\parallel \\overline{AD}$\n\n**Prove:** $\\triangle ABC \\cong \\triangle CDA$\n\nWrite a complete two-column proof. (*Hint:* Use the Alternate Interior Angles Theorem and the Reflexive Property.)",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "We have quadrilateral $ABCD$ with diagonal $\\overline{AC}$ drawn, splitting it into $\\triangle ABC$ and $\\triangle CDA$.\n\nThe key insight: $\\overline{AC}$ is **shared** by both triangles, and since $\\overline{BC} \\parallel \\overline{AD}$, the diagonal $\\overline{AC}$ acts as a **transversal** — creating a pair of alternate interior angles we can use.\n\nWith one shared side, one given pair of congruent sides, and one pair of congruent angles (from parallel lines), we'll have exactly what we need for **SAS** congruence."
+    },
+    {
+     "title": "Mark the Diagonal AC",
+     "description": "Draw diagonal $\\overline{AC}$, which is a side of **both** triangles.\n\nBy the **Reflexive Property of Congruence**, any segment is congruent to itself:\n$$\\overline{AC} \\cong \\overline{AC}$$\n\nThis gives us one pair of congruent sides shared between the two triangles."
+    },
+    {
+     "title": "Identify Alternate Interior Angles",
+     "description": "Since $\\overline{BC} \\parallel \\overline{AD}$, the diagonal $\\overline{AC}$ is a transversal cutting those parallel lines.\n\nBy the **Alternate Interior Angles Theorem**, the angles on opposite sides of the transversal between the parallel lines are congruent:\n$$\\angle BCA \\cong \\angle DAC$$\n\nNotice carefully which angles these are:\n- $\\angle BCA$ is at vertex $C$, inside $\\triangle ABC$, between sides $\\overline{BC}$ and $\\overline{AC}$\n- $\\angle DAC$ is at vertex $A$, inside $\\triangle CDA$, between sides $\\overline{DA}$ and $\\overline{AC}$\n\nThe angle sits **between** the two sides we're using — exactly what SAS requires."
+    },
+    {
+     "title": "Apply SAS Congruence",
+     "description": "Collect the three facts and match them to the **SAS (Side-Angle-Side)** pattern — two sides and the **included** angle (the angle sandwiched between those two sides):\n\n| $\\triangle ABC$ | $\\triangle CDA$ | Reason |\n|---|---|---|\n| $\\overline{BC}$ | $\\overline{DA}$ | Given |\n| $\\angle BCA$ | $\\angle DAC$ | Alternate Interior Angles |\n| $\\overline{AC}$ | $\\overline{CA}$ | Reflexive Property |\n\nIn $\\triangle ABC$: the included angle $\\angle BCA$ sits between $\\overline{BC}$ and $\\overline{AC}$. ✓\nIn $\\triangle CDA$: the included angle $\\angle DAC$ sits between $\\overline{DA}$ and $\\overline{CA}$. ✓\n\nAll three SAS conditions are met, so:\n$$\\triangle ABC \\cong \\triangle CDA \\quad \\blacksquare$$"
+    }
+   ],
+   "final_answer": "$\\triangle ABC \\cong \\triangle CDA$ by **SAS**, using $\\overline{BC} \\cong \\overline{DA}$ (Given), $\\angle BCA \\cong \\angle DAC$ (Alternate Interior Angles, since $\\overline{BC} \\parallel \\overline{AD}$), and $\\overline{AC} \\cong \\overline{AC}$ (Reflexive Property).",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "7d8e403c",
+   "source": "prod question_bank_items 7d8e403c",
+   "question": "**Given:** $\\overline{WX} \\perp \\overline{XY}$, $\\overline{ZY} \\perp \\overline{XY}$, $M$ is the midpoint of $\\overline{XY}$, and $\\overline{WX} \\cong \\overline{ZY}$.\n\n**Prove:** $\\angle W \\cong \\angle Z$\n\nWrite a complete two-column proof. You must: (1) establish that both triangles are right triangles, (2) prove the triangles congruent using HL, and (3) conclude with CPCTC.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "We have two segments, $\\overline{WX}$ and $\\overline{ZY}$, both perpendicular to $\\overline{XY}$, with $M$ as the midpoint of $\\overline{XY}$. This creates **two right triangles** — $\\triangle WXM$ and $\\triangle ZYM$ — that share a common midpoint. The goal is to show $\\angle W \\cong \\angle Z$.\n\nThe roadmap: right triangles + congruent legs $\\Rightarrow$ congruent hypotenuses $\\Rightarrow$ **HL** congruence $\\Rightarrow$ **CPCTC**."
+    },
+    {
+     "title": "Two-Column Proof",
+     "description": "| # | Statement | Reason |\n|---|-----------|--------|\n| 1 | $\\overline{WX} \\perp \\overline{XY}$, $\\overline{ZY} \\perp \\overline{XY}$ | Given |\n| 2 | $\\angle WXM$ and $\\angle ZYM$ are right angles | Definition of perpendicular lines |\n| 3 | $\\triangle WXM$ and $\\triangle ZYM$ are right triangles | Definition of right triangle (a triangle with one right angle) |\n| 4 | $M$ is the midpoint of $\\overline{XY}$ | Given |\n| 5 | $\\overline{XM} \\cong \\overline{YM}$ | Definition of midpoint |\n| 6 | $\\overline{WX} \\cong \\overline{ZY}$ | Given |\n| 7 | $WM^2 = WX^2 + XM^2$ and $ZM^2 = ZY^2 + YM^2$ | Pythagorean Theorem |\n| 8 | $WM^2 = ZM^2$, so $\\overline{WM} \\cong \\overline{ZM}$ | Substitution using steps 5, 6, and 7 (since $WX = ZY$ and $XM = YM$, both sums are equal) |\n| 9 | $\\triangle WXM \\cong \\triangle ZYM$ | **HL** — right triangles (step 3) with congruent hypotenuses $\\overline{WM} \\cong \\overline{ZM}$ (step 8) and congruent legs $\\overline{WX} \\cong \\overline{ZY}$ (step 6) |\n| 10 | $\\angle W \\cong \\angle Z$ | **CPCTC** — Corresponding Parts of Congruent Triangles are Congruent |"
+    },
+    {
+     "title": "Why HL Works Here",
+     "description": "**HL (Hypotenuse-Leg)** requires three things to be verified — make sure you didn't skip any:\n\n1. ✅ **Right triangles** — confirmed in step 3 via the perpendicularity given.\n2. ✅ **Hypotenuses congruent** — $\\overline{WM} \\cong \\overline{ZM}$, proven in step 8 using the Pythagorean Theorem with the two pairs of equal legs.\n3. ✅ **One pair of legs congruent** — $\\overline{WX} \\cong \\overline{ZY}$, directly given.\n\nOnce the triangles are congruent, $\\angle W$ and $\\angle Z$ are corresponding angles, so CPCTC finishes the proof."
+    }
+   ],
+   "final_answer": "$\\angle W \\cong \\angle Z \\quad \\text{(by CPCTC, after } \\triangle WXM \\cong \\triangle ZYM \\text{ by HL)}$",
+   "request": "can you provide the drawing? include segments WM and ZM"
+  },
+  {
+   "id": "f4ac1109",
+   "source": "prod question_bank_items f4ac1109",
+   "question": "**Given:** $\\overline{AB} \\parallel \\overline{CD}$, $\\overline{BC} \\cong \\overline{DA}$\n\n**Prove:** $\\triangle ABC \\cong \\triangle CDA$\n\nComplete the two-column proof below by filling in each blank Statement and Reason.\n\n| # | Statement | Reason |\n|---|-----------|--------|\n| 1 | $\\overline{AB} \\parallel \\overline{CD}$, $\\overline{BC} \\cong \\overline{DA}$ | 1. Given |\n| 2 | $\\angle BAC \\cong \\angle DCA$ | 2. _____________ |\n| 3 | $\\angle BCA \\cong \\angle DAC$ | 3. _____________ |\n| 4 | $\\overline{AC} \\cong \\overline{CA}$ | 4. _____________ |\n| 5 | $\\triangle ABC \\cong \\triangle CDA$ | 5. _____________ |",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "We have quadrilateral $ABCD$ with diagonal $\\overline{AC}$ drawn. The diagonal acts as a **transversal** cutting the two parallel lines $\\overline{AB}$ and $\\overline{CD}$. Our goal is to prove the two triangles formed by that diagonal are congruent.\n\nThe key insight: whenever a transversal crosses two parallel lines, it creates **alternate interior angles** — angles that are on opposite sides of the transversal, between the parallel lines, and always equal. Since $\\overline{AC}$ is one transversal cutting $AB \\parallel CD$, it creates *two* pairs of alternate interior angles, giving us two free angle congruences instantly."
+    },
+    {
+     "title": "Reason for Statement 2",
+     "description": "$\\angle BAC$ sits at vertex $A$ (between $\\overline{AB}$ and diagonal $\\overline{AC}$), and $\\angle DCA$ sits at vertex $C$ (between $\\overline{CD}$ and diagonal $\\overline{AC}$).\n\nBecause $AB \\parallel CD$ and $\\overline{AC}$ is a transversal, these two angles lie on **opposite sides** of the transversal and **between** the parallel lines — the definition of alternate interior angles.\n\n**Reason 2: Alternate Interior Angles Theorem**\n$$\\overline{AB} \\parallel \\overline{CD},\\ \\text{transversal } \\overline{AC} \\implies \\angle BAC \\cong \\angle DCA$$"
+    },
+    {
+     "title": "Reason for Statement 3",
+     "description": "$\\angle BCA$ sits at vertex $C$ (between $\\overline{BC}$ and diagonal $\\overline{CA}$), and $\\angle DAC$ sits at vertex $A$ (between $\\overline{DA}$ and diagonal $\\overline{AC}$).\n\nThis is the **second** pair of alternate interior angles created by the same transversal $\\overline{AC}$ crossing the same parallel lines $AB \\parallel CD$ — just at the opposite ends of the diagonal.\n\n**Reason 3: Alternate Interior Angles Theorem**\n$$\\overline{AB} \\parallel \\overline{CD},\\ \\text{transversal } \\overline{AC} \\implies \\angle BCA \\cong \\angle DAC$$"
+    },
+    {
+     "title": "Reason for Statement 4",
+     "description": "$\\overline{AC}$ and $\\overline{CA}$ are literally the **same segment**, just named from opposite endpoints. Any segment is congruent to itself.\n\n**Reason 4: Reflexive Property of Congruence**\n$$\\overline{AC} \\cong \\overline{CA}$$"
+    },
+    {
+     "title": "Reason for Statement 5",
+     "description": "Collect what we have for $\\triangle ABC$ vs. $\\triangle CDA$, matched vertex-to-vertex:\n\n| $\\triangle ABC$ | $\\triangle CDA$ | Source |\n|---|---|---|\n| $\\angle BAC$ | $\\angle DCA$ | Statement 2 |\n| $\\overline{AC}$ | $\\overline{CA}$ | Statement 4 |\n| $\\angle BCA$ | $\\angle DAC$ | Statement 3 |\n\nWe have **Angle – Side – Angle**: two pairs of congruent angles surrounding the congruent shared side $\\overline{AC}$. That is exactly the **ASA Congruence Postulate**.\n\n**Reason 5: ASA (Angle-Side-Angle) Congruence Postulate**\n$$\\triangle ABC \\cong \\triangle CDA$$"
+    }
+   ],
+   "final_answer": "| # | Statement | Reason |\n|---|-----------|--------|\n| 1 | $\\overline{AB} \\parallel \\overline{CD}$, $\\overline{BC} \\cong \\overline{DA}$ | Given |\n| 2 | $\\angle BAC \\cong \\angle DCA$ | **Alternate Interior Angles Theorem** |\n| 3 | $\\angle BCA \\cong \\angle DAC$ | **Alternate Interior Angles Theorem** |\n| 4 | $\\overline{AC} \\cong \\overline{CA}$ | **Reflexive Property of Congruence** |\n| 5 | $\\triangle ABC \\cong \\triangle CDA$ | **ASA Congruence Postulate** |",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "31f9bf18",
+   "source": "prod question_bank_items 31f9bf18",
+   "question": "A rectangle has a width of $7$ inches and a length of $24$ inches. A diagonal is drawn from one corner to the opposite corner, dividing the rectangle into two right triangles. Using the Pythagorean Theorem, find the exact length of the diagonal $d$. Then determine whether a second rectangle — with width $9$ inches and diagonal $40$ inches — has a longer or shorter length than the first rectangle's length of $24$ inches. Show your work for both parts.",
+   "solution_steps": [
+    {
+     "title": "Understand the Problem",
+     "description": "We have **two separate tasks**:\n\n**Part 1:** A rectangle with width $7$ in. and length $24$ in. The diagonal splits it into two right triangles — the diagonal is the **hypotenuse**, and the width and length are the two **legs**. Use the Pythagorean Theorem to find $d$.\n\n**Part 2:** A second rectangle has width $9$ in. and diagonal $40$ in. This time the hypotenuse and one leg are known — work **backwards** to find the missing leg (the length), then compare it to $24$ in.\n\nThe key insight: every rectangle diagonal creates a right triangle, so the Pythagorean Theorem $a^2 + b^2 = c^2$ applies both ways — **forward** (find the hypotenuse) and **backward** (find a leg)."
+    },
+    {
+     "title": "Apply Pythagorean Theorem",
+     "description": "Plug the two legs into $a^2 + b^2 = c^2$, where the diagonal $d$ is the hypotenuse:\n\n$$d^2 = 7^2 + 24^2$$\n\n$$d^2 = 49 + 576 = 625$$\n\nThis is a **perfect square**, which is a strong signal to take the square root cleanly."
+    },
+    {
+     "title": "Solve for d (Part 1)",
+     "description": "$$d = \\sqrt{625} = \\boxed{25} \\text{ inches}$$\n\nThis is actually the famous **7-24-25 right triangle** — a Pythagorean triple. The diagonal of the first rectangle is exactly $25$ inches."
+    },
+    {
+     "title": "Set Up Part 2",
+     "description": "For the second rectangle, the known values are width $= 9$ in. and diagonal $= 40$ in. The diagonal is the hypotenuse, so:\n\n$$9^2 + L^2 = 40^2$$\n\nwhere $L$ is the unknown length. Isolate $L^2$ by subtracting $9^2$ from both sides:\n\n$$L^2 = 40^2 - 9^2$$"
+    },
+    {
+     "title": "Solve for L (Part 2)",
+     "description": "$$L^2 = 1600 - 81 = 1519$$\n\n$$L = \\sqrt{1519} \\approx 38.97 \\text{ inches}$$\n\n$1519$ is not a perfect square, so $\\sqrt{1519}$ is the **exact** form."
+    },
+    {
+     "title": "Compare the Two Lengths",
+     "description": "First rectangle's length: $24$ inches.\nSecond rectangle's length: $\\sqrt{1519} \\approx 38.97$ inches.\n\nSince $\\sqrt{1519} > 24$, the second rectangle has a **longer** length than the first.\n\nA quick way to confirm without a calculator: $\\sqrt{1519} > \\sqrt{576} = 24$, because $1519 > 576$. ✓"
+    }
+   ],
+   "final_answer": "**Part 1:** $d = \\sqrt{7^2 + 24^2} = \\sqrt{625} = 25$ inches\n\n**Part 2:** $L = \\sqrt{40^2 - 9^2} = \\sqrt{1519} \\approx 38.97$ inches\n\nThe second rectangle's length ($\\sqrt{1519} \\approx 38.97$ in.) is **longer** than the first rectangle's length of $24$ in.",
+   "request": "shouldn there be a diagram"
+  },
+  {
+   "id": "d5a862d3",
+   "source": "prod question_bank_items d5a862d3",
+   "question": "In the right triangle below, the hypotenuse has length $c = 13$ and one leg has length $a = 5$. Find the length of the missing leg $b$.",
+   "solution_steps": [
+    {
+     "title": "Understand the Problem",
+     "description": "We have a right triangle with hypotenuse $c = 13$ and one leg $a = 5$. The **Pythagorean theorem** states that in any right triangle:\n$$a^2 + b^2 = c^2$$\nThe two legs $a$ and $b$ square and sum to equal the square of the hypotenuse $c$. Our job is to isolate the unknown leg $b$."
+    },
+    {
+     "title": "Isolate $b^2$",
+     "description": "Subtract $a^2$ from both sides of $a^2 + b^2 = c^2$ to get $b$ alone:\n$$b^2 = c^2 - a^2$$\nPlugging in $c = 13$ and $a = 5$:\n$$b^2 = 13^2 - 5^2 = 169 - 25 = 144$$"
+    },
+    {
+     "title": "Solve for $b$",
+     "description": "Take the positive square root of both sides (lengths are always positive):\n$$b = \\sqrt{144} = 12$$\n**Key insight:** $144 = 12 \\times 12$, so the square root is a clean whole number — this is the famous **5-12-13 Pythagorean triple**!"
+    }
+   ],
+   "final_answer": "$b = 12$",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "6d780084",
+   "source": "prod question_bank_items 6d780084",
+   "question": "In the figure below, $\\triangle ABC$ and $\\triangle DBC$ share hypotenuse $\\overline{BC}$, with right angles at $A$ and $D$ respectively, and $AB = DB$. Identify which triangle congruence theorem applies and write a complete congruence statement.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "We have two right triangles, $\\triangle ABC$ and $\\triangle DBC$, glued along their shared side $\\overline{BC}$. The key is to **inventory every piece of information** the problem hands us and match it to a known congruence theorem.\n\nGiven facts:\n- $\\angle A = 90°$ (right angle in $\\triangle ABC$)\n- $\\angle D = 90°$ (right angle in $\\triangle DBC$)\n- $\\overline{BC}$ is the **shared hypotenuse** of both triangles (same segment, so $BC = BC$)\n- $AB = DB$ (one leg of each triangle is equal)\n\nThe presence of two right triangles with a **common hypotenuse** is the tell-tale sign that the **Hypotenuse-Leg (HL) Theorem** is the right tool."
+    },
+    {
+     "title": "Identify the HL Pairs",
+     "description": "The **Hypotenuse-Leg (HL) Theorem** says: two right triangles are congruent when their **hypotenuses are equal** AND **one pair of legs is equal**.\n\nCheck both conditions:\n\n**Hypotenuse:** $BC = BC$ — it's the *same* segment (Reflexive Property). ✓\n\n**Leg:** $AB = DB$ — given directly. ✓\n\n**Right angles:** $\\angle A = \\angle D = 90°$ — confirms both are right triangles. ✓\n\nAll three requirements of HL are satisfied."
+    },
+    {
+     "title": "Match Corresponding Vertices",
+     "description": "A congruence statement must list vertices in **matching order** — corresponding parts must line up.\n\n| $\\triangle ABC$ | $\\triangle DBC$ | Why they correspond |\n|---|---|---|\n| $A$ | $D$ | Both are the **right-angle vertex** |\n| $B$ | $B$ | Both are where the **equal leg** meets the hypotenuse |\n| $C$ | $C$ | Both are the **shared endpoint** of the hypotenuse |\n\nSo the correct vertex order is $A \\leftrightarrow D$, $B \\leftrightarrow B$, $C \\leftrightarrow C$."
+    },
+    {
+     "title": "Write the Congruence Statement",
+     "description": "Putting the matched vertices in order:\n\n$$\\triangle ABC \\cong \\triangle DBC \\quad (\\text{HL Theorem})$$\n\nThis one statement encodes **six** congruences at once:\n- $\\angle A = \\angle D = 90°$\n- $AB = DB$ (given legs)\n- $AC = DC$ (remaining legs — now proven equal)\n- $BC = BC$ (shared hypotenuse)\n- $\\angle B_1 = \\angle B_2$ (base angles at $B$)\n- $\\angle C_1 = \\angle C_2$ (base angles at $C$)"
+    }
+   ],
+   "final_answer": "$\\triangle ABC \\cong \\triangle DBC$ by the **Hypotenuse-Leg (HL) Theorem**, using $BC = BC$ (Reflexive Property) as the shared hypotenuse and $AB = DB$ as the congruent legs.",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "7ef5c01b",
+   "source": "prod question_bank_items 7ef5c01b",
+   "question": "In the diagram below, $\\overline{AB} \\parallel \\overline{CD}$ and $M$ is the midpoint of $\\overline{BC}$. Using the information given, prove that $\\triangle ABM \\cong \\triangle DCM$ by identifying the three pairs of congruent parts and naming the appropriate congruence postulate.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "We have two parallel lines, $\\overline{AB} \\parallel \\overline{CD}$, connected by segment $\\overline{BC}$, with $M$ the midpoint of $\\overline{BC}$.\n\nThe key insight: $M$ sits **between** $B$ and $C$, making it the vertex where the two triangles \"meet.\" When parallel lines are cut by a transversal, they produce **alternate interior angles** — and any two lines crossing at a point create **vertical angles**. Those two angle facts, combined with the midpoint, give us exactly three congruent pairs."
+    },
+    {
+     "title": "Pair 1: Midpoint → Equal Sides",
+     "description": "Since $M$ is the **midpoint** of $\\overline{BC}$, it divides the segment into two equal halves:\n$$BM = MC$$\nThis is our **congruent side**, and it is the side shared between the two triangles (it lies between the two angles we'll identify next)."
+    },
+    {
+     "title": "Pair 2: Alternate Interior Angles",
+     "description": "Since $\\overline{AB} \\parallel \\overline{CD}$, and $\\overline{BC}$ acts as a **transversal** cutting across those parallel lines, the angles on opposite sides of the transversal between the parallels are **alternate interior angles** — and alternate interior angles are always equal:\n$$\\angle ABM = \\angle DCM$$\nThink of it as a \"Z\" shape formed by the parallel lines and the transversal — the angles inside the Z are equal."
+    },
+    {
+     "title": "Pair 3: Vertical Angles",
+     "description": "At point $M$, segments $\\overline{AB}$ and $\\overline{CD}$ cross (through $\\overline{AM}$ and $\\overline{DM}$). Any two straight lines that cross form **vertical angles** — the angles directly across from each other — and vertical angles are always equal:\n$$\\angle AMB = \\angle DMC$$\nThis is our second pair of congruent angles, at the other end of side $\\overline{BM}$."
+    },
+    {
+     "title": "Apply ASA Postulate",
+     "description": "Gathering our three pairs and matching them to $\\triangle ABM$ vs. $\\triangle DCM$:\n\n| Part | $\\triangle ABM$ | $\\triangle DCM$ | Reason |\n|---|---|---|---|\n| Angle | $\\angle ABM$ | $\\angle DCM$ | Alternate interior angles, $\\overline{AB} \\parallel \\overline{CD}$ |\n| **Side** | $BM$ | $MC$ | $M$ is the midpoint of $\\overline{BC}$ |\n| Angle | $\\angle AMB$ | $\\angle DMC$ | Vertical angles |\n\nThe pattern is **Angle–Side–Angle (ASA)**: one angle, the included side between those angles, then the other angle.\n\nThe **ASA Congruence Postulate** states: if two angles and the included side of one triangle are congruent to two angles and the included side of another triangle, the triangles are congruent.\n\nTherefore:\n$$\\triangle ABM \\cong \\triangle DCM \\quad (\\text{ASA})$$"
+    }
+   ],
+   "final_answer": "$\\triangle ABM \\cong \\triangle DCM$ by **ASA**, using:\n1. $\\angle ABM = \\angle DCM$ (alternate interior angles, $\\overline{AB} \\parallel \\overline{CD}$)\n2. $BM = MC$ (definition of midpoint)\n3. $\\angle AMB = \\angle DMC$ (vertical angles)",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "7450aa6e",
+   "source": "prod question_bank_items 7450aa6e",
+   "question": "In the figure below, $AB = DE$, $BC = EF$, and $AC = DF$. Name the congruence postulate that proves $\\triangle ABC \\cong \\triangle DEF$, and write a complete congruence statement.",
+   "solution_steps": [
+    {
+     "title": "Understand the Given Info",
+     "description": "We have two triangles, $\\triangle ABC$ and $\\triangle DEF$, and we're told three pairs of sides are equal:\n\n$$AB = DE, \\quad BC = EF, \\quad AC = DF$$\n\nThe question asks: which congruence postulate does this match, and what is the full congruence statement?\n\n**Key insight:** When a problem hands you information about sides and angles, your first job is to *count* what type of information you have — sides (S) or angles (A) — and *where* that information sits relative to the triangles. That pattern will directly name the postulate."
+    },
+    {
+     "title": "Identify the Pattern (SSS)",
+     "description": "We've been given **three pairs of equal sides** — and nothing else. No angles are mentioned at all.\n\nThis matches exactly one postulate:\n\n> **SSS — Side-Side-Side Congruence Postulate:**\n> If all three sides of one triangle are equal to all three sides of another triangle, the triangles are congruent.\n\nThe reason SSS works is geometric: once all three side lengths are fixed, there is only *one* possible triangle shape that can be built — no wiggle room exists. The triangle is completely locked in."
+    },
+    {
+     "title": "Write the Congruence Statement",
+     "description": "A congruence statement must list vertices **in matching order** — the first vertex of one triangle corresponds to the first vertex of the other, and so on.\n\nFrom the given equalities, the correspondence is:\n$$A \\leftrightarrow D, \\quad B \\leftrightarrow E, \\quad C \\leftrightarrow F$$\n\nBecause $AB = DE$ (so $A$ matches $D$ and $B$ matches $E$), $BC = EF$ (so $C$ matches $F$), and $AC = DF$ confirms this pairing.\n\nSo the complete congruence statement is:\n$$\\triangle ABC \\cong \\triangle DEF$$"
+    }
+   ],
+   "final_answer": "**SSS (Side-Side-Side) Postulate** — all three sides of $\\triangle ABC$ equal the corresponding three sides of $\\triangle DEF$.\n\n$$\\triangle ABC \\cong \\triangle DEF$$",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "2f44f46d",
+   "source": "prod question_bank_items 2f44f46d",
+   "question": "In the figure below, $\\overline{DE} \\parallel \\overline{BC}$, where $D$ lies on $\\overline{AB}$ and $E$ lies on $\\overline{AC}$. The measure of $\\angle ADE = 4x + 8$ degrees, $\\angle ABC = 6x - 12$ degrees, and $\\angle DAE = 38$ degrees.\n\n(a) Explain why $\\angle ADE$ and $\\angle ABC$ are congruent, and state the theorem that justifies this.\n\n(b) Solve for $x$.\n\n(c) Using your value of $x$, find $m\\angle AED$ and $m\\angle ACB$.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "We have triangle $ABC$ with a segment $\\overline{DE}$ drawn **inside** the triangle such that $\\overline{DE} \\parallel \\overline{BC}$, $D$ on $\\overline{AB}$, and $E$ on $\\overline{AC}$. This creates a **smaller triangle** $ADE$ sitting inside the bigger triangle $ABC$, sharing the same vertex $A$.\n\nThe key insight: whenever two parallel lines are cut by a **transversal** (a line crossing both), they create equal corresponding angles. Here, side $\\overline{AB}$ acts as a transversal cutting $\\overline{DE}$ and $\\overline{BC}$ — giving us a direct relationship between $\\angle ADE$ and $\\angle ABC$."
+    },
+    {
+     "title": "Part (a): Why ∠ADE ≅ ∠ABC",
+     "description": "Since $\\overline{DE} \\parallel \\overline{BC}$, line $\\overleftrightarrow{AB}$ is a **transversal** crossing both parallel lines.\n\n$\\angle ADE$ and $\\angle ABC$ are **corresponding angles** — they sit on the same side of the transversal, both opening to the right, one at each parallel line.\n\n**Corresponding Angles Postulate:** When two parallel lines are cut by a transversal, corresponding angles are congruent.\n\nTherefore: $$\\angle ADE \\cong \\angle ABC$$"
+    },
+    {
+     "title": "Part (b): Set Angles Equal, Solve for x",
+     "description": "Since $\\angle ADE \\cong \\angle ABC$, their measures are equal:\n$$4x + 8 = 6x - 12$$\n\nSubtract $4x$ from both sides:\n$$8 = 2x - 12$$\n\nAdd $12$ to both sides:\n$$20 = 2x$$\n\nDivide by $2$:\n$$x = 10$$"
+    },
+    {
+     "title": "Part (c): Find ∠AED and ∠ACB",
+     "description": "**Compute the known angles using $x = 10$:**\n$$\\angle ADE = 4(10) + 8 = 48°$$\n$$\\angle ABC = 6(10) - 12 = 48° \\checkmark$$\n\n**Find $\\angle AED$ using Triangle Angle Sum in $\\triangle ADE$:**\n\nThe three angles of any triangle sum to $180°$:\n$$\\angle DAE + \\angle ADE + \\angle AED = 180°$$\n$$38° + 48° + \\angle AED = 180°$$\n$$\\angle AED = 180° - 86° = 94°$$\n\n**Find $\\angle ACB$:**\n\nJust as $\\angle ADE \\cong \\angle ABC$ by corresponding angles, $\\angle AED$ and $\\angle ACB$ are also **corresponding angles** formed by transversal $\\overleftrightarrow{AC}$ cutting the same parallel lines $\\overline{DE} \\parallel \\overline{BC}$.\n\nTherefore:\n$$m\\angle ACB = m\\angle AED = 94°$$\n\n**Verification** — angles of $\\triangle ABC$ must sum to $180°$:\n$$38° + 48° + 94° = 180° \\checkmark$$"
+    }
+   ],
+   "final_answer": "$(a)$ $\\angle ADE$ and $\\angle ABC$ are congruent by the **Corresponding Angles Postulate** ($\\overline{DE} \\parallel \\overline{BC}$, cut by transversal $\\overleftrightarrow{AB}$).\n\n$(b)$ $4x+8 = 6x-12 \\implies x = 10$\n\n$(c)$ $m\\angle AED = m\\angle ACB = 94°$",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "77195d48",
+   "source": "prod question_bank_items 77195d48",
+   "question": "Lines $m \\parallel n$ are cut by transversal $t$. The transversal forms an angle of $74°$ with line $m$. The angle bisector of the acute angle at line $m$ meets line $n$ at point $P$, forming an angle $\\theta$ with line $n$. Find $\\theta$. Justify each step using parallel line theorems.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "We have two parallel lines $m \\parallel n$ cut by transversal $t$ at point $A$ on $m$. The transversal creates a **74° acute angle** at $A$. An angle bisector is drawn from $A$, splitting that 74° in half, and it hits line $n$ at point $P$. We want the angle $\\theta$ that this bisector makes with line $n$.\n\nThe key insight: the transversal $t$, the angle bisector, and line $n$ form a **triangle**. We can find all three interior angles of that triangle — two using parallel line theorems, and the third from the Triangle Angle Sum — to get $\\theta$ without any guesswork."
+    },
+    {
+     "title": "Bisect the 74° Angle",
+     "description": "The angle bisector of the **74° angle** at $A$ splits it into two equal halves:\n$$\\frac{74°}{2} = 37°$$\nSo the bisector makes a **37° angle with line $m$**. This is the interior angle of our triangle at vertex $A$."
+    },
+    {
+     "title": "Find Angle at B (Transversal meets n)",
+     "description": "Let $B$ be where transversal $t$ crosses line $n$. Since $m \\parallel n$, the **Alternate Interior Angles Theorem** tells us that the angle $t$ makes on the interior side at $B$ equals the acute angle it made at $A$:\n$$\\angle \\text{at } B \\text{ (interior)} = 74°$$\nThis is the interior angle of our triangle at vertex $B$."
+    },
+    {
+     "title": "Apply Triangle Angle Sum",
+     "description": "Triangle $ABP$ has interior angles at $A$, $B$, and $P$. By the **Triangle Angle Sum Theorem**, they must add to $180°$:\n$$37° + 74° + \\theta = 180°$$\n$$\\theta = 180° - 37° - 74° = 69°$$"
+    }
+   ],
+   "final_answer": "$\\theta = 69°$",
+   "request": "Can you show the diagram with the parallel lines cut by the transversal along with the problem?"
+  },
+  {
+   "id": "12c77989",
+   "source": "prod question_bank_items 12c77989",
+   "question": "In the figure below, $\\angle A = \\angle D$ and $\\angle B = \\angle E$. If $AB = 12$, $DE = 8$, and $BC = 9$, find $EF$. Set up and solve a proportion using the similarity ratio.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "We have two triangles — $\\triangle ABC$ and $\\triangle DEF$ — sharing two pairs of equal angles: $\\angle A = \\angle D$ and $\\angle B = \\angle E$.\n\nWhenever **two pairs of angles match**, the triangles are **similar** (AA Similarity). Similar triangles have the same shape, just different sizes, so their **corresponding sides are proportional**.\n\nThe matching (corresponding) sides are:\n- $AB \\leftrightarrow DE$ (between the equal angle pairs)\n- $BC \\leftrightarrow EF$ (the sides after the second equal angle)\n- $AC \\leftrightarrow DF$\n\nOur goal: use the known sides $AB = 12$, $DE = 8$, and $BC = 9$ to find $EF$."
+    },
+    {
+     "title": "Find the Similarity Ratio",
+     "description": "The **similarity ratio** is the scale factor from $\\triangle ABC$ down to $\\triangle DEF$. It's found by dividing the known corresponding sides:\n\n$$\\text{ratio} = \\frac{DE}{AB} = \\frac{8}{12} = \\frac{2}{3}$$\n\nEvery side in $\\triangle DEF$ is $\\frac{2}{3}$ the length of the matching side in $\\triangle ABC$."
+    },
+    {
+     "title": "Set Up the Proportion",
+     "description": "Since corresponding sides are proportional, set the ratio of the **known** corresponding pair equal to the ratio of the **unknown** pair:\n\n$$\\frac{DE}{AB} = \\frac{EF}{BC}$$\n\nSubstituting the known values:\n\n$$\\frac{8}{12} = \\frac{EF}{9}$$"
+    },
+    {
+     "title": "Solve for EF",
+     "description": "Cross-multiply to isolate $EF$:\n\n$$EF = 9 \\times \\frac{8}{12} = 9 \\times \\frac{2}{3} = \\frac{18}{3} = 6$$"
+    }
+   ],
+   "final_answer": "$EF = 6$",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "e87bd653",
+   "source": "prod question_bank_items e87bd653",
+   "question": "In the figure below, $AB = DE$, $\\angle B = \\angle E$, and $BC = EF$. Name the congruence postulate or theorem that proves $\\triangle ABC \\cong \\triangle DEF$, and write the full congruence statement.",
+   "solution_steps": [
+    {
+     "title": "Understand What's Given",
+     "description": "List the three pieces of information given about the two triangles:\n\n- $AB = DE$ — a pair of **equal sides**\n- $\\angle B = \\angle E$ — a pair of **equal angles**\n- $BC = EF$ — another pair of **equal sides**\n\nThe key question to ask: *where is the angle relative to the two sides?* This determines which congruence postulate applies."
+    },
+    {
+     "title": "Locate the Angle's Position",
+     "description": "In $\\triangle ABC$, the angle is at vertex $B$, and the two sides meeting at $B$ are $AB$ and $BC$. So $\\angle B$ is **sandwiched between** sides $AB$ and $BC$.\n\nThe same is true in $\\triangle DEF$: $\\angle E$ sits between sides $DE$ and $EF$.\n\nWhenever a known angle is **between** two known sides, the pattern is:\n$$\\text{Side} - \\text{Angle} - \\text{Side}$$\nThis is the **SAS** configuration."
+    },
+    {
+     "title": "Apply SAS Postulate",
+     "description": "The **SAS (Side-Angle-Side) Postulate** states: if two sides and the **included angle** of one triangle are congruent to two sides and the included angle of another triangle, the triangles are congruent.\n\nMatching the corresponding parts in order:\n\n| $\\triangle ABC$ | $\\triangle DEF$ |\n|---|---|\n| $AB$ | $DE$ |\n| $\\angle B$ | $\\angle E$ |\n| $BC$ | $EF$ |\n\nAll three conditions are satisfied, so the triangles are congruent by **SAS**."
+    },
+    {
+     "title": "Write the Congruence Statement",
+     "description": "The congruence statement must list vertices in **matching order** — corresponding vertices must align:\n\n- $A \\leftrightarrow D$, $B \\leftrightarrow E$, $C \\leftrightarrow F$\n\n$$\\triangle ABC \\cong \\triangle DEF$$"
+    }
+   ],
+   "final_answer": "$\\triangle ABC \\cong \\triangle DEF$ by the **SAS (Side-Angle-Side) Postulate**, since $AB = DE$, $\\angle B = \\angle E$ (included angle), and $BC = EF$.",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "49c9fee5",
+   "source": "prod question_bank_items 49c9fee5",
+   "question": "Find the length of the hypotenuse $c$ in the right triangle below. Leave your answer in simplest radical form.",
+   "solution_steps": [],
+   "final_answer": "(solution failed — please solve manually)",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "b1768f86",
+   "source": "prod question_bank_items b1768f86",
+   "question": "Triangle $ABC$ is inscribed in a circle with center $O$ as shown. Given $AB = 10$, $BC = 6$, and $\\angle B = 90°$, find the circumradius $R$ of the circle.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "We have triangle $ABC$ inscribed in a circle, with $AB = 10$, $BC = 6$, and $\\angle B = 90°$. When a triangle is **inscribed in a circle** (all three vertices touch the circle), there's a powerful theorem to look for: if one of the triangle's angles is $90°$, the side **opposite** that right angle must be the circle's **diameter**. This is called **Thales' Theorem**, and it turns a circumradius problem into a simple diameter-halving problem."
+    },
+    {
+     "title": "Identify the Diameter",
+     "description": "By **Thales' Theorem**, any triangle inscribed in a circle with a $90°$ angle has its hypotenuse as the circle's **diameter**. Since $\\angle B = 90°$, the hypotenuse is $AC$ — the side opposite $B$. So $AC = 2R$, meaning we just need to find $AC$."
+    },
+    {
+     "title": "Find the Hypotenuse",
+     "description": "Apply the **Pythagorean theorem** to the right triangle at $B$:\n$$AC^2 = AB^2 + BC^2 = 10^2 + 6^2 = 100 + 36 = 136$$\n$$AC = \\sqrt{136} = 2\\sqrt{34}$$"
+    },
+    {
+     "title": "Solve for R",
+     "description": "Since $AC$ is the diameter, the circumradius is exactly half:\n$$R = \\frac{AC}{2} = \\frac{2\\sqrt{34}}{2} = \\sqrt{34}$$"
+    }
+   ],
+   "final_answer": "$R = \\sqrt{34}$",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "099d8962",
+   "source": "prod question_bank_items 099d8962",
+   "question": "In the diagram below, $\\overline{WX} \\cong \\overline{YZ}$, $\\angle W \\cong \\angle Y$, and $\\angle X \\cong \\angle Z$. Determine which congruence theorem (ASA or AAS) can be used to prove $\\triangle WXV \\cong \\triangle YZV$. Explain why the other theorem does NOT apply.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "We have two triangles, $\\triangle WXV$ and $\\triangle YZV$, sharing vertex $V$. The given information is:\n- $\\overline{WX} \\cong \\overline{YZ}$ (one pair of congruent sides)\n- $\\angle W \\cong \\angle Y$ (one pair of congruent angles)\n- $\\angle X \\cong \\angle Z$ (one pair of congruent angles)\n\nThe key question is: **where does the known side sit relative to the two known angles?** That's the entire distinction between ASA and AAS:\n- **ASA** — the side is **between** (included by) the two known angles.\n- **AAS** — the side is **not between** (non-included) the two known angles."
+    },
+    {
+     "title": "Locate the Side's Position",
+     "description": "In $\\triangle WXV$, the side $\\overline{WX}$ runs directly **from vertex $W$ to vertex $X$** — the exact two vertices where our known angles $\\angle W$ and $\\angle X$ live.\n\nThis means $\\overline{WX}$ is the side **sandwiched between** $\\angle W$ and $\\angle X$. It is the **included side**.\n\nThe same relationship holds in $\\triangle YZV$: $\\overline{YZ}$ is sandwiched between $\\angle Y$ and $\\angle Z$."
+    },
+    {
+     "title": "Apply ASA",
+     "description": "The pattern across both triangles is:\n$$\\angle W \\cong \\angle Y, \\quad \\overline{WX} \\cong \\overline{YZ}, \\quad \\angle X \\cong \\angle Z$$\n\nReading left to right: **Angle — included Side — Angle**. This matches the **ASA (Angle-Side-Angle)** congruence theorem exactly.\n\nTherefore: $\\triangle WXV \\cong \\triangle YZV$ by **ASA**."
+    },
+    {
+     "title": "Why AAS Does NOT Apply",
+     "description": "**AAS (Angle-Angle-Side)** requires the known side to be **non-included** — meaning it must lie *outside* (not between) the two known angles.\n\nHere, $\\overline{WX}$ is *not* outside $\\angle W$ and $\\angle X$; it is the very segment that *connects* them. There is no non-included side among the three given pieces of information, so AAS has no role here.\n\nPutting it simply: **if the side is between the two angles → ASA. If the side is outside the two angles → AAS.** The given side $\\overline{WX}$ is between $\\angle W$ and $\\angle X$, so AAS cannot be used."
+    }
+   ],
+   "final_answer": "$\\triangle WXV \\cong \\triangle YZV$ by **ASA**, because $\\overline{WX}$ (and $\\overline{YZ}$) is the **included side** between the two known angles $(\\angle W, \\angle X)$ and $(\\angle Y, \\angle Z)$. AAS does **not** apply because it requires the known side to be *non-included* (outside the two angles), which is not the case here.",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "dd7ab4c1-step",
+   "source": "prod question_bank_items dd7ab4c1",
+   "question": "**Given:** $\\overline{BC} \\cong \\overline{DA}$, $\\overline{BC} \\parallel \\overline{AD}$\n\n**Prove:** $\\triangle ABC \\cong \\triangle CDA$\n\nWrite a complete two-column proof. (*Hint:* Use the Alternate Interior Angles Theorem and the Reflexive Property.)",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "We have quadrilateral $ABCD$ with diagonal $\\overline{AC}$ drawn, splitting it into $\\triangle ABC$ and $\\triangle CDA$.\n\nThe key insight: $\\overline{AC}$ is **shared** by both triangles, and since $\\overline{BC} \\parallel \\overline{AD}$, the diagonal $\\overline{AC}$ acts as a **transversal** — creating a pair of alternate interior angles we can use.\n\nWith one shared side, one given pair of congruent sides, and one pair of congruent angles (from parallel lines), we'll have exactly what we need for **SAS** congruence."
+    },
+    {
+     "title": "Mark the Diagonal AC",
+     "description": "Draw diagonal $\\overline{AC}$, which is a side of **both** triangles.\n\nBy the **Reflexive Property of Congruence**, any segment is congruent to itself:\n$$\\overline{AC} \\cong \\overline{AC}$$\n\nThis gives us one pair of congruent sides shared between the two triangles."
+    },
+    {
+     "title": "Identify Alternate Interior Angles",
+     "description": "Since $\\overline{BC} \\parallel \\overline{AD}$, the diagonal $\\overline{AC}$ is a transversal cutting those parallel lines.\n\nBy the **Alternate Interior Angles Theorem**, the angles on opposite sides of the transversal between the parallel lines are congruent:\n$$\\angle BCA \\cong \\angle DAC$$\n\nNotice carefully which angles these are:\n- $\\angle BCA$ is at vertex $C$, inside $\\triangle ABC$, between sides $\\overline{BC}$ and $\\overline{AC}$\n- $\\angle DAC$ is at vertex $A$, inside $\\triangle CDA$, between sides $\\overline{DA}$ and $\\overline{AC}$\n\nThe angle sits **between** the two sides we're using — exactly what SAS requires."
+    },
+    {
+     "title": "Apply SAS Congruence",
+     "description": "Collect the three facts and match them to the **SAS (Side-Angle-Side)** pattern — two sides and the **included** angle (the angle sandwiched between those two sides):\n\n| $\\triangle ABC$ | $\\triangle CDA$ | Reason |\n|---|---|---|\n| $\\overline{BC}$ | $\\overline{DA}$ | Given |\n| $\\angle BCA$ | $\\angle DAC$ | Alternate Interior Angles |\n| $\\overline{AC}$ | $\\overline{CA}$ | Reflexive Property |\n\nIn $\\triangle ABC$: the included angle $\\angle BCA$ sits between $\\overline{BC}$ and $\\overline{AC}$. ✓\nIn $\\triangle CDA$: the included angle $\\angle DAC$ sits between $\\overline{DA}$ and $\\overline{CA}$. ✓\n\nAll three SAS conditions are met, so:\n$$\\triangle ABC \\cong \\triangle CDA \\quad \\blacksquare$$"
+    }
+   ],
+   "final_answer": "$\\triangle ABC \\cong \\triangle CDA$ by **SAS**, using $\\overline{BC} \\cong \\overline{DA}$ (Given), $\\angle BCA \\cong \\angle DAC$ (Alternate Interior Angles, since $\\overline{BC} \\parallel \\overline{AD}$), and $\\overline{AC} \\cong \\overline{AC}$ (Reflexive Property).",
+   "request": "can you provide the drawing, and also put a diagram on the step that uses the alternate interior angles?"
+  },
+  {
+   "id": "7ef5c01b-step",
+   "source": "prod question_bank_items 7ef5c01b",
+   "question": "In the diagram below, $\\overline{AB} \\parallel \\overline{CD}$ and $M$ is the midpoint of $\\overline{BC}$. Using the information given, prove that $\\triangle ABM \\cong \\triangle DCM$ by identifying the three pairs of congruent parts and naming the appropriate congruence postulate.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "We have two parallel lines, $\\overline{AB} \\parallel \\overline{CD}$, connected by segment $\\overline{BC}$, with $M$ the midpoint of $\\overline{BC}$.\n\nThe key insight: $M$ sits **between** $B$ and $C$, making it the vertex where the two triangles \"meet.\" When parallel lines are cut by a transversal, they produce **alternate interior angles** — and any two lines crossing at a point create **vertical angles**. Those two angle facts, combined with the midpoint, give us exactly three congruent pairs."
+    },
+    {
+     "title": "Pair 1: Midpoint → Equal Sides",
+     "description": "Since $M$ is the **midpoint** of $\\overline{BC}$, it divides the segment into two equal halves:\n$$BM = MC$$\nThis is our **congruent side**, and it is the side shared between the two triangles (it lies between the two angles we'll identify next)."
+    },
+    {
+     "title": "Pair 2: Alternate Interior Angles",
+     "description": "Since $\\overline{AB} \\parallel \\overline{CD}$, and $\\overline{BC}$ acts as a **transversal** cutting across those parallel lines, the angles on opposite sides of the transversal between the parallels are **alternate interior angles** — and alternate interior angles are always equal:\n$$\\angle ABM = \\angle DCM$$\nThink of it as a \"Z\" shape formed by the parallel lines and the transversal — the angles inside the Z are equal."
+    },
+    {
+     "title": "Pair 3: Vertical Angles",
+     "description": "At point $M$, segments $\\overline{AB}$ and $\\overline{CD}$ cross (through $\\overline{AM}$ and $\\overline{DM}$). Any two straight lines that cross form **vertical angles** — the angles directly across from each other — and vertical angles are always equal:\n$$\\angle AMB = \\angle DMC$$\nThis is our second pair of congruent angles, at the other end of side $\\overline{BM}$."
+    },
+    {
+     "title": "Apply ASA Postulate",
+     "description": "Gathering our three pairs and matching them to $\\triangle ABM$ vs. $\\triangle DCM$:\n\n| Part | $\\triangle ABM$ | $\\triangle DCM$ | Reason |\n|---|---|---|---|\n| Angle | $\\angle ABM$ | $\\angle DCM$ | Alternate interior angles, $\\overline{AB} \\parallel \\overline{CD}$ |\n| **Side** | $BM$ | $MC$ | $M$ is the midpoint of $\\overline{BC}$ |\n| Angle | $\\angle AMB$ | $\\angle DMC$ | Vertical angles |\n\nThe pattern is **Angle–Side–Angle (ASA)**: one angle, the included side between those angles, then the other angle.\n\nThe **ASA Congruence Postulate** states: if two angles and the included side of one triangle are congruent to two angles and the included side of another triangle, the triangles are congruent.\n\nTherefore:\n$$\\triangle ABM \\cong \\triangle DCM \\quad (\\text{ASA})$$"
+    }
+   ],
+   "final_answer": "$\\triangle ABM \\cong \\triangle DCM$ by **ASA**, using:\n1. $\\angle ABM = \\angle DCM$ (alternate interior angles, $\\overline{AB} \\parallel \\overline{CD}$)\n2. $BM = MC$ (definition of midpoint)\n3. $\\angle AMB = \\angle DMC$ (vertical angles)",
+   "request": "can you add the diagram, and a diagram on the step where you show the vertical angles?"
+  }
+ ]
+}
