@@ -6,9 +6,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import { useAuthStore } from "@/stores/auth";
 import { auth, clearTokens, hasStoredTokens, type InviteData, type SectionInviteData } from "@/lib/api";
-import { Button, useToast } from "@/components/ui";
-import { Input, PasswordInput } from "@/components/ui/input";
-import { LogoMark } from "@/components/shared/logo-mark";
+import { useToast } from "@/components/ui";
+import { ButtonLink } from "@/components/site/button-link";
+import { AuthShell, AUTH_CARD, AUTH_H1 } from "@/components/site/auth-shell";
+import { SiteInput, SitePasswordInput, SiteSubmit, Spinner } from "@/components/site/form";
 
 // Student grade options. Signup is invite-only: every student arrives with
 // a class join code or a class invite (the backend refuses anything else,
@@ -175,12 +176,12 @@ function RegisterPageContent() {
   // Invite loading state
   if ((inviteToken || sectionInviteToken) && inviteLoading) {
     return (
-      <div className="flex flex-1 items-center justify-center">
-        <div className="text-center">
-          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          <p className="text-sm text-text-secondary">Verifying your invite...</p>
+      <AuthShell>
+        <div className="py-16 text-center" role="status">
+          <Spinner className="h-8 w-8 border-veradic" />
+          <p className="m-0 mt-4 text-[15px] text-ink-soft">Verifying your invite...</p>
         </div>
-      </div>
+      </AuthShell>
     );
   }
 
@@ -193,36 +194,34 @@ function RegisterPageContent() {
   // signed in, don't show them a signup form."
   if ((user || hasStoredTokens()) && !inviteToken && !sectionInviteToken) {
     return (
-      <div className="flex flex-1 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      </div>
+      <AuthShell>
+        <div className="py-16" role="status" aria-label="Signing you in">
+          <Spinner className="h-8 w-8 border-veradic" />
+        </div>
+      </AuthShell>
     );
   }
 
   // Invite error state
   if ((inviteToken || sectionInviteToken) && inviteError) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center px-6">
+      <AuthShell>
         <motion.div
-          initial={{ opacity: 0, y: 12 }}
+          initial={{ opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md rounded-[--radius-xl] border border-border-light bg-surface p-8 text-center shadow-md"
+          transition={{ duration: 0.18, ease: "easeOut" }}
+          className={AUTH_CARD}
         >
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-red-50 dark:bg-red-500/10">
-            <svg className="h-7 w-7 text-red-500" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
-            </svg>
-          </div>
-          <h1 className="font-serif text-[24px] leading-tight tracking-[-0.01em] text-text-primary">Invite not valid.</h1>
-          <p className="mt-2 text-sm text-text-secondary">{inviteError}</p>
-          <p className="mt-4 text-sm text-text-secondary">
+          <h1 className={AUTH_H1}>Invite not valid.</h1>
+          <p className="m-0 mt-3 text-base leading-[1.5] text-ink-soft">{inviteError}</p>
+          <p className="m-0 mt-3 text-base leading-[1.5] text-ink-soft">
             Contact your school administrator to request a new invite.
           </p>
-          <Link href="/" className="mt-6 inline-block text-sm font-semibold text-primary hover:text-primary-dark">
-            Back to Home
+          <Link href="/" className="mt-6 inline-block text-[15px] font-bold text-veradic underline underline-offset-4 hover:text-veradic-dark">
+            Back to home
           </Link>
         </motion.div>
-      </div>
+      </AuthShell>
     );
   }
 
@@ -230,141 +229,111 @@ function RegisterPageContent() {
   const isSectionInviteFlow = !!sectionInvite;
   const lockEmail = isInviteFlow || isSectionInviteFlow;
 
-  return (
-    <div
-      className="relative flex flex-1 flex-col items-center justify-center px-6 py-12"
-      style={{
-        backgroundImage:
-          "radial-gradient(circle at 18% 22%, var(--color-surface-alt-2) 0%, transparent 38%)," +
-          "radial-gradient(circle at 82% 78%, var(--color-primary-bg) 0%, transparent 40%)",
-      }}
-    >
-      {/* Brand — wordmark + serif sub. No gradient tile. */}
-      <Link href="/" className="mb-10 flex items-center gap-2.5">
-        <LogoMark size={36} />
-        <span className="flex flex-col leading-none">
-          <span className="text-lg font-bold tracking-[-0.01em] text-text-primary">
-            Veradic AI
-          </span>
-          <span className="mt-1 font-serif italic text-[13px] text-text-secondary">
-            classroom AI, teacher-controlled
-          </span>
-        </span>
-      </Link>
+  const showJoinForm = !(audience === "teacher" && !lockEmail);
 
-      {/* Card — hairline on warm surface, quiet entrance. */}
+  return (
+    <AuthShell switchPrompt="Already have an account?" switchLabel="Sign in" switchHref="/login">
+      {/* Quiet entrance: opacity + 4px rise, no spring. */}
       <motion.div
         initial={{ opacity: 0, y: 4 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.18, ease: "easeOut" }}
-        className="relative w-full max-w-md rounded-[--radius-md] border border-border bg-surface p-8"
+        className={AUTH_CARD}
       >
-        {/* Which door — shown without an invite link. Reuses the Grade Level picker's
-            segmented treatment so it reads as native to this form rather
-            than bolted on top of it. */}
+        {/* Which door: shown without an invite link (an invite already
+            settles it). A segmented switch on the card, as a radio group:
+            one tab stop, arrows move between the two. */}
         {!lockEmail && (
-          <div className="mb-6 flex flex-col gap-1.5">
-            <span id="audience-label" className="text-[13px] font-semibold tracking-wide text-text-secondary">
-              I&apos;m a…
-            </span>
-            <div role="radiogroup" aria-labelledby="audience-label" className="flex gap-2">
-              {(["student", "teacher"] as const).map((role) => (
-                <button
-                  key={role}
-                  type="button"
-                  role="radio"
-                  aria-checked={audience === role}
-                  // A radiogroup is one tab stop, and arrows move within it.
-                  // Without this the role announces a choice the keyboard
-                  // can't actually make.
-                  tabIndex={audience === role ? 0 : -1}
-                  onKeyDown={(e) => {
-                    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) return;
-                    e.preventDefault();
-                    const next = audience === "student" ? "teacher" : "student";
-                    setAudience(next);
-                    e.currentTarget.parentElement
-                      ?.querySelector<HTMLButtonElement>(`[data-audience="${next}"]`)
-                      ?.focus();
-                  }}
-                  data-audience={role}
-                  onClick={() => setAudience(role)}
-                  className={`flex-1 rounded-[--radius-sm] border py-2.5 text-sm font-semibold capitalize transition-colors ${
-                    audience === role
-                      ? "border-primary bg-primary-bg text-primary"
-                      : "border-border bg-input-bg text-text-secondary hover:border-primary/30"
-                  }`}
-                >
-                  {role}
-                </button>
-              ))}
-            </div>
+          <div role="radiogroup" aria-label="I'm a…" className="mb-6 flex rounded-[6px] bg-[#F0EEE6] p-1">
+            {(["student", "teacher"] as const).map((role) => (
+              <button
+                key={role}
+                type="button"
+                role="radio"
+                aria-checked={audience === role}
+                // A radiogroup is one tab stop, and arrows move within it.
+                // Without this the role announces a choice the keyboard
+                // can't actually make.
+                tabIndex={audience === role ? 0 : -1}
+                onKeyDown={(e) => {
+                  if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(e.key)) return;
+                  e.preventDefault();
+                  const next = audience === "student" ? "teacher" : "student";
+                  setAudience(next);
+                  e.currentTarget.parentElement
+                    ?.querySelector<HTMLButtonElement>(`[data-audience="${next}"]`)
+                    ?.focus();
+                }}
+                data-audience={role}
+                onClick={() => setAudience(role)}
+                className={`flex-1 rounded-[4px] px-2 py-2.5 text-[15px] transition-colors ${
+                  audience === role
+                    ? "bg-white font-extrabold text-ink shadow-[0_1px_2px_rgba(29,38,51,0.18)]"
+                    : "font-bold text-ink-soft hover:text-ink"
+                }`}
+              >
+                I&apos;m a {role}
+              </button>
+            ))}
           </div>
         )}
 
         {isInviteFlow ? (
           <>
-            <h1 className="font-serif text-[28px] leading-tight tracking-[-0.01em] text-text-primary">
-              Welcome, Teacher
-            </h1>
-            <div className="mt-2 flex items-center gap-2 rounded-[--radius-sm] bg-primary-bg px-3 py-2">
-              <svg className="h-4 w-4 text-primary" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.438 60.438 0 0 0-.491 6.347A48.62 48.62 0 0 1 12 20.904a48.62 48.62 0 0 1 8.232-4.41 60.46 60.46 0 0 0-.491-6.347m-15.482 0a50.636 50.636 0 0 0-2.658-.813A59.906 59.906 0 0 1 12 3.493a59.903 59.903 0 0 1 10.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.717 50.717 0 0 1 12 13.489a50.702 50.702 0 0 1 7.74-3.342" />
-              </svg>
-              <span className="text-sm font-semibold text-primary">
-                {invite.school_name}
-              </span>
-            </div>
+            <h1 className={AUTH_H1}>Welcome, Teacher</h1>
+            <p className="m-0 mt-3 inline-block rounded-[6px] bg-[#E4F0EA] px-3 py-1.5 text-[15px] font-bold text-veradic">
+              {invite.school_name}
+            </p>
           </>
         ) : isSectionInviteFlow ? (
           <>
-            <h1 className="font-serif text-[28px] leading-tight tracking-[-0.01em] text-text-primary">
-              Join {sectionInvite.course_name}
-            </h1>
-            <p className="mt-1 text-sm text-text-secondary">
+            <h1 className={AUTH_H1}>Join {sectionInvite.course_name}</h1>
+            <p className="m-0 mt-2 text-base text-ink-soft">
               {sectionInvite.section_name}
               {sectionInvite.school_name ? ` · ${sectionInvite.school_name}` : ""}
             </p>
           </>
         ) : (
-          <>
-            <h1 className="font-serif text-[28px] leading-tight tracking-[-0.01em] text-text-primary">
-              {audience === "teacher"
-                ? "Let's set up your classroom"
-                : "Create your student account"}
-            </h1>
-            <p className="mt-1 text-sm text-text-secondary">
-              {audience === "teacher"
-                ? "It starts with a conversation, not a signup form"
-                : "Join your class with the code from your teacher"}
-            </p>
-          </>
+          <h1 className={AUTH_H1}>
+            {audience === "teacher" ? "Teacher accounts come from your school." : "Join your class"}
+          </h1>
         )}
 
-        {audience === "teacher" && !lockEmail ? (
-          <div className="mt-6">
-            <p className="text-sm leading-relaxed text-text-secondary">
-              Tell us about your school. We&apos;ll reply within a day and set
-              your classes up together on a short call.
+        {!showJoinForm ? (
+          <div>
+            <p className="m-0 mt-3 text-base leading-[1.55] text-ink-soft">
+              Use the link in your invite email. New to Veradic? We&apos;ll set
+              up your school on a 20-minute call.
             </p>
-            <Link
-              href="/demo"
-              className="mt-5 flex w-full items-center justify-center gap-2 rounded-[--radius-sm] bg-primary px-4 py-3 text-sm font-semibold text-text-on-primary transition-colors hover:bg-primary-dark"
-            >
-              Tell us about your school
-              <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M5 12h14M12 5l7 7-7 7" />
-              </svg>
-            </Link>
-            <p className="mt-3 text-center text-xs text-text-secondary">
-              Already invited by your school? Use the link in your invite email.
-            </p>
+            <ButtonLink href="/demo" variant="ink" className="mt-5">
+              Book a demo
+            </ButtonLink>
           </div>
         ) : (
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-          <Input
+        <form onSubmit={handleSubmit} className="mt-6 space-y-5">
+          {/* Join code first, set large: it's the one thing a student
+              brings. Required without an invite link (Veradic is
+              invite-only); hidden for invite flows. */}
+          {!lockEmail && (
+            <SiteInput
+              label="Class join code"
+              placeholder="3FH7KP"
+              value={joinCode}
+              onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+              required
+              maxLength={10}
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+              autoComplete="off"
+              large
+              hint="Your teacher gives you this code: six letters and numbers. Don't have one? Ask your teacher."
+            />
+          )}
+
+          <SiteInput
             label="Name"
-            placeholder="Your name"
+            placeholder="First and last name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
@@ -372,10 +341,10 @@ function RegisterPageContent() {
           />
 
           <div>
-            <Input
+            <SiteInput
               label="Email"
               type="email"
-              placeholder="you@example.com"
+              placeholder="you@school.org"
               value={email}
               onChange={(e) => {
                 if (lockEmail) return; // Email locked for invite flows
@@ -388,14 +357,13 @@ function RegisterPageContent() {
               required
               autoComplete="email"
               disabled={lockEmail}
-              className={lockEmail ? "opacity-60" : ""}
             />
             {checkingEmail && (
-              <p className="mt-1 text-xs text-text-secondary">Checking availability...</p>
+              <p className="m-0 mt-1.5 text-sm text-ink-soft" role="status">Checking availability...</p>
             )}
           </div>
 
-          <PasswordInput
+          <SitePasswordInput
             label="Password"
             placeholder="At least 8 characters"
             value={password}
@@ -412,20 +380,21 @@ function RegisterPageContent() {
               students. Hidden only for teacher-invite
               (where the welcome card lives in its own branch). */}
           {!isInviteFlow && (
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[13px] font-semibold tracking-wide text-text-secondary">
-                Grade Level
-              </label>
-              <div className="flex gap-2">
+            <div role="group" aria-labelledby="grade-label">
+              <p id="grade-label" className="m-0 text-[15px] font-bold text-ink">
+                Grade level
+              </p>
+              <div className="mt-2 flex gap-2">
                 {GRADE_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
                     type="button"
+                    aria-pressed={gradeLevel === opt.value}
                     onClick={() => setGradeLevel(opt.value)}
-                    className={`flex-1 rounded-[--radius-sm] border py-2 text-xs font-semibold transition-colors ${
+                    className={`flex-1 rounded-[6px] border-[1.5px] px-1 py-2.5 text-sm font-bold transition-colors ${
                       gradeLevel === opt.value
-                        ? "border-primary bg-primary-bg text-primary"
-                        : "border-border bg-input-bg text-text-secondary hover:border-primary/30"
+                        ? "border-veradic bg-[#E4F0EA] text-veradic"
+                        : "border-[#8A93A0] bg-[#FBFAF6] text-ink-soft hover:border-ink hover:text-ink"
                     }`}
                   >
                     {opt.label}
@@ -435,65 +404,29 @@ function RegisterPageContent() {
             </div>
           )}
 
-          {/* Join code — required for students signing up without an
-              invite link (Veradic is invite-only); hidden for invite flows */}
-          {!lockEmail && (
-            <div>
-              <Input
-                label="Class join code"
-                placeholder="e.g. 3FH7KP"
-                value={joinCode}
-                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                required
-                maxLength={10}
-                autoCapitalize="characters"
-                autoCorrect="off"
-                spellCheck={false}
-              />
-              <p className="mt-1 text-xs text-text-secondary">
-                Your teacher gives you this code. Don&apos;t have one? Ask your teacher.
-              </p>
-            </div>
-          )}
+          <div className="pt-1">
+            <SiteSubmit loading={loading} disabled={!!emailError}>
+              {isInviteFlow
+                ? "Set up your account"
+                : isSectionInviteFlow
+                  ? "Accept invite"
+                  : "Create account"}
+            </SiteSubmit>
+          </div>
 
-          <Button
-            type="submit"
-            loading={loading}
-            className="w-full"
-            disabled={!!emailError}
-          >
-            {isInviteFlow
-              ? "Set Up Your Account"
-              : isSectionInviteFlow
-                ? "Accept Invite"
-                : "Create Account"}
-          </Button>
-
-          <p className="mt-4 text-center text-xs text-text-secondary">
+          <p className="m-0 text-center text-sm leading-[1.5] text-ink-soft">
             By signing up, you agree to our{" "}
-            <Link href="/terms" className="text-primary hover:underline">
+            <Link href="/terms" className="font-semibold text-veradic underline underline-offset-2 hover:text-veradic-dark">
               Terms of Service
             </Link>{" "}
             and{" "}
-            <Link href="/privacy" className="text-primary hover:underline">
+            <Link href="/privacy" className="font-semibold text-veradic underline underline-offset-2 hover:text-veradic-dark">
               Privacy Policy
             </Link>.
           </p>
         </form>
         )}
-
-        <div className="mt-6 border-t border-border-light pt-4 text-center">
-          <p className="text-sm text-text-secondary">
-            Already have an account?{" "}
-            <Link
-              href="/login"
-              className="font-semibold text-primary hover:text-primary-dark"
-            >
-              Sign In
-            </Link>
-          </p>
-        </div>
       </motion.div>
-    </div>
+    </AuthShell>
   );
 }

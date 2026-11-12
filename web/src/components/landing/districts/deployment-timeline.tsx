@@ -1,74 +1,57 @@
-import { Section } from "../section";
-import { Eyebrow } from "../eyebrow";
-
-type Step = { num: string; title: string; desc: string };
+type Step = { title: string; desc: string };
 
 const STEPS: Step[] = [
   {
-    num: "1",
-    title: "We create your school account",
+    title: "We create your school account.",
     desc: "We handle the initial setup. You give us your school name and the teachers who'll be invited.",
   },
   {
-    num: "2",
-    title: "Teachers receive invites",
+    title: "Teachers receive invites.",
     desc: "Each teacher gets a single email and a 5-minute setup. They organize their courses and sections.",
   },
   {
-    num: "3",
-    title: "Students join with a 6-character code",
+    title: "Students join with a 6-character code.",
     desc: "No student emails required. No district SSO integration required. Teachers share a code, students enter it.",
   },
   {
-    num: "4",
-    title: "First homework set goes live",
-    desc: "Most teachers run their first integrity-checked assignment within a week — same day if motivated.",
+    title: "The first homework goes out.",
+    desc: "Most teachers send their first checked assignment within a week, some the same day.",
   },
   {
-    num: "5",
-    title: "You can pilot a single classroom first",
+    title: "Pilot a single classroom first, if you like.",
     desc: "Run with one teacher, one class. See the data, sign the paperwork, then expand on your timeline.",
   },
 ];
 
 /**
- * Numbered deployment timeline. Visual reuses the StepItem pattern
- * from the demo page (kept inline rather than extracted, since the
- * two pages have meaningfully different copy and don't share many
- * other props).
+ * How a district goes live: the argument on the left, the steps on the
+ * right, numbered in the teacher's red pen like a worked list.
  */
 export function DeploymentTimeline() {
   return (
-    <Section variant="default" id="deployment">
-      <div className="mx-auto max-w-3xl">
-        <div className="text-center">
-          <Eyebrow>Deployment</Eyebrow>
-          <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
-            Live with students in a week. Or a day.
-          </h2>
-          <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-[color:var(--color-text-secondary)]">
-            No SSO project. No PII spreadsheet. No IT ticket.
-          </p>
-        </div>
-
-        <ol className="mt-14 space-y-8">
-          {STEPS.map((step) => (
-            <li key={step.num} className="flex gap-5">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--color-primary-bg)] font-mono text-sm font-bold text-[color:var(--color-primary)]">
-                {step.num}
-              </div>
-              <div className="pt-1">
-                <h3 className="text-lg font-bold text-[color:var(--color-text)]">
-                  {step.title}
-                </h3>
-                <p className="mt-2 text-base leading-relaxed text-[color:var(--color-text-secondary)]">
-                  {step.desc}
-                </p>
-              </div>
-            </li>
-          ))}
-        </ol>
+    <section
+      id="deployment"
+      className="mx-auto flex max-w-[1200px] flex-wrap gap-x-[72px] gap-y-10 px-4 py-20 md:px-8 md:py-24"
+    >
+      <div className="min-w-0 flex-[1_1_360px]">
+        <h2 className="site-h2">Live with students in a week.</h2>
+        <p className="m-0 mt-5 text-lg leading-[1.6] text-ink-soft md:text-[19px]">
+          No SSO project. No PII spreadsheet. No IT ticket.
+        </p>
       </div>
-    </Section>
+      <ol className="m-0 flex min-w-0 flex-[1_1_520px] list-none flex-col gap-6 p-0">
+        {STEPS.map((step, i) => (
+          <li key={step.title} className="flex items-baseline gap-5">
+            <span aria-hidden="true" className="w-[30px] flex-none font-hand text-[34px] leading-none text-redpen">
+              {i + 1}
+            </span>
+            <p className="m-0 text-lg leading-[1.5]">
+              <b className="font-extrabold">{step.title}</b>{" "}
+              <span className="text-ink-soft">{step.desc}</span>
+            </p>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }

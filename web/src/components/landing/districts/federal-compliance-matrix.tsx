@@ -1,13 +1,8 @@
-import { Section } from "../section";
-import { Eyebrow } from "../eyebrow";
-
 type EvidenceLink = {
   /** Display text shown in the evidence column. */
   label: string;
   /** Where the link points. Internal anchors or mailto: are both fine. */
   href: string;
-  /** External evidence (mailto, off-site) gets a small visual hint. */
-  external?: boolean;
 };
 
 type ComplianceRow = {
@@ -53,18 +48,16 @@ const ROWS: ComplianceRow[] = [
     requirement: "ADA / WCAG 2.1 AA",
     how: "Veradic is built on standard accessible web technology — semantic HTML, keyboard navigation, screen-reader compatibility, and accessible color contrast.",
     evidence: {
-      label: "Accessibility statement — request",
+      label: "Request the accessibility statement",
       href: mailto("Accessibility statement request"),
-      external: true,
     },
   },
   {
     requirement: "IDEA",
     how: "Veradic does not interfere with assistive technology or block standard accommodations under student IEPs or 504 plans.",
     evidence: {
-      label: "Accessibility statement — request",
+      label: "Request the accessibility statement",
       href: mailto("Accessibility statement request"),
-      external: true,
     },
   },
   {
@@ -91,151 +84,93 @@ const ROWS: ComplianceRow[] = [
     requirement: "Data Privacy Agreement",
     how: "Veradic signs the NDPA standard template most US districts use. Send your filled version and we countersign; state-specific addenda available on request.",
     evidence: {
-      label: "DPA — request",
+      label: "Request the DPA",
       href: mailto("DPA request"),
-      external: true,
     },
   },
 ];
 
 /**
- * Federal & cross-state compliance matrix. Sits between the high-level
- * ComplianceGrid (FERPA/COPPA/NDPA "yes, we do paperwork" cards) and the
- * DataModelSafety section. The matrix is the thing a procurement director
- * actually screenshots and forwards — one row per checklist item, plain
+ * Federal & cross-state compliance matrix: the thing a procurement
+ * director screenshots and forwards. One row per checklist item, plain
  * how-we-comply prose, and an evidence column that points to something
- * real (Privacy Policy section, Trust page anchor, or mailto for docs
- * available on request).
+ * real (a Privacy Policy section, a Trust page anchor, or an email for
+ * documents available on request).
  *
- * On desktop: 3-column table. On mobile: stacked cards (each row becomes
- * a card with requirement → how → evidence rows).
+ * A ruled table on a white sheet from md up; on phones each row becomes a
+ * block of requirement, how, evidence, divided by rule lines.
  *
- * State-level laws are explicitly NOT enumerated here — there's a single
- * note below the table directing districts to contact us. We cover every
- * state on request rather than maintaining an out-of-date list.
+ * State laws are not enumerated in the table: one note below it points
+ * districts to us, rather than keeping a list that drifts.
  */
 export function FederalComplianceMatrix() {
   return (
-    <Section variant="default" id="federal-compliance">
-      <div className="mx-auto max-w-3xl text-center">
-        <Eyebrow>Federal compliance, line by line</Eyebrow>
-        <h2 className="mt-6 text-display-md text-[color:var(--color-text)]">
-          The checklist your procurement team runs.
-        </h2>
-        <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-[color:var(--color-text-secondary)]">
-          Every federal requirement Veradic is asked about in district
-          procurement, with how we comply and where to verify it.
-        </p>
-      </div>
+    <section id="federal-compliance" className="mx-auto max-w-[1200px] scroll-mt-20 px-4 py-20 md:scroll-mt-24 md:px-8 md:py-24">
+      <h2 className="site-h2 max-w-[760px]">The checklist your procurement team runs.</h2>
+      <p className="m-0 mt-5 max-w-[36em] text-lg leading-relaxed text-ink-soft">
+        Every federal requirement Veradic is asked about in district
+        procurement, with how we comply and where to verify it.
+      </p>
 
-      <div className="mx-auto mt-14 max-w-5xl">
-        {/* Desktop: table layout */}
-        <div className="hidden overflow-hidden rounded-[--radius-lg] border border-[color:var(--color-border-light)] md:block">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="bg-[color:var(--color-surface-alt)]">
-                <th
-                  scope="col"
-                  className="border-b border-[color:var(--color-border-light)] px-6 py-4 text-left text-xs font-bold uppercase tracking-[0.14em] text-[color:var(--color-text-muted)]"
-                >
-                  Requirement
+      <div className="mt-11 rounded-[4px] border border-hairline bg-white">
+        {/* md and up: a table. */}
+        <table className="hidden w-full border-collapse text-left md:table">
+          <thead>
+            <tr className="border-b-2 border-ink">
+              <th scope="col" className="w-[24%] px-6 py-4 text-[15px] font-extrabold">Requirement</th>
+              <th scope="col" className="px-6 py-4 text-[15px] font-extrabold">How Veradic complies</th>
+              <th scope="col" className="w-[24%] px-6 py-4 text-[15px] font-extrabold">Evidence</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ROWS.map((row) => (
+              <tr key={row.requirement} className="border-b border-rule last:border-b-0">
+                <th scope="row" className="px-6 py-5 align-top text-base font-bold">
+                  {row.requirement}
                 </th>
-                <th
-                  scope="col"
-                  className="border-b border-[color:var(--color-border-light)] px-6 py-4 text-left text-xs font-bold uppercase tracking-[0.14em] text-[color:var(--color-text-muted)]"
-                >
-                  How Veradic complies
-                </th>
-                <th
-                  scope="col"
-                  className="border-b border-[color:var(--color-border-light)] px-6 py-4 text-left text-xs font-bold uppercase tracking-[0.14em] text-[color:var(--color-text-muted)]"
-                >
-                  Evidence
-                </th>
+                <td className="px-6 py-5 align-top text-[15.5px] leading-[1.55] text-ink-soft">{row.how}</td>
+                <td className="px-6 py-5 align-top text-[15px]">
+                  <a href={row.evidence.href} className="font-bold text-veradic underline underline-offset-2 hover:text-veradic-dark">
+                    {row.evidence.label}
+                  </a>
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {ROWS.map((row, i) => (
-                <tr
-                  key={row.requirement}
-                  className={
-                    i % 2 === 0
-                      ? "bg-[color:var(--color-surface)]"
-                      : "bg-[color:var(--color-surface-alt)]"
-                  }
-                >
-                  <td className="border-t border-[color:var(--color-border-light)] px-6 py-5 align-top text-sm font-semibold text-[color:var(--color-text)]">
-                    {row.requirement}
-                  </td>
-                  <td className="border-t border-[color:var(--color-border-light)] px-6 py-5 align-top text-sm leading-relaxed text-[color:var(--color-text-secondary)]">
-                    {row.how}
-                  </td>
-                  <td className="border-t border-[color:var(--color-border-light)] px-6 py-5 align-top text-sm">
-                    <a
-                      href={row.evidence.href}
-                      className="font-medium text-[color:var(--color-primary)] hover:underline"
-                    >
-                      {row.evidence.label}
-                      {row.evidence.external && (
-                        <span aria-hidden className="ml-1">
-                          ↗
-                        </span>
-                      )}
-                    </a>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
 
-        {/* Mobile: stacked cards */}
-        <div className="space-y-4 md:hidden">
+        {/* Phones: one block per row. */}
+        <ul className="m-0 list-none p-0 md:hidden">
           {ROWS.map((row) => (
-            <article
-              key={row.requirement}
-              className="rounded-[--radius-lg] border border-[color:var(--color-border-light)] bg-[color:var(--color-surface)] p-6"
-            >
-              <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-[color:var(--color-primary)]">
-                {row.requirement}
-              </div>
-              <p className="mt-3 text-base leading-relaxed text-[color:var(--color-text)]">
-                {row.how}
-              </p>
+            <li key={row.requirement} className="border-b border-rule px-5 py-5 last:border-b-0">
+              <h3 className="m-0 text-base font-extrabold">{row.requirement}</h3>
+              <p className="m-0 mt-2 text-[15.5px] leading-[1.55] text-ink-soft">{row.how}</p>
               <a
                 href={row.evidence.href}
-                className="mt-4 inline-flex items-center text-sm font-medium text-[color:var(--color-primary)] hover:underline"
+                className="mt-2.5 inline-block text-[15px] font-bold text-veradic underline underline-offset-2 hover:text-veradic-dark"
               >
                 {row.evidence.label}
-                {row.evidence.external && (
-                  <span aria-hidden className="ml-1">
-                    ↗
-                  </span>
-                )}
               </a>
-            </article>
+            </li>
           ))}
-        </div>
-
-        {/* State-level note. Single bullet, not a list — we don't want to
-            commit to enumerating each state's law and have it drift. */}
-        <p className="mx-auto mt-8 max-w-3xl rounded-[--radius-md] border border-[color:var(--color-border-light)] bg-[color:var(--color-surface-alt)] px-6 py-5 text-sm leading-relaxed text-[color:var(--color-text-secondary)]">
-          <strong className="font-semibold text-[color:var(--color-text)]">
-            State-specific privacy laws
-          </strong>{" "}
-          — New York Education Law §2-d, California SOPIPA, Illinois SOPPA,
-          and others. We work through each on request. Send us your
-          state&rsquo;s addendum and we&rsquo;ll redline within 5 business
-          days. Contact{" "}
-          <a
-            href={`mailto:${SUPPORT_EMAIL}`}
-            className="font-medium text-[color:var(--color-primary)] hover:underline"
-          >
-            {SUPPORT_EMAIL}
-          </a>
-          .
-        </p>
+        </ul>
       </div>
-    </Section>
+
+      {/* State-level note. One line, not a list: we don't want to commit
+          to enumerating each state's law and have it drift. */}
+      <p className="m-0 mt-6 max-w-[760px] border-l-[3px] border-veradic py-1 pl-[18px] text-base leading-[1.6] text-ink-soft">
+        <strong className="font-bold text-ink">State-specific privacy laws:</strong>{" "}
+        New York Education Law §2-d, California SOPIPA, Illinois SOPPA, and
+        others. We work through each on request. Send us your state&rsquo;s
+        addendum and we&rsquo;ll redline within 5 business days. Contact{" "}
+        <a
+          href={`mailto:${SUPPORT_EMAIL}`}
+          className="font-bold text-veradic underline underline-offset-2 hover:text-veradic-dark"
+        >
+          {SUPPORT_EMAIL}
+        </a>
+        .
+      </p>
+    </section>
   );
 }
