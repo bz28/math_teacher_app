@@ -401,3 +401,40 @@ def test_triangles_named_apart_are_drawn_apart() -> None:
     assert check_construction(apart, "", facts=reading) == []
     for fig in (crossing, inside):
         assert any("ABC and DEF overlap" in i.message for i in check_construction(fig, "", facts=reading))
+
+
+# ── Readings that disagreed in the eval and say the same thing ─────────
+
+
+def test_a_radius_with_a_value_states_its_length() -> None:
+    """Adversarial 'tangent-op': one reading wrote 'radius OA = 3', the
+    other also wrote 'OA = 3'. They say the same thing, and the radius's
+    value is checked on the drawing as that length is."""
+    tangent = Fact(kind="tangent", items=["PA"], point="A", circle="O")
+    op = Fact(kind="equal_length", items=["OP"], value=5)
+    radius = Fact(kind="radius", items=["OA"], value=3, circle="O")
+    a = FigureFacts(points=["P", "A", "O"], circles=["O"], givens=[tangent, radius, op])
+    b = a.model_copy(update={"givens": [tangent, radius, Fact(kind="equal_length", items=["OA"], value=3), op]})
+    assert disagreements(a, b) == []
+    assert disagreements(a, a.model_copy(update={"givens": [tangent, radius.model_copy(update={"value": 4}), op]}))
+    circle = [{"center": "O", "radius": 3}]
+    right = _fig({"O": (0, 0), "A": (3, 0), "P": (3, 4)}, segments=["OA", "PA", "OP"], circles=circle)
+    stretched = _fig({"O": (0, 0), "A": (3, 0), "P": (3, 6)}, segments=["OA", "PA", "OP"], circles=circle)
+    text = "PA is tangent to circle O at A. Find PA if radius OA = 3 and OP = 5."
+    assert check_construction(right, text, facts=a) == []
+    assert any("not in proportion" in i.message for i in check_construction(stretched, text, facts=a))
+
+
+def test_a_part_asked_for_by_no_name_or_already_named_asks_nothing() -> None:
+    """Prod 29be9c15: one reading listed lines p and q as named, the other
+    didn't, and one asked for 'the transversal' by no name. The checker
+    requires named lines anyway and can't require an unnamed part."""
+    base = FigureFacts(named_lines=["p", "q"], givens=[Fact(kind="parallel", items=["p", "q"])])
+    lines = [Part(kind="line", item="p"), Part(kind="line", item="q")]
+    a = base.model_copy(update={"requested": lines})
+    b = base.model_copy(update={"lines": ["p", "q"], "requested": [*lines, Part(kind="line", item="transversal")]})
+    c = base.model_copy(update={"requested": [Part(kind="polygon", item="the first rectangle with its diagonal")]})
+    assert disagreements(a, b) == []
+    assert disagreements(base, c) == []
+    # A part asked for by name still counts.
+    assert disagreements(base, base.model_copy(update={"requested": [Part(kind="line", item="t")]}))

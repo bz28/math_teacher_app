@@ -111,17 +111,16 @@ def test_the_claim_pattern_catches_claims_about_parts() -> None:
 @pytest.mark.asyncio
 async def test_the_adversarial_wordings(monkeypatch: pytest.MonkeyPatch) -> None:
     """Every wrong figure is caught (refused, or shown only with the
-    statement-to-prove mark removed); every correct one passes except where
-    the two readings disagreed — an honest decline, never a pass."""
+    statement-to-prove mark removed); every correct one passes."""
     from tests.harness.probes import construction_adversarial as ca
 
     monkeypatch.setenv("HARNESS_LLM_MODE", "replay")
     summary = ca.summarize(await ca.run_all())
     assert summary["errors"] == []
     assert summary["wrong_passed"] == []
-    assert set(summary["correct_refused"]) == {"tangent-op"}, summary
-    assert all("disagree" in " ".join(why) for why in summary["reading_failures"].values()), summary
-    assert summary["correct_passed"] == summary["cases"] - 1
+    assert summary["correct_refused"] == {}, summary
+    assert summary["reading_failures"] == {}, summary
+    assert summary["correct_passed"] == summary["cases"]
 
 
 @pytest.mark.asyncio

@@ -213,12 +213,20 @@ def atoms(facts: FigureFacts) -> dict[str, set[Canon]]:
         "find": {a for a in (_target_atom(t, facts) for t in facts.find) if a[0] != "other" and a[1][0] != "bad"},
         # A part asked for that the problem already names asks for nothing
         # more ("can you provide the drawing?" read as every side).
-        "requested": {_part_atom(p) for p in facts.requested} - _named_parts(facts),
+        # A part asked for by no name ("the transversal", "the first
+        # rectangle") is a part the checker can't require, so it says nothing.
+        "requested": {a for a in (_part_atom(p) for p in facts.requested) if _has_name(a)} - _named_parts(facts),
     }
+
+
+def _has_name(part: Canon) -> bool:
+    name = part[1] if isinstance(part, tuple) and len(part) > 1 else None
+    return name is not None and not (isinstance(name, tuple) and name[:1] == ("bad",))
 
 
 def _named_parts(facts: FigureFacts) -> set[Canon]:
     out = {("segment", seg(x)) for x in facts.segments} | {("line", lin(x)) for x in facts.lines}
+    out |= {("line", lin(x)) for x in facts.named_lines}
     out |= {("point", p.strip()) for p in facts.points}
     for poly in (*facts.triangles, *facts.polygons):
         n = split_names(poly)
@@ -373,7 +381,11 @@ def _fact_atoms(f: Fact, facts: FigureFacts) -> set[Canon]:
     if k == "on_circle":
         return {("on_circle", p, f.circle or "") for p in it}
     if k in ("tangent", "chord", "diameter", "radius") and it:
-        return {(k, lin(it[0]) if k == "tangent" else seg(it[0]), f.circle or "", f.point or "")}
+        out = {(k, lin(it[0]) if k == "tangent" else seg(it[0]), f.circle or "", f.point or "")}
+        if k in ("radius", "diameter") and (f.value is not None or f.expr):
+            # "radius OA = 3" states OA = 3, as "OA = 3" does.
+            out.add(("length", seg(it[0]), _num(f.value), _expr(f.expr)))
+        return out
     if k == "numbered_angle" and len(it) >= 2:
         return {("numbered", it[0], ang(it[1]))}
     if k == "transversal" and it:
@@ -752,10 +764,11 @@ def to_relations(f: Fact, facts: FigureFacts) -> list[Any]:
         return [R("tangent", pair(it[0]), f.circle or "", f.point or "")]
     if k == "chord" and it:
         return [R("oncircle", pair(it[0]), f.circle or "")]
-    if k == "diameter" and it:
-        return [R("diam", pair(it[0]), f.circle or "")]
-    if k == "radius" and it:
-        return [R("radius", pair(it[0]))]
+    if k in ("radius", "diameter") and it:
+        out = [R("diam", pair(it[0]), f.circle or "") if k == "diameter" else R("radius", pair(it[0]))]
+        if f.value is not None:  # its stated length, as for "OA = 3"
+            out.append(R("length", pair(it[0]), float(f.value)))
+        return out
     if k in ("central_angle", "inscribed_angle") and it:
         a = angle(it[0])
         if not isinstance(a, tuple) or not a[0]:
