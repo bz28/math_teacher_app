@@ -25,11 +25,12 @@ class User(Base):
         nullable=True, index=True,
     )
 
-    # Self-reported school name from teacher self-signup. Free-text,
-    # not normalized — used as a sales signal (which schools have
-    # teachers organically trying Veradic) rather than as a real
-    # institutional link. The formal `school_id` FK above remains the
-    # source of truth for school membership.
+    # Self-reported school name from teacher self-signup, which closed
+    # on 2026-11-11 (signup is invite-only), so only pre-beta indie
+    # teachers have it; no new rows are written. Free-text, not
+    # normalized, kept as a sales signal and shown in the data export.
+    # The formal `school_id` FK above is the source of truth for school
+    # membership.
     signup_school_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
 
     # Shadow student for the teacher's "Preview as student" mode.

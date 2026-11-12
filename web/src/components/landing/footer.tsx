@@ -3,20 +3,12 @@ import { LogoMark } from "@/components/shared/logo-mark";
 
 type LinkItem = { label: string; href: string };
 
-// Product-mode grouping. "Classroom" = teacher-led, in-school product
-// (the homepage default pitch + /for-districts + book-a-demo). "Self-
-// study" = the solo-student product (web /students page is the SEO/
-// fallback surface; mobile-app stores are where most solo discovery
-// happens). Audience-named columns ("For Teachers"/"For Students")
-// were rejected because school students are also "students" — naming
-// the *mode* avoids that overlap.
+// "Classroom" = the teacher-led, in-school product (the homepage pitch +
+// /for-districts + book-a-demo). There is no self-study column: Veradic is
+// invite-only, so students join through their teacher's class.
 const classroomLinks: LinkItem[] = [
   { label: "For districts", href: "/for-districts" },
   { label: "Book a demo", href: "/demo" },
-];
-
-const selfStudyLinks: LinkItem[] = [
-  { label: "For students", href: "/students" },
 ];
 
 const subjectsLinks: LinkItem[] = [
@@ -26,7 +18,8 @@ const subjectsLinks: LinkItem[] = [
 ];
 
 // No "Create account" — Veradic is sold to schools; teachers arrive via a
-// school invite and prospects book a demo. Students self-serve from /students.
+// school invite and prospects book a demo. Students join with their
+// teacher's class code.
 const accountLinks: LinkItem[] = [
   { label: "Sign in", href: "/login" },
   { label: "Book a demo", href: "/demo" },
@@ -72,7 +65,7 @@ export function Footer() {
   return (
     <footer className="border-t border-[color:var(--color-border-light)] bg-[color:var(--color-surface)]">
       <div className="mx-auto max-w-6xl px-6 py-16 md:px-8 md:py-20">
-        <div className="grid gap-x-8 gap-y-12 md:grid-cols-[1.5fr_repeat(5,1fr)]">
+        <div className="grid gap-x-8 gap-y-12 md:grid-cols-[1.5fr_repeat(4,1fr)]">
           {/* Brand — wordmark + italic-serif tagline mirrors the
               dashboard brand block. */}
           <div className="md:pr-8">
@@ -94,11 +87,9 @@ export function Footer() {
             </p>
           </div>
 
-          {/* Product-mode grouping: Classroom (teacher-led, in-school)
-              first since it's the primary conversion path; Self-study
-              (solo student) next; Subjects supporting; then utility. */}
+          {/* Classroom first since it's the primary conversion path;
+              Subjects supporting; then utility. */}
           <FooterColumn heading="Classroom" links={classroomLinks} />
-          <FooterColumn heading="Self-study" links={selfStudyLinks} />
           <FooterColumn heading="Subjects" links={subjectsLinks} />
           <FooterColumn heading="Account" links={accountLinks} />
           <FooterColumn heading="Legal" links={legalLinks} />

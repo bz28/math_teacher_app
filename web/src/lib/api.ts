@@ -702,7 +702,6 @@ export const auth = {
     invite_token?: string;
     section_invite_token?: string;
     join_code?: string;
-    signup_school_name?: string;
   }) {
     return apiFetch<TokenPair>("/auth/register", {
       method: "POST",

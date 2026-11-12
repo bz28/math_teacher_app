@@ -35,7 +35,6 @@ _WEB_PUBLIC = [
     Surface("web.public.subjects_math", "web", "/subjects/math", "public", "Subject: math"),
     Surface("web.public.subjects_physics", "web", "/subjects/physics", "public", "Subject: physics"),
     Surface("web.public.subjects_chemistry", "web", "/subjects/chemistry", "public", "Subject: chemistry"),
-    Surface("web.public.students", "web", "/students", "public", "Students landing"),
 ]
 
 # --- web: authenticated (shared + student + teacher) ----------------------

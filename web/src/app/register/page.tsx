@@ -10,12 +10,11 @@ import { Button, useToast } from "@/components/ui";
 import { Input, PasswordInput } from "@/components/ui/input";
 import { LogoMark } from "@/components/shared/logo-mark";
 
-// Self-signup grade options. Grades below 8 are intentionally absent:
-// students under 13 (proxied by grade < 8) must join via teacher invite
-// or section invite so the COPPA school-consent exception applies. The
-// floor is 8th grade (~13) — the old "6-8" band let grade 6-7 (under 13)
-// self-attest into a passing value, bypassing the gate. The backend also
-// rejects grade_level < 8 on invite-less /register calls — see RegisterRequest.
+// Student grade options. Signup is invite-only: every student arrives with
+// a class join code or a class invite (the backend refuses anything else,
+// see RegisterRequest.enforce_invite_only_signup). The 8th-grade floor is
+// left over from the old under-13 self-signup gate; younger students can
+// join with a code, so lowering it is an open follow-up.
 const GRADE_OPTIONS = [
   { label: "8th grade", value: 8 },
   { label: "9-12", value: 12 },
@@ -36,9 +35,9 @@ function RegisterPageContent() {
   const [password, setPassword] = useState("");
   const [gradeLevel, setGradeLevel] = useState(8);
   const [joinCode, setJoinCode] = useState("");
-  // Which door the visitor says they came for. Self-signup only: an
-  // invite already settles the question, and a teacher on their
-  // school's invite link is in exactly the right place.
+  // Which door the visitor says they came for. Only shown without an
+  // invite link: an invite already settles the question. Picking
+  // "teacher" here leads to the book-a-demo page, not a form.
   const [audience, setAudience] = useState<"student" | "teacher">("student");
   const [emailError, setEmailError] = useState("");
   const [checkingEmail, setCheckingEmail] = useState(false);
@@ -151,6 +150,11 @@ function RegisterPageContent() {
     if ((user || hasStoredTokens()) && !inviteToken && !sectionInviteToken) return;
 
     const trimmedCode = joinCode.trim().toUpperCase();
+    // `required` on the input accepts spaces, so check the trimmed code.
+    if (!lockEmail && !trimmedCode) {
+      toast.error("Enter the class join code from your teacher.");
+      return;
+    }
     try {
       await register({
         email,
@@ -161,13 +165,7 @@ function RegisterPageContent() {
         ...(sectionInviteToken ? { section_invite_token: sectionInviteToken } : {}),
         ...(trimmedCode ? { join_code: trimmedCode } : {}),
       });
-      router.replace(
-        invite
-          ? "/school/teacher"
-          : sectionInvite || trimmedCode
-            ? "/school/student"
-            : "/home",
-      );
+      router.replace(invite ? "/school/teacher" : "/school/student");
     } catch {
       const msg = useAuthStore.getState().error;
       if (msg) toast.error(msg);
@@ -261,7 +259,7 @@ function RegisterPageContent() {
         transition={{ duration: 0.18, ease: "easeOut" }}
         className="relative w-full max-w-md rounded-[--radius-md] border border-border bg-surface p-8"
       >
-        {/* Which door — self-signup only. Reuses the Grade Level picker's
+        {/* Which door — shown without an invite link. Reuses the Grade Level picker's
             segmented treatment so it reads as native to this form rather
             than bolted on top of it. */}
         {!lockEmail && (
@@ -338,7 +336,7 @@ function RegisterPageContent() {
             <p className="mt-1 text-sm text-text-secondary">
               {audience === "teacher"
                 ? "It starts with a conversation, not a signup form"
-                : "Start mastering any subject"}
+                : "Join your class with the code from your teacher"}
             </p>
           </>
         )}
@@ -410,8 +408,8 @@ function RegisterPageContent() {
             autoComplete="new-password"
           />
 
-          {/* Grade picker — shown for every self-signup path and for
-              section-invite students. Hidden only for teacher-invite
+          {/* Grade picker — shown for join-code and section-invite
+              students. Hidden only for teacher-invite
               (where the welcome card lives in its own branch). */}
           {!isInviteFlow && (
             <div className="flex flex-col gap-1.5">
@@ -437,21 +435,23 @@ function RegisterPageContent() {
             </div>
           )}
 
-          {/* Join code — self-signup students; hidden for invite flows */}
+          {/* Join code — required for students signing up without an
+              invite link (Veradic is invite-only); hidden for invite flows */}
           {!lockEmail && (
             <div>
               <Input
-                label="Join code (optional)"
+                label="Class join code"
                 placeholder="e.g. 3FH7KP"
                 value={joinCode}
                 onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                required
                 maxLength={10}
                 autoCapitalize="characters"
                 autoCorrect="off"
                 spellCheck={false}
               />
               <p className="mt-1 text-xs text-text-secondary">
-                Got one from your teacher? We&apos;ll add you to the class.
+                Your teacher gives you this code. Don&apos;t have one? Ask your teacher.
               </p>
             </div>
           )}

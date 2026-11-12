@@ -15,7 +15,8 @@ check** to distinguish real understanding from a memorized or copied right answe
 gives the teacher a class-at-a-glance view with the students who need help surfaced
 first. It began as a single-student photo-tutoring app and has grown into a **school
 portal**: teachers run courses, assign homework, and review AI-drafted grades, while the
-original self-study loop (Learn / Practice / Mock-test) remains for individual learners.
+original self-study loop (Learn / Practice / Mock-test) still exists in the app, but new
+accounts are invite-only (see §2), so only pre-beta independent learners use it.
 All AI runs on Anthropic Claude.
 
 The product's headline capabilities are dramatized in the standalone sales demo
@@ -30,11 +31,17 @@ Three customer segments share one platform. The role model in code is
 vs `individual` (an indie teacher's own "school"), so the code supports both
 institution-backed and solo usage.
 
+**Sign-up is invite-only (private beta, since 2026-11-11).** Teachers join through a teacher
+invite from their school (after a demo); students join through a class invite or their
+teacher's join code. `/auth/register` refuses anything else
+(`RegisterRequest.enforce_invite_only_signup`). Independent students and indie teachers who
+signed up before then keep their accounts.
+
 | Segment | Who | Job-to-be-done |
 |---|---|---|
 | **Students — school** | Enrolled in a teacher's section via invite/join-class | Do assigned homework by photographing work, see grades + feedback, practice weak spots. |
-| **Students — independent** | Self-study learners, no class | Snap or type any problem, get tutored step-by-step, generate practice, take mock tests. |
-| **Teachers** | Run courses/sections; institutional or indie | Turn worksheets into trusted assignments, let AI grade + understanding-check the class, walk in knowing who is struggling and what to reteach — with far less grading time. |
+| **Students — independent** | Self-study learners, no class (pre-beta accounts only; no new sign-ups) | Snap or type any problem, get tutored step-by-step, generate practice, take mock tests. |
+| **Teachers** | Run courses/sections; institutional, or indie (pre-beta only) | Turn worksheets into trusted assignments, let AI grade + understanding-check the class, walk in knowing who is struggling and what to reteach — with far less grading time. |
 | **Schools / districts** | The institutions teachers belong to; the buyer for `/for-districts` | Roll Veradic out across teachers/classes with trust, privacy, and visibility into learning. |
 
 **Positioning (owner-confirmed):** **Build for teachers, sell to districts.** The teacher
@@ -122,7 +129,7 @@ Concrete inventory of **what exists today**, derived from `tests/harness/improve
   per-submission trace.
 
 ### Public / marketing — web
-- Landing, `/students`, `/for-districts`, `/demo` (request-a-demo → contact lead),
+- Landing, `/for-districts`, `/demo` (request-a-demo → contact lead),
   `/subjects/{math,physics,chemistry}`, legal (`privacy` / `terms` / `support` / `trust`).
 
 ### Sales demo — `demo/` (standalone, no auth/API)

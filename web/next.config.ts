@@ -35,6 +35,14 @@ const nextConfig: NextConfig = {
         destination: "/demo",
         permanent: true,
       },
+      // /students was the solo-student (self-study) pitch. Veradic is
+      // invite-only now, so students join through their teacher; send old
+      // links and Google's index to the homepage.
+      {
+        source: "/students",
+        destination: "/",
+        permanent: true,
+      },
       // /security and /safety both consolidated into /for-districts,
       // which now carries the full compliance + safety surface for
       // school administrators. Old /security and /safety inbound

@@ -5939,8 +5939,6 @@ export interface components {
             role: string;
             /** Section Invite Token */
             section_invite_token?: string | null;
-            /** Signup School Name */
-            signup_school_name?: string | null;
         };
         /** ReopenRequest */
         ReopenRequest: {

@@ -11,6 +11,8 @@ from httpx import AsyncClient
 
 from api.core.step_decomposition import Decomposition
 
+from .conftest import make_join_code
+
 
 def _mock_practice_decomposition(problem: str, answer: str) -> Decomposition:
     """Create a mock Decomposition for practice mode tests."""
@@ -66,12 +68,13 @@ def _mock_completed_chat():
 
 @pytest.fixture
 async def auth_token(client: AsyncClient) -> str:
-    """Register a test user and return their access token."""
+    """Register a test user (via a class join code) and return their access token."""
     resp = await client.post("/v1/auth/register", json={
         "email": f"session_test_{uuid.uuid4().hex[:8]}@test.com",
         "password": "TestPass123",
         "name": "Test",
         "grade_level": 8,
+        "join_code": await make_join_code(),
     })
     assert resp.status_code == 201
     return resp.json()["access_token"]

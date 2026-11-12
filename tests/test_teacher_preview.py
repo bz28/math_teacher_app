@@ -36,7 +36,7 @@ from api.models.assignment import Submission, SubmissionGrade
 from api.models.question_bank import QuestionBankItem
 from api.models.section_enrollment import SectionEnrollment
 from api.models.user import User
-from tests.conftest import PAGE_PNG, auth_headers
+from tests.conftest import PAGE_PNG, auth_headers, make_teacher_invite
 
 
 async def _wipe() -> None:
@@ -85,10 +85,11 @@ async def _teacher_with_homework(
     wizard's default, which publish fans out to every section),
     "first_only" / "second_only" (an explicit subset), or "both".
     """
+    email = f"teacher_{uuid.uuid4().hex[:8]}@school.edu"
     r = await client.post("/v1/auth/register", json={
-        "email": f"teacher_{uuid.uuid4().hex[:8]}@school.edu",
-        "password": "password123", "name": "Ms Teacher",
-        "grade_level": 12, "role": "teacher", "signup_school_name": "Springfield High",
+        "email": email, "password": "password123", "name": "Ms Teacher",
+        "grade_level": 12, "role": "teacher",
+        "invite_token": await make_teacher_invite(email),
     })
     assert r.status_code in (200, 201), r.text
     headers = auth_headers(r.json()["access_token"])
