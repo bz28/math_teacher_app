@@ -502,6 +502,9 @@ def is_hidden(name: str) -> bool:
     return name.startswith("_")
 
 
+_MarkGroup = Annotated[list[str], Field(min_length=2)]
+
+
 class ConstructionLine(BaseModel):
     """A full line through two points, optionally named (p, q, ℓ1)."""
 
@@ -570,12 +573,14 @@ class ConstructionFigure(BaseModel):
     arcs: list[ConstructionArc] = Field(default_factory=list)
     sectors: list[ConstructionArc] = Field(default_factory=list)
     shaded: list[ShadedRegion] = Field(default_factory=list)
-    # Congruence marks: group i (0-based) gets i+1 ticks / arcs.
-    tick_groups: list[list[str]] = Field(default_factory=list)
-    arc_groups: list[list[str]] = Field(default_factory=list)
+    # Congruence marks: group i (0-based) gets i+1 ticks / arcs. A group
+    # ties at least two parts together (an empty or one-part group claims
+    # nothing, and crashed the checks).
+    tick_groups: list[_MarkGroup] = Field(default_factory=list)
+    arc_groups: list[_MarkGroup] = Field(default_factory=list)
     right_angles: list[str] = Field(default_factory=list)
     # Segments or line names; group i gets i+1 arrowheads.
-    parallel_groups: list[list[str]] = Field(default_factory=list)
+    parallel_groups: list[_MarkGroup] = Field(default_factory=list)
     angle_labels: dict[str, str] = Field(default_factory=dict)
     side_labels: dict[str, str] = Field(default_factory=dict)
 
@@ -636,6 +641,16 @@ class ConstructionFigure(BaseModel):
                 pair = split_points(ref, 2)
                 known(*pair)
                 distinct(pair, ref)
+            if len({frozenset(split_points(r, 2)) for r in group}) != len(group):
+                raise ValueError(f"tick group {group} lists the same segment twice")
+        for group in self.arc_groups:
+            keys = {(split_points(r, 3)[1], frozenset(split_points(r, 3)[::2])) for r in group}
+            if len(keys) != len(group):
+                raise ValueError(f"arc group {group} lists the same angle twice")
+        for group in self.parallel_groups:
+            line_names = {ln.name for ln in self.lines if ln.name}
+            if len({r if r in line_names else frozenset(split_points(r, 2)) for r in group}) != len(group):
+                raise ValueError(f"parallel group {group} lists the same piece twice")
         for ref in [*(r for g in self.arc_groups for r in g), *self.right_angles, *self.angle_labels]:
             triple = split_points(ref, 3)
             known(*triple)

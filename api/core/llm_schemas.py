@@ -465,12 +465,12 @@ _CONSTRUCTION_FIGURE_SCHEMA: dict[str, Any] = {
         },
         "tick_groups": {
             "type": "array",
-            "items": {"type": "array", "items": {"type": "string"}},
+            "items": {"type": "array", "items": {"type": "string"}, "minItems": 2},
             "description": "Groups of congruent segments; the first group gets 1 tick, the second 2, ...",
         },
         "arc_groups": {
             "type": "array",
-            "items": {"type": "array", "items": {"type": "string"}},
+            "items": {"type": "array", "items": {"type": "string"}, "minItems": 2},
             "description": f"Groups of congruent angles; first group 1 arc, second 2, ... {_ANGLE_REF}",
         },
         "right_angles": {
@@ -480,7 +480,7 @@ _CONSTRUCTION_FIGURE_SCHEMA: dict[str, Any] = {
         },
         "parallel_groups": {
             "type": "array",
-            "items": {"type": "array", "items": {"type": "string"}},
+            "items": {"type": "array", "items": {"type": "string"}, "minItems": 2},
             "description": "Groups of parallel segments (or line names); first group 1 arrow, second 2, ...",
         },
         "angle_labels": {
