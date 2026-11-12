@@ -87,7 +87,9 @@ export function HomeworkFlow() {
   }, [play]);
 
   useEffect(() => {
-    if (reduce) { paused.current = true; return; }
+    // Reduced motion just doesn't start the loop; it must not set `paused`,
+    // or turning reduced motion off later would leave the demo frozen.
+    if (reduce) return;
     play();
     return () => timers.current.forEach(clearTimeout);
   }, [play, reduce]);
