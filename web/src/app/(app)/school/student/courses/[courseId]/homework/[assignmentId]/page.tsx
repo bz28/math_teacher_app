@@ -69,6 +69,12 @@ export default function HomeworkPage() {
     try {
       const detail = await schoolStudent.homeworkDetail(aid);
       setHw(detail);
+      // Reopened for them: the homework page with the upload panel, not
+      // the screens of the turn-in it will replace.
+      if (detail.can_resubmit) {
+        setMode({ kind: "homework" });
+        return;
+      }
       if (detail.submitted && detail.submission_id) {
         const [sub, integrity] = await Promise.all([
           schoolStudent.getMySubmission(aid).catch(() => null),
@@ -422,7 +428,19 @@ export default function HomeworkPage() {
           )}
       </div>
 
-      {hw.submitted && submission ? (
+      {hw.can_resubmit ? (
+        <SubmissionPanel
+          assignmentId={hw.assignment_id}
+          dueAt={hw.due_at}
+          latePolicy={hw.late_policy}
+          resubmit
+          onClosed={() => loadAll(hw.assignment_id)}
+          onSubmitted={async () => {
+            setJustSubmitted(true);
+            await loadAll(hw.assignment_id);
+          }}
+        />
+      ) : hw.submitted && submission ? (
         <SubmittedView
           submission={submission}
           graded={hw.grade_published_at !== null}

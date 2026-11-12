@@ -164,6 +164,9 @@ export function HomeworkScreen({
 
   const isLate = hw?.due_at ? new Date(hw.due_at).getTime() < Date.now() : false;
   const isRetake = retaking && canRetake;
+  // Reopened by the teacher after it was turned in: the upload block
+  // again, for one more turn-in by their personal date.
+  const isResubmit = !!hw?.can_resubmit && !isRetake;
   const atCap = files.length >= MAX_FILES;
 
   const stage = (base64: string, kind: StagedFile["kind"], name?: string) => {
@@ -324,7 +327,7 @@ export function HomeworkScreen({
             <ProblemBlock key={p.bank_item_id} problem={p} colors={colors} styles={styles} />
           ))}
 
-          {hw.submitted && !isRetake ? (
+          {hw.submitted && !isRetake && !isResubmit ? (
             <>
               {hw.next_step && hw.submission_id ? (
                 <NextStepCard
@@ -370,12 +373,14 @@ export function HomeworkScreen({
           ) : (
             <View style={styles.submitBlock}>
               <Text style={styles.submitLabel}>
-                {isRetake ? "Retake your photos" : "Turn in your work"}
+                {isRetake ? "Retake your photos" : isResubmit ? "Turn it in again" : "Turn in your work"}
               </Text>
               <Text style={styles.submitHint}>
                 {isRetake
                   ? "Add every page again, upright, in a bright spot. We'll read them fresh for you to check. Your teacher still sees your first photos, and you can only retake once."
-                  : `Add clear photos or a PDF of your completed work — up to ${MAX_FILES} files.`}
+                  : isResubmit
+                    ? `Your teacher reopened this homework for you${hw.due_at ? `, until ${formatClosedAt(hw.due_at)}` : ""}. Add every page of your work. What you turn in now replaces your earlier turn-in and is graded fresh — your teacher still has the earlier one. You can turn it in again once.`
+                    : `Add clear photos or a PDF of your completed work — up to ${MAX_FILES} files.`}
               </Text>
               <View style={styles.tipRow}>
                 <Ionicons name="refresh" size={14} color={colors.primary} />

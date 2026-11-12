@@ -166,6 +166,11 @@ function Section({
             <Text style={styles.rowMeta} numberOfLines={1}>
               {a.course_name} · {a.section_name}
             </Text>
+            {a.can_resubmit && (
+              <Text style={[styles.rowMeta, styles.rowStep]} numberOfLines={1}>
+                Reopened · turn it in again
+              </Text>
+            )}
           </View>
           {step && a.next_step ? (
             <Text style={[styles.rowStatus, styles.rowStep]}>{NEXT_STEP_COPY[a.next_step].label}</Text>

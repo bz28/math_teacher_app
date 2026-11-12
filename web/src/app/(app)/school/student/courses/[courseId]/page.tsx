@@ -161,7 +161,11 @@ function HomeworkList({ courseId }: { courseId: string }) {
                 </p>
               )}
             </div>
-            {hw.next_step ? (
+            {hw.can_resubmit ? (
+              <span className="shrink-0 rounded-full bg-primary-bg px-2.5 py-0.5 text-xs font-semibold text-primary group-hover:bg-primary group-hover:text-white">
+                Reopened · turn it in again
+              </span>
+            ) : hw.next_step ? (
               <span className="shrink-0 rounded-full bg-primary-bg px-2.5 py-0.5 text-xs font-semibold text-primary group-hover:bg-primary group-hover:text-white">
                 {NEXT_STEP_COPY[hw.next_step].label}
               </span>
