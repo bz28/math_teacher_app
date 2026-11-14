@@ -1422,6 +1422,11 @@ def _holds(rel: _Relation, d: _Drawing) -> bool | None:
             if not all(n in p for n in (m, a, b)):
                 return None
             return d.collinear(p[a], p[b], p[m])
+        if k == "onray":  # from a through b
+            m, (a, b) = args
+            if not all(n in p for n in (m, a, b)):
+                return None
+            return d.collinear(p[a], p[b], p[m]) and d.param(p[a], p[b], p[m]) >= -0.01
         if k == "linemid":
             (a, b), (c, e) = args
             if not all(n in p for n in (a, b, c, e)):
@@ -1872,6 +1877,8 @@ def _rel_key(rel: _Relation) -> Any:
         return (k, ang(args[0]), float(args[1]))
     if k in ("mid", "on", "online"):
         return (k, args[0], frozenset(args[1]))
+    if k == "onray":
+        return (k, args[0], tuple(args[1]))
     return (k, repr(args))
 
 

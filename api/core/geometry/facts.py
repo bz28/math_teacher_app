@@ -27,7 +27,7 @@ from pydantic import BaseModel, Field, field_validator
 
 FactKind = Literal[
     "parallel", "perpendicular", "congruent_segments", "congruent_angles", "equal_length",
-    "angle_measure", "midpoint", "on_segment", "on_line", "collinear", "intersect",
+    "angle_measure", "midpoint", "on_segment", "on_line", "on_ray", "collinear", "intersect",
     "bisects_segment", "bisects_angle", "right_angle", "opposite_rays",
     "vertical_angles", "linear_pair", "supplementary", "complementary",
     "congruent_triangles", "similar_triangles", "isosceles", "equilateral", "right_triangle",
@@ -41,7 +41,7 @@ FactKind = Literal[
 ]
 # Kinds code writes from a reading's own words (see standard_reading); the
 # readers' tool doesn't offer them.
-CODE_KINDS = ("interior_ray", "extension", "obtuse_angle", "acute_angle", "obtuse_triangle", "acute_triangle",
+CODE_KINDS = ("interior_ray", "extension", "on_ray", "obtuse_angle", "acute_angle", "obtuse_triangle", "acute_triangle",
               "scalene")
 # Two angles a transversal makes with two lines, by where they sit.
 PAIRS = ("alternate_interior", "alternate_exterior", "corresponding", "same_side_interior")
@@ -386,7 +386,11 @@ def _fact_atoms(f: Fact, facts: FigureFacts) -> set[Canon]:
             if len(shared) == 1:  # AB ⊥ BC: the right angle at B
                 v = next(iter(shared))
                 return {("measure", ("ang", v, frozenset((set(p1) | set(p2)) - {v})), 90.0, None)}
-            return {("perp", frozenset((lin(it[0]), lin(it[1]))))}
+            # The foot, when stated, is checked (on each named segment's line), so
+            # it is part of what the fact says.
+            foot = {("online", f.point, frozenset(split_names(x))) for x in it[:2] if not _is_line_name(x)} \
+                if f.point else set()
+            return {("perp", frozenset((lin(it[0]), lin(it[1]))))} | foot
         return {("par", frozenset((lin(x), lin(y)))) for x, y in zip(it, it[1:])}
     if k == "congruent_segments":
         return {("eqlen", frozenset((seg(x), seg(y)))) for x, y in zip(it, it[1:])}
@@ -420,18 +424,22 @@ def _fact_atoms(f: Fact, facts: FigureFacts) -> set[Canon]:
         return {("measure", A(it[0]), 90.0, None)}
     if k == "midpoint" and it and f.point:
         return {("mid", f.point, seg(it[0]))}
-    if k in ("on_segment", "on_line") and it and f.point:
-        # On segment AB, on line AB, or where AB meets another line: one
-        # incidence (the merged reading keeps both wordings' checks).
+    # Each says exactly what is checked: on segment AB (between A and B), on
+    # line AB, on ray AB (from A through B), where lines meet (on each).
+    if k == "on_segment" and it and f.point:
         return {("on", f.point, lin(it[0]))}
+    if k == "on_line" and it and f.point:
+        return {("online", f.point, frozenset(split_names(it[0])) if not _is_line_name(it[0]) else lin(it[0]))}
+    if k == "on_ray" and it and f.point:
+        return {("onray", f.point, tuple(split_names(it[0])))}
     if k == "collinear":
         return {("collinear", frozenset(it))}
     if k == "intersect" and f.point and len(it) >= 2:
-        return {("on", f.point, lin(x)) for x in it}
+        return {("online", f.point, frozenset(split_names(x)) if not _is_line_name(x) else lin(x)) for x in it}
     if k == "bisects_segment" and len(it) >= 2:
         out: set[Canon] = {("linemid", lin(it[0]), seg(it[1]))}
         if f.point:
-            out |= {("mid", f.point, seg(it[1])), ("on", f.point, lin(it[0]))}
+            out |= {("mid", f.point, seg(it[1])), ("online", f.point, frozenset(split_names(it[0])))}
         return out
     if k == "bisects_angle" and len(it) >= 2:
         return {("bisang", seg(it[0]), A(it[1]))}
@@ -512,6 +520,31 @@ def _say(a: Canon) -> str:
         return str(x)
 
     return name(a)
+
+
+def with_derived(reading: FigureFacts, derived: list[Fact]) -> FigureFacts:
+    """The reading with the facts code derived from the words, each one the
+    reading doesn't already state (in canonical form)."""
+    have = atoms(reading)["givens"]
+    add: list[Fact] = []
+    for d in derived:
+        if not _closure(_fact_atoms(d, reading)) <= have and d not in add:
+            add.append(d)
+    return reading.model_copy(update={"givens": [*reading.givens, *add]}) if add else reading
+
+
+def derived_conflicts(reading: FigureFacts, derived: list[Fact]) -> list[str]:
+    """A size the problem's words state (a fact code derived) that the
+    reading gives another value: the same angle or side, measured twice."""
+    have = atoms(reading)["givens"]
+    out = []
+    for d in derived:
+        for a in _fact_atoms(d, reading):
+            if a[0] not in ("measure", "length"):
+                continue
+            other = [x for x in have if x[0] == a[0] and x[1] == a[1] and x != a]
+            out += [_say(a[:2]) for _ in other[:1]]
+    return list(dict.fromkeys(out))
 
 
 def disagreements(a: FigureFacts, b: FigureFacts) -> list[str]:
@@ -1182,6 +1215,7 @@ def describe(f: Fact) -> str:
         "midpoint": f"{p} is the midpoint of {first}",
         "on_segment": f"{p} is on {first}",
         "on_line": f"{p} is on line {first}",
+        "on_ray": f"{p} is on ray {first}",
         "collinear": f"{', '.join(it)} are collinear",
         "intersect": f"{' and '.join(it)} meet at {p}",
         "bisects_segment": f"{first} bisects {rest}",
@@ -1352,6 +1386,8 @@ def to_relations(f: Fact, facts: FigureFacts) -> list[Any]:
         return [R("on", f.point, pair(it[0]))]
     if k == "on_line" and it and f.point:
         return [R("online", f.point, pair(it[0]))]
+    if k == "on_ray" and it and f.point:
+        return [R("onray", f.point, pair(it[0]))]
     if k == "collinear" and len(it) >= 3:
         return [R("online", q, (it[0], it[1])) for q in it[2:]]
     if k == "intersect" and f.point and len(it) >= 2:

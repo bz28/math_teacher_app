@@ -260,19 +260,6 @@ async def read_figure_facts(
     quoted from the step. The question lends only its point names."""
     import asyncio
 
-    from api.core.geometry.facts import (
-        coverage_gaps,
-        described_in_words,
-        disagreements,
-        first_difference,
-        grounded,
-        impossible_measures,
-        invented_points,
-        merged,
-        standard_reading,
-        unverifiable,
-        without_other,
-    )
 
     message = f"Problem:\n{problem_text}"
     if step_of is not None:
@@ -297,6 +284,30 @@ async def read_figure_facts(
     except Exception:
         logger.exception("figure facts reading failed")
         return None, ["the problem couldn't be read for checking"]
+    return trusted_reading(problem_text, a, b, request=request, step_of=step_of)
+
+
+def trusted_reading(problem_text: str, a: FigureFacts, b: FigureFacts, *, request: str = "",
+                    step_of: str | None = None) -> tuple[FigureFacts | None, list[str]]:
+    """Plain code on the two readings: standard form, agreement, coverage
+    (with the facts code derives from the words), verifiers. The agreed
+    facts the drawing is checked against, or why there are none."""
+    from api.core.geometry.coverage import coverage
+    from api.core.geometry.facts import (
+        derived_conflicts,
+        described_in_words,
+        disagreements,
+        first_difference,
+        grounded,
+        impossible_measures,
+        invented_points,
+        merged,
+        standard_reading,
+        unverifiable,
+        with_derived,
+        without_other,
+    )
+
     a, b = grounded(a, f"{problem_text}\n{request}"), grounded(b, f"{problem_text}\n{request}")
     a, b = standard_reading(a), standard_reading(b)
     names = f"{problem_text}\n{request}\n{step_of or ''}"
@@ -309,15 +320,27 @@ async def read_figure_facts(
         return None, [_IN_WORDS]
     # (After "described in words", which reads the "other" facts' items.)
     a, b = without_other(a), without_other(b)
+    # The facts code derives from the problem's own words ("each base
+    # angle", "intersects PR at S", "altitude CD") are checked on the
+    # drawing whatever the readings say, so each reading is compared with
+    # them added: one that left out a foot the words state agrees with one
+    # that wrote it.
+    gaps, derived = coverage(problem_text, a)
+    derived_b = coverage(problem_text, b)[1]
+    clash = derived_conflicts(a, derived) or derived_conflicts(b, derived_b)
+    a, b = with_derived(a, derived), with_derived(b, derived_b)
     differ = disagreements(a, b)
     if differ:
         logger.warning("figure facts: the two readings differ: %s", differ)
         what = first_difference(a, b)
         about = f" about {what if what.startswith('which') else 'whether ' + what}" if what else ""
         return None, [f"two readings of the problem disagree{about}, so the figure can't be checked"]
-    gaps = coverage_gaps(problem_text, a)
     if gaps:
         return None, [f"the reading of the problem missed {g}, so the figure can't be checked" for g in gaps[:3]]
+    if clash:  # a reading measures a part the words measure otherwise
+        logger.warning("figure facts: a reading contradicts the problem's words: %s", clash)
+        return None, [f"the reading of the problem contradicts its words about {clash[0]}, so the figure can't be "
+                      "checked"]
     agreed = merged(a, b)
     if described_in_words(agreed):
         return None, [_IN_WORDS]
@@ -328,6 +351,8 @@ async def read_figure_facts(
     if impossible:
         return None, impossible[:2]
     return agreed, []
+
+
 
 
 _IN_WORDS = (

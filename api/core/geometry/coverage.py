@@ -147,30 +147,43 @@ _POLY_KINDS = frozenset({"congruent_triangles", "similar_triangles", "isosceles"
                          "rhombus", "trapezoid", "isosceles_trapezoid", "kite"})
 # Words that name a listed polygon by its number of corners.
 _POLY_WORDS = {"quadrilateral": 4, "pentagon": 5, "hexagon": 6, "polygon": 0}
-# A method's name, accounted for only from this list, matched whole
-# (with the verb that applies it: "by", "using", "use", "apply"). Each
-# name was reviewed against "does it assert anything about THIS figure?":
-# only names that hold for any figure the rest of the problem states are
-# here. Not here, on purpose, because applying them asserts a relation:
-# the Alternate Interior / Corresponding Angles theorems (parallel lines),
-# the Vertical Angles Theorem (vertical angles), the Base Angles and
-# Isosceles Triangle theorems (isosceles), the Pythagorean Theorem (a
-# right angle), the Exterior Angle Theorem, the Angle / Segment Addition
-# postulates (a ray inside, a point between), HL (right triangles), SSA,
-# "definition of midpoint / bisector / perpendicular", "properties of …".
-METHOD_NAMES: tuple[tuple[str, str], ...] = (
-    (r"(?:the )?(?:corollary to the )?triangle sum theorem", "any triangle's angles add to 180° (1c9d21ab, df891226)"),
-    (r"(?:the )?reflexive property(?: of (?:congruence|equality))?", "a part equals itself (dd7ab4c1)"),
-    (r"(?:the )?(?:transitive|substitution|symmetric) property(?: of (?:congruence|equality))?", "algebra"),
-    (r"(?:the )?(?:SSS|SAS|ASA|AAS) (?:congruence )?(?:postulate|theorem)", "a congruence method (afee316c)"),
-    (r"(?:SSS|SAS|ASA|AAS|AA|CPCTC|CPCF)\b", "a congruence / similarity method by its letters (589e4a97, dd5e6fa8)"),
-    (r"(?:the )?parallel postulate", "Euclid's: one parallel through a point; nothing about this figure"),
-    (r"(?:the )?definitions? of congruen(?:t|ce)(?: (?:segments|angles|triangles))?", "what ≅ means"),
+# A method's name, accounted for only from this list, matched whole (with
+# the verb that applies it: "by", "using", "use", "apply"). Each name was
+# reviewed against "does it assert anything about THIS figure?". A name
+# that applies only to a kind of figure asserts that figure, so it counts
+# only when the reading states one (the kind after the name below: "SAS"
+# needs a stated pair of congruent triangles). Not here at all, because
+# applying them asserts a relation the name alone can't place: the
+# Corollary to the Triangle Sum Theorem (a right triangle), the Alternate
+# Interior / Corresponding Angles theorems (parallel lines cut by a
+# transversal), the Vertical Angles Theorem, the Base Angles and Isosceles
+# Triangle theorems, the Pythagorean Theorem, the Exterior Angle Theorem,
+# the Angle / Segment Addition postulates, HL, SSA, "definition of
+# midpoint / bisector / perpendicular", "properties of …".
+METHOD_NAMES: tuple[tuple[str, str, str], ...] = (
+    (r"(?:the )?triangle sum theorem", "triangle", "any triangle's angles add to 180° (df891226)"),
+    (r"(?:the )?reflexive property(?: of (?:congruence|equality))?", "", "a part equals itself (dd7ab4c1)"),
+    (r"(?:the )?(?:transitive|substitution|symmetric) property(?: of (?:congruence|equality))?", "", "algebra"),
+    (r"(?:the )?definitions? of congruen(?:t|ce)(?: (?:segments|angles))?", "", "what ≅ means"),
+    (r"(?:the )?(?:SSS|SAS|ASA|AAS) (?:congruence )?(?:postulate|theorem)", "congruent_triangles",
+     "a congruence method (afee316c)"),
+    (r"(?:SSS|SAS|ASA|AAS|CPCTC|CPCF)\b", "congruent_triangles", "a congruence method by its letters (589e4a97)"),
+    (r"AA\b(?: similarity)?", "similar_triangles", "a similarity method"),
+    (r"(?:the )?parallel postulate", "parallel", "Euclid's, about parallel lines"),
 )
-_METHOD = re.compile(
-    r"\b(?:(?:by|using|use|uses|apply|applying)\s+(?:the\s+)?)?(?:"
-    + "|".join(rx.replace(" ", r"\s+") for rx, _ in METHOD_NAMES) + r")(?![A-Za-z])",
-    re.IGNORECASE)
+_METHODS = [(re.compile(r"\b(?:(?:by|using|use|uses|apply|applying)\s+(?:the\s+)?)?" + rx.replace(" ", r"\s+")
+                        + r"(?![A-Za-z])", re.IGNORECASE), needs) for rx, needs, _ in METHOD_NAMES]
+
+
+def _states_a(needs: str, facts: FigureFacts) -> bool:
+    """The reading states the kind of figure a method applies to."""
+    if not needs:
+        return True
+    if needs == "triangle":
+        return bool(facts.triangles)
+    return any(f.kind == needs for f in (*facts.givens, *facts.prove))
+
+
 # A question that asserts nothing: "determine whether AB ∥ CD" (up to a
 # condition, which is a statement: "…, given that the triangle is isosceles").
 _WHETHER = re.compile(r"\bwhether\b[^.;?\n]*?(?=,|\s+(?:given|if|when|where|since|because|knowing)\b|[.;?\n]|$)",
@@ -380,7 +393,75 @@ def _vars(f: Fact) -> set[str]:
     return set(re.findall(r"(?<![A-Za-z])[a-z](?![A-Za-z])", f.expr or ""))
 
 
-def _fact_accounts(f: Fact, run: list[Tok], facts: FigureFacts) -> list[Tok]:
+_EXPR_SYMS = {"sym:+", "sym:-", "sym:/", "sym:*", "sym:frac", "sym:dfrac", "sym:tfrac", "sym:left", "sym:right",
+              "sym:cdot", "sym:times", "sym:div"}
+
+
+def _expressions(t: str, toks: list[Tok]) -> dict[int, dict[str, float] | None]:
+    """Each algebraic expression the text writes ("(5x − 3)", "2(x + 5)",
+    "2\\frac{1}{2}x"), read whole: token id → the expression as
+    {variable: coefficient}, None when it can't be read."""
+    from api.core.geometry.figure_check import _polynomial, _UnparsedError
+
+    out: dict[int, dict[str, float] | None] = {}
+    group: list[Tok] = []
+
+    def flush(tail: str = "") -> None:
+        parts = [k for k in group if k.kind != "punct"]
+        if parts and any(k.kind in ("num", "var") for k in parts):
+            # From the brackets that open it to those that close it, the
+            # closing ones of a "),", ")$" included.
+            e = t[group[0].a:group[-1].b] + tail
+            e = re.sub(r"\\(?:left|right)\s*", "", e).strip()
+            while e and e[0] in "([{" and _depth(e) > 0:
+                e = e[1:].lstrip()
+            while e and e[-1] in ")]}" and _depth(e) < 0:
+                e = e[:-1].rstrip()
+            try:
+                poly: dict[str, float] | None = {v: c for v, c in _polynomial(e).items() if abs(c) > 1e-12}
+            except (_UnparsedError, ValueError, ZeroDivisionError):
+                poly = None
+            for k in parts:
+                out[id(k)] = poly
+        group.clear()
+
+    for k in toks:
+        if k.kind in ("num", "var") or (k.kind == "sym" and k.norm in _EXPR_SYMS) or (
+                k.kind == "punct" and not k.norm.strip(" ()[]{}")):
+            group.append(k)
+        else:
+            lead = re.match(r"[\s)\]}]*", k.norm)[0] if k.kind == "punct" else ""  # type: ignore[index]
+            flush(lead)
+            if k.kind == "punct":
+                rest = k.norm[len(lead):]
+                opening = re.search(r"[\s(\[{]*$", rest)[0]  # type: ignore[index]
+                if opening.strip():  # "$(" opens the next one
+                    group.append(Tok("punct", opening, k.b - len(opening), k.b))
+    flush()
+    return out
+
+
+def _depth(e: str) -> int:
+    return sum(e.count(c) for c in "([{") - sum(e.count(c) for c in ")]}")
+
+
+def _same_expression(f: Fact, k: Tok, exprs: dict[int, dict[str, float] | None]) -> bool:
+    """The text's expression holding token k is the fact's, exactly: "(5x −
+    3)°" read as 5x + 3 uses none of it."""
+    from api.core.geometry.figure_check import _polynomial, _UnparsedError
+
+    have = exprs.get(id(k))
+    if have is None or not f.expr:
+        return False
+    try:
+        want = {v: c for v, c in _polynomial(f.expr).items() if abs(c) > 1e-12}
+    except (_UnparsedError, ValueError, ZeroDivisionError):
+        return False
+    return want.keys() == have.keys() and all(abs(want[v] - have[v]) < 1e-6 for v in want)
+
+
+def _fact_accounts(f: Fact, run: list[Tok], facts: FigureFacts, out: list[Fact],
+                   exprs: dict[int, dict[str, float] | None] | None = None) -> list[Tok]:
     """The tokens of a quote's run that the fact uses; none at all when the
     run holds no word or symbol of the fact's own relation."""
     vocab = VOCAB.get(f.kind)
@@ -392,7 +473,7 @@ def _fact_accounts(f: Fact, run: list[Tok], facts: FigureFacts) -> list[Tok]:
     relation = not vocab  # a numbered angle's label has no relation word
     # A part named by its role, exactly ("each base angle", "the vertex
     # angle", "one acute angle … the other"): those words, and the part.
-    role = _named_by_role(f, run, facts)
+    role = _named_by_role(f, run, facts, out)
     named = bool(role)  # the quote names a part of the fact
     if f.kind == "perpendicular" and any(k.norm == "altitude" for k in run):
         vocab = vocab | {"drawn"}  # "altitude QS is drawn to PR"
@@ -400,17 +481,20 @@ def _fact_accounts(f: Fact, run: list[Tok], facts: FigureFacts) -> list[Tok]:
         if k.kind == "name":
             ok = _uses_name(f, k, facts) or id(k) in role
             named |= ok
+        elif k.kind == "num" and algebra and id(k) in (exprs or {}):
+            ok = _same_expression(f, k, exprs or {})  # the whole expression, signs included
         elif k.kind == "num":
             ok = k.value is not None and round(k.value, 6) in nums
         elif k.kind == "var":
             line = any(line_key(x) == k.norm for x in f.items)
-            ok = k.norm in vs or line
+            ok = (k.norm in vs and (not algebra or _same_expression(f, k, exprs or {}))) or line
             named |= line
         elif k.kind == "word":
             ok = k.norm in vocab or k.norm in INERT_WORDS or id(k) in role
             relation |= k.norm in vocab
         else:  # a symbol
-            ok = k.norm in vocab or (algebra and k.norm in ("sym:+", "sym:-", "sym:/", "sym:^", "sym:=", _DEG))
+            ok = k.norm in vocab or (algebra and (k.norm in ("sym:^", "sym:=", _DEG) or (
+                k.norm in _EXPR_SYMS and _same_expression(f, k, exprs or {}))))
             relation |= k.norm in vocab
         if ok:
             used.append(k)
@@ -432,11 +516,14 @@ def _vertex(f: Fact) -> str:
 # ── Derived facts ─────────────────────────────────────────────────────
 # A wording that needs more than one fact ("each base angle", "G and H
 # respectively", "intersects PR at S") is accounted for only this way:
-# code parses exactly those words with a fixed grammar, derives the
-# fact(s) they state, and requires each derived fact to be in the agreed
-# reading, in canonical form. The figure is then checked against the
-# reading's facts like any other. A wording the grammar doesn't parse
-# exactly, or that fits more than one part, is a gap.
+# code parses exactly those words with a fixed grammar and derives the
+# fact(s) they state, with their exact kinds (a point on a segment, a ray
+# or a line; a perpendicular with its foot). The derived facts are added to
+# the facts the drawing is checked against, whatever the reading says; a
+# reading that says otherwise makes the drawing fail. Which part a phrase
+# is about ("the vertex angle", "arc AB") comes from parts the reading
+# states with their own words; a phrase that fits no part, or more than
+# one, or that the grammar doesn't parse exactly, is a gap.
 
 
 def _given_atoms(facts: FigureFacts) -> set[Any]:
@@ -444,15 +531,6 @@ def _given_atoms(facts: FigureFacts) -> set[Any]:
     for g in facts.givens:
         out |= _fact_atoms(g, facts)
     return _closure(out)
-
-
-def _in_reading(derived: list[Fact], facts: FigureFacts) -> bool:
-    have = _given_atoms(facts)
-    for d in derived:
-        a = _fact_atoms(d, facts)
-        if not a or not a <= have or any(x[0] == "other" for x in a):
-            return False
-    return True
 
 
 def _apex(tri: list[str], have: set[Any]) -> str | None:
@@ -497,7 +575,7 @@ def _angle_at(tri: list[str], v: str) -> str:
     return a + v + b
 
 
-def _named_by_role(f: Fact, run: list[Tok], facts: FigureFacts) -> set[int]:
+def _named_by_role(f: Fact, run: list[Tok], facts: FigureFacts, out: list[Fact]) -> set[int]:
     """The tokens (by id) of a role phrase that names the fact's angle
     exactly, or none. Each derives the angle(s) from the words:
     - "each / one base angle [of △DEF] measures …": the two base angles of
@@ -514,7 +592,8 @@ def _named_by_role(f: Fact, run: list[Tok], facts: FigureFacts) -> set[int]:
     have = _given_atoms(facts)
 
     def is_(derived: list[Fact]) -> bool:
-        return _in_reading(derived, facts)
+        out.extend(d.model_copy(update={"quote": f.quote}) for d in derived)
+        return True
 
     def measure(angle: str) -> Fact:
         return Fact(kind="angle_measure", items=[angle], value=f.value, expr=f.expr)
@@ -597,11 +676,19 @@ def coverage_gaps(text: str, facts: FigureFacts) -> list[str]:
     """What the text says that the reading doesn't account for (see the
     module docstring): a point name the reading lacks, then each run of
     unaccounted tokens, in the problem's own words."""
+    return coverage(text, facts)[0]
+
+
+def coverage(text: str, facts: FigureFacts) -> tuple[list[str], list[Fact]]:
+    """The gaps, and the facts code derived from the words (see "Derived
+    facts"), which the drawing is checked against too."""
+    derived: list[Fact] = []
     from api.core.geometry.figure_check import _clean, _plain, _shading_statements, parse_problem
 
     t = _clean(text)
     gaps = [f"point {n}" for n in sorted(parse_problem(text).points - set(facts.points))]
     toks = tokens(t, set(facts.points))
+    exprs = _expressions(t, toks)
 
     def mark(a: int, b: int, only: tuple[str, ...] = ()) -> None:
         for k in toks:
@@ -620,7 +707,7 @@ def coverage_gaps(text: str, facts: FigureFacts) -> list[str]:
     for f in [*facts.givens, *facts.prove]:
         for piece in re.split(r"\s*…\s*|\.\.\.", f.quote or ""):
             for found in _find_runs(toks, tokens(_clean(piece), set(facts.points))):
-                for k in _fact_accounts(f, found, facts):
+                for k in _fact_accounts(f, found, facts, derived, exprs):
                     k.done = True
     # 2. What is asked.
     _targets(t, toks, facts)
@@ -632,9 +719,10 @@ def coverage_gaps(text: str, facts: FigureFacts) -> list[str]:
         mark(*m.span())
     for m in re.finditer(_LIST_MARK, t, re.IGNORECASE):
         mark(*m.span())
-    for rx in (_METHOD, _WHETHER):  # "by the Alternate Interior Angles Theorem"; "whether AB ∥ CD"
-        for m in rx.finditer(t):
-            mark(*m.span(), only=("word", "punct"))
+    for rx, needs in [*_METHODS, (_WHETHER, "")]:  # "by SAS"; "whether AB ∥ CD"
+        if _states_a(needs, facts):
+            for m in rx.finditer(t):
+                mark(*m.span(), only=("word", "punct"))
     if facts.triangles or any(len(split_names(p)) == 3 for p in facts.polygons):
         for m in _ANGLE_SUM.finditer(t):
             if _angle_sum_of_triangle(m.group(0), facts):
@@ -642,7 +730,7 @@ def coverage_gaps(text: str, facts: FigureFacts) -> list[str]:
                 mark(m.start(), m.end() + (end.end() if end else 0))
     _named_parts(toks, facts)
     _hypotenuse_and_legs(toks, facts)
-    _exact_rules(t, toks, facts)
+    _exact_rules(t, toks, facts, derived)
     _draw(toks, facts)
     # A clause said again exactly is accounted for when the first saying is.
     clauses = _clauses(t)
@@ -670,7 +758,11 @@ def coverage_gaps(text: str, facts: FigureFacts) -> list[str]:
         else:
             said = re.sub(r"\\(?:overline|overrightarrow|overleftrightarrow)\s*", "", t[r[0].a:r[-1].b])
             gaps.append(f"“{_plain(said).strip()}”")
-    return list(dict.fromkeys(gaps))
+    unique: list[Fact] = []
+    for d in derived:
+        if d not in unique:
+            unique.append(d)
+    return list(dict.fromkeys(gaps)), unique
 
 
 def _targets(t: str, toks: list[Tok], facts: FigureFacts) -> None:
@@ -841,7 +933,7 @@ INSTRUCTION_PHRASES: tuple[tuple[str, str], ...] = (
     (r"using your value of(?= [a-z]\b)", "the unknown after it is accounted for only if asked (2f44f46d)"),
 )
 _PHRASES = [re.compile(r"\b" + rx.replace(" ", r"\s+"), re.IGNORECASE) for rx, _ in INSTRUCTION_PHRASES]
-_ACR = r"(?:SAS|ASA|AAS|SSS|CPCTC|AA)"  # the method names above by their letters (no HL: right triangles)
+_ACR = r"(?:SAS|ASA|AAS|SSS|CPCTC)"  # congruence methods by their letters (no HL: right triangles)
 _METHOD_LISTS = re.compile(  # "AAS or ASA congruence", "triangle congruence (SSS or SAS)"
     rf"\b(?:(?:using|by)\s+)?(?:triangle\s+congruence\s*\(\s*{_ACR}(?:\s+or\s+{_ACR})*\s*\)|{_ACR}(?:\s+or\s+{_ACR})+"
     rf"(?:\s+congruence)?)(?![A-Za-z])",
@@ -860,7 +952,7 @@ def _sentence_of(toks: list[Tok], i: int) -> tuple[int, int]:
     return a, b
 
 
-def _exact_rules(t: str, toks: list[Tok], facts: FigureFacts) -> None:
+def _exact_rules(t: str, toks: list[Tok], facts: FigureFacts, out: list[Fact]) -> None:
     """Wordings accounted for by an exact rule: the instruction phrases and
     method lists, and the derived-fact rules (see "Derived facts")."""
     def mark(a: int, b: int, kinds: tuple[str, ...] = ("word",)) -> None:
@@ -876,8 +968,9 @@ def _exact_rules(t: str, toks: list[Tok], facts: FigureFacts) -> None:
             var_m = re.match(r"\s+([a-z])\b", t[m.end():])
             if rx.pattern.endswith("value\\s+of(?=\\s+[a-z]\\b)") and var_m and var_m[1] in asked_vars:
                 mark(m.end(), m.end() + var_m.end(), ("var",))
-    for m in _METHOD_LISTS.finditer(t):
-        mark(*m.span())
+    if _states_a("congruent_triangles", facts):  # "AAS or ASA congruence": a congruence method
+        for m in _METHOD_LISTS.finditer(t):
+            mark(*m.span())
     words = [k for k in toks if k.kind != "punct"]
     pos = {id(k): i for i, k in enumerate(toks)}
     have = _given_atoms(facts)
@@ -897,6 +990,14 @@ def _exact_rules(t: str, toks: list[Tok], facts: FigureFacts) -> None:
         for w in ws:
             w.done = True
 
+    def derive(derived: list[Fact], ws: list[Tok]) -> bool:
+        """These words state exactly these facts: they are checked on the
+        drawing with the reading's (and the words are accounted for)."""
+        quote = t[ws[0].a:ws[-1].b] if ws else ""
+        out.extend(d.model_copy(update={"quote": quote}) for d in derived)
+        done(*ws)
+        return True
+
     for i, k in enumerate(words):
         if k.kind != "word":
             continue
@@ -909,12 +1010,11 @@ def _exact_rules(t: str, toks: list[Tok], facts: FigureFacts) -> None:
             after = [w for w in sent[sent.index(k) + 4:] if w.kind == "name" and w.wrap == "angle"]
             vs = {split_names(w.norm)[1] if len(split_names(w.norm)) == 3 else w.norm for w in after}
             holding = [tr for tr in tris if vs <= set(tr)]
-            if words[i + 1].norm == "base":
-                ok = len(holding) == 1 and len(vs) == 2 and (apex := _apex(holding[0], have)) is not None \
-                    and vs == set(holding[0]) - {apex}
-            else:
-                ok = bool(after) and len(holding) == 1
-            if ok:
+            if words[i + 1].norm == "base" and len(holding) == 1 and len(vs) == 2:
+                # Q and R are the base angles: the legs from the third corner are equal.
+                apex = next(x for x in holding[0] if x not in vs)
+                derive([Fact(kind="congruent_segments", items=[apex + b for b in sorted(vs)])], words[i + 1:i + 4])
+            elif words[i + 1].norm == "interior" and after and len(holding) == 1:
                 done(*words[i + 1:i + 4])
         # "OA, OB, OC, and OD all share endpoint O": every part named before
         # it in the sentence is a ray named from O (so it starts at O by its
@@ -955,13 +1055,15 @@ def _exact_rules(t: str, toks: list[Tok], facts: FigureFacts) -> None:
                 if j < len(words) and words[j].norm == "point":
                     j += 1
                 subject = _subject_of(toks, pos[id(k)])
-                if is_name(j, 1) and subject is not None:
+                on_xy = _on_kind(words, i + 1)
+                if is_name(j, 1) and subject is not None and on_xy:
                     pt = words[j].norm
-                    derived = [Fact(kind="on_segment", items=[xy], point=pt)]
+                    derived = [Fact(kind=on_xy, items=[xy], point=pt)]
                     if pt not in split_names(subject.norm):
-                        derived.append(Fact(kind="on_line", items=[subject.norm], point=pt))
-                    if _in_reading(derived, facts):
-                        done(*words[i:j + 1])
+                        on_subject = _on_kind(words, words.index(subject))
+                        derived += [Fact(kind=on_subject, items=[subject.norm], point=pt)] if on_subject else []
+                    if len(derived) == 1 + (pt not in split_names(subject.norm)):
+                        derive(derived, words[i:j + 1])
         # The exterior angle:
         # - "an exterior angle is formed at (vertex) P by extending (side) RP
         #   beyond P (to point T)": exactly the stated extension;
@@ -988,17 +1090,15 @@ def _exact_rules(t: str, toks: list[Tok], facts: FigureFacts) -> None:
                                 q = end + 1 + (end + 1 < len(words) and words[end + 1].norm == "point")
                                 if is_name(q, 1):
                                     to, end = words[q].norm, q + 1
-                            ok = _in_reading([Fact(kind="extension", items=[st + p], point=to or None)], facts) \
-                                and any({st, p} <= set(tr) for tr in tris)
-                            if ok:
-                                done(*words[i:end])
+                            if any({st, p} <= set(tr) for tr in tris):
+                                derive([Fact(kind="extension", items=[st + p], point=to or None)], words[i:end])
             elif is_name(j, 3) and words[j].wrap == "angle":
                 x, v, y = split_names(words[j].norm)
                 derived = [Fact(kind="extension", items=[c + v], point=d)
                            for e, d in ((x, y), (y, x)) for tr in tris if {e, v} <= set(tr) and d not in tr
                            for c in tr if c not in (e, v)]
-                if len(derived) == 1 and _in_reading(derived, facts):
-                    done(k, words[i + 1])
+                if len(derived) == 1:
+                    derive(derived, [k, words[i + 1]])
             elif norm_seq(j, 1) == ["at"] and is_name(j + 1, 1) and _in_target(t, k):
                 ext = _extensions_past(words[j + 1].norm, facts)
                 if len(ext) == 1:
@@ -1010,8 +1110,7 @@ def _exact_rules(t: str, toks: list[Tok], facts: FigureFacts) -> None:
             holding = [tr for tr in tris if c in tr and d not in tr]
             if len(holding) == 1:
                 opposite = "".join(x for x in holding[0] if x != c)
-                if _in_reading([Fact(kind="perpendicular", items=[c + d, opposite], point=d)], facts):
-                    done(k)
+                derive([Fact(kind="perpendicular", items=[c + d, opposite], point=d)], [k])
         # "transversal EF cutting both lines at points G and H respectively":
         # the two lines named before EF in the sentence, in the order the
         # text names them; G is where EF meets the first, H the second.
@@ -1031,10 +1130,9 @@ def _exact_rules(t: str, toks: list[Tok], facts: FigureFacts) -> None:
                                 set(split_names(w.norm)) != set(split_names(tl.norm)) and \
                                 set(split_names(w.norm)) not in [set(split_names(x)) for x in lines_]:
                             lines_.append(w.norm)
-                    if len(lines_) == 2 and _in_reading([
-                            Fact(kind="intersect", items=[tl.norm, lines_[0]], point=g_),
-                            Fact(kind="intersect", items=[tl.norm, lines_[1]], point=h_)], facts):
-                        done(*words[j - 3:i + 1])
+                    if len(lines_) == 2:
+                        derive([Fact(kind="intersect", items=[tl.norm, lines_[0]], point=g_),
+                                Fact(kind="intersect", items=[tl.norm, lines_[1]], point=h_)], words[j - 3:i + 1])
     # In a question: "the measure of each angle", "both angle measures"
     # (what is asked, stated of nothing); "each acute angle" when the one
     # listed triangle has a stated right angle; "arc AB" when A and B lie on
@@ -1059,15 +1157,41 @@ def _exact_rules(t: str, toks: list[Tok], facts: FigureFacts) -> None:
                     w.done = nxt[0].done = True
 
 
+def _on_kind(words: list[Tok], i: int) -> str:
+    """What a point "on" the part named at words[i] lies on, by how the text
+    writes the part: a segment (AB with a bar, or "segment AB"), a ray, a
+    line; "" when the text doesn't say."""
+    k = words[i]
+    by_wrap = {"overline": "on_segment", "overrightarrow": "on_ray", "overleftrightarrow": "on_line"}.get(k.wrap, "")
+    said = words[i - 1].norm if i and words[i - 1].kind == "word" else ""
+    by_word = {"segment": "on_segment", "ray": "on_ray", "line": "on_line"}.get(said, "")
+    return by_wrap or by_word
+
+
 def _in_target(t: str, k: Tok) -> bool:
     return any(a <= k.a and k.b <= b for a, b in _target_spans(t))
 
 
+# A name heads a verb phrase when a relation or one of these verbs follows it.
+_VERBS = frozenset({"bisects", "is", "are", "passes", "lies", "meets", "crosses", "cuts", "intersects", "forms",
+                    "makes", "extends", "runs", "goes", "contains", "divides"})
+_PART_WORDS = frozenset({"ray", "rays", "segment", "segments", "line", "lines"})
+_RELATION_SYMS = frozenset({"sym:perp", "sym:parallel", "sym:cong", "sym:=", "sym:sim"})
+
+
 def _subject_of(toks: list[Tok], at: int) -> Tok | None:
-    """The subject of the verb at toks[at] (see the "intersects" rule)."""
+    """The subject of the verb at toks[at], from its own clause only:
+    - the name right before the verb ("EF intersects"), or right before one
+      clause set off by commas ("QS, the bisector of ∠PQR, intersects");
+    - after "and" (past one clause set off by commas, if any): the nearest
+      name before it, in the same clause, that heads a verb phrase ("ray QS
+      bisects ∠PQR and intersects": QS; "QT ⊥ PR and EF ∥ PQ and
+      intersects": EF). The clause runs back to a comma or the sentence's
+      start. A subject of two names ("QT and EF are drawn and intersects")
+      is ambiguous: none."""
     verb = toks[at]
-    # Words and names, plus the punctuation that matters here: commas and
-    # sentence ends ("$, " is a comma; " $" is nothing).
+    # Words, names and symbols, plus the punctuation that matters here:
+    # commas and sentence ends ("$, " is a comma; " $" is nothing).
     sig = [k for k in toks if k.kind != "punct" or "," in k.norm or _SENT_END.search(k.norm)]
     at = next(n for n, k in enumerate(sig) if k is verb)
 
@@ -1079,6 +1203,11 @@ def _subject_of(toks: list[Tok], at: int) -> Tok | None:
 
     def name2(k: Tok) -> bool:
         return k.kind == "name" and len(split_names(k.norm)) == 2
+
+    def heads_verb(n: int) -> bool:
+        nxt = sig[n + 1] if n + 1 < len(sig) else None
+        return name2(sig[n]) and nxt is not None and (
+            (nxt.kind == "sym" and nxt.norm in _RELATION_SYMS) or (nxt.kind == "word" and nxt.norm in _VERBS))
 
     i = at - 1
     after_and = i >= 0 and sig[i].kind == "word" and sig[i].norm == "and"
@@ -1095,13 +1224,28 @@ def _subject_of(toks: list[Tok], at: int) -> Tok | None:
         return None
     if not after_and:
         return sig[i] if name2(sig[i]) else None
-    # The clause before "and": from the previous comma or the sentence's start.
+    end = i
     while not stop(i):
         i -= 1
-    i += 1
-    while i < at and sig[i].kind == "word" and sig[i].norm in ("ray", "line", "segment", "the"):
-        i += 1
-    return sig[i] if name2(sig[i]) else None
+    heads = [n for n in range(i + 1, end + 1) if heads_verb(n)]
+    if not heads:
+        return None
+    n = heads[-1]
+
+    def before(j: int) -> int:  # the token before j, past a type word ("ray EF")
+        j -= 1
+        return j - 1 if j > i and sig[j].kind == "word" and sig[j].norm in _PART_WORDS else j
+
+    # "QT and EF ∥ PQ", "ray QT and ray EF are": a subject of more than one
+    # name (not "QT ⊥ PR and EF ∥ PQ", where PR is ⊥'s object).
+    j = before(n)
+    if j > i and (sig[j].norm in ("and", "or") or comma(j)):
+        k = before(j)
+        if k > i and name2(sig[k]):
+            lead = before(k)
+            if lead <= i or sig[lead].norm in ("and", "or", "both") or comma(lead):
+                return None
+    return sig[n]
 
 
 def _draw(toks: list[Tok], facts: FigureFacts) -> None:
