@@ -61,6 +61,89 @@
       "unlabeled_dots": 0
     }
   },
+  "1aac39ec18b89317ac670d2a1da528d5": {
+    "meta": {
+      "mode": "integrity_extract",
+      "model": "claude-opus-5-5",
+      "prompt": "You are a teacher reading a student's handwritten homework. Your job is to copy  ||",
+      "recorded_at": 1794617580.819978
+    },
+    "response": {
+      "confidence": 0.9,
+      "final_answers": [
+        {
+          "answer_latex": "(2, 3)",
+          "answer_plain": "(2, 3)",
+          "page_index": 1,
+          "problem_position": 1
+        }
+      ],
+      "steps": [
+        {
+          "latex": "y = 2x - 1",
+          "page_index": 1,
+          "plain_english": "Wrote first equation y = 2x - 1 (labeled 1.)",
+          "problem_position": 1,
+          "step_num": 1
+        },
+        {
+          "latex": "y = -x + 5",
+          "page_index": 1,
+          "plain_english": "Wrote second equation y = -x + 5",
+          "problem_position": 1,
+          "step_num": 2
+        },
+        {
+          "latex": "2x - 1 = -x + 5",
+          "page_index": 1,
+          "plain_english": "Set the expressions equal",
+          "problem_position": 1,
+          "step_num": 3
+        },
+        {
+          "latex": "3x = 6",
+          "page_index": 1,
+          "plain_english": "Simplified to 3x = 6",
+          "problem_position": 1,
+          "step_num": 4
+        },
+        {
+          "latex": "x = 2, y = 3",
+          "page_index": 1,
+          "plain_english": "x = 2, y = 3",
+          "problem_position": 1,
+          "step_num": 5
+        },
+        {
+          "latex": "(2, 3)",
+          "page_index": 1,
+          "plain_english": "Wrote ordered pair (2, 3)",
+          "problem_position": 1,
+          "step_num": 6
+        }
+      ],
+      "visual_work": [
+        {
+          "answer_on_drawing": null,
+          "bbox": {
+            "x0": 0.5,
+            "x1": 0.95,
+            "y0": 0.14,
+            "y1": 0.48
+          },
+          "description": "Hand-drawn coordinate axes with tick marks on both axes, no numeric labels. Only one straight line is drawn, rising steeply left to right and crossing the y-axis just below the origin. No second line, no marked intersection point, no labels.",
+          "kind": "graph",
+          "labeled_points": [],
+          "page_index": 1,
+          "plotted_elements": [
+            "single line rising left-to-right, steep, crossing the y-axis slightly below the origin and the x-axis slightly right of the origin, from lower-left of the graph to upper-right"
+          ],
+          "present": true,
+          "problem_position": 1
+        }
+      ]
+    }
+  },
   "2c0b24c5daae4e5d4d1d76f0a72805e3": {
     "meta": {
       "mode": "integrity_extract",
@@ -126,6 +209,69 @@
           "plotted_elements": [
             "Open circle at x = 4 (exclusive boundary)",
             "Bold shaded ray extending rightward from 4 to the arrow at the right end of the number line (x > 4)"
+          ],
+          "present": true,
+          "problem_position": 1
+        }
+      ]
+    }
+  },
+  "3189e2b9d2ae9f6ec289e0c9061c5c0a": {
+    "meta": {
+      "mode": "integrity_extract",
+      "model": "claude-opus-5-5",
+      "prompt": "You are a teacher reading a student's handwritten homework. Your job is to copy  ||",
+      "recorded_at": 1794617600.677401
+    },
+    "response": {
+      "confidence": 0.88,
+      "final_answers": [
+        {
+          "answer_latex": "(2, 3)",
+          "answer_plain": "(2, 3)",
+          "page_index": 1,
+          "problem_position": 1
+        }
+      ],
+      "steps": [
+        {
+          "latex": "y = 2x - 1",
+          "page_index": 1,
+          "plain_english": "Labeled '1.', the student wrote the first equation: y = 2x - 1",
+          "problem_position": 1,
+          "step_num": 1
+        },
+        {
+          "latex": "y = -x + 5",
+          "page_index": 1,
+          "plain_english": "The student wrote the second equation: y = -x + 5",
+          "problem_position": 1,
+          "step_num": 2
+        },
+        {
+          "latex": "(2, 3)",
+          "page_index": 1,
+          "plain_english": "The student wrote the ordered pair (2, 3)",
+          "problem_position": 1,
+          "step_num": 3
+        }
+      ],
+      "visual_work": [
+        {
+          "answer_on_drawing": null,
+          "bbox": {
+            "x0": 0.5,
+            "x1": 0.95,
+            "y0": 0.14,
+            "y1": 0.48
+          },
+          "description": "Hand-drawn coordinate axes with tick marks, no numbers on the axes. Two straight lines cross each other in the first quadrant, about 1\u20132 ticks right of the y-axis and about 2 ticks up. The crossing point is not marked or labeled. The lines have no equations written next to them.",
+          "kind": "graph",
+          "labeled_points": [],
+          "page_index": 1,
+          "plotted_elements": [
+            "Line rising from left to right, from the lower left (below the x-axis, left of the y-axis) to the upper right. It crosses the y-axis about 1 tick below the origin and the x-axis about half a tick right of the origin.",
+            "Line falling from left to right, from the upper left near the top of the y-axis to the lower right. It crosses the y-axis about 5 ticks above the origin and the x-axis about 2\u20133 ticks right of the origin."
           ],
           "present": true,
           "problem_position": 1
@@ -531,6 +677,69 @@
       "labeled_points": [],
       "notes": "The two curves cross each other once in the upper-center region (above the x-axis, near the y-axis). Both curves pass through or very near the origin area and extend to opposite lower corners, creating a large X shape overall. No coordinate labels are written beside any points.",
       "unlabeled_dots": 0
+    }
+  },
+  "7c293820f88d4215a6eb2e79b3910405": {
+    "meta": {
+      "mode": "integrity_extract",
+      "model": "claude-opus-5-5",
+      "prompt": "You are a teacher reading a student's handwritten homework. Your job is to copy  ||",
+      "recorded_at": 1794617623.959231
+    },
+    "response": {
+      "confidence": 0.9,
+      "final_answers": [
+        {
+          "answer_latex": "x > 4",
+          "answer_plain": "x > 4 (also graphed on number line as a ray from 4 going right)",
+          "page_index": 1,
+          "problem_position": 1
+        }
+      ],
+      "steps": [
+        {
+          "latex": "2x - 3 > 5",
+          "page_index": 1,
+          "plain_english": "Labeled '1.', student writes the inequality 2x - 3 > 5",
+          "problem_position": 1,
+          "step_num": 1
+        },
+        {
+          "latex": "2x > 8",
+          "page_index": 1,
+          "plain_english": "Adds 3 to both sides: 2x > 8",
+          "problem_position": 1,
+          "step_num": 2
+        },
+        {
+          "latex": "x > 4",
+          "page_index": 1,
+          "plain_english": "Divides by 2: x > 4",
+          "problem_position": 1,
+          "step_num": 3
+        }
+      ],
+      "visual_work": [
+        {
+          "answer_on_drawing": "Open circle at 4 with bold ray shaded to the right (x > 4)",
+          "bbox": {
+            "x0": 0.05,
+            "x1": 0.95,
+            "y0": 0.29,
+            "y1": 0.37
+          },
+          "description": "Horizontal number line with tick marks labeled -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10. A circle that appears open (unfilled, with the tick mark visible through it) is drawn at 4. A bold, heavier line runs from the circle at 4 to the right, ending in an arrowhead just past 10.",
+          "kind": "number_line",
+          "labeled_points": [],
+          "page_index": 1,
+          "plotted_elements": [
+            "Open (unfilled) circle at 4, with the tick mark passing through it",
+            "Bold ray starting at the circle at 4 and extending right past 10, ending in an arrowhead"
+          ],
+          "present": true,
+          "problem_position": 1
+        }
+      ]
     }
   },
   "8971168b040b88797e219dfc4bc2a7fa": {
