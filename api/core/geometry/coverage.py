@@ -1113,7 +1113,9 @@ def _exact_rules(t: str, toks: list[Tok], facts: FigureFacts, out: list[Fact]) -
                 derive([Fact(kind="perpendicular", items=[c + d, opposite], point=d)], [k])
         # "transversal EF cutting both lines at points G and H respectively":
         # the two lines named before EF in the sentence, in the order the
-        # text names them; G is where EF meets the first, H the second.
+        # text names them; G is where EF meets the first, H the second. Each
+        # point is on each part as the text writes it (a segment, a ray or a
+        # line); a part written bare (no bar, arrow or "line") is a gap.
         if k.norm == "respectively" and i >= 7 and words[i - 2].norm == "and" and is_name(i - 1, 1):
             j = i - 3
             if is_name(j, 1):
@@ -1124,15 +1126,22 @@ def _exact_rules(t: str, toks: list[Tok], facts: FigureFacts, out: list[Fact]) -
                                                   "meets") and is_name(j - 4, 2):
                     tl = words[j - 4]
                     sent = sentence_words(k)
-                    lines_: list[str] = []
+                    lines_: list[Tok] = []
                     for w in sent[:sent.index(tl)]:
                         if w.kind == "name" and len(split_names(w.norm)) == 2 and \
                                 set(split_names(w.norm)) != set(split_names(tl.norm)) and \
-                                set(split_names(w.norm)) not in [set(split_names(x)) for x in lines_]:
-                            lines_.append(w.norm)
-                    if len(lines_) == 2:
-                        derive([Fact(kind="intersect", items=[tl.norm, lines_[0]], point=g_),
-                                Fact(kind="intersect", items=[tl.norm, lines_[1]], point=h_)], words[j - 3:i + 1])
+                                set(split_names(w.norm)) not in [set(split_names(x.norm)) for x in lines_]:
+                            lines_.append(w)
+                    kinds = [_on_kind(words, words.index(w)) for w in (tl, *lines_)]
+                    if len(lines_) == 2 and all(kinds):
+                        pairs = ((g_, lines_[0], kinds[1]), (h_, lines_[1], kinds[2]))
+                        if set(kinds) == {"on_line"}:  # lines meeting: where they cross
+                            derived = [Fact(kind="intersect", items=[tl.norm, w.norm], point=pt) for pt, w, _ in pairs]
+                        else:
+                            derived = [f for pt, w, kw in pairs for f in (
+                                Fact(kind=kinds[0], items=[tl.norm], point=pt),
+                                Fact(kind=kw, items=[w.norm], point=pt))]
+                        derive(derived, words[j - 3:i + 1])
     # In a question: "the measure of each angle", "both angle measures"
     # (what is asked, stated of nothing); "each acute angle" when the one
     # listed triangle has a stated right angle; "arc AB" when A and B lie on

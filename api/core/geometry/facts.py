@@ -383,9 +383,12 @@ def _fact_atoms(f: Fact, facts: FigureFacts) -> set[Canon]:
         if k == "perpendicular":
             p1, p2 = split_names(it[0]), split_names(it[1])
             shared = set(p1) & set(p2) if len(p1) == len(p2) == 2 else set()
-            if len(shared) == 1:  # AB ⊥ BC: the right angle at B
+            if len(shared) == 1:  # AB ⊥ BC: the right angle at B (and a stated foot elsewhere, kept)
                 v = next(iter(shared))
-                return {("measure", ("ang", v, frozenset((set(p1) | set(p2)) - {v})), 90.0, None)}
+                right: set[Canon] = {("measure", ("ang", v, frozenset((set(p1) | set(p2)) - {v})), 90.0, None)}
+                if f.point and f.point != v:
+                    right |= {("online", f.point, frozenset(split_names(x))) for x in it[:2]}
+                return right
             # The foot, when stated, is checked (on each named segment's line), so
             # it is part of what the fact says.
             foot = {("online", f.point, frozenset(split_names(x))) for x in it[:2] if not _is_line_name(x)} \
