@@ -20,13 +20,13 @@ import pytest
 
 from tests.harness.probes import generation_figures as gf
 
-# Figures drawn in the recorded run (set 1: 5, set 2: 1). A change that
+# Figures drawn in the recorded run (set 1: 5, set 2: 4). A change that
 # draws fewer fails here.
-DRAWN_FLOOR = 6
+DRAWN_FLOOR = 9
 # Problems a teacher would sketch that got no figure, because they name no
 # points (a figure whose points the problem doesn't name can't be checked):
 # the "unnamed figures" to-do of PR #989. Shown as plain text problems.
-KNOWN_MISSING = {"set1-p3", "set2-p1", "set2-p4"}
+KNOWN_MISSING = {"set1-p7", "set1-p8", "set2-p7", "set2-p8"}
 
 
 @pytest.mark.asyncio
@@ -42,6 +42,9 @@ async def test_generation_figure_eval_meets_the_bar(monkeypatch: pytest.MonkeyPa
     assert s["steps_inconsistent"] == [], s
     assert s["question_figures"] >= DRAWN_FLOOR, s
     assert set(s["missing_figures"]) <= KNOWN_MISSING, s
+    # The teacher gets the count asked for: a slot whose figure can't be
+    # checked gets a problem that needs none (review round 1 of #998).
+    assert s["problems"] == len(gf.SETS) * gf.COUNT, s
 
 
 @pytest.mark.asyncio
