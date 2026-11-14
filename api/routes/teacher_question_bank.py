@@ -37,6 +37,7 @@ from api.core.homework_points import MAX_TOTAL_POINTS
 from api.core.image_utils import validate_and_decode_upload
 from api.core.question_bank_chat import CHAT_SOFT_CAP, chat_with_bank_item
 from api.core.question_bank_generation import (
+    _is_construction,
     _render_step_figures,
     _resolve_figure,
     regenerate_one,
@@ -625,6 +626,24 @@ async def _rederive_requires_drawing(
         item.requires_drawing = flag
 
 
+def _drop_stale_constructions(item: QuestionBankItem) -> None:
+    """New wording voids the reading a construction figure (and each step's
+    construction figure) was checked against: `figure_facts` describes the
+    old problem. Nothing is kept that no check stands behind, so they go,
+    and the teacher can ask for the figure again (one undo restores them).
+    Other figures don't depend on a reading and stay."""
+    if _is_construction(item.figure_spec):
+        item.figure_spec = None
+        item.figure_svg = None
+    item.figure_facts = None
+    if isinstance(item.solution_steps, list):
+        item.solution_steps = [
+            {k: v for k, v in s.items() if k not in ("figure_spec", "figure_svg")}
+            if isinstance(s, dict) and _is_construction(s.get("figure_spec")) else s
+            for s in item.solution_steps
+        ]
+
+
 @router.patch("/question-bank/{item_id}")
 async def update_bank_item(
     body: UpdateBankItemRequest,
@@ -687,6 +706,7 @@ async def update_bank_item(
         if not t:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Title cannot be empty")
         item.title = t
+    text_changed = False
     if body.question is not None:
         q = body.question.strip()
         if not q:
@@ -720,6 +740,9 @@ async def update_bank_item(
             db, item, EDIT_MANUAL, current_user,
             changes=[(FIELD_REQUIRES_DRAWING, prev_flag, "yes" if item.requires_drawing else "no")],
         )
+
+    if text_changed:
+        _drop_stale_constructions(item)
 
     # A generated question a teacher had to rewrite is the clearest
     # signal the generation prompt is wrong. No-ops when the question
