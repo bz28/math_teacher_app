@@ -7,6 +7,7 @@ import { latePenaltyLine } from "@/lib/late-penalty";
 import {
   schoolStudent,
   ApiError,
+  type IntegrityStateResponse,
   type StudentHomeworkDetail,
   type StudentProblemFeedback,
   type StudentSubmission,
@@ -68,14 +69,29 @@ export default function HomeworkPage() {
   // Called on mount, after submit, after the confirm screen's Confirm
   // or Flag, when the preparing screen is ready, and after the chat
   // finishes, so the entry prompt / progress indicator stay in sync.
-  async function loadAll(aid: string) {
+  //
+  // `fresh` is a submission + integrity state read a moment ago (the
+  // preparing screen's last poll), used instead of downloading the
+  // submission — photos and all — a second time.
+  async function loadAll(
+    aid: string,
+    fresh?: { submission: StudentSubmission; integrity: IntegrityStateResponse },
+  ) {
     try {
+      // The submission doesn't depend on the homework detail, so start
+      // it alongside instead of after. Before a turn-in it's a 404,
+      // swallowed here and never read.
+      const mySubmission = fresh
+        ? Promise.resolve(fresh.submission)
+        : schoolStudent.getMySubmission(aid).catch(() => null);
       const detail = await schoolStudent.homeworkDetail(aid);
       setHw(detail);
       if (detail.submitted && detail.submission_id) {
         const [sub, integrity] = await Promise.all([
-          schoolStudent.getMySubmission(aid).catch(() => null),
-          schoolStudent.getIntegrityState(detail.submission_id).catch(() => null),
+          mySubmission,
+          fresh
+            ? fresh.integrity
+            : schoolStudent.getIntegrityState(detail.submission_id).catch(() => null),
         ]);
         if (sub) setSubmission(sub);
         // Always set the mode: loadAll also runs from inside the
@@ -149,10 +165,11 @@ export default function HomeworkPage() {
         key={pendingRun}
         submissionId={hw.submission_id}
         assignmentId={assignmentId}
-        onReady={async () => {
+        onReady={async (latest) => {
           // Re-fetch state and let loadAll decide where to route
-          // next (chat, submitted view, etc.).
-          await loadAll(assignmentId);
+          // next (chat, submitted view, etc.) — reusing the submission
+          // and check state the view just read.
+          await loadAll(assignmentId, latest ?? undefined);
         }}
         onTimeout={() => setMode({ kind: "integrity_pending_timeout" })}
       />
