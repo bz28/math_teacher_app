@@ -14,7 +14,7 @@ when the page is unmistakable: one bright, convex sheet with a crisp edge
 against a clearly darker background, its own edges on at least two sides,
 covering well under the whole frame, with no writing anywhere outside the
 cut. Anything less leaves the photo exactly as it was — on 750 recent prod
-photo pages that cut 6 (every one correct, no ink lost) and left 744 alone.
+photo pages that cut 4 (every one correct, no ink lost) and left 746 alone.
 Deterministic and free — no model call.
 """
 
@@ -32,6 +32,11 @@ from PIL import Image, ImageChops, ImageFilter, ImageOps
 from api.core.image_utils import line_ratio, open_bounded
 
 logger = logging.getLogger(__name__)
+
+# Set on a read whose pages were cut to their paper: its drawing boxes are
+# fractions of the cut page. Reads stored before carry no mark, and their
+# boxes are fractions of the whole photo.
+PAGES_CUT_TO_PAPER = "pages_cut_to_paper"
 
 # Detection runs on a copy this size: plenty to find a sheet of paper,
 # and it keeps the work per page to a few milliseconds.
@@ -62,6 +67,15 @@ _INK_DELTA = 30
 _INK_SHARE = 0.75
 # On paper-bright ground a faint pencil stroke is enough.
 _FAINT_INK_DELTA = 12
+# Past each of the page's edges, out to this share of its size, there
+# must be plain background (`_plain_beyond`): its brightness no more than
+# `_BEYOND_BRIGHTER` above the background further out, and varying by no
+# more than `_BEYOND_STEP` with distance. `_EDGE_STEP` working pixels of
+# the paper's own edge are skipped.
+_BEYOND = 0.15
+_BEYOND_BRIGHTER = 40.0
+_BEYOND_STEP = 25.0
+_EDGE_STEP = 3
 # Frame sides a page's outline may run into (see `find_page`).
 _MAX_FRAME_SIDES = 2
 # Ink outside the cut leaves the photo whole once any one connected mark
@@ -173,6 +187,8 @@ def find_page(img: Image.Image) -> PageCrop:
         return PageCrop(None, "soft_boundary")
 
     x, y, bw, bh = cv2.boundingRect(outline)
+    if not _plain_beyond(blank, page_mask, (x, y, bw, bh)):
+        return PageCrop(None, "paper_beyond")
     pad_x, pad_y = max(2, round(bw * _PAD)), max(2, round(bh * _PAD))
     left, top = max(0, x - pad_x), max(0, y - pad_y)
     right, bottom = min(w, x + bw + pad_x), min(h, y + bh + pad_y)
@@ -203,6 +219,40 @@ def find_page(img: Image.Image) -> PageCrop:
         min(w0, int(np.ceil(right * inv))), min(h0, int(np.ceil(bottom * inv))),
     )
     return PageCrop(box, "cropped")
+
+
+def _plain_beyond(blank: np.ndarray, page_mask: np.ndarray, rect: tuple[int, int, int, int]) -> bool:
+    """Whether what lies just past each of the page's own edges is plain
+    background. A sheet half in shadow, or with a dark band along an edge,
+    passes every shape check on its lit part alone — the rest of the paper
+    is then right past the edge: noticeably brighter than the background
+    further out, or a second step down where the paper really ends."""
+    h, w = blank.shape
+    x, y, bw, bh = rect
+    reach = max(6, round(_BEYOND * max(bw, bh)))
+    near = cv2.dilate(page_mask.astype(np.uint8), np.ones((2 * reach + 1, 2 * reach + 1), np.uint8))
+    background = float(np.median(blank[near == 0])) if (near == 0).any() else float(np.median(blank[~page_mask]))
+    # Brightness by distance past each edge, across the middle 80% of it.
+    mx, my = bw // 10, bh // 10
+    strips = []
+    if y > 2:
+        strips.append(blank[max(0, y - reach):y, x + mx:x + bw - mx][::-1])
+    if y + bh < h - 2:
+        strips.append(blank[y + bh:y + bh + reach, x + mx:x + bw - mx])
+    if x > 2:
+        strips.append(blank[y + my:y + bh - my, max(0, x - reach):x].T[::-1])
+    if x + bw < w - 2:
+        strips.append(blank[y + my:y + bh - my, x + bw:x + bw + reach].T)
+    for strip in strips:
+        if strip.shape[0] <= _EDGE_STEP or strip.shape[1] == 0:
+            continue
+        # Skip the few pixels of the paper's own edge.
+        profile = np.median(strip[_EDGE_STEP:], axis=1)
+        if float(np.median(profile)) - background > _BEYOND_BRIGHTER:
+            return False
+        if float(profile.max() - profile.min()) > _BEYOND_STEP:
+            return False
+    return True
 
 
 def _ink(gray: np.ndarray, bright: np.ndarray, kernel: np.ndarray) -> np.ndarray:
@@ -240,6 +290,7 @@ def crop_page_to_paper(data_base64: str, media_type: str) -> str:
         return data_base64
     try:
         with open_bounded(base64.b64decode(data_base64)) as opened:
+            icc = opened.info.get("icc_profile")
             img = ImageOps.exif_transpose(opened)
             page = reader_page(img)
             if page is img:
@@ -248,13 +299,13 @@ def crop_page_to_paper(data_base64: str, media_type: str) -> str:
                 page = page.convert("RGB")
             buf = io.BytesIO()
             if media_type == "image/png":
-                page.save(buf, format="PNG")
+                page.save(buf, format="PNG", icc_profile=icc)
             else:
                 # Near-lossless: the reader downsizes it next anyway.
-                page.save(buf, format="JPEG", quality=95)
+                page.save(buf, format="JPEG", quality=95, icc_profile=icc)
             return base64.b64encode(buf.getvalue()).decode("ascii")
-    except Exception:  # noqa: BLE001 — a page we can't cut is read whole
-        logger.warning("page crop failed; reading the photo whole", exc_info=True)
+    except Exception as err:  # noqa: BLE001 — a page we can't cut is read whole
+        logger.warning("page crop failed (%s); reading the photo whole", type(err).__name__)
         return data_base64
 
 

@@ -180,7 +180,8 @@ def test_page_images_follow_the_readers_file_numbering() -> None:
             {"data": f"data:image/jpeg;base64,{photo}", "media_type": "image/jpeg"},
             {"data": _pdf(2), "media_type": "application/pdf"},
             {"data": "eA==", "media_type": "text/plain"},
-        ]
+        ],
+        cut=True,
     )
     assert [len(p) for p in pages] == [1, 2, 0]
     assert pages[0] == [(photo, "image/jpeg")]
@@ -258,7 +259,7 @@ async def test_the_hunt_moves_on_to_other_pages_until_one_shows_the_drawing(chec
 
 
 async def test_a_drawing_on_a_multi_page_pdf_is_hunted_page_by_page(checks: Checks) -> None:
-    pages = page_images([{"data": _pdf(2), "media_type": "application/pdf"}])
+    pages = page_images([{"data": _pdf(2), "media_type": "application/pdf"}], cut=True)
     checks.queue(_not_found(), _found("page", "yes", "yes"))
     r = await check_problem_drawing(_extraction(visual=[_drawn()]), pages, 1, PART)
     assert [(c["page"], c["bbox"]) for c in checks.calls] == [(pages[0][0][0], None), (pages[0][1][0], None)]
@@ -266,7 +267,7 @@ async def test_a_drawing_on_a_multi_page_pdf_is_hunted_page_by_page(checks: Chec
 
 
 async def test_a_drawing_on_a_one_page_pdf_is_cropped(checks: Checks) -> None:
-    pages = page_images([{"data": _pdf(1), "media_type": "application/pdf"}])
+    pages = page_images([{"data": _pdf(1), "media_type": "application/pdf"}], cut=True)
     checks.queue(_found("tight", "yes", "yes"))
     await check_problem_drawing(_extraction(visual=[_drawn()]), pages, 1, PART)
     assert checks.calls[0]["bbox"] == BOX and checks.calls[0]["media_type"] == "image/jpeg"

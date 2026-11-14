@@ -17,7 +17,14 @@ from PIL import Image, ImageDraw, ImageOps
 from api.core import integrity_ai
 from api.core.graph_grading import page_images
 from api.core.image_utils import crop_region_for_vision
-from api.core.page_crop import crop_page_to_paper, find_page, reader_page, upright_turn
+from api.core.page_crop import (
+    PAGES_CUT_TO_PAPER,
+    PageCrop,
+    crop_page_to_paper,
+    find_page,
+    reader_page,
+    upright_turn,
+)
 
 _DESK = (52, 46, 40)
 _PAPER = (236, 234, 228)
@@ -189,26 +196,36 @@ def _is_red(data: str) -> bool:
     return px[0] > 150 and px[1] < 90 and px[2] < 90
 
 
-async def test_drawing_second_look_crops_the_readers_cut_page(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_reader_and_second_look_see_the_same_cut_page(monkeypatch: pytest.MonkeyPatch) -> None:
     """The reader's drawing boxes are fractions of the page it saw — the
-    cut one — so the zoomed second look must cut the same page first."""
+    cut one — so the zoomed second look crops that same cut page, and the
+    read is marked so the graph check later cuts it the same way."""
     photo, bbox = _red_square_photo()
     sent: list[str] = []
 
     async def fake_vision(content: Any, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        sent.append(content[0]["source"]["data"])
+        images = [c["source"]["data"] for c in content if c.get("type") == "image"]
+        sent.extend(images)
+        if kwargs.get("call_metadata", {}).get("phase") == "vision_extract":
+            return {"steps": [], "final_answers": [], "confidence": 0.9, "visual_work": [
+                {"problem_position": 1, "kind": "diagram", "present": True, "description": "",
+                 "plotted_elements": [], "labeled_points": [], "page_index": 1, "bbox": bbox},
+            ]}
         return {"has_drawing": True, "elements": [], "notes": "", "labeled_points": [],
                 "unlabeled_dots": 0, "description": "A square."}
 
     monkeypatch.setattr(integrity_ai, "call_claude_vision", fake_vision)
-    entry = {"problem_position": 1, "kind": "diagram", "present": True, "description": "",
-             "plotted_elements": [], "labeled_points": [], "page_index": 1, "bbox": bbox}
-    await integrity_ai.verify_visual_work(
-        {"visual_work": [entry]}, [{"data": _b64(photo), "media_type": "image/jpeg"}], flagged_positions={1},
+    result = await integrity_ai.extract_student_work_from_pages(
+        [{"data": _b64(photo), "media_type": "image/jpeg"}],
+        problems=[{"position": 1, "requires_drawing": True}],
     )
-    assert sent
-    # The middle of the crop is the red square, not the desk beside it.
-    middle = _decode(sent[0])
+    assert result[PAGES_CUT_TO_PAPER] is True
+    assert len(sent) == 2
+    # The reader got the page, not the desk: portrait, like the sheet.
+    read = _decode(sent[0])
+    assert read.height > read.width
+    # The middle of the second look is the red square, not the desk beside it.
+    middle = _decode(sent[1])
     w, h = middle.size
     buf = io.BytesIO()
     middle.crop((w // 3, h // 3, 2 * w // 3, 2 * h // 3)).save(buf, format="PNG")
@@ -217,6 +234,26 @@ async def test_drawing_second_look_crops_the_readers_cut_page(monkeypatch: pytes
 
 def test_graph_check_pages_are_the_readers_cut_pages() -> None:
     photo, bbox = _red_square_photo()
-    [[(data, media_type)]] = page_images([{"data": _b64(photo), "media_type": "image/jpeg"}])
+    [[(data, media_type)]] = page_images([{"data": _b64(photo), "media_type": "image/jpeg"}], cut=True)
     crop = crop_region_for_vision(data, media_type, bbox, margin=0.0, min_frac=0.0)
     assert crop is not None and _is_red(crop)
+
+
+def test_a_read_stored_before_pages_were_cut_keeps_the_whole_photo() -> None:
+    """Its boxes are fractions of the whole photo, so it is not cut."""
+    photo, _ = _red_square_photo()
+    original = _b64(photo)
+    [[(data, _)]] = page_images([{"data": original, "media_type": "image/jpeg"}], cut=False)
+    assert data == original
+
+
+def test_paper_beyond_the_sheet_leaves_the_photo_whole() -> None:
+    """A lit sheet with a second, shadowed sheet right against it: the
+    bright region looks like a page, but more paper runs on past its edge
+    (where pencil could be), so the photo is left whole."""
+    page = _written_page()
+    photo = Image.new("RGB", (2400, 1600), _DESK)
+    photo.paste(page, (700, 250))
+    # The shadowed paper continues below the lit sheet, out of shot.
+    ImageDraw.Draw(photo).rectangle((700, 1350, 1550, 1600), fill=(120, 118, 112))
+    assert find_page(photo) == PageCrop(None, "paper_beyond")

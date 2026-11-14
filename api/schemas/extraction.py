@@ -20,9 +20,10 @@ The shapes mirror the ACTUAL producers:
 `extra="allow"` on the container models is defense-in-depth: the extraction
 blob flows through `{**extraction, ...}` spreads in the slicer/overlay, so
 even an unforeseen top-level key round-trips through the response model
-instead of being silently dropped. No producer emits an extra key today
-(the tool schema pins `additionalProperties: false` at every level), so
-this never widens the observed wire shape — it only guarantees no loss.
+instead of being silently dropped. The model can't emit an extra key
+(the tool schema pins `additionalProperties: false` at every level); the
+reader adds one, `pages_cut_to_paper` (see core/page_crop.py), which must
+round-trip because the graph check reads it to frame the drawing boxes.
 """
 
 from __future__ import annotations
