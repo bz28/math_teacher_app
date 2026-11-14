@@ -21,25 +21,26 @@ import pytest
 
 from tests.harness.probes import generation_figures as gf
 
-# Figures drawn in the recorded run (set 1: 2, set 2: 3, set 3: 0). A
+# Figures drawn in the recorded run (set 1: 5, set 2: 3, set 3: 0). A
 # change that draws fewer fails here.
-DRAWN_FLOOR = 5
+DRAWN_FLOOR = 8
 # Problems that should have a figure by Ben's rule but got none: each is
-# written as a story or names no points, so its figure can't be checked.
-# A target to bring down (a text auditor PR may let story layouts keep
-# their words); a change that misses more fails here.
-KNOWN_MISSING = {"set1-p3", "set1-p4", "set1-p5", "set1-p6", "set1-p8", "set2-p6", "set2-p8"}
-# Step figures: the solver emitted 15 (counted from its own output) and
+# written as a story or names no points, so the AI drafted no figure (or
+# its figure couldn't be checked). A target to bring down (a text auditor
+# PR may let story layouts keep their words); a change that misses more
+# fails here.
+KNOWN_MISSING = {"set1-p3", "set1-p8", "set2-p6", "set2-p8"}
+# Step figures: the solver emitted 24 (counted from its own output) and
 # none is shown yet. Each fails its reading: the step's words are an
 # explanation ("We use the Midpoint Theorem…"), so the reading misses
 # words, or the two readings disagree. Pinned so a change that emits fewer,
 # or drops one without a reason, fails here; a step figure shown must then
 # pass the step bars (by eye, consistent, its negative rejected).
-STEP_FIGURES_EMITTED = 15
+STEP_FIGURES_EMITTED = 24
 KNOWN_STEP_DROPS = {
-    "set1-p1-step1", "set1-p1-step2", "set1-p1-step3", "set1-p1-step4", "set1-p1-step5",
-    "set1-p2-step1", "set1-p2-step2", "set2-p1-step1", "set2-p1-step2", "set2-p3-step1", "set2-p3-step2",
-    "set2-p3-step3", "set2-p5-step1", "set2-p5-step2", "set2-p5-step3",
+    *(f"set1-p1-step{i}" for i in range(1, 6)), "set1-p2-step1", "set1-p2-step2",
+    *(f"set1-p{p}-step{i}" for p in (5, 6, 7) for i in range(1, 4)),
+    "set2-p1-step1", "set2-p1-step2", *(f"set2-p{p}-step{i}" for p in (3, 5) for i in range(1, 4)),
 }
 
 

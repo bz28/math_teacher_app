@@ -3,9 +3,10 @@ enforces one rule.
 
 - The prompts carry Ben's wording (2026-11-13) word for word: when a problem
   gets a figure, and when a step does.
-- The rule (`_needs_figure`): a math problem that names points, or any
-  problem that refers to a figure, ends with a checked figure, or is replaced
-  once, then left out.
+- The rule (`_needs_figure`): the AI decides. A problem it drafted a figure
+  for, or whose text refers to a figure, ends with a checked figure, or is
+  replaced once, then its slot gets a problem that needs no figure. A
+  figure drafted for a problem the student is to draw is dropped.
 - Step figures are constructions built on the problem's checked figure,
   read and checked like it (one redraw), and their facts build up step by
   step. The shape-form step figure path is gone (prod 77195d48).
@@ -180,80 +181,39 @@ def test_the_replacement_and_variation_wording() -> None:
 # ── The rule code enforces ─────────────────────────────────────────────
 
 
-@pytest.mark.parametrize(("text", "needs"), [
-    # Points in math markup or an explicit point form (how the generation
-    # prompt writes them).
-    (r"In $\triangle ABC$, $m\angle A = 40°$. Find $m\angle C$.", True),
-    ("In the figure below, find x.", True),
-    (r"$\triangle ABC$ has a right angle at $C$, $AB = 13$ and $BC = 5$. Find $AC$.", True),
-    (r"$ABCD$ is a rectangle. $AB = 3$. Find $AC$.", True),
-    (r"Square $ABCD$ has side 4.", True),
-    (r"Chord $\overline{AB}$ of circle $O$ has length 8.", True),
-    ("Points A and B lie on circle O.", True),
-    (r"In $\triangle ABC$, $AB = AC$.", True),
-    (r"In $ABCD$, $AB = 5$. Find $CD$.", True),
-    (r"In $PQRS$, the diagonals bisect each other. Find $PR$ if $PT = 4$.", True),
-    # A run of capitals in math markup names points (coordinator, after round 3).
-    (r"Let $ABCD$ be a square with side 4. Find $AC$.", True),
-    (r"Square $ABCD$ has side 6. Find $BD$.", True),
-    (r"$PQRS$ is a rhombus with side 5. Find its perimeter.", True),
-    (r"A store sells a jacket for \$85 and a hat for \$15 in the $\text{USA}$.", False),  # a word set in math
-    ("A(2, 3) and B(5, 7) are points. Find the distance AB.", False),  # coordinates
-    ("Point P is on the parabola y = x^2. Find P.", False),  # a curve
-    ("A rectangle has width 7 and length 9. Find its area.", False),  # shapes only
-    ("A 12 ft ladder leans against a wall, reaching 10 ft up.", False),  # no points named
-    ("Solve 2x + 3 = 11.", False),
-    ("Use SAS to prove the triangles congruent.", False),  # a postulate, not points
-    (r"Let $A = \begin{pmatrix}1&2\\3&4\end{pmatrix}$. Find $AB$.", False),
-    ("Events A and B are independent with P(A) = 0.3.", False),
-    (r"Events $A$ and $B$ are independent with $P(A) = 0.3$.", False),
-    ("In the USA, 40% of people use GPS.", False),
-    # Review rounds 1 to 3 (#998): no guessing from a bare run of capitals,
-    # so an acronym is never taken for points.
-    ("A taxi ride in DC costs $3 plus $2 per mile. How far can you go for $15?", False),
-    ("In PEMDAS, which operation comes first?", False),
-    ("In NYC, a slice of pizza costs $3.50. How many slices can you buy for $21?", False),
-    ("Let NY be the number of tickets sold in New York.", False),
-    ("In HL, which parts must be congruent?", False),
-    ("Write the line through the points in EF form.", False),
-    ("The distance NYC to LA is 2800 miles. A plane flies at 560 mph. How long does it take?", False),
-    ("Let NY be the number of points scored in New York.", False),
-    ("In DC, a square plot of land costs $40 per square foot. How much is a plot with side 20 ft?", False),
-    ("A cell phone plan AT costs $40 per month plus $0.10 per text.", False),
-    ("The distance NYC to LA is 2800 miles. A plane flies at 560 mph. Which answer is NOT possible?", False),
-    ("Let NY be the number of tickets sold in New York and NJ the number in New Jersey. NY + NJ = 500.", False),
-    ("A cell phone plan AT costs $40 per month. Plan TM costs $35 per month plus $5 per GB.", False),
-    # Changed in round 3, on purpose: bare names with no markup no longer
-    # count (before, a shared letter or "Let … be a square" made them
-    # points). Such a problem gets no figure: at worst a missing figure.
-    ("A ladder AB leans against wall BC, with its foot 5 ft from the wall.", False),
-    ("In PQRS, the diagonals bisect each other. Find PR if PT = 4.", False),
-    ("Let PQRS be a rhombus with side 6. Find its perimeter.", False),
-    # Ben's rule: when the student is to draw it, the problem gets no figure
-    # (`requires_drawing`); an auxiliary line in a proof, "construct a
-    # proof" or "draw a conclusion" is not that.
-    (r"Construct the perpendicular bisector of $\overline{AB}$ with a compass and straightedge.", False),
-    (r"Using only a compass and straightedge, construct the perpendicular bisector of $\overline{AB}$, "
-     r"where $AB = 8$ cm. Label the midpoint $M$.", False),
-    (r"Sketch $\triangle ABC$ with $AB = 5$, then find its perimeter.", False),
-    (r"In $\triangle ABC$, $AB = AC$. Draw $\overline{AD}$ bisecting $\angle BAC$. Prove: $\angle B \cong \angle C$.",
-     True),
-    (r"Given $\overline{AB} \parallel \overline{CD}$. Construct a two-column proof that "
-     r"$\triangle ABM \cong \triangle DCM$.", True),
-    (r"$m\angle P = 40°$ and $m\angle Q = 50°$. Draw a conclusion about $\angle P$ and $\angle Q$.", True),
-])
-def test_what_needs_a_figure(text: str, needs: bool) -> None:
-    assert qbg._needs_figure({"text": text}) is needs
+# Texts that name no figure by themselves: whether they get one is the
+# AI's choice (it drafts a figure_spec or not), never guessed from words.
+# Rounds 1 to 4 of #998 found acronyms, statistics and probability read as
+# point names; with no figure_spec none of these wants a figure.
+NO_GUESSING = [
+    r"Let $ABCD$ be a square with side 4. Find $AC$.",
+    "A ladder AB leans against wall BC, with its foot 5 ft from the wall.",
+    r"The data set has $IQR = 12$ and median 40. Find $Q_3$ if $Q_1 = 34$.",
+    r"Find the $GCF$ of 36 and 48.",
+    r"If $\det(A) = 3$ and $\det(B) = 4$, find $\det(AB)$.",
+    r"Events $A$ and $B$ are independent; $P(A) = 0.3$, $P(B) = 0.5$. Find $P(AB)$.",
+    r"The sample mean is $\overline{X} = 52$. Find the margin of error.",
+    "The distance NYC to LA is 2800 miles. A plane flies at 560 mph. Which answer is NOT possible?",
+    "In DC, a square plot of land costs $40 per square foot. How much is a plot with side 20 ft?",
+    "Let NY be the number of tickets sold in New York and NJ the number in New Jersey. NY + NJ = 500.",
+]
 
 
-def test_other_subjects_need_one_only_when_they_refer_to_it() -> None:
-    assert not qbg._needs_figure({"text": "A block slides from point A to point B."}, "physics")
-    assert qbg._needs_figure({"text": "In the diagram below, find the tension."}, "physics")
+@pytest.mark.parametrize("text", NO_GUESSING)
+def test_the_ai_decides_whether_a_problem_wants_a_figure(text: str) -> None:
+    assert not qbg._needs_figure({"text": text})
+    assert qbg._needs_figure({"text": text, "figure_spec": TRIANGLE})
+    assert qbg._needs_figure({"text": text, "figure_spec": None, "figure_wanted": True})  # after a failed check
+
+
+def test_a_problem_that_points_at_a_figure_wants_one() -> None:
+    assert qbg._needs_figure({"text": "In the figure below, find x."})
+    assert qbg._needs_figure({"text": "In the diagram below, find the tension."})
 
 
 def test_a_checked_figure_satisfies_the_rule() -> None:
-    assert qbg._lacks_figure({"text": PROBLEM})
-    assert not qbg._lacks_figure({"text": PROBLEM, "figure_svg": "<svg/>"})
+    assert qbg._lacks_figure({"text": PROBLEM, "figure_spec": TRIANGLE})
+    assert not qbg._lacks_figure({"text": PROBLEM, "figure_spec": TRIANGLE, "figure_svg": "<svg/>"})
 
 
 def _q(text: str, spec: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -291,7 +251,7 @@ async def test_a_named_point_problem_whose_figure_cant_be_checked_is_replaced_th
     topic that needs no figure: the teacher gets the count asked for
     (coordinator, after review round 1 of #998)."""
     plain = _q("Solve 2x + 3 = 11.")
-    no_figure = {**_q("Two angles are supplementary; one measures 70°. Find the other."), "figure_spec": TRIANGLE}
+    no_figure = _q("Two angles are supplementary; one measures 70°. Find the other.")
     with caplog.at_level("WARNING"):
         out, gen = await _generate([[plain, _q(PROBLEM, TRIANGLE)], [_q(PROBLEM, TRIANGLE)], [no_figure]], _untrusted)
     assert gen.await_count == 3 and gen.await_args_list[1].kwargs["count"] == 1
@@ -304,25 +264,62 @@ async def test_a_named_point_problem_whose_figure_cant_be_checked_is_replaced_th
 
 
 @pytest.mark.asyncio
-async def test_a_plain_replacement_that_still_needs_a_figure_is_left_out(caplog: pytest.LogCaptureFixture) -> None:
+@pytest.mark.parametrize("last", [_q(PROBLEM, TRIANGLE), _q("In the figure below, find x.")])
+async def test_a_no_figure_reply_that_drafts_or_points_at_a_figure_is_not_taken(
+    last: dict[str, Any], caplog: pytest.LogCaptureFixture,
+) -> None:
     plain = _q("Solve 2x + 3 = 11.")
     with caplog.at_level("WARNING"):
         out, gen = await _generate(
-            [[plain, _q(PROBLEM, TRIANGLE)], [_q(PROBLEM, TRIANGLE)], [_q(PROBLEM)]], _untrusted)
+            [[plain, _q(PROBLEM, TRIANGLE)], [_q(PROBLEM, TRIANGLE)], [dict(last)]], _untrusted)
     assert gen.await_count == 3
     assert [q["text"] for q in out] == [plain["text"]]
     assert "left out 1 problem(s): no figure could be checked" in caplog.text
 
 
-@pytest.mark.asyncio
-async def test_a_named_point_problem_with_no_figure_is_replaced() -> None:
-    async def trusted(*_a: Any, **_k: Any) -> tuple[FigureFacts, list[str]]:
-        return READING, []
+SQUARE = r"Let $ABCD$ be a square with side 4. Find $AC$."
 
-    out, gen = await _generate([[_q(PROBLEM), _q("Solve x + 1 = 2.")], [_q(PROBLEM, TRIANGLE)]], trusted)
-    assert gen.await_count == 2
-    assert [bool(q.get("figure_svg")) for q in out] == [False, True]
-    assert out[0]["text"] == "Solve x + 1 = 2."
+
+@pytest.mark.asyncio
+async def test_a_problem_whose_drafted_figure_fails_is_replaced() -> None:
+    """Review round 4 (#998): the AI decides. It drafted a figure for this
+    one, the figure failed its check, so the problem is replaced."""
+    out, gen = await _generate([[_q(SQUARE, TRIANGLE), _q("Solve x + 1 = 2.")], [_q("Solve 3x = 9.")]], _untrusted)
+    assert gen.await_count == 2 and gen.await_args_list[1].kwargs["count"] == 1
+    assert [q["text"] for q in out] == ["Solve x + 1 = 2.", "Solve 3x = 9."]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("text", [SQUARE, *NO_GUESSING])
+async def test_a_problem_the_ai_drafted_no_figure_for_is_kept_without_one(text: str) -> None:
+    """No figure drafted and no figure referred to: kept as it is. For
+    "Let $ABCD$ be a square" that is a missing figure, which the eval
+    counts; it is never a wrong one."""
+    out, gen = await _generate([[_q(text), _q("Solve x + 1 = 2.")]], _untrusted)
+    assert gen.await_count == 1
+    assert [q["text"] for q in out] == [text, "Solve x + 1 = 2."] and not out[0].get("figure_svg")
+
+
+async def _passes(spec: Any, _text: str, **_kw: Any) -> tuple[Any, str | None, list[str], Any]:
+    return spec, ("<svg/>" if spec else None), [], (READING if spec else None)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("text", "shown"), [
+    # The student constructs it: a drafted figure is dropped (Ben's rule).
+    (r"Using only a compass and straightedge, construct the perpendicular bisector of $\overline{AB}$.", False),
+    # An auxiliary line in a proof is not the student's drawing: kept.
+    (r"In $\triangle ABC$, $AB = AC$. Draw $\overline{AD}$ bisecting $\angle BAC$. "
+     r"Prove: $\angle B \cong \angle C$.", True),
+])
+async def test_a_figure_for_a_problem_the_student_draws_is_dropped(text: str, shown: bool) -> None:
+    gen = AsyncMock(return_value=[_q(text, TRIANGLE), _q("Solve x + 1 = 2.")])
+    resolve = AsyncMock(side_effect=_passes)
+    with patch.object(qbg, "generate_questions", gen), patch.object(qbg, "_resolve_figure_with_retry", resolve):
+        out = await qbg.generate_checked_problems(REQUEST, count=2)
+    assert gen.await_count == 1 and [q["text"] for q in out] == [text, "Solve x + 1 = 2."]
+    assert bool(out[0]["figure_svg"]) is shown
+    assert (resolve.await_args_list[0].args[0] is not None) is shown  # dropped before it was drawn
 
 
 @pytest.mark.asyncio
@@ -363,7 +360,7 @@ async def test_a_slot_lost_after_solving_gets_a_solved_problem_that_needs_no_fig
 
     q = {**_q(PROBLEM, TRIANGLE), "figure_svg": "<svg/>", "figure_facts": READING.model_dump()}
     plain = _q("Solve x + 1 = 2.")
-    no_figure = {**_q("Two angles are supplementary; one is 70°. Find the other."), "figure_spec": TRIANGLE}
+    no_figure = _q("Two angles are supplementary; one is 70°. Find the other.")
     solve = AsyncMock(side_effect=[
         [{"question_text": "a", "steps": [], "final_answer": "70°"}, {"question_text": "b", "steps": [],
                                                                      "final_answer": "1"}],
@@ -560,7 +557,11 @@ async def test_the_per_problem_checks_run_at_once() -> None:
 
 
 @pytest.mark.asyncio
-async def test_regenerate_refuses_a_named_point_problem_without_a_figure() -> None:
+@pytest.mark.parametrize(("question", "spec", "refused"), [
+    (PROBLEM, TRIANGLE, "has a figure that couldn't be drawn"),  # the AI drafted one; it failed
+    ("In the figure below, find x.", None, "refers to a figure that couldn't be drawn"),
+])
+async def test_regenerate_refuses_a_new_version_whose_figure_fails(question: str, spec: Any, refused: str) -> None:
     from sqlalchemy import select
 
     from api.database import get_session_factory
@@ -577,12 +578,17 @@ async def test_regenerate_refuses_a_named_point_problem_without_a_figure() -> No
         s.add(item)
         await s.commit()
         item_id = item.id
-    call = AsyncMock(return_value={"title": "t", "question": PROBLEM, "solution_steps": [], "final_answer": "70°"})
-    with patch("api.core.question_bank_generation.call_claude_json", call):
+    call = AsyncMock(return_value={"title": "t", "question": question, "solution_steps": [], "final_answer": "70°",
+                                   "figure_spec": spec})
+    failed = AsyncMock(return_value=(None, None, ["two readings of the problem disagree"], None))
+    with (
+        patch("api.core.question_bank_generation.call_claude_json", call),
+        patch.object(qbg, "_resolve_figure_with_retry", failed),
+    ):
         async with get_session_factory()() as s:
             item = (await s.execute(select(QuestionBankItem).where(QuestionBankItem.id == item_id))).scalar_one()
             course = (await s.execute(select(Course).where(Course.id == w["course"]))).scalar_one()
-            with pytest.raises(RuntimeError, match="names points for a figure that couldn't be drawn"):
+            with pytest.raises(RuntimeError, match=refused):
                 await qbg.regenerate_one(s, item, course, instructions=None, user_id=w["teacher"])
     async with get_session_factory()() as s:
         item = (await s.execute(select(QuestionBankItem).where(QuestionBankItem.id == item_id))).scalar_one()

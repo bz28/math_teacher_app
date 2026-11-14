@@ -14,8 +14,8 @@ What it measures (the bars):
     verdict (BY_EYE, keyed by fingerprint); none may be "wrong";
   - references to a missing figure: a problem that says "the figure below"
     and has none, must be 0;
-  - the enforced rule: a problem that names points (or refers to a figure)
-    shipped without a checked figure, must be 0;
+  - the enforced rule: a problem the AI drafted a figure for (or that
+    refers to one) shipped without a checked figure, must be 0;
   - step figures: counted from the solver's own output (emitted) and as
     shown, with why each was dropped. In the recorded run none is shown
     (see tests/test_generation_figure_eval.py), so step consistency (every
@@ -85,6 +85,9 @@ def count_of(name: str) -> int:
 BY_EYE: dict[str, tuple[str, str]] = {
     "set1-p1": ("cadc98edaf93", "right"),  # M on AC and BD, each half ticked
     "set1-p2": ("c7e0c0288895", "right"),  # P, Q, R on circle O; inscribed ∠QPR = 37° labeled; radii OQ, OR
+    "set1-p5": ("3361ded9636e", "right"),  # AB ∥ CD arrows, E the midpoint of BC ticked, ∠ABE ≅ ∠DCE arcs
+    "set1-p6": ("9720b7877131", "right"),  # A, B, C, D on circle O; ∠AOB = 124°, ∠ACD = 31° labeled; ∠AOD 62° drawn
+    "set1-p7": ("b4d80fecd623", "right"),  # right angles at D and C marked, AD ≅ BC ticked, shared AB
     "set2-p1": ("a498817f5848", "right"),  # AB ∥ CD, transversal EF with G past F; ∠AEG = 112° as drawn
     "set2-p3": ("b055008a90f7", "right"),  # right angle at C; AB = 17, AC = 8 labeled, in proportion
     "set2-p5": ("5237fe49f692", "right"),  # right angle at C; AB = 15, BC = 9 labeled, AC drawn 12
@@ -99,11 +102,11 @@ EXPECTED: dict[str, str] = {
     "6612b38f698e": "figure",  # p1: a proof about a named arrangement (MUST)
     "4d009383ce43": "figure",  # p2: inscribed and central angles (MUST)
     "df3b2e3390c3": "figure",  # p3: a ladder against a wall (SHOULD); written as a story, no points
-    "1da4425658d2": "figure",  # p4: two right-triangle parks, HL (SHOULD); a story, no points
-    "3ff8a595648d": "figure",  # p5: two chords meeting inside a circle (MUST); no points
-    "0d31622d26e7": "figure",  # p6: a congruence proof of two triangles (MUST); no points
-    "cdb3170c0b68": "optional",  # p7: an arc's length by formula (the tangent line plays no part)
-    "445bf426d10f": "figure",  # p8: two triangular plots, SAS (SHOULD); a story, no points
+    "f49005c8cf74": "optional",  # p4: △PQR ≅ △XYZ, solve for x from matching sides (algebra)
+    "bf39fc064dfe": "figure",  # p5: parallel lines and a midpoint, a proof (MUST)
+    "4c1df32a2548": "figure",  # p6: central and inscribed angles (MUST)
+    "89d2f779ca14": "figure",  # p7: two right triangles on a shared side, a proof (MUST)
+    "459859cb76da": "figure",  # p8: a wire from a post to the ground (SHOULD); a story, no points
     # set 2
     "ad8560639f80": "figure",  # p1: parallel lines and a transversal (MUST)
     "e5511552fced": "optional", "6cd0d1f8c203": "optional",  # p3, p5: a right triangle by its formula
@@ -123,6 +126,9 @@ EXPECTED: dict[str, str] = {
 NEGATIVES: dict[str, dict[str, Any]] = {
     "set1-p1": {"move": {"M": [2.5, 2]}},  # M no longer the midpoint of AC or BD
     "set1-p2": {"move": {"P": [4, 1]}},  # P off circle O
+    "set1-p5": {"move": {"E": [4, 2.5]}},  # E off BC, no longer its midpoint
+    "set1-p6": {"move": {"D": [2, 5]}},  # D off circle O
+    "set1-p7": {"move": {"C": [5, -1]}},  # no right angle at C, BC no longer ≅ AD
     "set2-p1": {"move": {"C": [0, 1]}},  # line CD no longer ∥ AB
     "set2-p3": {"move": {"B": [0, 10]}},  # AB = 17, AC = 8 out of proportion
     "set2-p5": {"move": {"A": [0, 4]}},  # AB = 15, BC = 9 out of proportion
@@ -311,7 +317,7 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
         "not_looked_at": [k for k, v in said.items() if not v],
         "missing_reference": [p["key"] for p in results
                               if qbg._FIGURE_REFERENCE.search(p["text"]) and not p["figure_svg"]],
-        "rule_broken": [p["key"] for p in results if qbg._lacks_figure({**p, "text": p["text"]}, "math")],
+        "rule_broken": [p["key"] for p in results if qbg._lacks_figure(p)],
         "steps_inconsistent": [f"{p['key']}-step{st['step']}" for p, st in steps_drawn
                                if not p["figure_spec"] or not step_consistent(p["figure_spec"], st["spec"])],
         "missing_figures": [p["key"] for p in results

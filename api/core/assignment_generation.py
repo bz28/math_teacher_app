@@ -70,8 +70,9 @@ student level — NOT absolute math/science difficulty:
 # checkable: the reading that checks a figure turns away a problem that
 # describes it in words without naming its points
 # (construction_figures._IN_WORDS). Code enforces one rule on top
-# (question_bank_generation._lacks_figure): a problem that names points or
-# refers to a figure ends with a checked figure, or is replaced or left out.
+# (question_bank_generation._lacks_figure): a problem the AI drafted a
+# figure for, or whose text refers to a figure, ends with a checked figure,
+# or is replaced, or its slot gets a problem that needs no figure.
 # How a problem that gets a figure is worded. Code checks every word of
 # such a problem against the figure (api/core/geometry/coverage.py), so
 # the wording rules come before any figure rule. Shared with the

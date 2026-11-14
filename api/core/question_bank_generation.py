@@ -34,7 +34,7 @@ from api.core.document_vision import (
 from api.core.drawing_requirement import combine_requires_drawing, requires_drawing
 from api.core.geometry import FigureSpecError, figure_point_names, render_figure, render_figure_or_none
 from api.core.geometry.dsl import ConstructionFigure, split_points
-from api.core.geometry.facts import _COORD, FigureFacts, as_facts
+from api.core.geometry.facts import FigureFacts, as_facts
 from api.core.geometry.figure_check import check_construction, unbacked_marks, with_arc_sides
 from api.core.image_utils import to_content_block
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
@@ -534,6 +534,9 @@ async def _draw_figures(
     actually see — and the solver is only shown that."""
 
     async def draw(q: dict[str, Any]) -> None:
+        _drop_unwanted_figure(q, generation_job_id)
+        # The AI's own choice, kept after a failed check drops the spec.
+        q["figure_wanted"] = bool(q.get("figure_spec"))
         spec, svg, issues, reading = await _resolve_figure_with_retry(
             q.get("figure_spec"), q.get("text") or "", mode=LLMMode.GENERATE_QUESTIONS,
             user_id=user_id, generation_job_id=generation_job_id,
@@ -549,75 +552,31 @@ async def _draw_figures(
     await asyncio.gather(*(draw(q) for q in questions))
 
 
-# A problem on the coordinate plane or about a curve: the construction tool
-# can't draw grids or curves other than circles (CONSTRUCTION_FIGURE_RULES,
-# rule 6), so naming points there asks for no figure.
-_COORDINATE_OR_CURVE = re.compile(
-    rf"{_COORD}|\(\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*\)|\b[yf]\s*(?:\(\s*x\s*\))?\s*=|"
-    r"\b(?:parabola|hyperbola|ellipse|graph|coordinate|axis|axes|slope)\b",
-    re.IGNORECASE,
-)
-
-# A run of 2 to 8 capitals inside math markup: "$ABCD$", "$AC = 5$". Words
-# set in \text{} or \mathrm{} are words, not points; and in a problem with
-# a matrix ("$A = \begin{pmatrix}…$", "Find $AB$") capitals name matrices.
-_MATH_WORDS = re.compile(r"\\(?:text|mathrm|textbf|textit|operatorname)\s*\{[^{}]*\}")
-_MATH_POINT_RUN = re.compile(r"(?<![A-Za-z])(?:[A-Z]'*){2,8}(?![A-Za-z])")
-_MATRIX = re.compile(r"\\begin\s*\{\s*[pbBvV]?matrix\s*\}")
+def _drop_unwanted_figure(q: dict[str, Any], job_id: str | None = None) -> None:
+    """Ben's rule: when the student is to draw or construct it
+    (`requires_drawing`), the problem gets no figure. A figure the AI
+    drafted for such a problem is dropped before it is drawn. The safe
+    direction: a wrong call here costs a missing figure, never a wrong one."""
+    if q.get("figure_spec") and requires_drawing(q.get("text") or ""):
+        logger.info("Job %s: the student draws this one, so its figure is dropped: %.80s", job_id, q.get("text"))
+        q["figure_spec"] = None
 
 
-def _math_point_runs(text: str) -> bool:
-    if _MATRIX.search(text):
-        return False
-    for span in _MATH.findall(text):  # $…$, $$…$$, \(…\), \[…\]
-        math = _MATH_WORDS.sub(" ", span)
-        if re.search(r"\b[a-z]{3,}\b", re.sub(r"\\[A-Za-z]+", " ", math)):
-            continue  # prose between two prices ("$40 per month. Plan TM costs $35"), not math
-        for run in _MATH_POINT_RUN.findall(math):
-            letters = run.replace("'", "")
-            if len(set(letters)) == len(letters):
-                return True
-    return False
-
-
-def _names_points(text: str) -> bool:
-    """The problem names points in math markup or an explicit point form:
-    "$\\triangle ABC$", "$\\overline{AB}$", "$m\\angle A$", "point $P$"
-    (`_named_points`), a run of capitals in math ("Let $ABCD$ be a square",
-    "Find $AC$"; `_math_point_runs`), or what the figure checker's own
-    parse of the problem reads ("circle $O$"), which is what the figure is
-    checked against. No guessing from a bare run of capitals ("ladder AB",
-    "In PQRS", "the distance NYC to LA"): the generation prompt writes every
-    point name in math markup (FIGURE_PROBLEM_WORDING), and the guesses
-    mistook acronyms for points. At worst a problem with bare names gets no
-    figure (counted as missing), never a wrong one."""
-    from api.core.geometry.facts import parse_problem_points
-
-    return bool(_named_points(text) or _math_point_runs(text) or parse_problem_points(text))
-
-
-def _needs_figure(q: dict[str, Any], subject: str = "math") -> bool:
-    """The one figure rule code enforces on a generated problem: it must end
-    with a checked figure when its text refers to a figure ("in the figure
-    below"), or, in math, names points. A problem on the coordinate plane or
-    about a curve (which the tool can't draw), one asking the student to
-    draw or construct it (`requires_drawing`, Ben's rule: then no figure),
-    and one naming only shapes ("a rectangle 7 wide", which can't be read
-    for checking) are left to the
-    generator's judgment, as is every problem in other subjects (a physics
-    problem's "point A" is not a geometry figure)."""
-    text = q.get("text") or ""
-    if _FIGURE_REFERENCE.search(text):
+def _needs_figure(q: dict[str, Any]) -> bool:
+    """The problem wants a figure: the generating AI drafted one for it
+    (`figure_spec`, following the when-to-draw rule in its prompt;
+    `figure_wanted` keeps that choice after a failed check drops the spec),
+    or its text points at a figure ("in the figure below", "as shown"). The
+    AI decides; code checks the figure, and holds a problem that points at a
+    figure to having one. No guessing from the words."""
+    if q.get("figure_wanted") or q.get("figure_spec"):
         return True
-    return (
-        subject == "math" and _names_points(text) and not _COORDINATE_OR_CURVE.search(text)
-        and not requires_drawing(text)
-    )
+    return bool(_FIGURE_REFERENCE.search(q.get("text") or ""))
 
 
-def _lacks_figure(q: dict[str, Any], subject: str = "math") -> bool:
-    """Needs a figure (`_needs_figure`) but has no checked one to show."""
-    return not q.get("figure_svg") and _needs_figure(q, subject)
+def _lacks_figure(q: dict[str, Any]) -> bool:
+    """Wants a figure (`_needs_figure`) but has no checked one to show."""
+    return not q.get("figure_svg") and _needs_figure(q)
 
 
 def schedule_generation_job(job_id: uuid.UUID) -> None:
@@ -899,9 +858,10 @@ async def _no_figure_top_up(
     plain = await _ask_for_problems(
         request, short, _NO_FIGURE_RULE, kept, failed="the no-figure replacement call failed; keeping the rest",
     )
+    # Asked for none: one that drafts a figure or points at one is not taken.
+    plain = _without_repeats([q for q in plain if not _needs_figure(q)], kept)[:short]
     for q in plain:
-        q["figure_spec"] = q["figure_svg"] = q["figure_facts"] = None  # asked for none; never shown unchecked
-    plain = _without_repeats([q for q in plain if not _needs_figure(q, request.subject)], kept)[:short]
+        q["figure_spec"] = q["figure_svg"] = q["figure_facts"] = None
     if len(plain) < short:
         logger.warning(
             "Job %s: left out %d problem(s): no figure could be checked, and no replacement without a "
@@ -914,7 +874,7 @@ async def generate_checked_problems(
     request: ProblemRequest, *, count: int, docs_selected: int = 0,
 ) -> list[dict[str, Any]]:
     """Generate problems and draw each one's figure, checked. A problem that
-    needs a figure (`_needs_figure`: it names points, or refers to a figure)
+    wants a figure (`_needs_figure`: the AI drafted one, or it refers to one)
     and ends without a checked one, or repeats another problem, is replaced
     once; a slot whose replacement has the same flaw gets a problem that
     needs no figure (`_no_figure_top_up`), so the teacher gets the count
@@ -941,7 +901,7 @@ async def generate_checked_problems(
         raise TeacherFacingGenerationError(_empty_result_message(docs_selected, len(request.images or [])))
 
     def lacks(q: dict[str, Any]) -> bool:
-        return _lacks_figure(q, request.subject)
+        return _lacks_figure(q)
 
     job_id, asked = request.job_id, len(question_dicts)
     question_dicts = _without_repeats(question_dicts, [])
@@ -994,6 +954,7 @@ async def solve_checked_problems(
         if s.get("final_answer"):
             s["final_answer"] = real_newlines(s["final_answer"])
         lost = None
+        wanted = _needs_figure(q)
         if _is_construction(q.get("figure_spec")):
             kept_spec, kept_svg, issues = _check_figure(
                 q["figure_spec"], q.get("text") or "", final_answer=s.get("final_answer") or "",
@@ -1004,7 +965,7 @@ async def solve_checked_problems(
             q["figure_spec"], q["figure_svg"] = kept_spec, kept_svg
             if not kept_svg:
                 q["figure_facts"] = None
-            if issues and _lacks_figure(q, subject):
+            if issues and wanted and not kept_svg:
                 lost = "; ".join(issues)
         if lost is None and isinstance(s.get("steps"), list) and s["steps"]:
             async with sem:
@@ -1431,14 +1392,16 @@ async def regenerate_one(
     new_final = real_newlines(str(new_answer)) if new_answer else ""
     # Figure first, so a problem that points at a figure it can't have is
     # refused before anything is overwritten.
+    drafted = {"text": new_question, "figure_spec": result.get("figure_spec")}
+    _drop_unwanted_figure(drafted)
     new_figure_spec, new_figure_svg, figure_issues, new_facts = await _resolve_figure_with_retry(
-        result.get("figure_spec"), new_question, mode=LLMMode.REGENERATE_BANK_ITEM,
+        drafted["figure_spec"], new_question, mode=LLMMode.REGENERATE_BANK_ITEM,
         user_id=str(user_id), final_answer=new_final,
     )
-    if _lacks_figure({"text": new_question, "figure_svg": new_figure_svg}, course.subject):
+    if _lacks_figure({**drafted, "figure_svg": new_figure_svg}):
         reason = "; ".join(figure_issues) or "no figure was drawn"
         logger.warning("Regenerated item %s needs a figure it doesn't have: %s", item.id, reason)
-        what = "refers to a figure" if _FIGURE_REFERENCE.search(new_question) else "names points for a figure"
+        what = "refers to a figure" if _FIGURE_REFERENCE.search(new_question) else "has a figure"
         raise RuntimeError(
             f"The new version of this problem {what} that couldn't be drawn ({reason}). "
             "Nothing was changed — try again.",
