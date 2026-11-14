@@ -31,6 +31,7 @@ dependencies = [
     "stripe==15.5.1",
     "pillow==12.3.0",  # EXIF-transpose + downscale student photos before vision (api/core/image_utils) — RUNTIME dep, imported at app startup
     "pypdfium2==5.14.0",  # render PDF pages to images so a drawing on a PDF upload can be cropped (api/core/image_utils) — RUNTIME dep
+    "boto3==1.43.120",  # S3 client for the homework-photo bucket (api/core/photo_store) — RUNTIME dep
 ]
 
 [tool.setuptools.packages.find]
@@ -45,6 +46,7 @@ dev = [
     "mypy>=1.13.0",
     "types-python-jose>=3.3.0",
     "playwright>=1.49.0",  # autonomous browser harness (tests/harness)
+    "moto[s3]>=5.2.0",  # mocked S3 for the photo-bucket tests (tests/test_photo_store.py)
 ]
 
 [tool.ruff]
