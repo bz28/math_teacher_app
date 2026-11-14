@@ -428,9 +428,9 @@ async def _resolve_figure_with_retry(
 
 
 def _not_redrawable(issue: str) -> bool:
-    """A reason no redraw can fix: the checker crashed, or the problem
-    wasn't read."""
-    return issue in (_CHECK_CRASHED, _NOT_READ)
+    """A reason no redraw can fix: the checker crashed, the problem wasn't
+    read, or the question's figure a step is checked against can't be read."""
+    return issue in (_CHECK_CRASHED, _NOT_READ, _BASE_UNREADABLE)
 
 
 async def _render_step_figures_with_retry(
