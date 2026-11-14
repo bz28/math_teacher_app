@@ -5,6 +5,7 @@ The API returns a tool_use content block with properly serialized JSON — no
 markdown fencing or manual JSON parsing needed.
 """
 
+import copy
 from typing import Any
 
 ToolSchema = dict[str, Any]
@@ -1873,6 +1874,11 @@ DRAWING_CHECK_SCHEMA: ToolSchema = {
 GENERATE_QUESTIONS_CONSTRUCTION_SCHEMA: ToolSchema = _with_construction_figures(GENERATE_QUESTIONS_SCHEMA)
 BANK_CHAT_REPLY_CONSTRUCTION_SCHEMA: ToolSchema = _with_construction_figures(BANK_CHAT_REPLY_SCHEMA)
 REGENERATE_QA_CONSTRUCTION_SCHEMA: ToolSchema = _with_construction_figures(REGENERATE_QA_SCHEMA)
+# A generated problem's solution: step figures in the construction form when
+# the problem has a checked construction figure to build on, else none.
+DECOMPOSITION_CONSTRUCTION_SCHEMA: ToolSchema = _with_construction_figures(DECOMPOSITION_SCHEMA)
+DECOMPOSITION_NO_FIGURES_SCHEMA: ToolSchema = copy.deepcopy(DECOMPOSITION_SCHEMA)
+del DECOMPOSITION_NO_FIGURES_SCHEMA["input_schema"]["properties"]["steps"]["items"]["properties"]["figure_spec"]
 BANK_CHAT_REPLY_CONSTRUCTION_SCHEMA["input_schema"]["properties"]["reply"]["description"] = (
     "Conversational response to the teacher. Keep it short (1-3 sentences). "
     "Don't describe a figure here: code writes the sentence about the figure "

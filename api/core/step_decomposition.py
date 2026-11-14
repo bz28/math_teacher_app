@@ -4,7 +4,7 @@ import logging
 import re
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from api.core.constants import DECOMPOSITION_CACHE_MAX_SIZE, DECOMPOSITION_CACHE_TTL_SECONDS
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
@@ -46,7 +46,9 @@ def _cache_get(problem: str) -> "Decomposition | None":
             refreshed_steps.append(s)
             continue
         rendered = dict(s)
-        svg = render_figure_or_none(s.get("figure_spec"), context="cached step figure")
+        svg = None if _is_construction(s.get("figure_spec")) else render_figure_or_none(
+            s.get("figure_spec"), context="cached step figure",
+        )
         if svg:
             rendered["figure_svg"] = svg
         else:
@@ -136,7 +138,11 @@ _SYSTEM_PROMPT_TEMPLATE = (
     "    \"xRange\": [-5,5], \"yRange\": [-5,10]}}@@\n"
     "  - Physics/other: use <svg> blocks as before\n\n"
     "For answer_type, use \"diagram\" with @@{{...}}@@ notation for chemistry/graph answers.\n\n"
+)
 
+# Learn mode's step figures: the shape forms, rendered as the solver writes
+# them (a student's own problem has no checked figure to build on).
+_SHAPE_STEP_FIGURES = (
     "Per-step geometry figures:\n"
     "- For geometry problems where the construction evolves step by "
     "step (drop a perpendicular, draw an altitude, construct a "
@@ -180,13 +186,52 @@ _SYSTEM_PROMPT_TEMPLATE = (
     "which point is which across steps.\n"
 )
 
+# A generated problem's step figures: the problem's checked construction
+# figure plus what the step adds, checked like the problem's own
+# (question_bank_generation._render_step_figures_with_retry). The first
+# paragraph is Ben's wording (2026-11-13), word for word.
+_CONSTRUCTION_STEP_FIGURES = (
+    "Per-step geometry figures:\n"
+    "Steps. Give a step its own figure only when that step changes the picture: "
+    "it draws a new line or point, or proves something worth marking. Keep the "
+    "problem's points exactly where they are and only add.\n"
+    "The problem's figure is given with the problem, as data. A step's figure is "
+    "the figure before it (the problem's, or the last step figure) with the same "
+    "point names and coordinates and everything it draws, plus what this step "
+    "adds. Name every new point in the step's description. Rule 4's \"never mark "
+    "the statement to prove\" is for the problem's figure: a step's figure may "
+    "mark what that step has shown.\n\n"
+)
 
-def _build_system_prompt(subject: str) -> str:
+# Which step figures the solver may emit: "shapes" (Learn mode), "construction"
+# (a generated problem with a checked construction figure), "none".
+StepFigures = Literal["shapes", "construction", "none"]
+
+
+def _build_system_prompt(subject: str, figures: StepFigures = "shapes") -> str:
     cfg = get_config(subject)
-    return _SYSTEM_PROMPT_TEMPLATE.format(
+    prompt = _SYSTEM_PROMPT_TEMPLATE.format(
         professor_role=cfg["professor_role"],
         domain=cfg["domain"],
     )
+    if figures == "shapes":
+        return prompt + _SHAPE_STEP_FIGURES
+    if figures == "construction":
+        # Appended after .format(): the rules hold literal braces.
+        from api.core.construction_figures import CONSTRUCTION_FIGURE_RULES
+
+        return prompt + _CONSTRUCTION_STEP_FIGURES + CONSTRUCTION_FIGURE_RULES + "\n"
+    return prompt
+
+
+def _schema(figures: StepFigures) -> Any:
+    from api.core.llm_schemas import DECOMPOSITION_CONSTRUCTION_SCHEMA, DECOMPOSITION_NO_FIGURES_SCHEMA
+
+    return {
+        "shapes": DECOMPOSITION_SCHEMA,
+        "construction": DECOMPOSITION_CONSTRUCTION_SCHEMA,
+        "none": DECOMPOSITION_NO_FIGURES_SCHEMA,
+    }[figures]
 
 
 @dataclass
@@ -272,8 +317,12 @@ def _parse_decomposition(
             description = _normalize_latex(str(s.get("description", "")))
             step: dict[str, Any] = {"title": title, "description": description}
             raw_figure = s.get("figure_spec")
-            svg = render_figure_or_none(raw_figure, context="step figure_spec")
-            if svg:
+            if _is_construction(raw_figure):
+                # Kept without a drawing: a construction step figure is drawn
+                # only once it passes its check, which the caller runs
+                # (question_bank_generation._render_step_figures_with_retry).
+                step["figure_spec"] = raw_figure
+            elif svg := render_figure_or_none(raw_figure, context="step figure_spec"):
                 step["figure_svg"] = svg
                 step["figure_spec"] = raw_figure
             steps.append(step)
@@ -294,6 +343,10 @@ def _parse_decomposition(
     )
 
 
+def _is_construction(spec: Any) -> bool:
+    return isinstance(spec, dict) and spec.get("shape") == "construction"
+
+
 def _is_word_problem(text: str, subject: str = Subject.MATH) -> bool:
     """Detect whether text is a word problem vs pure notation."""
     cfg = get_config(subject)
@@ -311,13 +364,19 @@ async def decompose_problem(
     subject: str = Subject.MATH,
     image_base64: str | None = None,
     generation_job_id: str | None = None,
+    figures: StepFigures = "shapes",
 ) -> Decomposition:
     """Generate step-by-step decomposition for a problem.
 
     If work_diagnosis is provided (from a prior work submission), the steps
     will be personalized to reference the student's specific mistakes.
+
+    `figures` picks which step figures the solver may emit: the shape forms
+    (Learn mode, the default), construction figures built on the problem's
+    checked figure (a generated problem that has one; they come back
+    undrawn, for the caller to check), or none.
     """
-    cache_key = f"{subject}:{problem}"
+    cache_key = f"{subject}:{problem}" if figures == "shapes" else f"{subject}:{figures}:{problem}"
     # Return cached result for non-personalized calls (image or not — the
     # decomposition depends on the problem text, not the image itself).
     if not work_diagnosis:
@@ -363,13 +422,13 @@ async def decompose_problem(
             },
             {
                 "type": "text",
-                "text": _build_system_prompt(subject) + "\n\n" + user_message,
+                "text": _build_system_prompt(subject, figures) + "\n\n" + user_message,
             },
         ]
         result = await call_claude_vision(
             user_content,
             mode=llm_mode,
-            tool_schema=DECOMPOSITION_SCHEMA,
+            tool_schema=_schema(figures),
             model=MODEL_REASON,
             max_tokens=8192,
             thinking_budget=2000,
@@ -378,10 +437,10 @@ async def decompose_problem(
         )
     else:
         result = await call_claude_json(
-            _build_system_prompt(subject),
+            _build_system_prompt(subject, figures),
             user_message,
             mode=llm_mode,
-            tool_schema=DECOMPOSITION_SCHEMA,
+            tool_schema=_schema(figures),
             model=MODEL_REASON,
             max_tokens=8192,
             thinking_budget=2000,

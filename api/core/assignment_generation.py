@@ -10,7 +10,7 @@ from api.core.construction_figures import CONSTRUCTION_FIGURE_RULES
 from api.core.document_vision import build_vision_content
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
 from api.core.llm_schemas import GENERATE_QUESTIONS_CONSTRUCTION_SCHEMA
-from api.core.step_decomposition import decompose_problem
+from api.core.step_decomposition import StepFigures, decompose_problem
 from api.core.subjects import Subject, get_config
 
 logger = logging.getLogger(__name__)
@@ -65,15 +65,19 @@ student level — NOT absolute math/science difficulty:
 """
 
 
+# When a generated problem gets a figure. The first paragraph is Ben's
+# wording (2026-11-13), word for word; the second makes every figure
+# checkable: the reading that checks a figure turns away a problem that
+# describes it in words without naming its points
+# (construction_figures._IN_WORDS). Code enforces one rule on top
+# (question_bank_generation._lacks_figure): a problem that names points or
+# refers to a figure ends with a checked figure, or is replaced or left out.
 _CONSTRUCTION_FIGURES_SECTION = """\
 # Figures (diagrams)
 
-Some problems genuinely need a diagram to be understood — congruence and
-similarity setups, parallel lines and transversals, angle relationships,
-right-triangle trigonometry, circles with chords, tangents or inscribed
-angles. Emit `figure_spec` for those, NOT for algebra, word problems, or
-anything where the prose already carries the full picture. A problem
-that says "in the figure below" MUST carry its figure_spec.
+When to draw. Add a figure when seeing it helps a student understand or solve the problem: the problem names points, lines or shapes; it refers to a figure; or it describes a layout a teacher would sketch on the board (a ladder against a wall, a composite floor plan). Leave it out when there's no shape to show, or when the picture would reveal what the student is asked to find or decide.
+
+When a problem gets a figure, its text names every point the figure shows (ladder AB leans against wall BC; floor plan ABCDEF), so the figure can be checked; a figure whose points the problem doesn't name is not shown.
 
 """
 
@@ -191,6 +195,11 @@ def _translate_params_to_instructions(params: dict[str, Any] | None) -> list[str
     return instructions
 
 
+# A set of problems that each carry a construction figure: about 150 tokens
+# of text plus 300-500 of figure each, so 4096 cut an 8-problem set short.
+_GENERATE_MAX_TOKENS = 16000
+
+
 async def generate_questions(
     unit_name: str,
     count: int,
@@ -274,7 +283,7 @@ async def generate_questions(
                 tool_schema=schema,
                 user_id=user_id,
                 model=MODEL_REASON,
-                max_tokens=4096,
+                max_tokens=_GENERATE_MAX_TOKENS,
                 call_metadata=call_metadata,
                 generation_job_id=generation_job_id,
             )
@@ -286,7 +295,7 @@ async def generate_questions(
                 tool_schema=schema,
                 user_id=user_id,
                 model=MODEL_REASON,
-                max_tokens=4096,
+                max_tokens=_GENERATE_MAX_TOKENS,
                 call_metadata=call_metadata,
                 generation_job_id=generation_job_id,
             )
@@ -357,12 +366,18 @@ async def generate_solutions(
                 "and measurements are part of the problem:\n"
                 + json.dumps(q["figure_spec"])
             )
+        # Step figures build on the problem's checked construction figure
+        # (and are checked themselves by the caller); a problem without one
+        # gets no step figures.
+        spec = q.get("figure_spec")
+        figures: StepFigures = "construction" if isinstance(spec, dict) and spec.get("shape") == "construction" else "none"
         try:
             decomp = await decompose_problem(
                 problem,
                 user_id=user_id,
                 subject=subject,
                 generation_job_id=generation_job_id,
+                figures=figures,
             )
             return {
                 "question_text": q["text"],
