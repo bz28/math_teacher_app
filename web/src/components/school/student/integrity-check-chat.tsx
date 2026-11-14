@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ApiError,
+  NetworkError,
   schoolStudent,
   type IntegrityExtraction,
   type IntegrityProblemSummary,
@@ -329,6 +330,34 @@ export function IntegrityCheckChat({
       // a turn that finished right at the threshold.
       lastActivityRef.current = Date.now();
     } catch (err) {
+      // Refetch first, so the chat shows the check as the server has it:
+      // the server said no (tap spent in another tab, the check closed:
+      // finished, the turn cap, or past its deadline in a tab left open),
+      // or the connection broke and the reply may have landed anyway.
+      let fresh: IntegrityStateResponse | null = null;
+      try {
+        fresh = await schoolStudent.getIntegrityState(submissionId);
+      } catch {
+        /* keep current state; the error below says it failed */
+      }
+      setPendingStudentMessage(null);
+      setStreamedBubbles([]);
+      // A timeout or dropped connection doesn't lose the reply: the
+      // server finishes and saves the turn on its own. If it already
+      // has, show it like any reply instead of an error the student
+      // would answer by sending the same message again.
+      if (
+        err instanceof NetworkError &&
+        fresh &&
+        studentTurnCount(fresh) > studentTurnCount(state)
+      ) {
+        telemetry.reset();
+        if (shouldOpenOwnWordsNudge(state, fresh)) setOwnWordsOpen(true);
+        setState(fresh);
+        setTurnStartedAt(Date.now());
+        lastActivityRef.current = Date.now();
+        return;
+      }
       const status = err instanceof ApiError ? err.status : null;
       // A 400 carries the server's own student-facing reason (e.g. the
       // stuck tap was already spent in another tab) — show it verbatim.
@@ -337,18 +366,9 @@ export function IntegrityCheckChat({
           ? err.message
           : "Couldn't send that — try again.",
       );
-      setPendingStudentMessage(null);
-      setStreamedBubbles([]);
       // Hand a typed draft back; a stuck tap has no draft to restore.
       if (!stuck) setMessage(trimmed);
-      // The server said no (tap spent in another tab, the check closed:
-      // finished, the turn cap, or past its deadline in a tab left open).
-      // Refetch so the chip and composer reflect it, as mobile does.
-      try {
-        setState(await schoolStudent.getIntegrityState(submissionId));
-      } catch {
-        /* keep current state; the error above already says it failed */
-      }
+      if (fresh) setState(fresh);
     } finally {
       setSending(false);
     }
@@ -966,6 +986,10 @@ function ReferencePanel({
       )}
     </div>
   );
+}
+
+function studentTurnCount(s: IntegrityStateResponse | null): number {
+  return s ? s.transcript.filter((t) => t.role === "student").length : 0;
 }
 
 function TurnBubble({ turn }: { turn: IntegrityTurn }) {
