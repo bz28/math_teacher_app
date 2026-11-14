@@ -1421,7 +1421,7 @@ async def rewrite_graph_checklist(
     current_user: CurrentUser = Depends(require_teacher),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """Write the checklist again from the question, answer key and solution,
+    """Write the checklist again from the question and answer key,
     replacing the teacher's edits. Awaited, like regenerate: the teacher
     asked for it and is waiting for it. On failure her checklist stays."""
     if not needs_checklist(item):
