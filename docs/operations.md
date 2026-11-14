@@ -19,8 +19,8 @@ How to deploy, monitor, and troubleshoot the math teacher app. Written so anyone
 1. Code merges to `main`.
 2. Railway (after backend CI passes) builds with Railpack. The deploy settings live in `railway.toml` at the repo root and override the dashboard.
 3. The start command installs the package, runs `alembic upgrade head`, then starts uvicorn on `$PORT`.
-4. Railway sends traffic to the new deployment only once `/v1/health` answers 200 (up to 300s); the old one keeps serving until then. If the migration fails or health never passes, the deploy fails and the old one stays live.
-5. The old deployment then gets SIGTERM and 45s to finish in-flight requests and streamed integrity turns.
+4. Railway sends traffic to the new deployment only once `/v1/health` answers 200 (up to 300s); the old one keeps serving until then. If the migration fails or health never passes, the deploy fails and the old one stays live — on whatever schema the migration left. **Migrations must therefore be backward-compatible with the previous code** (add first; drop/rename in a later deploy).
+5. The old deployment then gets SIGTERM and up to 45s to finish in-flight requests (and, with #994, streamed integrity turns). Detached background tasks still running at shutdown are cancelled.
 
 ### Environment Variables (Railway Console)
 
