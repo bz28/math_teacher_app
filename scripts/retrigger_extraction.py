@@ -98,6 +98,7 @@ async def _record_intervention(submission_id: uuid.UUID, steps: int) -> None:
 
 async def main(submission_id: uuid.UUID, apply: bool) -> None:
     from sqlalchemy import select
+    from sqlalchemy.orm import undefer
 
     from api.database import get_session_factory
     from api.models.assignment import Assignment, Submission
@@ -106,6 +107,7 @@ async def main(submission_id: uuid.UUID, apply: bool) -> None:
     async with get_session_factory()() as db:
         sub = (await db.execute(
             select(Submission).where(Submission.id == submission_id)
+            .options(undefer(Submission.files))
         )).scalar_one_or_none()
         if sub is None:
             sys.exit(f"no submission {submission_id}")

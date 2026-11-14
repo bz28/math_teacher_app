@@ -38,7 +38,7 @@ from sqlalchemy import delete as sql_delete
 from sqlalchemy import distinct, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import load_only
+from sqlalchemy.orm import load_only, undefer
 
 from api.core.audit_log import record_student_activity
 from api.core.constants import MAX_SUBMISSION_FILES, MAX_SUBMISSION_TOTAL_BYTES
@@ -2338,6 +2338,7 @@ async def _resubmit_reopened(
     sub = (await db.execute(
         select(Submission)
         .where(Submission.id == submission_id, Submission.reopened_at.is_not(None))
+        .options(undefer(Submission.files))
         .with_for_update().execution_options(populate_existing=True)
     )).scalar_one_or_none()
     if sub is None:
@@ -2918,6 +2919,7 @@ async def retake_submission(
     # double tap waits here instead of numbering a second copy of it.
     sub = (await db.execute(
         select(Submission).where(Submission.id == submission_id)
+        .options(undefer(Submission.files))
         .with_for_update().execution_options(populate_existing=True)
     )).scalar_one()
     previous_file_count = len(sub.files or [])
@@ -3014,7 +3016,7 @@ async def get_my_submission(
         select(Submission).where(
             Submission.assignment_id == assignment_id,
             Submission.student_id == user.id,
-        )
+        ).options(undefer(Submission.files))
     )).scalar_one_or_none()
     if sub is None:
         raise HTTPException(status_code=404, detail="No submission yet")
