@@ -527,101 +527,7 @@ def disagreements(a: FigureFacts, b: FigureFacts) -> list[str]:
 
 # ── Coverage: the reading accounts for everything the text states ─────
 
-# Each word or symbol that states a relation, and the fact kinds that can
-# account for it.
-# A theorem's name ("the Alternate Interior Angles Theorem") names a method,
-# not a fact about the figure.
-_NOT_A_THEOREM = r"(?!(?:\s+angles?)?(?:\s+(?:theorem|postulate|converse))\b)"
-# Kinds that state an angle's size, for the measure signals below.
-_MEASURE_KINDS = ("angle_measure", "right_angle", "central_angle", "inscribed_angle")
-_SEG_EQ_KINDS = ("equal_length", "congruent_segments", "radius", "diameter", "midpoint", "isosceles",
-                 "equilateral", "bisects_segment", "kite", "rhombus", "square")
-# (pattern, the fact kinds that can account for one occurrence of it,
-# whether the pattern sits between its two parts like "AB ∥ CD").
-_SIGNALS: list[tuple[str, tuple[str, ...], bool]] = [
-    (r"\\parallel|∥|\bparallel\b", ("parallel", "parallelogram", "rectangle", "square", "rhombus", "trapezoid",
-                                     "isosceles_trapezoid", "transversal"), True),
-    (r"\\perp|⊥|\bperpendicular\b", ("perpendicular", "right_angle", "angle_measure", "bisects_segment"), True),
-    (r"\\cong|≅|\bcongruent\b", ("congruent_segments", "congruent_angles", "congruent_triangles", "isosceles",
-                                 "equilateral", "kite", "rhombus", "square", "midpoint"), True),
-    (r"\\sim\b|∼|\bsimilar\b", ("similar_triangles",), True),
-    # A measure: "∠A = …" (the "m" is cleaned away), and each "40°".
-    (r"\\angle\s*\{?\s*(?:(?:[A-Z][0-9]*'*){1,3}|\d+)\s*\}?\s*=",
-     (*_MEASURE_KINDS, "congruent_angles", "vertical_angles", "bisects_angle"), True),
-    (r"(?<![\w.])\d+(?:\.\d+)?\s*°", (*_MEASURE_KINDS, "supplementary", "complementary", "linear_pair",
-                                       "perpendicular", "rectangle", "square", "right_triangle"), False),
-    # "AB = CD", "AB = 5", "AB = 2x".
-    (r"(?<![A-Za-z0-9\\{'])(?:\\overline\s*\{\s*)?(?:[A-Z][0-9]*'*){2}\s*\}?\s*=(?!=)", _SEG_EQ_KINDS, True),
-    (r"\bmidpoints?\b", ("midpoint", "bisects_segment"), False),
-    (r"\bbisect(?:s|ed|ing|or|ors)?\b", ("bisects_segment", "bisects_angle", "midpoint"), False),
-    (r"\btangents?\b", ("tangent",), False),
-    # On the cleaned text "right triangle ABC" reads "right \triangle{ABC}".
-    (r"\bright\s+(?:angles?\b|triangles?\b|\\triangle)",
-     ("right_angle", "right_triangle", "angle_measure", "perpendicular", "rectangle", "square"), False),
-    (r"\bequilateral\b", ("equilateral",), False),
-    (r"\bisosceles\b", ("isosceles", "isosceles_trapezoid"), False),
-    (r"\bparallelograms?\b", ("parallelogram", "rectangle", "square", "rhombus"), False),
-    (r"\brectangles?\b", ("rectangle", "square"), False),
-    (r"\bsquares?\b(?!\s*(?:units?|roots?|feet|foot|inch(?:es)?|cm|mm|m|meters?|ft|in|yards?)\b)", ("square",),
-     False),
-    (r"\brhomb(?:us|i|uses)\b", ("rhombus", "square"), False),
-    (r"\btrapezoids?\b|\btrapezia\b", ("trapezoid", "isosceles_trapezoid"), False),
-    (r"\bkites?\b", ("kite",), False),
-    (r"\bdiameters?\b", ("diameter",), False),
-    (r"\bradi(?:us|i)\b", ("radius", "on_circle", "central_angle"), False),
-    (r"\bchords?\b", ("chord",), False),
-    (r"\binscribed\b", ("on_circle", "inscribed_angle"), False),
-    (r"\bcircles?\b|\\odot|⊙", ("on_circle", "tangent", "chord", "diameter", "radius", "central_angle",
-                                "inscribed_angle"), False),
-    (r"\bopposite\s+rays\b", ("opposite_rays",), False),
-    (rf"\bvertical\s+angles\b{_NOT_A_THEOREM}", ("vertical_angles",), False),
-    (rf"\blinear\s+pair\b{_NOT_A_THEOREM}", ("linear_pair",), False),
-    (r"\bsupplementary\b", ("supplementary", "linear_pair"), False),
-    (r"\bcomplementary\b", ("complementary",), False),
-    (r"\btransversals?\b", ("transversal",), False),
-    (r"\b(?:lie|lies|is|are)\s+(?:a\s+|the\s+)?(?:points?\s+)?on\b", ("on_segment", "on_line", "on_circle",
-                                                                      "collinear", "midpoint", "intersect"), False),
-    (r"(?<![A-Za-z])[A-Z][0-9]*'*\s+(?:is|lies)\s+between\b", ("on_segment", "collinear", "midpoint"), False),
-    (r"\bcollinear\b", ("collinear", "on_line", "on_segment"), False),
-    # "meeting AB at M", "the bisectors meet at I": accounted for by a fact
-    # that puts that point on those parts.
-    (r"\b(?:intersect(?:s|ing|ion|ions)?|meets?|meeting)\b", ("intersect", "on_segment", "on_line", "transversal",
-                                                              "perpendicular", "bisects_segment", "bisects_angle",
-                                                              "midpoint"), False),
-    (r"\bincent(?:er|re)\b", ("bisects_angle",), False),
-    # Where two angles sit is its own fact: a transversal alone doesn't say it.
-    (rf"\balternate\s+interior\b{_NOT_A_THEOREM}", ("alternate_interior",), False),
-    (rf"\balternate\s+exterior\b{_NOT_A_THEOREM}", ("alternate_exterior",), False),
-    (rf"\bcorresponding\s+angles\b{_NOT_A_THEOREM}", ("corresponding",), False),
-    (rf"\b(?:same[-\s]side|consecutive)\s+interior\b{_NOT_A_THEOREM}", ("same_side_interior",), False),
-    # An altitude is accounted for only by its own perpendicular (below).
-    (r"\bmedians?\b|\bequidistant\b|\bconcentric\b|\bcircumscribed\b", (), False),
-    # Relations in words: "40 degrees", "∠A and ∠B are equal", "AB equals
-    # AC", "the same length", "∠B is twice ∠A".
-    (r"(?<![\w.])\d+(?:\.\d+)?\s*degrees?\b", (*_MEASURE_KINDS, "supplementary", "complementary", "linear_pair",
-                                                "perpendicular", "rectangle", "square", "right_triangle"), False),
-    (r"\bequals?\b|\bequal\s+to\b|\b(?:are|is)\s+equal\b",
-     (*_SEG_EQ_KINDS, "congruent_angles", "vertical_angles", "bisects_angle", *_MEASURE_KINDS), False),
-    (r"\bsame\s+(?:length|measure|size)\b", (*_SEG_EQ_KINDS, "congruent_angles", "bisects_angle"), False),
-    (r"\btwice\b|\b(?:two|three|four|five|\d+)\s+times\b|\bhalf\s+(?:of|as)\b",
-     ("angle_measure", "equal_length", "midpoint", "bisects_segment", "bisects_angle"), False),
-    # "∠B is obtuse", "acute △ABC", "a scalene triangle": read by code (CODE_KINDS).
-    (r"\bobtuse\b", ("obtuse_angle", "obtuse_triangle"), False),
-    # "one acute angle of right △ABC": a right triangle's other two angles
-    # are acute, always, so its fact states them.
-    (r"\bacute(?:\s+angles?\b)?", ("acute_angle", "acute_triangle", "right_triangle"), False),
-    (r"\bscalene\b", ("scalene",), False),
-]
-# A method, not a fact: "use the Alternate Interior Angles Theorem", "by SAS".
-_METHOD = re.compile(
-    r"\b(?:use|using)\b[^.;:?\n]*|\bby\s+(?:the\s+)?(?:definition|theorem|postulate|property|converse|"
-    r"SAS|ASA|AAS|SSS|HL|CPCTC|AA|SSA)\b[^.;:?\n]*|\b(?:theorem|postulate)\b"
-    # A hint is a method too: "(Hint: first prove △QRT ≅ △SRT ...)".
-    r"|\(\s*\**\s*hint\b[^)]*\)?|\bhint\b\s*\**\s*:[^\n]*"
-    # A question states nothing: "determine whether any side is perpendicular".
-    r"|\b(?:determine|decide|tell|check|state|explain|show)\s+whether\b[^.;?\n]*|\bwhether\b[^.;?\n]*",
-    re.IGNORECASE,
-)
+# (The accounting itself is in api/core/geometry/coverage.py.)
 _NOT_NAMES = {"I", "SAS", "ASA", "AAS", "SSS", "HL", "CPCTC", "AA", "SSA", "CPCF"}
 
 
@@ -643,120 +549,11 @@ def _fact_names(f: Fact) -> set[str]:
 
 
 def coverage_gaps(text: str, facts: FigureFacts) -> list[str]:
-    """What the text states that the reading doesn't account for: a point
-    name with no place in it, or a relation word / symbol with no fact of
-    its kind about the names beside it. Each occurrence counts on its own:
-    "AB ∥ CD and EF ∥ GH" needs two parallel facts, one per pair."""
-    from api.core.geometry.figure_check import _clean, _plain, parse_problem
+    """What the text says that the reading doesn't account for: an
+    allowlist over the text's tokens (api/core/geometry/coverage.py)."""
+    from api.core.geometry.coverage import coverage_gaps as gaps
 
-    t = _clean(text)
-    gaps = [f"point {n}" for n in sorted(parse_problem(text).points - set(facts.points))]
-    every = [*facts.givens, *facts.prove]
-    methods = [m.span() for m in _METHOD.finditer(t)]
-    if facts.triangles or any(len(split_names(p)) == 3 for p in facts.polygons):
-        # A triangle's angles adding up to 180° is always true: no fact.
-        methods += [m.span() for m in _ANGLE_SUM.finditer(t) if _angle_sum_of_triangle(m.group(0), facts)]
-    questions = _question_spans(t)
-    # A statement said twice needs its fact once: the repeat is skipped by
-    # the signal words, and accounted for when what it repeats is.
-    _cl = _clauses(t)
-    repeats = [_cl[ci] for ci in _restated(t, _cl)]
-    stops = stop_positions(t)
-
-    def names_in(s: str) -> set[str]:
-        return _names(re.sub(r"\\[A-Za-z]+", " ", s)) | {
-            line_key(x) for x in re.findall(r"(?<![A-Za-z\\])(?:[a-z]|\\ell\s*_?\{?\d*\}?)(?![A-Za-z])", s)
-            if not re.fullmatch(r"[a-z]", x) or re.search(rf"\b[Ll]ines?\s+{x}\b|\b{x}\s*(?:\\parallel|∥)", s)
-        }
-
-    for pattern, kinds, infix in _SIGNALS:
-        # A word in a question's target that names no part is what is asked
-        # ("find the acute angle"); one with a name after it says something
-        # of that part ("find the area of rectangle ABCD": ABCD is a rectangle).
-        skip = methods + repeats
-        found = [m for m in re.finditer(pattern, t, re.IGNORECASE)
-                 if not any(a <= m.start() < b for a, b in skip)
-                 and not any(a <= m.start() < b and not names_in(t[m.end():b]) for a, b in questions)]
-        # Each occurrence: the names beside it, up to the next comma, "and",
-        # clause end, or neighbouring occurrence of the same signal.
-        wants: list[tuple[str, set[str], set[str]]] = []
-        for i, m in enumerate(found):
-            lo = max((j for j in stops if j < m.start()), default=-1) + 1
-            hi = min((j for j in stops if j >= m.end()), default=len(t))
-            if i and found[i - 1].end() > lo:
-                lo = found[i - 1].end()
-            if i + 1 < len(found) and found[i + 1].start() < hi:
-                hi = found[i + 1].start()
-            left, right = t[lo:m.start()], t[m.end():hi]
-            left = re.split(r",|\band\b", left)[-1]
-            right = re.split(r",|\band\b", right)[0]
-            # "AB =", "D is between": the names in the signal itself are its left side.
-            near_l, near_r = names_in(left) | names_in(m.group(0)), names_in(right)
-            if not near_l and not near_r and not infix:
-                near_l = names_in(t[lo:hi])
-            wants.append((_plain(m.group(0)), near_l, near_r))
-        if not kinds:
-            gaps += [f"“{w}”" + (f" (about {', '.join(sorted(lt | rt))})" if lt | rt else "") for w, lt, rt in wants]
-            continue
-
-        def fits(f: Fact, near_l: set[str], near_r: set[str], word: str) -> bool:
-            if f.kind not in kinds:
-                return False
-            if f.kind == "right_triangle" and word.lower().startswith("acute") and "angle" not in word.lower():
-                return False  # "△ABC is acute" is not a right triangle
-            if re.search(r"°|degree", word):  # "40°", "40 degrees": a fact with that number
-                n = float(re.match(r"[\d.]+", word).group(0))  # type: ignore[union-attr]
-                said = {f.value} | {float(x) for x in re.findall(r"\d+(?:\.\d+)?", f.expr or "")}
-                if n not in said and not (n == 90 and f.kind in ("right_angle", "perpendicular", "rectangle",
-                                                                  "square", "right_triangle")) \
-                        and not (n == 180 and f.kind in ("supplementary", "linear_pair")) \
-                        and not (n == 90 and f.kind == "complementary"):
-                    return False
-            names = _fact_names(f)
-            if not names:
-                return True
-            if infix and near_l and near_r:
-                return bool(names & near_l) and bool(names & near_r)
-            near = near_l | near_r
-            return not near or bool(names & near)
-
-        # One fact per occurrence (a chain "AB ∥ CD ∥ EF" is one fact for two).
-        # "right △ABC with the right angle at C": the triangle's fact says both.
-        cap = {i: 2 if f.kind == "right_triangle" else max(1, len(f.items) - 1) for i, f in enumerate(every)}
-        owner: dict[tuple[int, int], int] = {}
-
-        def assign(w: int, seen: set[tuple[int, int]]) -> bool:
-            word, near_l, near_r = wants[w]
-            for i, f in enumerate(every):
-                if not fits(f, near_l, near_r, word):
-                    continue
-                for slot in range(cap[i]):
-                    key = (i, slot)
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    if key not in owner or assign(owner[key], seen):
-                        owner[key] = w
-                        return True
-            return False
-
-        circle_ok = "circle" in pattern and bool(facts.circles)
-        for w, (word, near_l, near_r) in enumerate(wants):
-            if not assign(w, set()) and not circle_ok:
-                near = near_l | near_r
-                gaps.append(f"“{word}”" + (f" (about {', '.join(sorted(near))})" if near else ""))
-    # "altitude QS": a perpendicular fact that names QS itself.
-    for m in re.finditer(r"\baltitudes?\b", t, re.IGNORECASE):
-        if any(a <= m.start() < b for a, b in methods):
-            continue
-        after = re.match(r"\s*(?:\\overline\s*)?\{?\s*([A-Z]'?)\s*([A-Z]'?)(?![A-Za-z])", t[m.end():])
-        side = frozenset(after.groups()) if after else None
-        if side is None or not any(
-            f.kind == "perpendicular" and any(frozenset(split_names(x)) == side for x in f.items) for f in every
-        ):
-            gaps.append("“altitude”" + (f" (about {''.join(after.groups())})" if after else ""))
-    gaps += _clause_gaps(t, facts, methods, questions)
-    return list(dict.fromkeys(gaps))
+    return gaps(text, facts)
 
 
 # A clause that asks or instructs ("Find m∠C", "Write a two-column proof")
@@ -824,13 +621,6 @@ def _non_stops(t: str) -> set[int]:
     return {m.start() + k for m in _NOT_A_STOP.finditer(t) for k, ch in enumerate(m.group(0)) if ch == "."}
 
 
-def stop_positions(t: str) -> list[int]:
-    """Where sentences and their parts end (. ; : ? ! newline), leaving out
-    decimal points."""
-    skip = _non_stops(t)
-    return [i for i, ch in enumerate(t) if ch in ".;:?!\n" and i not in skip]
-
-
 def _clauses(t: str) -> list[tuple[int, int]]:
     """The text cut into clauses (spans): at sentence ends, commas, "and",
     "if", "where" … but never inside brackets ("A(0, 0)"), at a decimal
@@ -894,80 +684,24 @@ def _question_spans(t: str) -> list[tuple[int, int]]:
     """The target phrases of questions and instructions: from the question
     word through what is asked ("Find m∠A", "What is the length of AC"),
     up to the end of its clause or a condition ("… if AB = 5"). Only the
-    target states nothing: the rest of a question's sentence ("in right
-    △ABC", "with D on BC", "given ∠B is obtuse") and the clauses after it
-    ("find k and the length of YZ") are covered like any statement."""
+    target's own tokens are exempt (coverage.py); the rest of a question's
+    sentence is accounted for like any statement."""
     out: list[tuple[int, int]] = []
-    prev: tuple[int, int] | None = None  # the asking clause just before, when its target ran to its end
     for a, b in _clauses(t):
         clause = t[a:b]
-        joined = prev is not None and re.fullmatch(r"\s*,?\s*(?:and\s*)?", t[prev[1]:a])
-        if joined and _TARGET_ONLY.fullmatch(clause):
-            # "find the value of k and the length of YZ": a clause that is
-            # only one more target (no verb, nothing said of it) is asked too.
-            out.append((a, b))
-            prev = (a, b)
-            continue
-        prev = None
         if re.search(r"\b(?:prove|show\s+that|verify|justify|explain)\b", clause, re.IGNORECASE):
             continue
         if m := _QUESTION.search(clause):
             start = a + m.start()
             end = _TARGET_END.search(t, start + 1, b)
             out.append((start, end.start() if end else b))
-            prev = (a, b) if end is None else None
     return out
-
-
-# "Draw AD", "and draw ray AB", "draw \overleftrightarrow{PQ}": exactly an
-# instruction to draw one part, and nothing more.
-_DRAW_PART = re.compile(
-    r"\s*(?:and\s+)?(?:then\s+)?[Dd]raw\s+(?:the\s+)?(?:(?P<word>segment|ray|line)\s+)?"
-    r"(?:\\(?P<cmd>overline|overrightarrow|overleftrightarrow)\s*)?\{?\s*(?P<a>[A-Z][0-9]*'*)\s*(?P<b>[A-Z][0-9]*'*)\s*\}?\s*")
-
-
-def _draws_listed(clause: str, facts: FigureFacts) -> bool:
-    """The (cleaned) clause only says to draw one part, and the reading lists
-    that part (so the figure is checked to draw it)."""
-    m = _DRAW_PART.fullmatch(clause)
-    if not m:
-        return False
-    word = m["word"] or {"overrightarrow": "ray", "overleftrightarrow": "line"}.get(m["cmd"] or "", "segment")
-    if m["word"] and m["cmd"] and word != {"overline": "segment", "overrightarrow": "ray",
-                                           "overleftrightarrow": "line"}[m["cmd"]]:
-        return False
-    name = m["a"] + m["b"]
-    if word == "ray":
-        return any(split_names(x) == [m["a"], m["b"]] for x in facts.rays)
-    pool = facts.lines if word == "line" else facts.segments
-    return any(frozenset(split_names(x)) == frozenset((m["a"], m["b"])) for x in pool) and len(set(name)) > 1
 
 
 def _states(piece: str) -> bool:
     """The piece says something beyond naming parts of the figure."""
     rest = re.sub(r"(?<![A-Za-z\\])(?:[A-Z][0-9]*'*)+(?![a-z])|\\angle\s*\{?\s*\d+\s*\}?", "", piece)
     return bool(_NAMING.sub("", rest))
-
-
-def _goes_on_with(t: str, clauses: list[tuple[int, int]], ci: int) -> bool:
-    """Whether a clause of only names ("C" in "right angles at A and C", "AC"
-    in "D and E lie on AB and AC") is joined by "and" or a comma to a
-    statement before it in the same sentence: it is then part of what that
-    statement says, which one fact quoting the statement's clause may not
-    cover ("right angles at A" alone), so it can't be passed as naming only."""
-    if ci == 0:
-        return False
-    pa, pb = clauses[ci - 1]
-    if not re.fullmatch(r"\s*(?:,\s*)?(?:and\s*)?(?:,\s*)?", t[pb:clauses[ci][0]], re.IGNORECASE):
-        return False
-    return _states(t[pa:pb])
-
-
-# A clause that is only a target: "the length of YZ", "m∠Q", "the value of x".
-_TARGET_ONLY = re.compile(
-    r"(?:and\s+)?(?:the\s+)?(?:(?:value|length|measure|area|perimeter|circumference)\s+of\s+(?:the\s+)?)?"
-    r"(?:segment\s+|side\s+)?(?:m\s*)?(?:\\overline\s*|\\angle\s*|\\triangle\s*)?"
-    r"\{?\s*(?:(?:[A-Z][0-9]*'*){1,3}|[a-z])\s*\}?\s*")
 
 
 def _restated(t: str, clauses: list[tuple[int, int]]) -> dict[int, int]:
@@ -993,185 +727,6 @@ def _restated(t: str, clauses: list[tuple[int, int]]) -> dict[int, int]:
     return out
 
 
-def _states_kind(clause: str, kind: str) -> bool:
-    """The clause holds a signal word or symbol of the fact kind."""
-    return any(kind in kinds and re.search(pattern, clause, re.IGNORECASE) for pattern, kinds, _ in _SIGNALS)
-
-
-def _tokens(s: str) -> list[str]:
-    """Words, names and symbols, one spelling each, for finding a fact's
-    quote in the text however it is typeset."""
-    from api.core.geometry.figure_check import _clean
-
-    s = _clean(s)
-    for a, b in ((r"\angle", " angle "), (r"\triangle", " triangle "), (r"\parallel", " parallel "),
-                 (r"\perp", " perp "), (r"\cong", " cong "), (r"\sim", " sim "), (r"^\circ", " deg "),
-                 ("°", " deg "), ("=", " eq ")):
-        s = s.replace(a, b)
-    s = re.sub(r"\\[A-Za-z]+", " ", s)
-    return re.findall(r"[A-Za-z]+|\d+(?:\.\d+)?|[+\-<>]", s.lower())
-
-
-def _found_at(text_tokens: list[str], quote: list[str]) -> list[int]:
-    """Where a quote's tokens sit in the text: contiguous, else in order
-    within a short stretch (a quote may drop an "m" or a word)."""
-    n = len(quote)
-    if not n:
-        return []
-    for i in range(len(text_tokens) - n + 1):
-        if text_tokens[i:i + n] == quote:
-            return list(range(i, i + n))
-    for i in range(len(text_tokens)):
-        if text_tokens[i] != quote[0]:
-            continue
-        hit, j = [i], i + 1
-        for q in quote[1:]:
-            while j < len(text_tokens) and j <= i + 2 * n and text_tokens[j] != q:
-                j += 1
-            if j >= len(text_tokens) or j > i + 2 * n:
-                break
-            hit.append(j)
-            j += 1
-        if len(hit) == n:
-            return hit
-    return []
-
-
-def _clause_gaps(t: str, facts: FigureFacts, methods: list[tuple[int, int]],
-                 questions: list[tuple[int, int]]) -> list[str]:
-    """The structural rule: every clause that names a part or holds a
-    number is accounted for by a fact whose quote lies in it (or is a
-    question, an instruction or a method); a clause that only names the
-    figure ("In △ABC,") needs nothing. And every number the text gives is
-    a number of some fact (or a coordinate code reads)."""
-    from api.core.geometry.figure_check import _plain, _shading_statements, coordinates, linear_expr
-
-    clauses = _clauses(t)
-    # Tokens of the text, each with the clause it sits in.
-    text_tokens: list[str] = []
-    owner: list[int] = []
-    at = 0
-    for ci, (a, b) in enumerate(clauses):
-        between = _tokens(t[at:a])  # the "and" / "if" between clauses: no clause's
-        text_tokens += between
-        owner += [-1] * len(between)
-        toks = _tokens(t[a:b])
-        text_tokens += toks
-        owner += [ci] * len(toks)
-        at = b
-    accounted: set[int] = set()
-    spanning: list[tuple[Fact, set[int]]] = []
-    quoted_in: dict[int, list[Fact]] = {}  # clause → the facts whose quotes reach into it
-    every = [*facts.givens, *facts.prove]
-    for f in every:
-        for q in re.split(r"\s*…\s*|\.\.\.", f.quote or ""):
-            # A quote accounts for the one clause it lies inside: one that
-            # runs over two clauses ("AB = 5 and BC is the longest side" for
-            # AB = 5) can't say which of them its fact states, so it accounts
-            # for neither; one that is only a name ("BC") states nothing.
-            where = {owner[i] for i in _found_at(text_tokens, _tokens(q))}
-            for ci in where - {-1}:
-                quoted_in.setdefault(ci, []).append(f)
-            if len(where) == 1 and -1 not in where and not _only_names(q):
-                accounted |= where
-            elif len(where - {-1}) > 1 and not _only_names(q):
-                spanning.append((f, where - {-1}))
-        if not (f.quote or "").strip():
-            # No quote to place it by: it sits in each shortest run of clauses
-            # (up to three: "AB and CD are parallel" splits at "and") that
-            # writes all of its points; the signal words still need its kind.
-            def written(x: str) -> set[str]:
-                return set(re.findall(r"[A-Z]|(?<=∠)\s*\d+", _plain(x).replace(" ", "")))
-
-            need = written(" ".join([*f.items, f.point or ""]).replace("∠", "")) | {
-                i for i in f.items if i.isdigit()}
-            for ci in range(len(clauses) if need else 0):
-                for cj in range(ci, min(ci + 3, len(clauses))):
-                    if need <= written(t[clauses[ci][0]:clauses[cj][1]]):
-                        accounted |= set(range(ci, cj + 1))
-                        break
-    # A quote over several clauses accounts for the one clause of them that
-    # states its fact's relation: the only one with a word of the fact's kind
-    # that no one-clause quote accounts for ("isosceles" in "In isosceles
-    # △ABC, AB = AC", where "AB = AC" has its own fact). The others need their
-    # own facts ("meeting AB at point M" is not the perpendicular's word).
-    single = set(accounted)
-    for f, where in spanning:
-        stating = [ci for ci in where - single if _states_kind(t[clauses[ci][0]:clauses[ci][1]], f.kind)]
-        if len(stating) == 1:
-            accounted.add(stating[0])
-    # A clause that repeats an accounted one word for word is accounted too.
-    accounted |= {ci for ci, orig in _restated(t, clauses).items() if orig in accounted}
-    skip = methods + questions
-
-    def inside(a: int, b: int) -> bool:
-        return any(x <= a and b <= y + 1 for x, y in skip)
-
-    gaps: list[str] = []
-    points = {p.strip() for p in facts.points} | set(parse_problem_points(t))
-    coord_nums = {v for xy in coordinates(t).values() for v in xy}
-    said_nums: set[float] = set(coord_nums)
-    for f in every:
-        if f.value is not None:
-            said_nums.add(round(float(f.value), 6))
-        for x in re.findall(r"\d+(?:\.\d+)?", " ".join([f.expr or "", *f.items, f.point or ""])):
-            said_nums.add(round(float(x), 6))
-        try:  # "5x/2" says the 2½ of "2\frac{1}{2}x"
-            parsed = linear_expr(f.expr) if f.expr else None
-        except (ValueError, ZeroDivisionError):
-            parsed = None
-        if parsed is not None:
-            said_nums |= {round(abs(parsed[0]), 6), round(abs(parsed[1]), 6)}
-    blanked = list(t)
-    for x, y in skip:  # a method or a question's target says nothing
-        blanked[x:y] = " " * (y - x)
-    # "△ABD is shaded": code's too. Read in the whole text, so a complement
-    # word anywhere in its sentence ("…, except its middle") leaves it a gap.
-    for m in _shading_statements(t):
-        blanked[m.start():m.end()] = " " * (m.end() - m.start())
-    for ci, (a, b) in enumerate(clauses):
-        clause = "".join(blanked[a:b])
-        if inside(a, b):
-            continue
-        body = re.sub(r"[A-Z]\s*\(\s*-?[\d.]+\s*,\s*-?[\d.]+\s*\)", " ", clause)  # coordinates: code's
-        body = re.sub(_LIST_MARK, " ", body)
-        has_name = bool(_names(re.sub(r"\\[A-Za-z]+", " ", body)) & points)
-        has_number = bool(re.search(r"(?<![A-Za-z\d'])\d", re.sub(r"\\angle\s*\{?\s*\d+", " ", body)))
-        if not (has_name or has_number) or ci in accounted:
-            continue
-        if _draws_listed(clause, facts) or (
-                ci and _DRAW_PART.fullmatch(t[clauses[ci - 1][0]:clauses[ci - 1][1]])
-                and re.fullmatch(r"\s*,?\s*(?:and\s*)?", t[clauses[ci - 1][1]:a], re.IGNORECASE)
-                and _draws_listed("draw " + clause.strip(), facts)):
-            # "draw AD", exactly, or the next part of the same instruction ("Draw
-            # ray AB and ray AC"): a part the figure must draw (it is checked drawn).
-            continue
-        rest = _NAMING.sub("", re.sub(r"(?<![A-Za-z\\])(?:[A-Z][0-9]*'*)+(?![a-z])|\\angle\s*\{?\s*\d+\s*\}?",
-                                      "", body))
-        if not rest and not _goes_on_with(t, clauses, ci):
-            continue  # only names the figure
-        if not rest and (said := _names(re.sub(r"\\[A-Za-z]+", " ", body)) & points) and any(
-                said <= _fact_names(f) | {c for x in _fact_names(f) for c in split_names(x)}
-                for f in quoted_in.get(ci, [])):
-            # The end of a statement ("B" in "D is between A and B"): a fact
-            # whose quote says it and that names it states it.
-            continue
-        gaps.append(f"“{_plain(clause).strip()}”")
-    # Every number the text gives is some fact's. A fraction or a mixed
-    # number (\frac12, 4\frac{1}{2}, 4 1/2) is one number.
-    marks = [m.span() for m in re.finditer(_LIST_MARK, t)]
-    for rx in _FRACTIONS:
-        marks += [m.span() for m in rx.finditer(t) if _fraction_value(m) in said_nums]
-    for m in re.finditer(r"(?<![A-Za-z\d.'_])(\d+(?:\.\d+)?)", t):
-        if inside(m.start(), m.end()) or any(a <= m.start() < b for a, b in marks):
-            continue
-        if re.search(r"\\angle\s*\{?\s*$", t[max(0, m.start() - 12):m.start()]):
-            continue  # ∠1 is a name
-        if round(float(m.group(1)), 6) not in said_nums:
-            gaps.append(f"the number {m.group(1)}")
-    return gaps
-
-
 # \frac{1}{2}, \frac12, 4\frac{1}{2} (cleaned text), and 4 1/2.
 _FRACTIONS = (
     re.compile(r"(?:(?<![\d.])(?P<whole>\d+)\s*)?\\[dt]?frac\s*(?:\{\s*(?P<num>\d+)\s*\}\s*\{\s*(?P<den>\d+)\s*\}"
@@ -1186,15 +741,6 @@ def _fraction_value(m: re.Match[str]) -> float | None:
     if not num or not den or not float(den):
         return None
     return round(float(g.get("whole") or 0) + float(num) / float(den), 6)
-
-
-def _only_names(q: str) -> bool:
-    """A quote that is only names ("BC", "∠1", "△ABC") states nothing."""
-    from api.core.geometry.figure_check import _clean
-
-    rest = re.sub(r"\\(?:triangle|angle|overline|overrightarrow|overleftrightarrow)\b|[∠△]|\bm(?=\s*(?:∠|\\angle))",
-                  " ", _clean(q))
-    return bool(_ONLY_NAMES.match(rest))
 
 
 def invented_points(facts: FigureFacts, text: str) -> list[str]:
@@ -1508,12 +1054,12 @@ def _said_by(f: Fact, covering: list[Fact], facts: FigureFacts) -> bool:
     names = set().union(*(_fact_names(g) for g in covering))
     if not _names(_plain_quote(f.quote)) <= names | {line_key(x) for x in names}:
         return False
-    rest = _plain_quote(f.quote)
-    kinds = {g.kind for g in covering}
-    for pattern, signal_kinds, _infix in _SIGNALS:
-        if kinds & set(signal_kinds):
-            rest = re.sub(pattern, " ", rest, flags=re.I)
-    rest = re.sub(r"(?<![A-Za-z])(?:[A-Z][0-9]*'*)+(?![a-z])", " ", rest)
+    from api.core.geometry.coverage import INERT_WORDS, VOCAB, tokens
+    from api.core.geometry.figure_check import _clean
+
+    vocab = set().union(*(VOCAB.get(g.kind, frozenset()) for g in covering))
+    rest = " ".join(k.norm for k in tokens(_clean(f.quote or ""))
+                    if k.kind in ("word", "sym", "num", "var") and k.norm not in vocab and k.norm not in INERT_WORDS)
     return not _FILLER.sub("", rest)
 
 

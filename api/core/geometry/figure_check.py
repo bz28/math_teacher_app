@@ -143,24 +143,7 @@ def _shading_statements(text: str) -> list[re.Match[str]]:
     return [m for pattern in (
         rf"\bshad(?:e|ed|es|ing)\s+(?:the\s+|a\s+)?(?P<side>(?:major|minor)\s+)?(?P<w>{_REGION_WORD})?{names}",
         rf"(?P<side>\b(?:major|minor)\s+)?(?P<w>{_REGION_WORD}){names}\s+(?:is|are)\s+shaded",
-    ) for m in re.finditer(pattern, text, re.IGNORECASE)
-        if not _COMPLEMENT.search(_sentence_of(text, m.start(), m.end()))]
-
-
-# "Everything except sector AOB is shaded", "△ABC is shaded, except its
-# middle", "shade △ABC, leaving out …": the shading is not (only) the region
-# named. Such a word anywhere in the sentence, before or after, leaves the
-# words for a reading (and they can't be checked).
-_COMPLEMENT = re.compile(
-    r"\b(?:except|but|not|outside|other\s+than|besides|excluding|apart\s+from|without|minus|"
-    r"leav(?:e|es|ing)\s+out|left\s+out|omit(?:s|ted|ting)?|exclud(?:e|es|ed))\b", re.IGNORECASE)
-
-
-def _sentence_of(text: str, start: int, end: int) -> str:
-    """The whole sentence holding text[start:end]."""
-    a = max((text.rfind(ch, 0, start) for ch in ".;?!\n"), default=-1)
-    ends = [j for j in (text.find(ch, end) for ch in ".;?!\n") if j != -1]
-    return text[a + 1:min(ends) if ends else len(text)]
+    ) for m in re.finditer(pattern, text, re.IGNORECASE)]
 
 
 def figure_words(text: str) -> set[str]:
