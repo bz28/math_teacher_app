@@ -3130,17 +3130,15 @@ table.dt tr:last-child td { border-bottom: none; }
   flex-direction: column;
   gap: 10px;
 }
-.xq-shot img,
-.xq-shot canvas {
+.xq-shot img {
   display: block;
   width: 100%;
   height: auto;
   border: 1px solid var(--rule);
   background: var(--paper-2);
 }
-/* A scanned PDF: every page stacked, spaced like consecutive photos. */
-.xq-pdf,
-.xq-pdf-pages {
+/* A scanned PDF: the viewer and its open link, spaced like consecutive photos. */
+.xq-pdf {
   display: flex;
   flex-direction: column;
   gap: 10px;
