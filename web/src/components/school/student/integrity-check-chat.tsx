@@ -85,8 +85,10 @@ const STUCK_USED_HINT = "Give it a try in your own words — even a guess helps.
  * On mount we hydrate the full transcript from the server (so a kid
  * who closes the tab mid-conversation comes back right where they
  * left off). On send, we append an optimistic student turn, POST to
- * /turn, and replace local state with the server response — which
- * includes both the student turn (canonical) and the agent's reply.
+ * /turn/stream, show the agent's words as they're written, and then
+ * replace local state (streamed text included) with the server's final
+ * response — which includes both the student turn (canonical) and the
+ * agent's reply.
  *
  * No visible turn counter. A thin progress bar at the top reflects
  * how many sampled problems have been verdicted.
@@ -101,6 +103,10 @@ export function IntegrityCheckChat({
   const [state, setState] = useState<IntegrityStateResponse | null>(null);
   const [pendingStudentMessage, setPendingStudentMessage] =
     useState<string | null>(null);
+  // Agent text streamed in while a reply is being answered, one entry
+  // per agent message. A preview only: the final response replaces it,
+  // and a failed send drops it.
+  const [streamedBubbles, setStreamedBubbles] = useState<string[]>([]);
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -177,7 +183,7 @@ export function IntegrityCheckChat({
     if (el && atBottomRef.current) {
       el.scrollTop = el.scrollHeight;
     }
-  }, [state?.transcript.length, pendingStudentMessage]);
+  }, [state?.transcript.length, pendingStudentMessage, streamedBubbles]);
 
   // Track whether the student is near the bottom (within ~120px). Read
   // by the auto-scroll effect above. Threshold is generous so normal
@@ -276,24 +282,47 @@ export function IntegrityCheckChat({
     if (!stuck) setMessage("");
     setSending(true);
     setError(null);
+    setStreamedBubbles([]);
+    // Bubble numbers are the server's loop iterations; a reply's
+    // messages can skip some (an iteration with no text), so map each
+    // number to its place in order of arrival.
+    const bubbleSlots = new Map<number, number>();
+    const onText = (bubble: number, text: string) => {
+      let slot = bubbleSlots.get(bubble);
+      if (slot === undefined) {
+        slot = bubbleSlots.size;
+        bubbleSlots.set(bubble, slot);
+      }
+      const at = slot;
+      setStreamedBubbles((prev) => {
+        const next = [...prev];
+        next[at] = (next[at] ?? "") + text;
+        return next;
+      });
+    };
     try {
       const seconds = Math.max(
         0,
         Math.round((Date.now() - turnStartedAt) / 1000),
       );
       const telemetryPayload = telemetry.snapshot();
-      const next = await schoolStudent.postIntegrityTurn(submissionId, {
-        message: stuck ? "" : trimmed,
-        stuck,
-        seconds_on_turn: seconds,
-        telemetry: telemetryPayload,
-      });
+      const next = await schoolStudent.streamIntegrityTurn(
+        submissionId,
+        {
+          message: stuck ? "" : trimmed,
+          stuck,
+          seconds_on_turn: seconds,
+          telemetry: telemetryPayload,
+        },
+        onText,
+      );
       // Only reset telemetry after the turn is persisted on the
       // server; a failed POST keeps the signals intact for retry.
       telemetry.reset();
       if (shouldOpenOwnWordsNudge(state, next)) setOwnWordsOpen(true);
       setState(next);
       setPendingStudentMessage(null);
+      setStreamedBubbles([]);
       setTurnStartedAt(Date.now());
       // The agent's reply counts as "fresh activity" — resetting
       // here stops the inactivity nudge from firing immediately on
@@ -309,6 +338,7 @@ export function IntegrityCheckChat({
           : "Couldn't send that — try again.",
       );
       setPendingStudentMessage(null);
+      setStreamedBubbles([]);
       // Hand a typed draft back; a stuck tap has no draft to restore.
       if (!stuck) setMessage(trimmed);
       // The server said no (tap spent in another tab, the check closed:
@@ -540,6 +570,20 @@ export function IntegrityCheckChat({
             )}
             {visibleTranscript.map((t) => (
               <TurnBubble key={`${t.ordinal}-${t.role}`} turn={t} />
+            ))}
+            {/* The agent's reply as it's being written. Same bubble as
+                the saved message it becomes, so nothing shifts when the
+                final response replaces it. */}
+            {streamedBubbles.map((text, i) => (
+              <TurnBubble
+                key={`streamed-${i}`}
+                turn={{
+                  ordinal: visibleTranscript.length + i,
+                  role: "agent",
+                  content: text.trim(),
+                  created_at: "",
+                }}
+              />
             ))}
             {/* Animated "AI is thinking" indicator shown while we're
                 waiting on the /turn round-trip. Appears right after the
