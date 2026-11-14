@@ -527,34 +527,23 @@ def digit_scripts(text: str) -> str:
     return _SCRIPT.sub(_script, text)
 
 
-# One spacing rule for every label, after all conversions: these symbols
-# sit tight against what they join ("2·x", "2πr", "(3x+14)°", "∠ABC",
-# "a₁"); + − = < > get one space on each side when the label spaces them
-# at all ("3 + 4", "a₁ + a₂"), and none when it doesn't ("3x+14"); a sign
-# ("-5", "= -5", "3·-x") sits against its number; runs of spaces become
-# one.
-_TIGHT = "·×√π°∠△" + SUBSCRIPTS + SUPERSCRIPTS
-_TIGHT_NEIGHBOUR = rf"[\w()\[\].{_TIGHT}]"
-# · × √ ∠ △ still want their operand, so whatever follows, a sign
-# included, sits against them: "3·-x".
-_WANTS_OPERAND = "·×√∠△"
-_OPERATORS = "+−=<>-"  # "-" last: literal in a character class
-# What can end an operand, so the + − = < > after it is an operator, not
-# a sign. Not · × √ ∠ △: a "-" after them is a sign ("3·-x" is 3 times -x).
-_OPERAND_END = rf"[\w)\]π°{SUBSCRIPTS}{SUPERSCRIPTS}]"
+# One spacing rule for every label, after all conversions. It only tidies
+# around symbols that are never signs, so it never changes what a label
+# means: a space next to · × √ π ° ∠ △ ≅ or a script character goes
+# ("2·x", "2πr", "(3x + 14)°", "∠ABC", "a₁"), unless what is on its other
+# side is + − = < > (so "2π + 1" and "x = π" keep both spaces). After
+# · × √ ∠ △ ≅ the operand follows, so the space goes even then ("3·-x").
+# + − = < > themselves keep exactly the spacing the source wrote; runs of
+# spaces become one.
+_TIGHT = "·×√π°∠△≅" + SUBSCRIPTS + SUPERSCRIPTS
+_WANTS_OPERAND = "·×√∠△≅"
+_RELATION = "+−=<>≤≥≠±-"  # "-" last: literal in a character class
 
 
 def _label_spacing(text: str) -> str:
     out = " ".join(text.split())
     out = re.sub(rf"(?<=[{_WANTS_OPERAND}]) ", "", out)
-    out = re.sub(rf"(?<=[{_TIGHT}]) (?={_TIGHT_NEIGHBOUR})|(?<={_TIGHT_NEIGHBOUR}) (?=[{_TIGHT}])", "", out)
-    out = re.sub(
-        rf"(?<={_OPERAND_END})( ?)([{_OPERATORS}])( ?)(?=\S)",
-        lambda m: f" {m.group(2)} " if m.group(1) or m.group(3) else m.group(2),
-        out,
-    )
-    # A sign sits against its number: "- 5" after "=" or "·" is "-5".
-    return re.sub(rf"(?<!{_OPERAND_END})(?<!{_OPERAND_END} )([+−-]) (?=\S)", r"\1", out)
+    return re.sub(rf"(?<=[{_TIGHT}]) (?![{_RELATION}])|(?<![{_RELATION}]) (?=[{_TIGHT}])", "", out)
 
 
 def plain_label(text: str) -> str:
