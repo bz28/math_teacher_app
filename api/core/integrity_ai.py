@@ -46,6 +46,7 @@ from api.core.llm_schemas import (
     INTEGRITY_SUBMIT_VERDICT_SCHEMA,
     VISUAL_WORK_VERIFY_SCHEMA,
 )
+from api.core.page_crop import crop_page_to_paper
 from api.models.assignment import Submission
 
 logger = logging.getLogger(__name__)
@@ -266,8 +267,11 @@ async def extract_student_work_from_pages(
         raw = f.get("data", "")
         recorded_media = f.get("media_type", "image/jpeg")
         base64_data, media_type = _strip_data_url_prefix(raw, recorded_media)
-        # EXIF-orient + downscale phone photos before Vision sees them.
-        parts = [(preprocess_image_for_vision(base64_data, media_type), media_type)]
+        # A photo is cut to its sheet of paper and turned upright when
+        # that is certain (`crop_page_to_paper`, CPU work: off the loop),
+        # then EXIF-oriented and downscaled for Vision.
+        page = await asyncio.to_thread(crop_page_to_paper, base64_data, media_type)
+        parts = [(preprocess_image_for_vision(page, media_type), media_type)]
         if media_type == "application/pdf":
             # Sent as a document, a PDF page is rasterized by the API at a
             # fixed ~1.2 MP, so a photo printed to PDF reached the reader
@@ -462,6 +466,9 @@ async def _verify_one(
     f = files[page - 1]
     raw = f.get("data", "")
     base64_data, media_type = _strip_data_url_prefix(raw, f.get("media_type", "image/jpeg"))
+    # The box is a fraction of the page the reader saw: the photo cut to
+    # its paper (deterministic, so this is the same cut).
+    base64_data = await asyncio.to_thread(crop_page_to_paper, base64_data, media_type)
     # The model's boxes are rough — off by a tenth of the page is
     # normal. A crop that shows no drawing gets one wider retry
     # before we believe it.

@@ -36,6 +36,7 @@ from api.core.graph_checklist import current_checklist, stored_items
 from api.core.homework_points import weighted_percent
 from api.core.image_utils import page_looks_sideways, pdf_pages_as_images
 from api.core.integrity_ai import _strip_data_url_prefix
+from api.core.page_crop import crop_page_to_paper
 from api.models.question_bank import QuestionBankItem
 
 logger = logging.getLogger(__name__)
@@ -119,15 +120,17 @@ Image = tuple[str, str]
 def page_images(files: list[dict[str, Any]]) -> list[list[Image]]:
     """The images of each uploaded file, in the reader's page order: the
     reader numbers files, so `page_index` N is file N. A photo is one
-    image; a PDF is one image per page (the reader saw all of them under
-    one page number); anything else has none."""
+    image, cut to its paper as the reader saw it (`crop_page_to_paper`),
+    so the reader's drawing boxes land where it put them; a PDF is one
+    image per page (the reader saw all of them under one page number);
+    anything else has none."""
     out: list[list[Image]] = []
     for f in files:
         data, media_type = _strip_data_url_prefix(f.get("data", ""), f.get("media_type", "image/jpeg"))
         if media_type == "application/pdf":
             out.append([(page, "image/jpeg") for page in pdf_pages_as_images(data)])
         elif media_type.startswith("image/"):
-            out.append([(data, media_type)])
+            out.append([(crop_page_to_paper(data, media_type), media_type)])
         else:
             out.append([])
     return out
