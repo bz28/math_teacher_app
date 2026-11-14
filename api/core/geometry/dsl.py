@@ -485,14 +485,39 @@ class PolygonFigure(BaseModel):
 _POINT_NAME = re.compile(r"_[a-z0-9]+|[A-Z][0-9]*'*")
 # A label is plain text in the drawing: math markup in it ("$(3x+14)°$",
 # "$x^\\circ$") would be printed as it is. The few symbols labels use are
-# turned into their characters; anything else in markup is refused.
+# turned into their characters; anything else in markup is refused. Each
+# command ends at a non-letter, so "\cdots" or "\triangleq" is refused,
+# not read as "\cdot" + "s".
+_END = r"(?![A-Za-z])"
 _LABEL_SYMBOLS = [
-    (re.compile(r"\^\s*\{?\s*\\circ\s*\}?|\\circ|\\degree"), "°"),
-    (re.compile(r"\\cdot"), "·"), (re.compile(r"\\times"), "×"), (re.compile(r"\\pi"), "π"),
-    (re.compile(r"\\angle\s*"), "∠"), (re.compile(r"\\triangle\s*"), "△"), (re.compile(r"\\cong"), "≅"),
-    (re.compile(r"\\sqrt\s*\{([^{}]*)\}"), r"√\1"), (re.compile(r"\\(?:left|right)\b"), ""),
+    (re.compile(rf"\^\s*\{{?\s*\\circ{_END}\s*\}}?|\\circ{_END}|\\degree{_END}"), "°"),
+    (re.compile(rf"\\cdot{_END}"), "·"), (re.compile(rf"\\times{_END}"), "×"), (re.compile(rf"\\pi{_END}"), "π"),
+    (re.compile(rf"\\angle{_END}\s*"), "∠"), (re.compile(rf"\\triangle{_END}\s*"), "△"),
+    (re.compile(rf"\\cong{_END}"), "≅"),
+    (re.compile(rf"\\sqrt{_END}\s*\{{([^{{}}]*)\}}"), r"√\1"), (re.compile(rf"\\(?:left|right){_END}"), ""),
     (re.compile(r"\\[,;! ]"), " "),
 ]
+# One rule for "_" and "^": digits become their subscript or superscript
+# characters ("a_1" and "a_{1}" are both "a₁", "x^2" and "x^{2}" both
+# "x²"); anything else after "_" or "^" is refused.
+SUBSCRIPTS = "₀₁₂₃₄₅₆₇₈₉"
+SUPERSCRIPTS = "⁰¹²³⁴⁵⁶⁷⁸⁹"
+_SCRIPT = re.compile(r"([_^])\s*(?:\{\s*(\d+)\s*\}|(\d+))")
+
+
+def _script(m: re.Match[str]) -> str:
+    chars = SUBSCRIPTS if m.group(1) == "_" else SUPERSCRIPTS
+    return "".join(chars[int(c)] for c in m.group(2) or m.group(3))
+
+
+def tex_scripts(text: str) -> str:
+    """Undo `plain_label`'s scripts for comparing with the problem's TeX:
+    "a₁" is "a_1", "x²" is "x^2"."""
+    def back(m: re.Match[str]) -> str:
+        sub = m.group(0)[0] in SUBSCRIPTS
+        return ("_" if sub else "^") + "".join(str((SUBSCRIPTS if sub else SUPERSCRIPTS).index(c)) for c in m.group(0))
+
+    return re.sub(f"[{SUBSCRIPTS}]+|[{SUPERSCRIPTS}]+", back, text)
 
 
 def plain_label(text: str) -> str:
@@ -501,10 +526,13 @@ def plain_label(text: str) -> str:
     out = text.replace("$", "")
     for pattern, repl in _LABEL_SYMBOLS:
         out = pattern.sub(repl, out)
+    out = _SCRIPT.sub(_script, out)
     out = " ".join(out.split())
-    if "\\" in out or "{" in out or "}" in out:
+    if any(c in out for c in "\\{}_^"):
         raise ValueError(f"the label {text!r} is math markup that can't be shown as plain text")
     return out
+
+
 _MAX_POINTS = 40
 _MAX_PIECES = 60
 

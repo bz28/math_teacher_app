@@ -219,6 +219,9 @@ def _named_points(text: str) -> set[str]:
     return names
 
 
+_BASE_UNREADABLE = "the question's figure can't be read, so the step's figure can't be checked against it"
+
+
 def _is_construction(spec: Any) -> bool:
     return isinstance(spec, dict) and spec.get("shape") == "construction"
 
@@ -279,7 +282,10 @@ def _check_figure(
             try:
                 base_fig = ConstructionFigure.model_validate(base)
             except ValidationError:
-                base_fig = None
+                # Fail closed: without the question's figure the step's
+                # can't be checked against it (a stored figure whose labels
+                # a later rule refuses, say), so the step's is refused.
+                return None, None, [_BASE_UNREADABLE]
         try:
             issues = [
                 i.message for i in check_construction(
