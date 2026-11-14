@@ -98,7 +98,7 @@ class Backend(Protocol):
     def put(self, key: str, body: bytes, media_type: str) -> None: ...
     def get(self, key: str) -> bytes: ...
     def size(self, key: str) -> int | None: ...
-    def delete(self, key: str) -> None: ...
+    def delete_many(self, keys: list[str]) -> list[str]: ...
     def url(self, key: str, expires_in: int) -> str: ...
 
 
@@ -159,8 +159,15 @@ class S3Backend:
             raise
         return int(head["ContentLength"])
 
-    def delete(self, key: str) -> None:
-        self._client.delete_object(Bucket=self.bucket, Key=key)
+    def delete_many(self, keys: list[str]) -> list[str]:
+        """One DeleteObjects call for up to `DELETE_BATCH` keys; returns
+        the keys the store reported it couldn't delete. A key that was
+        already gone counts as deleted."""
+        out = self._client.delete_objects(
+            Bucket=self.bucket,
+            Delete={"Objects": [{"Key": k} for k in keys], "Quiet": True},
+        )
+        return [str(e.get("Key")) for e in out.get("Errors", [])]
 
     def url(self, key: str, expires_in: int) -> str:
         url: str = self._client.generate_presigned_url(
@@ -197,8 +204,10 @@ class LocalBackend:
         path = self.path(key)
         return path.stat().st_size if path.exists() else None
 
-    def delete(self, key: str) -> None:
-        self.path(key).unlink(missing_ok=True)
+    def delete_many(self, keys: list[str]) -> list[str]:
+        for key in keys:
+            self.path(key).unlink(missing_ok=True)
+        return []
 
     def signature(self, key: str, expires: int) -> str:
         return hmac.new(self._secret, f"{key}:{expires}".encode(), hashlib.sha256).hexdigest()
@@ -328,44 +337,43 @@ def pages_out(entries: list[dict[str, Any]] | None) -> list[dict[str, Any]] | No
     return None if entries is None else [page_out(e) for e in entries]
 
 
-# Deletes in flight at once: a course's worth of pages goes in seconds
-# without taking every worker thread.
-_DELETE_CONCURRENCY = 16
+# Keys per DeleteObjects call — the S3 maximum. A course's worth of pages
+# is a few calls, one worker thread at a time.
+DELETE_BATCH = 1000
 
 
 async def delete_pages(entries: list[dict[str, Any]]) -> None:
     """Best-effort removal of pages: ones a failed request uploaded, or
     the pages of submissions whose delete has COMMITTED. Never raises — a
-    page that won't delete is logged by key (never a URL), and the request
-    that removed its row still succeeds. INLINE entries have nothing to
-    remove."""
-    keys = [entry["key"] for entry in entries if "key" in entry]
-    if not keys:
-        return
-    gate = asyncio.Semaphore(_DELETE_CONCURRENCY)
-
-    async def delete(key: str) -> None:
-        async with gate:
-            try:
-                await asyncio.to_thread(backend().delete, key)
-            except Exception:  # noqa: BLE001 — an orphaned object is harmless; the error isn't the caller's
-                logger.warning("couldn't delete photo object %s", key)
-
-    await asyncio.gather(*(delete(k) for k in keys))
+    page that won't delete is logged by key (never a URL or credential),
+    and the request that removed its row still succeeds. INLINE entries
+    have nothing to remove."""
+    keys = list(dict.fromkeys(entry["key"] for entry in entries if "key" in entry))
+    for i in range(0, len(keys), DELETE_BATCH):
+        batch = keys[i:i + DELETE_BATCH]
+        try:
+            failed = await asyncio.to_thread(backend().delete_many, batch)
+            cause = "refused by the store"
+        except Exception as e:  # noqa: BLE001 — an orphaned object is harmless; the error isn't the caller's
+            failed, cause = batch, type(e).__name__
+        if failed:
+            logger.warning(
+                "couldn't delete %d photo object(s) (%s): %s", len(failed), cause, ", ".join(failed),
+            )
 
 
 # Every bucket key in the given submissions' `files` and their earlier
 # attempts' — read out in SQL, so a course still holding inline (pre-
 # backfill) pages isn't loaded into memory to find none.
 _KEYS_SQL = text("""
-    SELECT e ->> 'key' FROM (
+    SELECT DISTINCT e ->> 'key' FROM (
         SELECT files FROM submissions WHERE id = ANY(:ids)
         UNION ALL
         SELECT files FROM submission_attempts WHERE submission_id = ANY(:ids)
     ) AS f, jsonb_array_elements(
         CASE WHEN json_typeof(f.files) = 'array' THEN f.files::jsonb ELSE '[]'::jsonb END
     ) AS e
-    WHERE e ? 'key'
+    WHERE jsonb_typeof(e -> 'key') = 'string'
 """)
 
 

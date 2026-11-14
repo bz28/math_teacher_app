@@ -10,17 +10,19 @@ rows. Run on `LocalBackend`, where a page is a file under `root`.
 
 from __future__ import annotations
 
+import json
 import uuid
-from collections.abc import Iterator
+from collections.abc import Awaitable, Callable, Iterator
 from pathlib import Path
 from typing import Any
 
 import pytest
-from httpx import AsyncClient
+from httpx import AsyncClient, Response
 from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core import photo_store
+from api.core.auth import create_access_token
 from api.database import get_session_factory
 from api.models.assignment import Assignment, AssignmentSection, Submission
 from api.models.course import CourseTeacher
@@ -105,79 +107,71 @@ async def _submissions_left(world: dict[str, Any]) -> int:
         )).all())
 
 
-async def test_deleting_a_student_account_deletes_their_photos(
-    client: AsyncClient, world: dict[str, Any], local: Path,
-) -> None:
-    keys = await _turn_in_with_a_retake(client, world)
-    other = await _unrelated_page()
-    assert _pages_on_disk(local) == keys | {other}
-
-    r = await client.request(
-        "DELETE", "/v1/auth/account", headers=_auth(world["student_token"]), json={"password": "x"},
-    )
-    assert r.status_code == 204, r.text
-    assert await _submissions_left(world) == 0
-    assert _pages_on_disk(local) == {other}
-
-
-async def test_deleting_a_course_deletes_its_photos(
-    client: AsyncClient, world: dict[str, Any], local: Path,
-) -> None:
-    await _turn_in_with_a_retake(client, world)
-    other = await _unrelated_page()
-    course_id, _ = await _course_and_section(world)
-
-    r = await client.delete(f"/v1/teacher/courses/{course_id}", headers=_auth(world["teacher_token"]))
-    assert r.status_code == 200, r.text
-    assert await _submissions_left(world) == 0
-    assert _pages_on_disk(local) == {other}
-
-
-async def test_deleting_a_section_deletes_its_photos(
-    client: AsyncClient, world: dict[str, Any], local: Path,
-) -> None:
-    await _turn_in_with_a_retake(client, world)
-    other = await _unrelated_page()
+async def _prepare_delete(
+    client: AsyncClient, world: dict[str, Any], path: str,
+) -> Callable[[], Awaitable[Response]]:
+    """Set up one of the paths that cascade to the world's submission (a
+    course seat, a draft, an admin — committed for real), and return the
+    request that deletes it."""
     course_id, section_id = await _course_and_section(world)
-
-    r = await client.delete(
-        f"/v1/teacher/courses/{course_id}/sections/{section_id}", headers=_auth(world["teacher_token"]),
-    )
-    assert r.status_code == 200, r.text
-    assert await _submissions_left(world) == 0
-    assert _pages_on_disk(local) == {other}
-
-
-async def test_deleting_an_assignment_deletes_its_photos(
-    client: AsyncClient, world: dict[str, Any], local: Path,
-) -> None:
-    await _turn_in_with_a_retake(client, world)
-    other = await _unrelated_page()
+    teacher = _auth(world["teacher_token"])
+    if path == "account":
+        return lambda: client.request(
+            "DELETE", "/v1/auth/account", headers=_auth(world["student_token"]), json={"password": "x"},
+        )
+    if path == "admin":
+        async with get_session_factory()() as s:
+            admin = User(email=f"a_{uuid.uuid4().hex[:8]}@t.com", password_hash="x", role="admin", grade_level=99)
+            s.add(admin)
+            await s.commit()
+            admin_auth = _auth(create_access_token(str(admin.id), "admin"))
+        return lambda: client.delete(f"/v1/admin/users/{world['student_id']}", headers=admin_auth)
+    if path == "course":
+        return lambda: client.delete(f"/v1/teacher/courses/{course_id}", headers=teacher)
+    if path == "section":
+        return lambda: client.delete(f"/v1/teacher/courses/{course_id}/sections/{section_id}", headers=teacher)
+    assert path == "assignment"
     # Only an unpublished assignment can be deleted.
     async with get_session_factory()() as s:
         await s.execute(update(Assignment).where(Assignment.id == world["assignment_id"]).values(status="draft"))
         await s.commit()
+    return lambda: client.delete(f"/v1/teacher/assignments/{world['assignment_id']}", headers=teacher)
 
-    r = await client.delete(f"/v1/teacher/assignments/{world['assignment_id']}", headers=_auth(world["teacher_token"]))
-    assert r.status_code == 200, r.text
+
+PATHS = ["account", "admin", "course", "section", "assignment"]
+
+
+@pytest.mark.parametrize("path", PATHS)
+async def test_deleting_submissions_deletes_their_photos(
+    client: AsyncClient, world: dict[str, Any], local: Path, path: str,
+) -> None:
+    keys = await _turn_in_with_a_retake(client, world)
+    other = await _unrelated_page()
+    assert _pages_on_disk(local) == keys | {other}
+    delete = await _prepare_delete(client, world, path)
+
+    r = await delete()
+    assert r.status_code in (200, 204), r.text
     assert await _submissions_left(world) == 0
     assert _pages_on_disk(local) == {other}
 
 
+@pytest.mark.parametrize("path", PATHS)
 async def test_a_delete_that_rolls_back_keeps_the_photos(
-    client: AsyncClient, world: dict[str, Any], local: Path, monkeypatch: pytest.MonkeyPatch,
+    client: AsyncClient, world: dict[str, Any], local: Path, monkeypatch: pytest.MonkeyPatch, path: str,
 ) -> None:
+    """Fails each path's commit: the rows stay, so the photos must too —
+    a regression that deleted objects before the commit fails here."""
     keys = await _turn_in_with_a_retake(client, world)
-    course_id, _ = await _course_and_section(world)
+    delete = await _prepare_delete(client, world, path)
 
     async def failing_commit(self: AsyncSession) -> None:
         raise RuntimeError("database went away mid-commit")
 
     monkeypatch.setattr(AsyncSession, "commit", failing_commit)
-    r = await client.delete(f"/v1/teacher/courses/{course_id}", headers=_auth(world["teacher_token"]))
+    r = await delete()
     monkeypatch.undo()
     assert r.status_code == 500
-
     assert await _submissions_left(world) == 1
     assert _pages_on_disk(local) == keys
 
@@ -239,9 +233,48 @@ async def test_a_page_that_wont_delete_is_logged_not_raised(
 ) -> None:
     store = photo_store.backend()
 
-    def broken_delete(key: str) -> None:
+    def broken_delete(keys: list[str]) -> list[str]:
         raise ConnectionError("bucket unreachable")
 
-    monkeypatch.setattr(store, "delete", broken_delete)
+    monkeypatch.setattr(store, "delete_many", broken_delete)
     await photo_store.delete_pages([{"key": "submissions/x/a.png"}, {"key": "submissions/x/b.png"}])
-    assert sum("couldn't delete photo object" in r.message for r in caplog.records) == 2
+    [record] = [r for r in caplog.records if "couldn't delete" in r.message]
+    assert "2 photo object(s) (ConnectionError)" in record.message
+    assert "submissions/x/a.png, submissions/x/b.png" in record.message
+
+
+async def test_page_keys_are_read_from_every_shape_of_row(world: dict[str, Any], local: Path) -> None:
+    """`pages_of_submissions` reads keys out in SQL: inline pages, JSON
+    null, a non-list, and malformed entries yield nothing; a key listed
+    twice comes back once."""
+    rows: list[Any] = [
+        [{"key": "submissions/a/1.png", "media_type": "image/png"}, {"data": PAGE_PNG, "media_type": "image/png"}],
+        [{"key": "submissions/a/1.png"}, {"key": None}, "key", {"key": 7}],
+        None,
+        {"key": "submissions/a/not-a-list.png"},
+        [{"data": PAGE_PNG}],
+    ]
+    async with get_session_factory()() as s:
+        ids = []
+        for i, files in enumerate(rows):
+            sid = uuid.uuid4()
+            await s.execute(text(
+                "INSERT INTO submissions "
+                "(id, assignment_id, student_id, section_id, status, files, submitted_at, is_late) "
+                "SELECT :id, a.assignment_id, :student, a.section_id, 'submitted', CAST(:files AS json), now(), false "
+                "FROM assignment_sections a WHERE a.assignment_id = :assignment"
+            ), {
+                "id": sid, "student": world["student_id"] if i == 0 else await _another_student(s),
+                "files": None if files is None else json.dumps(files), "assignment": world["assignment_id"],
+            })
+            ids.append(sid)
+        pages = await photo_store.pages_of_submissions(s, Submission.id.in_(ids))
+        await s.rollback()
+    assert pages == [{"key": "submissions/a/1.png"}]
+
+
+async def _another_student(s: AsyncSession) -> uuid.UUID:
+    student = User(email=f"s_{uuid.uuid4().hex[:8]}@t.com", password_hash="x", role="student", grade_level=8)
+    s.add(student)
+    await s.flush()
+    return student.id
