@@ -11067,7 +11067,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Server-sent events. `delta` {bubble, text}: agent text as it's written, appended to bubble `bubble` (one per agent message). Then exactly one of `done` (the IntegrityStateResponse /turn returns — the authoritative result, which replaces the streamed bubbles) or `error` {status, detail} (the status and detail /turn would have answered with). */
+            /** @description Server-sent events. `delta` {bubble, text}: agent text as it's written, appended to bubble `bubble` (one per agent message). Then exactly one of `done` (the IntegrityStateResponse /turn returns — the authoritative result, which replaces the streamed bubbles) or `error` {status, detail} (the status and detail /turn would have answered with). While nothing else is being sent, a `: ping` comment goes out every few seconds, so a client can time out on silence rather than on total duration. */
             200: {
                 headers: {
                     [name: string]: unknown;

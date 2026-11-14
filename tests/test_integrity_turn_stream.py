@@ -17,6 +17,7 @@ model outputs.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 from unittest.mock import patch
@@ -24,6 +25,7 @@ from unittest.mock import patch
 from httpx import AsyncClient
 from sqlalchemy import func, select
 
+from api.core import integrity_pipeline
 from api.database import get_session_factory
 from api.models.integrity_check import (
     IntegrityCheckSubmission,
@@ -374,3 +376,37 @@ async def test_refused_reply_gets_a_plain_http_error(
         json={"message": "Long enough message"},
     )
     assert r.status_code == 404
+
+
+async def test_a_quiet_stretch_sends_heartbeats_and_the_turn_still_lands(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """While the loop has nothing to stream (here: slow model calls, the
+    first tool-only), the stream sends `: ping` comments so the web
+    client's inactivity timeout never fires on a long but healthy turn —
+    and the result is unchanged."""
+    set_agent_script([[make_text("Opener.")]])
+    submission_id = (await _submit(client, world)).json()["submission_id"]
+    problem_id = await _only_problem_id(submission_id)
+
+    reply = "Good — and why did you divide by 2 there?"
+    set_agent_script([[_verdict(problem_id, "uv1")], [make_text(reply)]])
+    real_agent = integrity_pipeline.run_agent_turn
+
+    async def slow_agent(*args: Any, **kwargs: Any) -> Any:
+        await asyncio.sleep(0.3)
+        return await real_agent(*args, **kwargs)
+
+    with (
+        patch("api.routes.integrity_check.STREAM_HEARTBEAT_SECONDS", 0.05),
+        patch("api.core.integrity_pipeline.run_agent_turn", side_effect=slow_agent),
+    ):
+        bubbles, events, r = await _stream_turn(
+            client, world, submission_id, {"message": "I split it into two parts."},
+        )
+    assert r.text.count(": ping\n\n") >= 3
+    # Pings are comments: they never surface as events.
+    assert {name for name, _ in events} <= {"delta", "done"}
+    done = await _assert_done_is_authoritative(client, world, submission_id, events)
+    assert _agent_after_last_student(done) == [reply]
+    assert bubbles == [reply]

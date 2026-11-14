@@ -763,6 +763,12 @@ async def drain_streamed_turns(timeout: float = 30.0) -> None:
         await asyncio.wait(set(_STREAMED_TURNS), timeout=timeout)
 
 
+# How often a streamed turn sends a `: ping` comment while it has nothing
+# else to send. Well under the web client's 15s inactivity timeout, so a
+# long but healthy turn (six model calls, tool handling) never trips it.
+STREAM_HEARTBEAT_SECONDS = 5.0
+
+
 def _sse(event: str, data: str) -> str:
     return f"event: {event}\ndata: {data}\n\n"
 
@@ -779,7 +785,9 @@ def _sse(event: str, data: str) -> str:
             "IntegrityStateResponse /turn returns — the authoritative "
             "result, which replaces the streamed bubbles) or `error` "
             "{status, detail} (the status and detail /turn would have "
-            "answered with)."
+            "answered with). While nothing else is being sent, a "
+            "`: ping` comment goes out every few seconds, so a client "
+            "can time out on silence rather than on total duration."
         ),
     }},
 )
@@ -852,7 +860,20 @@ async def post_student_turn_stream(
         # An opening comment gets the headers and first bytes through
         # any proxy before the model's first word.
         yield ": open\n\n"
-        while (item := await queue.get()) is not None:
+        while True:
+            try:
+                item = await asyncio.wait_for(
+                    queue.get(), STREAM_HEARTBEAT_SECONDS,
+                )
+            except TimeoutError:
+                # Nothing to send — the loop is in a tool call or a
+                # response that isn't streamed. A comment tells the
+                # client the turn is alive, so its inactivity timeout
+                # only trips on a server that has really gone quiet.
+                yield ": ping\n\n"
+                continue
+            if item is None:
+                return
             yield item
 
     return StreamingResponse(

@@ -20,6 +20,14 @@ const SESSION_CREATE_TIMEOUT = 90_000;
 // An inline AI grade: the server allows the grader 300s (a long homework's
 // reasoning streams at ~70 tokens/s), plus margin for the round trip.
 const AI_GRADE_TIMEOUT = 330_000;
+// A streamed integrity turn fails on SILENCE, not duration: the server
+// sends a heartbeat comment every ~5s while its agent loop works, so only
+// a server (or connection) that has really gone quiet trips this. A long
+// but healthy turn — six model calls run past 15s in prod — never does.
+// The overall cap stays above the loop's worst case so a server that
+// keeps the connection open but never finishes still surfaces.
+const TURN_STREAM_IDLE_TIMEOUT = 15_000;
+const TURN_STREAM_MAX_TIMEOUT = 90_000;
 
 // A homework submit carries every page inline as base64, so its wall-
 // clock is the student's upload speed, not our server. A fixed timeout
@@ -720,13 +728,14 @@ export function parseSseEvents(buffer: string): {
 async function readTurnStream(
   res: Response,
   onText: (bubble: number, text: string) => void,
+  idleTimeout: number,
 ): Promise<IntegrityStateResponse> {
   if (!res.body) throw new TypeError("no response body");
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
   for (;;) {
-    const { value, done } = await reader.read();
+    const { value, done } = await readWithin(reader, idleTimeout);
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
     const parsed = parseSseEvents(buffer);
@@ -745,6 +754,26 @@ async function readTurnStream(
     }
   }
   throw new TypeError("the stream ended without a result");
+}
+
+/** One `reader.read()`, abandoned (and the stream cancelled) when nothing
+ *  arrives for `ms`. Rejects as an AbortError, like our request timeout. */
+async function readWithin<T>(
+  reader: ReadableStreamDefaultReader<T>,
+  ms: number,
+): Promise<ReadableStreamReadResult<T>> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const silence = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(Object.assign(new Error("the stream went quiet"), { name: "AbortError" }));
+      void reader.cancel();
+    }, ms);
+  });
+  try {
+    return await Promise.race([reader.read(), silence]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export const auth = {
@@ -3200,7 +3229,8 @@ export const schoolStudent = {
    *  `bubble`, one bubble per agent message — but only text the turn is
    *  certain to show. Resolves with the same state the turn would return
    *  unstreamed, which replaces the streamed bubbles; rejects (dropping
-   *  them) exactly where the unstreamed call would. */
+   *  them) on an error, or when the stream goes silent for `idleTimeout`
+   *  (the server pings every ~5s while it works). */
   streamIntegrityTurn(
     submissionId: string,
     body: {
@@ -3215,13 +3245,15 @@ export const schoolStudent = {
       telemetry?: IntegrityTurnTelemetry;
     },
     onText: (bubble: number, text: string) => void,
+    idleTimeout: number = TURN_STREAM_IDLE_TIMEOUT,
   ) {
     return apiFetch<IntegrityStateResponse>(
       `/school/student/integrity/submissions/${submissionId}/turn/stream`,
       {
         method: "POST",
         body: JSON.stringify(body),
-        read: (res) => readTurnStream(res, onText),
+        timeout: TURN_STREAM_MAX_TIMEOUT,
+        read: (res) => readTurnStream(res, onText, idleTimeout),
       },
     );
   },
