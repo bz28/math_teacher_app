@@ -143,20 +143,24 @@ def _shading_statements(text: str) -> list[re.Match[str]]:
     return [m for pattern in (
         rf"\bshad(?:e|ed|es|ing)\s+(?:the\s+|a\s+)?(?P<side>(?:major|minor)\s+)?(?P<w>{_REGION_WORD})?{names}",
         rf"(?P<side>\b(?:major|minor)\s+)?(?P<w>{_REGION_WORD}){names}\s+(?:is|are)\s+shaded",
-    ) for m in re.finditer(pattern, text, re.IGNORECASE) if not _COMPLEMENT.search(_sentence_before(text, m.start()))]
+    ) for m in re.finditer(pattern, text, re.IGNORECASE)
+        if not _COMPLEMENT.search(_sentence_of(text, m.start(), m.end()))]
 
 
-# "Everything except sector AOB is shaded", "the region outside △ABD is
-# shaded": the shading is the rest, not the region named. No drawing is
-# held to that, so the words are left for a reading (and can't be checked).
+# "Everything except sector AOB is shaded", "△ABC is shaded, except its
+# middle", "shade △ABC, leaving out …": the shading is not (only) the region
+# named. Such a word anywhere in the sentence, before or after, leaves the
+# words for a reading (and they can't be checked).
 _COMPLEMENT = re.compile(
-    r"\b(?:except|but|not|outside|other\s+than|besides|excluding|apart\s+from|without|minus)\b", re.IGNORECASE)
+    r"\b(?:except|but|not|outside|other\s+than|besides|excluding|apart\s+from|without|minus|"
+    r"leav(?:e|es|ing)\s+out|left\s+out|omit(?:s|ted|ting)?|exclud(?:e|es|ed))\b", re.IGNORECASE)
 
 
-def _sentence_before(text: str, at: int) -> str:
-    """The text from the start of `at`'s sentence up to `at`."""
-    start = max((text.rfind(ch, 0, at) for ch in ".;?!\n"), default=-1)
-    return text[start + 1:at]
+def _sentence_of(text: str, start: int, end: int) -> str:
+    """The whole sentence holding text[start:end]."""
+    a = max((text.rfind(ch, 0, start) for ch in ".;?!\n"), default=-1)
+    ends = [j for j in (text.find(ch, end) for ch in ".;?!\n") if j != -1]
+    return text[a + 1:min(ends) if ends else len(text)]
 
 
 def figure_words(text: str) -> set[str]:
@@ -2118,29 +2122,29 @@ def _curved_extras(d: _Drawing, parts: ProblemParts) -> list[str]:
     return out
 
 
-# "major arc AB", "minor arc AB", "arc ACB" (through C), "major sector AOB";
-# a two-letter arc ("arc AB") is the minor one.
+# "major arc AB", "minor arc AB", "arc ACB" (through C), "major arc ACB"
+# (both), "major sector AOB"; a two-letter arc ("arc AB") is the minor one.
 _NAMED_ARC = re.compile(
     r"(?:\b(?P<side>major|minor)\s+)?\b(?P<w>arc|sector)s?\s+\{?\s*(?P<n>(?-i:(?:[A-Z][0-9]*'*){2,3}))\s*\}?(?![A-Za-z])",
     re.IGNORECASE,
 )
 
 
-def named_arcs(text: str) -> list[tuple[str, frozenset[str], str]]:
-    """(arc | sector, its two ends, what the text says of its side: "major",
-    "minor", or a point it passes through) for each arc or sector the
-    (cleaned) text names. A sector XYZ is centred at Y."""
-    out: list[tuple[str, frozenset[str], str]] = []
+def named_arcs(text: str) -> list[tuple[str, frozenset[str], str, str]]:
+    """(arc | sector, its two ends, the side the text says: "major", "minor"
+    or "" (unsaid), a point it passes through or "") for each arc or sector
+    the (cleaned) text names. A sector XYZ is centred at Y."""
+    out: list[tuple[str, frozenset[str], str, str]] = []
     for m in _NAMED_ARC.finditer(text):
         pts = re.findall(r"[A-Z][0-9]*'*", m["n"])
         word, side = m["w"].lower(), (m["side"] or "").lower()
         if word == "sector":
             if len(pts) == 3:
-                out.append(("sector", frozenset((pts[0], pts[2])), side or "minor"))
+                out.append(("sector", frozenset((pts[0], pts[2])), side or "minor", ""))
         elif len(pts) == 2:
-            out.append(("arc", frozenset(pts), side or "minor"))
-        elif not side:
-            out.append(("arc", frozenset((pts[0], pts[2])), pts[1]))  # arc ACB passes through C
+            out.append(("arc", frozenset(pts), side or "minor", ""))
+        else:
+            out.append(("arc", frozenset((pts[0], pts[2])), side, pts[1]))  # arc ACB passes through C
     return out
 
 
@@ -2175,14 +2179,14 @@ def with_arc_sides(raw_spec: dict[str, Any], text: str) -> dict[str, Any]:
         if not isinstance(arc, dict) or not isinstance(arc.get("endpoints"), list):
             return arc
         ends = frozenset(arc["endpoints"])
-        said = [s for w, e, s in wants if e == ends and w == word]
+        said = [(s, x) for w, e, s, x in wants if e == ends and w == word]
         if not said:
             return arc
-        s = said[0]
+        s, through = said[0]
         major: bool | None = s == "major"
-        if s not in ("major", "minor"):
+        if not s:
             try:
-                major = _side_through(p, arc.get("center"), list(arc["endpoints"]), s)  # type: ignore[arg-type]
+                major = _side_through(p, arc.get("center"), list(arc["endpoints"]), through)  # type: ignore[arg-type]
             except (TypeError, ValueError):
                 major = None
         if major is None or bool(arc.get("major")) == major:
@@ -2209,20 +2213,23 @@ def _arc_side_issues(d: _Drawing, text: str) -> list[str]:
         ("sector", r.sector) for r in d.fig.shaded if r.sector is not None]
     for word, arc in pieces:
         ends = frozenset(arc.endpoints)
-        said = [s for w, e, s in wants if e == ends and w == word]
+        said = [(s, x) for w, e, s, x in wants if e == ends and w == word]
         if not said:
             continue
         ok = []
-        for s in said:
-            if s in ("major", "minor"):
-                ok.append(arc.major == (s == "major"))
-            else:
-                major = _side_through(d.p, arc.center, list(arc.endpoints), s)
-                ok.append(major is not None and major == arc.major)
+        for s, through in said:
+            # "major arc ACB" says both: the major side, and through C.
+            fits = not s or arc.major == (s == "major")
+            if through:
+                major = _side_through(d.p, arc.center, list(arc.endpoints), through)
+                fits = fits and major is not None and major == arc.major
+            ok.append(fits)
         if not any(ok):
             a, b = sorted(ends)
             name = f"{a}{arc.center}{b}" if word == "sector" else f"{a}{b}"
-            what = {"major": f"major {word} {name}", "minor": f"{word} {name}"}.get(said[0], f"arc {a}{said[0]}{b}")
+            s, through = said[0]
+            what = (f"{s} " if s and (through or s == "major") else "") + (
+                f"arc {a}{through}{b}" if through else f"{word} {name}")
             out.append(f"the {word} {name} is drawn on the other side of the circle from {what}")
     return out
 

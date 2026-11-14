@@ -38,7 +38,11 @@ KNOWN_WRONG_PASSED = {"77195d48-step1"}
 # the rest are honest declines (the two readings disagreed, or the figure
 # failed its check twice). A change that draws fewer fails here.
 # 15 of the first 24 (21 should get one), 5 of the 25 breadth problems, 12 of the 20 in breadth set 2.
-DRAWN_FLOOR = 43
+# Review round 5 (coverage loosened only by exact rules) declines three that
+# were drawn right: df891226 (an exterior angle "formed … by extending side
+# RP", more than the extension fact says), 9d6733ba ("meeting AB at point M"
+# has no fact of its own) and 0511d648 ("… at points G and H respectively").
+DRAWN_FLOOR = 40
 
 
 @pytest.mark.asyncio
@@ -124,7 +128,9 @@ async def test_the_adversarial_wordings(monkeypatch: pytest.MonkeyPatch) -> None
     assert summary["wrong_caught_only_as_unmarked"] == [], summary
     assert summary["correct_refused"] == {}, summary
     assert summary["reading_failures"] == {}, summary
-    assert summary["correct_passed"] == summary["cases"]
+    # A problem that can't be checked as worded is declined (review round 5).
+    assert summary["declined_as_expected"] == summary["expected_declines"], summary
+    assert summary["correct_passed"] == summary["cases"] - len(summary["expected_declines"])
 
 
 @pytest.mark.asyncio

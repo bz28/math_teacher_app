@@ -636,8 +636,10 @@ def test_the_arms_of_a_named_angle_pair_are_drawn() -> None:
 @pytest.mark.asyncio
 async def test_the_reading_step_sets_circle_facts_aside(monkeypatch: pytest.MonkeyPatch) -> None:
     """Prod 6d780084, through the reading step: the readings agree once the
-    made-up diameter is set aside, and the agreed facts carry the note."""
-    right = "with right angles at A and D respectively"
+    made-up diameter is set aside, and the agreed facts carry the note.
+    (Prod wrote "with right angles at A and D respectively"; "D respectively"
+    has no fact of its own, so that wording is declined: review round 5.)"""
+    right = "∠A and ∠D are right angles"
     common = [Fact(kind="right_triangle", items=["ABC"], point="A", quote=right),
               Fact(kind="right_triangle", items=["DBC"], point="D", quote=right),
               Fact(kind="congruent_segments", items=["AB", "DB"], quote="AB = DB")]
@@ -645,7 +647,7 @@ async def test_the_reading_step_sets_circle_facts_aside(monkeypatch: pytest.Monk
                     prove=[Fact(kind="congruent_triangles", items=["ABC", "DBC"])])
     b = a.model_copy(update={"givens": [*common, Fact(kind="diameter", items=["BC"])]})
     _stub_readings(monkeypatch, a, b)
-    facts, why = await _why("△ABC and △DBC share hypotenuse BC, with right angles at A and D respectively, "
+    facts, why = await _why("△ABC and △DBC share hypotenuse BC, ∠A and ∠D are right angles, "
                             "and AB = DB. Write a complete congruence statement.")
     assert why == []
     assert facts.dropped == ["set aside from givens: BC is a diameter of the circle (the problem names no circle)"]

@@ -17,8 +17,10 @@ as a test that fails if its fix is reverted.
 7. The reply says when accepting removes or replaces a diagram.
 8. A decimal point or an abbreviation's dot doesn't end a clause.
 9. A quote accounts for the one clause it lies in; a name-only quote
-   accounts for nothing; one over several clauses accounts only for the
-   clauses that write nothing but its own points and numbers.
+   accounts for nothing; one over several clauses accounts only for the one
+   clause that states its fact's relation (review round 5: the round-4
+   rule, "the clauses that write nothing but its own points and numbers",
+   was an approximation and is gone).
 """
 
 from __future__ import annotations
@@ -398,10 +400,17 @@ def test_a_name_only_quote_covers_nothing() -> None:
     assert any("BC is the longest side" in g for g in coverage_gaps(LONGEST, facts))
 
 
+def test_a_quote_over_clauses_covers_the_clause_stating_its_relation() -> None:
+    text = r"In isosceles $\triangle ABC$, $AB = AC$. Find $m\angle B$."
+    givens = [F("isosceles", ["ABC"], point="A", quote="isosceles △ABC, AB = AC"),
+              F("congruent_segments", ["AB", "AC"], quote="AB = AC")]
+    assert coverage_gaps(text, FigureFacts(points=list("ABC"), givens=givens)) == []
+    # Without the one-clause fact, "AB = AC" is a second clause stating the
+    # isosceles relation's kind: which clause the quote states is unclear.
+    assert coverage_gaps(text, FigureFacts(points=list("ABC"), givens=givens[:1])) != []
+
+
 @pytest.mark.parametrize(("text", "givens"), [
-    (r"In isosceles $\triangle ABC$, $AB = AC$. Find $m\angle B$.",
-     [F("isosceles", ["ABC"], point="A", quote="isosceles △ABC, AB = AC"),
-      F("congruent_segments", ["AB", "AC"], quote="AB = AC")]),
     (r"Given: $\overleftrightarrow{AB} \parallel \overleftrightarrow{CD}$, with transversal "
      r"$\overleftrightarrow{EF}$ cutting both lines at points $G$ and $H$ respectively.",
      [F("parallel", ["AB", "CD"], quote="AB ∥ CD"),
@@ -416,10 +425,12 @@ def test_a_name_only_quote_covers_nothing() -> None:
       F("bisects_segment", ["PQ", "AB"], point="M",
         quote="PQ is the perpendicular bisector of AB, meeting AB at point M")]),
 ])
-def test_a_quote_over_clauses_of_its_own_points_covers_them(text: str, givens: list[Fact]) -> None:
+def test_the_other_clauses_of_a_spanning_quote_need_their_own_facts(text: str, givens: list[Fact]) -> None:
+    """Round 4 passed these by an approximation (the clause writes only the
+    fact's points); round 5 declines them: "H respectively" and "meeting AB
+    at point M" have no fact of their own."""
     pts = sorted({c for g in givens for x in [*g.items, g.point or ""] for c in x if c.isupper()})
-    facts = FigureFacts(points=pts, givens=givens)
-    assert coverage_gaps(text, facts) == []
+    assert coverage_gaps(text, FigureFacts(points=pts, givens=givens)) != []
 
 
 def test_a_list_of_names_is_one_clause() -> None:

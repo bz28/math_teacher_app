@@ -657,6 +657,10 @@ def coverage_gaps(text: str, facts: FigureFacts) -> list[str]:
         # A triangle's angles adding up to 180° is always true: no fact.
         methods += [m.span() for m in _ANGLE_SUM.finditer(t) if _angle_sum_of_triangle(m.group(0), facts)]
     questions = _question_spans(t)
+    # A statement said twice needs its fact once: the repeat is skipped by
+    # the signal words, and accounted for when what it repeats is.
+    _cl = _clauses(t)
+    repeats = [_cl[ci] for ci in _restated(t, _cl)]
     stops = stop_positions(t)
 
     def names_in(s: str) -> set[str]:
@@ -666,10 +670,13 @@ def coverage_gaps(text: str, facts: FigureFacts) -> list[str]:
         }
 
     for pattern, kinds, infix in _SIGNALS:
-        # A word in a question's target names what is asked ("find the acute angle").
-        skip = methods + questions
+        # A word in a question's target that names no part is what is asked
+        # ("find the acute angle"); one with a name after it says something
+        # of that part ("find the area of rectangle ABCD": ABCD is a rectangle).
+        skip = methods + repeats
         found = [m for m in re.finditer(pattern, t, re.IGNORECASE)
-                 if not any(a <= m.start() < b for a, b in skip)]
+                 if not any(a <= m.start() < b for a, b in skip)
+                 and not any(a <= m.start() < b and not names_in(t[m.end():b]) for a, b in questions)]
         # Each occurrence: the names beside it, up to the next comma, "and",
         # clause end, or neighbouring occurrence of the same signal.
         wants: list[tuple[str, set[str], set[str]]] = []
@@ -754,9 +761,12 @@ def coverage_gaps(text: str, facts: FigureFacts) -> list[str]:
 
 # A clause that asks or instructs ("Find m∠C", "Write a two-column proof")
 # states nothing about the figure (proving is a statement, so not here).
+# Not "which" (a relative "which" clause states something: "∠B, which is a
+# right angle"), nor "draw", "label", "sketch", "construct": what a drawing
+# instruction names ("Draw AD ⊥ BC") is part of the figure and needs its fact.
 _QUESTION = re.compile(
-    r"\b(?:find|what|which|how|determine|calculate|compute|solve|identify|name|write|give|express|list|"
-    r"classify|round|leave|simplify|complete|fill|label|draw|sketch|construct|graph|plot|set\s+up|evaluate)\b",
+    r"\b(?:find|what|how|determine|calculate|compute|solve|identify|name|write|give|express|list|"
+    r"classify|round|leave|simplify|complete|fill|graph|plot|set\s+up|evaluate)\b",
     re.IGNORECASE,
 )
 _CLAUSE_END = re.compile(r"[.;?!\n]|,|\b(?:and|if|where|when|so\s+that|such\s+that|given\s+that|then)\b",
@@ -826,7 +836,8 @@ def _clauses(t: str) -> list[tuple[int, int]]:
     "if", "where" … but never inside brackets ("A(0, 0)"), at a decimal
     point, nor at a comma or "and" that only lists
     names ("AB and CD are parallel", "A, B and C lie on circle O")."""
-    out, start, depth = [], 0, 0
+    out: list[tuple[int, int]] = []
+    start, depth = 0, 0
     skip = _non_stops(t)
     i = 0
     while i < len(t):
@@ -838,8 +849,13 @@ def _clauses(t: str) -> list[tuple[int, int]]:
         elif depth == 0 and i not in skip and (m := _CLAUSE_END.match(t, i)) and (
                 not m.group(0)[0].isalpha() or i == 0 or not t[i - 1].isalpha()):
             word = m.group(0).strip().lower()
-            if word in (",", "and") and _lists_names(t[start:i]):
-                i = m.end()  # a list of names goes on to what is said about them
+            if word in (",", "and") and _lists_names(t[start:i]) and not (
+                    out and _states(t[out[-1][0]:out[-1][1]])
+                    and re.fullmatch(r"\s*(?:,\s*)?(?:and\s*)?", t[out[-1][1]:start], re.IGNORECASE)):
+                # A list of names goes on to what is said about them ("A, B and
+                # C lie on circle O") -- unless the names end a statement before
+                # them ("right angles at A and C, and AB = 3": C is the angle's).
+                i = m.end()
                 continue
             out.append((start, i))
             start = i = m.end()
@@ -876,37 +892,110 @@ _TARGET_END = re.compile(
 
 def _question_spans(t: str) -> list[tuple[int, int]]:
     """The target phrases of questions and instructions: from the question
-    word through what is asked ("Find m∠A", "What is the length of AC",
-    "and the shaded area"), in the asking clause and the clauses after it
-    in the same sentence that list more targets ("find k and the length of
-    YZ"), up to a condition ("… if AB = 5"). Only the target states
-    nothing: the rest of a question's sentence ("in right △ABC", "with D on
-    BC", "given ∠B is obtuse") is covered like any statement."""
+    word through what is asked ("Find m∠A", "What is the length of AC"),
+    up to the end of its clause or a condition ("… if AB = 5"). Only the
+    target states nothing: the rest of a question's sentence ("in right
+    △ABC", "with D on BC", "given ∠B is obtuse") and the clauses after it
+    ("find k and the length of YZ") are covered like any statement."""
     out: list[tuple[int, int]] = []
-    asking = False
-    prev_end = 0
+    prev: tuple[int, int] | None = None  # the asking clause just before, when its target ran to its end
     for a, b in _clauses(t):
-        between = t[prev_end:a]
-        if re.search(r"[.;?!\n]", between):
-            asking = False  # a new sentence
-        if re.search(r"\b(?:if|where|when|so\s+that|such\s+that|given\s+that)\b", between, re.IGNORECASE):
-            asking = False  # a condition states something
         clause = t[a:b]
-        start = None
+        joined = prev is not None and re.fullmatch(r"\s*,?\s*(?:and\s*)?", t[prev[1]:a])
+        if joined and _TARGET_ONLY.fullmatch(clause):
+            # "find the value of k and the length of YZ": a clause that is
+            # only one more target (no verb, nothing said of it) is asked too.
+            out.append((a, b))
+            prev = (a, b)
+            continue
+        prev = None
         if re.search(r"\b(?:prove|show\s+that|verify|justify|explain)\b", clause, re.IGNORECASE):
-            asking = False
-        elif m := _QUESTION.search(clause):
-            asking, start = True, a + m.start()
-        elif asking:
-            start = a  # a further target in the list
-        if asking and start is not None:
+            continue
+        if m := _QUESTION.search(clause):
+            start = a + m.start()
             end = _TARGET_END.search(t, start + 1, b)
-            stop = end.start() if end else b
-            out.append((start, stop))
-            if end:
-                asking = False  # the rest of the clause says something; no more targets
-        prev_end = b
+            out.append((start, end.start() if end else b))
+            prev = (a, b) if end is None else None
     return out
+
+
+# "Draw AD", "and draw ray AB", "draw \overleftrightarrow{PQ}": exactly an
+# instruction to draw one part, and nothing more.
+_DRAW_PART = re.compile(
+    r"\s*(?:and\s+)?(?:then\s+)?[Dd]raw\s+(?:the\s+)?(?:(?P<word>segment|ray|line)\s+)?"
+    r"(?:\\(?P<cmd>overline|overrightarrow|overleftrightarrow)\s*)?\{?\s*(?P<a>[A-Z][0-9]*'*)\s*(?P<b>[A-Z][0-9]*'*)\s*\}?\s*")
+
+
+def _draws_listed(clause: str, facts: FigureFacts) -> bool:
+    """The (cleaned) clause only says to draw one part, and the reading lists
+    that part (so the figure is checked to draw it)."""
+    m = _DRAW_PART.fullmatch(clause)
+    if not m:
+        return False
+    word = m["word"] or {"overrightarrow": "ray", "overleftrightarrow": "line"}.get(m["cmd"] or "", "segment")
+    if m["word"] and m["cmd"] and word != {"overline": "segment", "overrightarrow": "ray",
+                                           "overleftrightarrow": "line"}[m["cmd"]]:
+        return False
+    name = m["a"] + m["b"]
+    if word == "ray":
+        return any(split_names(x) == [m["a"], m["b"]] for x in facts.rays)
+    pool = facts.lines if word == "line" else facts.segments
+    return any(frozenset(split_names(x)) == frozenset((m["a"], m["b"])) for x in pool) and len(set(name)) > 1
+
+
+def _states(piece: str) -> bool:
+    """The piece says something beyond naming parts of the figure."""
+    rest = re.sub(r"(?<![A-Za-z\\])(?:[A-Z][0-9]*'*)+(?![a-z])|\\angle\s*\{?\s*\d+\s*\}?", "", piece)
+    return bool(_NAMING.sub("", rest))
+
+
+def _goes_on_with(t: str, clauses: list[tuple[int, int]], ci: int) -> bool:
+    """Whether a clause of only names ("C" in "right angles at A and C", "AC"
+    in "D and E lie on AB and AC") is joined by "and" or a comma to a
+    statement before it in the same sentence: it is then part of what that
+    statement says, which one fact quoting the statement's clause may not
+    cover ("right angles at A" alone), so it can't be passed as naming only."""
+    if ci == 0:
+        return False
+    pa, pb = clauses[ci - 1]
+    if not re.fullmatch(r"\s*(?:,\s*)?(?:and\s*)?(?:,\s*)?", t[pb:clauses[ci][0]], re.IGNORECASE):
+        return False
+    return _states(t[pa:pb])
+
+
+# A clause that is only a target: "the length of YZ", "m∠Q", "the value of x".
+_TARGET_ONLY = re.compile(
+    r"(?:and\s+)?(?:the\s+)?(?:(?:value|length|measure|area|perimeter|circumference)\s+of\s+(?:the\s+)?)?"
+    r"(?:segment\s+|side\s+)?(?:m\s*)?(?:\\overline\s*|\\angle\s*|\\triangle\s*)?"
+    r"\{?\s*(?:(?:[A-Z][0-9]*'*){1,3}|[a-z])\s*\}?\s*")
+
+
+def _restated(t: str, clauses: list[tuple[int, int]]) -> dict[int, int]:
+    """Clauses of the (cleaned) text that say again, exactly, what an
+    earlier clause said ("In the figure below, M is the midpoint of AC.
+    Given: M is the midpoint of AC"): {restating clause: the clause it
+    repeats}. Exactly: the same symbols, names, words and their case, only
+    the spacing may differ, and a leading "Given:" or "also" changes
+    nothing. "∠A ≅ ∠D" restated as "∠CAE ≅ ∠BDE" is not a repeat."""
+    seen: dict[tuple[str, ...], int] = {}
+    out: dict[int, int] = {}
+    for ci, (a, b) in enumerate(clauses):
+        toks = re.findall(r"\\[A-Za-z]+|[A-Za-z]+|\d+(?:\.\d+)?|\S", t[a:b])
+        while toks and toks[0] in ("Given", "given", "Also", "also", ":"):
+            toks = toks[1:]
+        key = tuple(toks)
+        if not key:
+            continue
+        if key in seen:
+            out[ci] = seen[key]
+        else:
+            seen[key] = ci
+    return out
+
+
+def _states_kind(clause: str, kind: str) -> bool:
+    """The clause holds a signal word or symbol of the fact kind."""
+    return any(kind in kinds and re.search(pattern, clause, re.IGNORECASE) for pattern, kinds, _ in _SIGNALS)
 
 
 def _tokens(s: str) -> list[str]:
@@ -972,17 +1061,20 @@ def _clause_gaps(t: str, facts: FigureFacts, methods: list[tuple[int, int]],
         at = b
     accounted: set[int] = set()
     spanning: list[tuple[Fact, set[int]]] = []
+    quoted_in: dict[int, list[Fact]] = {}  # clause → the facts whose quotes reach into it
     every = [*facts.givens, *facts.prove]
     for f in every:
         for q in re.split(r"\s*…\s*|\.\.\.", f.quote or ""):
             # A quote accounts for the one clause it lies inside: one that
             # runs over two clauses ("AB = 5 and BC is the longest side" for
-            # AB = 5) can't say which of them its fact states, and one that
-            # is only a name ("BC") states nothing.
+            # AB = 5) can't say which of them its fact states, so it accounts
+            # for neither; one that is only a name ("BC") states nothing.
             where = {owner[i] for i in _found_at(text_tokens, _tokens(q))}
+            for ci in where - {-1}:
+                quoted_in.setdefault(ci, []).append(f)
             if len(where) == 1 and -1 not in where and not _only_names(q):
                 accounted |= where
-            elif len(where - {-1}) > 1:
+            elif len(where - {-1}) > 1 and not _only_names(q):
                 spanning.append((f, where - {-1}))
         if not (f.quote or "").strip():
             # No quote to place it by: it sits in each shortest run of clauses
@@ -998,23 +1090,18 @@ def _clause_gaps(t: str, facts: FigureFacts, methods: list[tuple[int, int]],
                     if need <= written(t[clauses[ci][0]:clauses[cj][1]]):
                         accounted |= set(range(ci, cj + 1))
                         break
-    # A quote over several clauses ("isosceles △ABC, AB = AC", "cutting both
-    # lines at points G and H respectively") accounts for each of them that no
-    # other fact does and that writes only points and numbers of its fact:
-    # "AB = 5 and BC is the longest side" for AB = 5 leaves "BC is the longest
-    # side" (C is not AB's) unaccounted.
-    points_all = {p.strip() for p in facts.points} | set(parse_problem_points(t))
+    # A quote over several clauses accounts for the one clause of them that
+    # states its fact's relation: the only one with a word of the fact's kind
+    # that no one-clause quote accounts for ("isosceles" in "In isosceles
+    # △ABC, AB = AC", where "AB = AC" has its own fact). The others need their
+    # own facts ("meeting AB at point M" is not the perpendicular's word).
+    single = set(accounted)
     for f, where in spanning:
-        mine = _fact_names(f) | set(re.findall(r"[A-Z][0-9]*'*", " ".join(_fact_names(f))))
-        nums = {round(float(x), 6) for x in re.findall(r"\d+(?:\.\d+)?", " ".join([f.expr or "", *f.items]))}
-        if f.value is not None:
-            nums.add(round(float(f.value), 6))
-        for ci in where - accounted:
-            a, b = clauses[ci]
-            body = re.sub(r"\\[A-Za-z]+", " ", t[a:b])
-            said = {round(float(x), 6) for x in re.findall(r"(?<![A-Za-z\d'])\d+(?:\.\d+)?", body)}
-            if (_names(body) & points_all) <= mine and said <= nums:
-                accounted.add(ci)
+        stating = [ci for ci in where - single if _states_kind(t[clauses[ci][0]:clauses[ci][1]], f.kind)]
+        if len(stating) == 1:
+            accounted.add(stating[0])
+    # A clause that repeats an accounted one word for word is accounted too.
+    accounted |= {ci for ci, orig in _restated(t, clauses).items() if orig in accounted}
     skip = methods + questions
 
     def inside(a: int, b: int) -> bool:
@@ -1038,22 +1125,37 @@ def _clause_gaps(t: str, facts: FigureFacts, methods: list[tuple[int, int]],
     blanked = list(t)
     for x, y in skip:  # a method or a question's target says nothing
         blanked[x:y] = " " * (y - x)
+    # "△ABD is shaded": code's too. Read in the whole text, so a complement
+    # word anywhere in its sentence ("…, except its middle") leaves it a gap.
+    for m in _shading_statements(t):
+        blanked[m.start():m.end()] = " " * (m.end() - m.start())
     for ci, (a, b) in enumerate(clauses):
         clause = "".join(blanked[a:b])
         if inside(a, b):
             continue
         body = re.sub(r"[A-Z]\s*\(\s*-?[\d.]+\s*,\s*-?[\d.]+\s*\)", " ", clause)  # coordinates: code's
-        for m in reversed(_shading_statements(body)):  # "△ABD is shaded": code's too
-            body = body[:m.start()] + " " + body[m.end():]
         body = re.sub(_LIST_MARK, " ", body)
         has_name = bool(_names(re.sub(r"\\[A-Za-z]+", " ", body)) & points)
         has_number = bool(re.search(r"(?<![A-Za-z\d'])\d", re.sub(r"\\angle\s*\{?\s*\d+", " ", body)))
         if not (has_name or has_number) or ci in accounted:
             continue
+        if _draws_listed(clause, facts) or (
+                ci and _DRAW_PART.fullmatch(t[clauses[ci - 1][0]:clauses[ci - 1][1]])
+                and re.fullmatch(r"\s*,?\s*(?:and\s*)?", t[clauses[ci - 1][1]:a], re.IGNORECASE)
+                and _draws_listed("draw " + clause.strip(), facts)):
+            # "draw AD", exactly, or the next part of the same instruction ("Draw
+            # ray AB and ray AC"): a part the figure must draw (it is checked drawn).
+            continue
         rest = _NAMING.sub("", re.sub(r"(?<![A-Za-z\\])(?:[A-Z][0-9]*'*)+(?![a-z])|\\angle\s*\{?\s*\d+\s*\}?",
                                       "", body))
-        if not rest:
+        if not rest and not _goes_on_with(t, clauses, ci):
             continue  # only names the figure
+        if not rest and (said := _names(re.sub(r"\\[A-Za-z]+", " ", body)) & points) and any(
+                said <= _fact_names(f) | {c for x in _fact_names(f) for c in split_names(x)}
+                for f in quoted_in.get(ci, [])):
+            # The end of a statement ("B" in "D is between A and B"): a fact
+            # whose quote says it and that names it states it.
+            continue
         gaps.append(f"“{_plain(clause).strip()}”")
     # Every number the text gives is some fact's. A fraction or a mixed
     # number (\frac12, 4\frac{1}{2}, 4 1/2) is one number.
@@ -1188,11 +1290,13 @@ _TRIANGLE_SHAPE = re.compile(
 
 
 def _angle_or_triangle_shape(plain: str) -> tuple[str, str] | None:
-    """(kind, name) when a quote says an angle is obtuse or acute, or a
-    triangle is obtuse, acute or scalene ("∠B is obtuse", "acute △ABC")."""
-    if m := _ANGLE_SHAPE.search(plain):
+    """(kind, name) when a quote says exactly that an angle is obtuse or
+    acute, or a triangle is obtuse, acute or scalene ("∠B is obtuse",
+    "acute △ABC"), and nothing more: "acute △ABC with AB the longest side"
+    says more than the shape fact would check, so it stays unverifiable."""
+    if m := _ANGLE_SHAPE.fullmatch(plain):
         return f"{m.group(2).lower()}_angle", m.group(1)
-    if m := _TRIANGLE_SHAPE.search(plain):
+    if m := _TRIANGLE_SHAPE.fullmatch(plain):
         word, name = (m.group(1), m.group(2)) if m.group(1) else (m.group(4), m.group(3))
         word = word.lower()
         return ("scalene" if word == "scalene" else f"{word}_triangle"), name
@@ -1262,8 +1366,14 @@ def standard_reading(facts: FigureFacts) -> FigureFacts:
         for f in getattr(facts, section):
             q = f.quote or ""
             plain = _plain_quote(q)
-            ext = next((m for rx in _EXTENSIONS if (m := rx.search(plain)) and _names_upper(m)), None)
-            interior = m if (m := _INTERIOR.search(plain)) and _names_upper(m) else None
+            # An "other" fact becomes a checkable kind only when its quote is
+            # exactly that phrase: a quote that says more keeps it unverifiable.
+            exact = f.kind == "other"
+
+            def find(rx: re.Pattern[str], plain: str = plain, exact: bool = exact) -> re.Match[str] | None:
+                return rx.fullmatch(plain) if exact else rx.search(plain)
+            ext = next((m for rx in _EXTENSIONS if (m := find(rx)) and _names_upper(m)), None)
+            interior = m if (m := find(_INTERIOR)) and _names_upper(m) else None
             if ext and f.kind in ("other", "on_segment", "on_line", "collinear", "intersect"):
                 a, b, *rest = ext.groups()
                 past, to = (rest[0], rest[1]) if len(rest) == 2 else (None, rest[0])
