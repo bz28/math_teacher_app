@@ -63,16 +63,39 @@ COUNT = 8
 # By-eye verdict per drawn figure, keyed "set1-p3" (the problem's figure) or
 # "set1-p3-step2", with the figure's fingerprint: a figure that changes must
 # be looked at again. "right", "wrong: …", "unwanted: …".
-BY_EYE: dict[str, tuple[str, str]] = {}
+BY_EYE: dict[str, tuple[str, str]] = {
+    "set1-p1": ("98f255504d99", "right"),  # M's ticks on AM, MC; right angle at M
+    "set1-p2": ("e931d838a625", "right"),  # AB ∥ DC arrows, AB ≅ DC ticks (see the note in the PR: the
+    # problem proves △ABC ≅ △DCB, which its givens imply only for a rectangle; the figure draws one)
+    "set1-p4": ("7faeca401aca", "right"),  # M on AC and BD with each half ticked; AB ≅ CD
+    "set1-p5": ("7f1bf39c18e0", "right"),  # BC ∥ DE; AC ≅ AE ticks; arcs at ∠ABC and ∠AED
+    "set1-p6": ("86b58ec1e0aa", "right"),  # right angles at D and C; AD ≅ BC ticks
+    "set2-p5": ("0ef172ddddd8", "right"),  # right angle at C; AB = 13, AC = 5 labeled, in proportion
+}
 
 # Per problem (by the fingerprint of its text), whether a figure should be
 # drawn by Ben's rubric ("When to draw"): "figure" or "none".
-EXPECTED: dict[str, str] = {}
+EXPECTED: dict[str, str] = {
+    "e7d71e19e64a": "figure", "86495fd98dee": "figure", "f19f2a454ad0": "figure", "a82476422a9a": "figure",
+    "c6959fba65f6": "figure", "0a643caa6304": "figure",
+    "181c568b27e0": "figure",  # set1-p3: two tangent segments from an external point (a board sketch); names no points
+    "b57d0518763d": "figure",  # set2-p1: parallel lines p, q cut by transversal t; names lines, no points
+    "c7d00d408b7d": "figure",  # set2-p4: a floor plan (a board sketch); names no points
+    "0169cf2ab7dd": "none", "96aa828a0374": "none",  # a hexagon's angle sum: no shape to show
+    "a4cfd8a2a478": "none",  # a regular polygon's exterior angle: no shape to show
+}
 
 # A known-wrong version of each drawn question figure (keyed like BY_EYE),
 # which the checker must reject: {"move": {"D": [x, y]}}, {"drop": ["BD"]},
 # {"label": {"ABC": "47°"}}, {"side_label": {"AB": "9"}}.
-NEGATIVES: dict[str, dict[str, Any]] = {}
+NEGATIVES: dict[str, dict[str, Any]] = {
+    "set1-p1": {"move": {"M": [3, 0]}},  # M no longer the midpoint, BM not ⊥ AC
+    "set1-p2": {"move": {"D": [1, 0]}},  # DC shorter than AB
+    "set1-p4": {"move": {"M": [3, 2]}},  # M off AC
+    "set1-p5": {"move": {"E": [8, 10]}},  # AE no longer ≅ AC
+    "set1-p6": {"move": {"C": [4.5, 3.5]}},  # ∠ACB no longer right
+    "set2-p5": {"move": {"B": [0, 8]}},  # AB = 13, AC = 5 out of proportion
+}
 
 
 def fingerprint(x: Any) -> str:
