@@ -131,8 +131,10 @@ async def test_a_problem_citing_a_lacks_figure_is_replaced() -> None:
 
 @pytest.mark.asyncio
 async def test_a_replacement_with_the_same_flaw_is_left_out() -> None:
-    items, gen = await _run([[GOOD, BROKEN], [BROKEN]])
-    assert gen.await_count == 2
+    # (the third call asks for a problem that needs no figure; it too
+    # comes back broken, so the slot is left out)
+    items, gen = await _run([[GOOD, BROKEN], [BROKEN], [BROKEN]])
+    assert gen.await_count == 3
     assert [i.question for i in items] == [GOOD["text"]]
 
 
@@ -145,8 +147,8 @@ async def test_a_batch_with_every_figure_drawn_makes_no_extra_call() -> None:
 
 @pytest.mark.asyncio
 async def test_a_failed_replacement_call_keeps_the_good_problems() -> None:
-    items, gen = await _run([[GOOD, BROKEN], RuntimeError("upstream 529")])
-    assert gen.await_count == 2
+    items, gen = await _run([[GOOD, BROKEN], RuntimeError("upstream 529"), RuntimeError("upstream 529")])
+    assert gen.await_count == 3
     assert [i.question for i in items] == [GOOD["text"]]
 
 

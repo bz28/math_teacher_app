@@ -542,14 +542,27 @@ async def _draw_figures(
 # Points named as a run of capitals after a word that names a figure or a
 # part of one: "ladder AB", "wall BC", "floor plan ABCDEF", "chord AB",
 # "Let ABCD be", "In PQRS". Each letter once: SAS, ASA and CPCTC name
-# postulates, not points.
+# postulates, not points. After "let" / "in" a run of capitals is often an
+# acronym ("a taxi ride in DC", "In PEMDAS"), so there it names points only
+# in math markup ("In $ABCD$") or in a sentence with a figure noun ("Let
+# ABCD be a square"); see `_names_points`.
 _POINT_RUN = re.compile(
-    r"\b(?:let|in|segments?|sides?|lines?|rays?|chords?|diameters?|radius|radii|diagonals?|altitudes?|"
+    r"\b(?P<word>let|in|segments?|sides?|lines?|rays?|chords?|diameters?|radius|radii|diagonals?|altitudes?|"
     r"medians?|bisectors?|tangents?|secants?|arcs?|triangles?|quadrilaterals?|polygons?|rectangles?|squares?|"
     r"trapezoids?|parallelograms?|rhombus|kites?|pentagons?|hexagons?|octagons?|plan|lot|field|garden|room|"
-    r"wall|ladder|pole|tower|ramp|figure|region|distance|length)\s+\$?((?-i:(?:[A-Z]'*){2,8}))(?![A-Za-z0-9])",
+    r"wall|ladder|pole|tower|ramp|figure|region|distance|length)\s+(?P<markup>\$?)((?-i:(?:[A-Z]'*){2,8}))"
+    r"(?![A-Za-z0-9])",
     re.IGNORECASE,
 )
+# A figure noun: a sentence with one makes "Let ABCD" / "In PQRS" a figure's name.
+_FIGURE_NOUN = re.compile(
+    r"\b(?:points?|segments?|sides?|lines?|rays?|chords?|diameters?|radius|radii|diagonals?|altitudes?|medians?|"
+    r"bisectors?|tangents?|secants?|arcs?|angles?|vertex|vertices|triangles?|quadrilaterals?|polygons?|"
+    r"rectangles?|squares?|trapezoids?|parallelograms?|rhombus|kites?|pentagons?|hexagons?|octagons?|circles?|"
+    r"midpoints?|perpendicular|parallel|congruent)\b",
+    re.IGNORECASE,
+)
+_POSTULATE_LETTERS = {"SAS", "ASA", "AAS", "SSS", "HL", "CPCTC", "AA", "SSA", "CPCF", "LL", "LA", "HA"}
 # A problem on the coordinate plane or about a curve: the construction tool
 # can't draw grids or curves other than circles (CONSTRUCTION_FIGURE_RULES,
 # rule 6), so naming points there asks for no figure.
@@ -564,8 +577,19 @@ def _names_points(text: str) -> bool:
     """The problem names points: "In △ABC", "point P", "ladder AB"."""
     from api.core.geometry.facts import parse_problem_points
 
-    runs = [m[1] for m in _POINT_RUN.finditer(text) if len(set(m[1].replace("'", ""))) == len(m[1].replace("'", ""))]
-    return bool(runs or _named_points(text) or parse_problem_points(text))
+    def names(m: re.Match[str]) -> bool:
+        run = m[3].replace("'", "")
+        if len(set(run)) != len(run) or run in _POSTULATE_LETTERS:
+            return False
+        if m["word"].lower() not in ("let", "in") or m["markup"]:
+            return True
+        if re.match(r"\s+(?:form|notation|format|units?|mode|order|time)\b", text[m.end():], re.IGNORECASE):
+            return False  # "in EF form", "in SI units": a name of something else
+        start = max(text.rfind(".", 0, m.start()), text.rfind("?", 0, m.start()), text.rfind("!", 0, m.start()))
+        ends = [i for i in (text.find(c, m.end()) for c in ".?!") if i >= 0]
+        return bool(_FIGURE_NOUN.search(text[start + 1:min(ends, default=len(text))]))
+
+    return any(map(names, _POINT_RUN.finditer(text))) or bool(_named_points(text) or parse_problem_points(text))
 
 
 def _needs_figure(q: dict[str, Any], subject: str = "math") -> bool:
@@ -781,6 +805,13 @@ _REPLACEMENT_RULE = (
     "figure must include a figure_spec that draws exactly those points, and every number on "
     "the figure must also be in the problem text."
 )
+# The last try for a slot whose figure couldn't be checked twice: a problem
+# on the same topic that needs no figure, so the set keeps its size.
+_NO_FIGURE_RULE = (
+    "Every problem must be complete on its own and need no figure: name no points (no AB, no "
+    "triangle ABC), never mention a figure, diagram or picture, and give every number in the "
+    "text. Stay on the same topic. Do not include a figure_spec."
+)
 
 
 async def generate_checked_problems(
@@ -800,8 +831,10 @@ async def generate_checked_problems(
 ) -> list[dict[str, Any]]:
     """Generate problems and draw each one's figure, checked. A problem that
     needs a figure (`_needs_figure`: it names points, or refers to a figure)
-    and ends without a checked one is replaced once; a replacement with the
-    same flaw is left out rather than handed to the teacher broken."""
+    and ends without a checked one is replaced once; a slot whose
+    replacement has the same flaw gets a problem that needs no figure, so
+    the teacher gets the count asked for. Only when that fails too is the
+    slot left out, never handed to the teacher broken."""
     question_dicts: list[dict[str, Any]] = cast(list[dict[str, Any]], await generate_questions(
         unit_name=unit_name,
         count=count,
@@ -850,6 +883,38 @@ async def generate_checked_problems(
         replacements = []
     await _draw_figures(replacements, user_id=user_id, generation_job_id=job_id)
     kept = [q for q in question_dicts if not lacks(q)] + [q for q in replacements if not lacks(q)][:missing]
+    short = len(question_dicts) - len(kept)
+    if short:
+        logger.warning(
+            "Job %s: %d problem(s) still had no figure that could be checked; asking for problems on the same "
+            "topic that need no figure", job_id, short,
+        )
+        try:
+            plain = cast(list[dict[str, Any]], await generate_questions(
+                unit_name=unit_name,
+                count=short,
+                course_name=course_name,
+                subject=subject,
+                user_id=user_id,
+                images=images,
+                extra_instructions=(constraint_text + "\n\n" if constraint_text else "") + _NO_FIGURE_RULE,
+                assignment_title=assignment_title,
+                params=params,
+                call_metadata=call_metadata,
+                generation_job_id=job_id,
+            ))
+        except Exception:
+            logger.exception("Job %s: the no-figure replacement call failed; keeping the rest", job_id)
+            plain = []
+        for q in plain:
+            q["figure_spec"] = q["figure_svg"] = q["figure_facts"] = None  # asked for none; never shown unchecked
+        plain = [q for q in plain if not _needs_figure(q, subject)][:short]
+        kept += plain
+        if len(plain) < short:
+            logger.warning(
+                "Job %s: left out %d problem(s): no figure could be checked, and no replacement without a "
+                "figure came back", job_id, short - len(plain),
+            )
     if not kept:
         raise TeacherFacingGenerationError(
             "Every generated problem needed a figure that couldn't be drawn. Try again."

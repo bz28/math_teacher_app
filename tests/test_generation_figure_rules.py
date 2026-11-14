@@ -91,6 +91,33 @@ def test_both_generation_prompts_say_how_to_word_a_figure_problem() -> None:
     assert cv.coverage("A ladder rests against a wall. " + example, standard_reading(facts))[0] != []
 
 
+def test_the_wording_covers_the_remaining_drops() -> None:
+    """Review round 1 of #998: the drops left after the first wording
+    change ("line q", "point O is the center of the circle", "arc AB",
+    "Additionally", "labeled as", "A composite figure made up of") are
+    fixed at the source. The one-statement example passes coverage."""
+    w = assignment_generation.FIGURE_PROBLEM_WORDING
+    for phrase in ('never "line $p$"', "Name a circle by its center point", 'not "arc $AB$"',
+                   '"Additionally"', '"labeled as"', '"A composite figure made up of"', "One plain statement"):
+        assert phrase in w, phrase
+
+    from api.core.geometry import coverage as cv
+    from api.core.geometry.facts import Target, standard_reading
+
+    composite = (r"$ABCD$ is a rectangle. $\triangle CDE$ has a right angle at $D$. $AB = 14$, $BC = 9$ and "
+                 r"$DE = 6$. Find the area of polygon $ABCED$.")
+    assert r"$\triangle CDE$ has a right angle at $D$." in w
+    facts = FigureFacts(points=list("ABCDE"), polygons=["ABCD", "ABCED"], triangles=["CDE"],
+                        find=[Target(kind="other", item="area of ABCED")], givens=[
+        Fact(kind="rectangle", items=["ABCD"], quote="ABCD is a rectangle"),
+        Fact(kind="right_angle", items=["CDE"], quote="right angle at D"),
+        Fact(kind="equal_length", items=["AB"], value=14, quote="AB = 14"),
+        Fact(kind="equal_length", items=["BC"], value=9, quote="BC = 9"),
+        Fact(kind="equal_length", items=["DE"], value=6, quote="DE = 6")])
+    assert cv.coverage(composite, standard_reading(facts))[0] == []
+    assert cv.coverage("A composite figure made up of " + composite, standard_reading(facts))[0] != []
+
+
 def test_the_construction_step_prompt_has_bens_paragraph_and_the_rules() -> None:
     prompt = step_decomposition._build_system_prompt("math", "construction")
     assert STEPS in prompt
@@ -121,6 +148,17 @@ def test_no_figures_mode_has_no_figure_block_or_slot() -> None:
 
 def test_generation_has_room_for_a_set_of_figures() -> None:
     assert assignment_generation._GENERATE_MAX_TOKENS >= 12000
+    # and the time to write them, at about 70 tokens/s (review round 1, #998)
+    assert assignment_generation._GENERATE_TIMEOUT_S >= assignment_generation._GENERATE_MAX_TOKENS / 70
+
+
+@pytest.mark.asyncio
+async def test_the_generate_call_gets_the_long_timeout() -> None:
+    with patch.object(assignment_generation, "call_claude_json",
+                      AsyncMock(return_value={"questions": [{"text": "Solve 2x = 4."}]})) as call:
+        await assignment_generation.generate_questions(
+            unit_name="U", count=1, course_name="Algebra", subject="math", user_id="u")
+    assert call.call_args.kwargs["timeout"] == assignment_generation._GENERATE_TIMEOUT_S
 
 
 def test_the_replacement_and_variation_wording() -> None:
@@ -151,6 +189,19 @@ def test_the_replacement_and_variation_wording() -> None:
     (r"Let $A = \begin{pmatrix}1&2\\3&4\end{pmatrix}$. Find $AB$.", False),
     ("Events A and B are independent with P(A) = 0.3.", False),
     ("In the USA, 40% of people use GPS.", False),
+    # Review round 1 (#998): after "in" / "let" an acronym is not a figure's
+    # name; there a run of capitals names points only in math markup or in a
+    # sentence with a figure noun.
+    ("A taxi ride in DC costs $3 plus $2 per mile. How far can you go for $15?", False),
+    ("In PEMDAS, which operation comes first?", False),
+    ("In NYC, a slice of pizza costs $3.50. How many slices can you buy for $21?", False),
+    ("Let NY be the number of tickets sold in New York.", False),
+    ("In HL, which parts must be congruent?", False),
+    ("Write the line through the points in EF form.", False),
+    (r"In $\triangle ABC$, $AB = AC$.", True),
+    ("Let ABCD be a square with side 4. Find AC.", True),
+    (r"In $ABCD$, $AB = 5$. Find $CD$.", True),
+    ("In PQRS, the diagonals bisect each other. Find PR if PT = 4.", True),
 ])
 def test_what_needs_a_figure(text: str, needs: bool) -> None:
     assert qbg._needs_figure({"text": text}) is needs
@@ -187,18 +238,41 @@ async def _generate(batches: list[Any], read: Any) -> tuple[list[dict[str, Any]]
     return out, gen
 
 
-@pytest.mark.asyncio
-async def test_a_named_point_problem_whose_figure_cant_be_checked_is_replaced_then_left_out() -> None:
-    """No "figure below" in it: before, only that phrase was enforced, so
-    "In △ABC …" shipped with no figure when its reading failed."""
-    async def untrusted(*_a: Any, **_k: Any) -> tuple[None, list[str]]:
-        return None, ["two readings of the problem disagree, so the figure can't be checked"]
+async def _untrusted(*_a: Any, **_k: Any) -> tuple[None, list[str]]:
+    return None, ["two readings of the problem disagree, so the figure can't be checked"]
 
+
+@pytest.mark.asyncio
+async def test_a_named_point_problem_whose_figure_cant_be_checked_is_replaced_then_a_plain_one_takes_its_slot(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """No "figure below" in it: before, only that phrase was enforced, so
+    "In △ABC …" shipped with no figure when its reading failed. Its
+    replacement fails the same way, so the slot gets a problem on the same
+    topic that needs no figure: the teacher gets the count asked for
+    (coordinator, after review round 1 of #998)."""
     plain = _q("Solve 2x + 3 = 11.")
-    out, gen = await _generate([[plain, _q(PROBLEM, TRIANGLE)], [_q(PROBLEM, TRIANGLE)]], untrusted)
-    assert gen.await_count == 2 and gen.await_args_list[1].kwargs["count"] == 1
+    no_figure = {**_q("Two angles are supplementary; one measures 70°. Find the other."), "figure_spec": TRIANGLE}
+    with caplog.at_level("WARNING"):
+        out, gen = await _generate([[plain, _q(PROBLEM, TRIANGLE)], [_q(PROBLEM, TRIANGLE)], [no_figure]], _untrusted)
+    assert gen.await_count == 3 and gen.await_args_list[1].kwargs["count"] == 1
     assert "names points or refers to a figure" in gen.await_args_list[1].kwargs["extra_instructions"]
+    assert gen.await_args_list[2].kwargs["count"] == 1
+    assert "need no figure" in gen.await_args_list[2].kwargs["extra_instructions"]
+    assert [q["text"] for q in out] == [plain["text"], no_figure["text"]]
+    assert out[1]["figure_spec"] is None and out[1]["figure_svg"] is None  # never shown unchecked
+    assert "asking for problems on the same topic that need no figure" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_a_plain_replacement_that_still_needs_a_figure_is_left_out(caplog: pytest.LogCaptureFixture) -> None:
+    plain = _q("Solve 2x + 3 = 11.")
+    with caplog.at_level("WARNING"):
+        out, gen = await _generate(
+            [[plain, _q(PROBLEM, TRIANGLE)], [_q(PROBLEM, TRIANGLE)], [_q(PROBLEM)]], _untrusted)
+    assert gen.await_count == 3
     assert [q["text"] for q in out] == [plain["text"]]
+    assert "left out 1 problem(s): no figure could be checked" in caplog.text
 
 
 @pytest.mark.asyncio

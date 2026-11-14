@@ -92,6 +92,15 @@ FIGURE_PROBLEM_WORDING = (
     'points.\n'
     '- Never put a theorem\'s or postulate\'s name in the problem ("by the Hypotenuse-Leg Theorem", '
     '"using SAS", "by the Vertical Angles Theorem"). Theorem names belong in the solution steps.\n'
+    '- Name every line by two of its points: "$\\overleftrightarrow{AB} \\parallel '
+    '\\overleftrightarrow{CD}$", "transversal $\\overleftrightarrow{EF}$", never "line $p$" or "line '
+    '$q$".\n'
+    '- Name a circle by its center point: "Points $A$, $B$ and $C$ lie on circle $O$." Not "the '
+    'circle" or "$O$ is the center of the circle". Give an arc by its angle ("$m\\angle AOB = '
+    '112^\\circ$"), not "arc $AB$".\n'
+    '- One plain statement per sentence, each a fact about the named parts. No connecting or '
+    'framing words ("Additionally", "Also", "labeled as", "A composite figure made up of", "is '
+    'a diagonal"): "$ABCD$ is a rectangle." "$\\triangle CDE$ has a right angle at $D$."\n'
 )
 
 _CONSTRUCTION_FIGURES_SECTION = (
@@ -227,6 +236,9 @@ def _translate_params_to_instructions(params: dict[str, Any] | None) -> list[str
 # A set of problems that each carry a construction figure: about 150 tokens
 # of text plus 300-500 of figure each, so 4096 cut an 8-problem set short.
 _GENERATE_MAX_TOKENS = 16000
+# Room to write all of them: output streams at about 70 tokens/s, so 16000
+# tokens take about 230 s; the default 90 s would cut a full set off.
+_GENERATE_TIMEOUT_S = 300.0
 
 
 async def generate_questions(
@@ -325,6 +337,7 @@ async def generate_questions(
                 user_id=user_id,
                 model=MODEL_REASON,
                 max_tokens=_GENERATE_MAX_TOKENS,
+                timeout=_GENERATE_TIMEOUT_S,
                 call_metadata=call_metadata,
                 generation_job_id=generation_job_id,
             )
