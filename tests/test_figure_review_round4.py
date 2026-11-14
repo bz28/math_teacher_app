@@ -32,6 +32,7 @@ from typing import Any
 import pytest
 
 from api.core.geometry.construction_render import arc_span, render_construction
+from api.core.geometry.coverage import coverage
 from api.core.geometry.dsl import ConstructionFigure
 from api.core.geometry.facts import (
     Fact,
@@ -448,11 +449,13 @@ def test_the_other_clauses_of_a_spanning_quote_need_their_own_facts(text: str, g
     if "respectively" in text:
         # Review round 6: "both lines at points G and H respectively" has an
         # exact rule: G is on the first line and the transversal, H on the
-        # second, each by its own fact.
+        # second. Review round 8: code derives those two facts from the words
+        # and checks them whatever order the reading has.
         assert gaps == []
         swapped = [*givens[:2], F("intersect", ["EF", "AB"], point="H", quote=givens[2].quote),
                    F("intersect", ["EF", "CD"], point="G", quote=givens[3].quote)]
-        assert coverage_gaps(text, FigureFacts(points=pts, givens=swapped)) != []
+        derived = coverage(text, FigureFacts(points=pts, givens=swapped))[1]
+        assert [(d.items, d.point) for d in derived] == [(["EF", "AB"], "G"), (["EF", "CD"], "H")]
     else:
         assert gaps != []
 

@@ -54,7 +54,12 @@ KNOWN_WRONG_PASSED = {"77195d48-step1"}
 # and afee316c ("Use the Vertical Angles Theorem" asserts vertical angles;
 # afee316c also "the definition of midpoint") and dd7ab4c1 ("Use the
 # Alternate Interior Angles Theorem" asserts parallel lines).
-DRAWN_FLOOR = 26
+# Review round 8 (a method that applies only to some figure counts only when
+# the reading states that figure; the Corollary to the Triangle Sum Theorem
+# is off the list): 24. Lost: 1c9d21ab ("Use the Corollary to the Triangle
+# Sum Theorem") and dd5e6fa8 ("using triangle congruence (SSS or SAS) and
+# CPCTC" with no congruent triangles stated).
+DRAWN_FLOOR = 24
 
 
 @pytest.mark.asyncio

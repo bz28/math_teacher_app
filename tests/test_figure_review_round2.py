@@ -423,8 +423,12 @@ def test_a_hint_states_no_fact() -> None:
     # (△QRT ≅ △SRT) is a statement no fact reads, so it is a gap: skipping a
     # hint could pass a figure that breaks it ("Hint: the triangle is
     # isosceles"). Only its label, its method ("using AAS") and the exact
-    # instruction "first prove that" are accounted for.
-    assert coverage_gaps(text, facts) == ["“≅”"]
+    # instruction "first prove that" are accounted for. Review round 8: a
+    # congruence method names a figure (congruent triangles), so "using AAS"
+    # is accounted for only when the reading states them.
+    assert coverage_gaps(text, facts) == ["“≅”", "“using AAS”"]
+    claim = F("congruent_triangles", ["QRT", "SRT"], quote="△QRT ≅ △SRT")
+    assert coverage_gaps(text, facts.model_copy(update={"prove": [*facts.prove, claim]})) == []
 
 
 def test_a_chain_is_one_fact_for_each_link() -> None:

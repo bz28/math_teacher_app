@@ -689,6 +689,47 @@ CASES: list[dict[str, Any]] = [
                   "F": [1.368, 3.759], "G": [0, 0], "H": [0.684, 1.879]}, lines=_EF_LINES,
                  angle_labels={"AGH": "70°"}),
      "why": "AB and CD are not parallel"},
+    # Review round 8: derived facts are checked, losslessly.
+    {"id": "round8-subject-same-clause",
+     "text": r"In $\triangle PQR$, $\overline{QT} \perp \overline{PR}$ and $\overline{EF} \parallel \overline{PQ}$ and "
+             r"intersects $\overline{PR}$ at $S$. Find $PS$.",
+     "good": _fig({"P": [0, 0], "R": [6, 0], "Q": [2, 4], "T": [2, 0], "S": [3, 0], "E": [2, -2], "F": [4, 2]},
+                  segments=["PQ", "QR", "RP", "QT", "EF"], parallel_groups=[["EF", "PQ"]], right_angles=["QTP"]),
+     "bad": _fig({"P": [0, 0], "R": [6, 0], "Q": [2, 4], "T": [2, -1], "S": [2, 0], "E": [4, 1], "F": [5, 3]},
+                 segments=["PQ", "QR", "RP", "QT", "EF"], parallel_groups=[["EF", "PQ"]], right_angles=["QSP"]),
+     "why": "S is QT's foot; EF does not pass through S"},
+    {"id": "round8-on-the-segment",
+     "text": r"In $\triangle PQR$, $\overline{EF} \parallel \overline{PQ}$ and intersects $\overline{PR}$ at $S$. "
+             r"Find $PS$.",
+     "good": _fig({"P": [0, 0], "R": [4, 0], "Q": [1, 3], "S": [2, 0], "E": [1.5, -1.5], "F": [3, 3]},
+                  segments=["PQ", "QR", "RP", "EF"], parallel_groups=[["EF", "PQ"]]),
+     "bad": _fig({"P": [0, 0], "R": [4, 0], "Q": [1, 3], "S": [6, 0], "E": [5, -3], "F": [7, 3]},
+                 segments=["PQ", "QR", "RP", "EF"], parallel_groups=[["EF", "PQ"]]),
+     "why": "S is on line PR past R, not on segment PR"},
+    {"id": "round8-on-the-ray",
+     "text": r"In $\triangle PQR$, ray $\overrightarrow{QT} \perp \overline{PQ}$ and intersects $\overline{PR}$ at "
+             r"$S$. Find $PS$.",
+     "good": _fig({"P": [0, 0], "R": [6, 0], "Q": [1, 1], "T": [1.5, 0.5], "S": [2, 0]},
+                  segments=["PQ", "QR", "RP"], rays=["QT"], right_angles=["PQT"]),
+     "bad": _fig({"P": [0, 0], "R": [6, 0], "Q": [1, 1], "T": [0, 2], "S": [2, 0]},
+                 segments=["PQ", "QR", "RP"], rays=["QT"], right_angles=["PQT"]),
+     "why": "S is behind Q, on line QT but not on ray QT"},
+    {"id": "round8-corollary", "expect_declined": True,
+     "text": r"In $\triangle ABC$, $m\angle B = 35^\circ$. Using the Corollary to the Triangle Sum Theorem, find "
+             r"$m\angle A$.",
+     "good": _fig({"A": [0, 0], "B": [4, 0], "C": [0, 2.801]}, segments=["AB", "BC", "CA"],
+                  angle_labels={"ABC": "35°"}, right_angles=["BAC"]),
+     "bad": _fig({"A": [3.27, 2.29], "B": [0, 0], "C": [4, 0]}, segments=["AB", "BC", "CA"],
+                 angle_labels={"ABC": "35°"}),
+     "why": "the corollary is about a right triangle; there is no right angle"},
+    {"id": "round8-altitude-foot",
+     "text": r"In $\triangle ABC$, altitude $\overline{CD}$ is perpendicular to $\overline{AB}$, $AB = 8$ and "
+             r"$CD = 2$. Find the area of $\triangle ABC$.",
+     "good": _fig({"A": [0, 0], "B": [8, 0], "C": [3, 2], "D": [3, 0]}, segments=["AB", "BC", "CA", "CD"],
+                  side_labels={"AB": "8", "CD": "2"}, right_angles=["CDB"]),
+     "bad": _fig({"A": [0, 0], "B": [8, 0], "C": [0, 5], "D": [0, 3]}, segments=["AB", "BC", "CA", "CD"],
+                 side_labels={"AB": "8", "CD": "2"}, right_angles=["CAB"]),
+     "why": "D is not on AB, so CD is not the altitude"},
 ]
 
 

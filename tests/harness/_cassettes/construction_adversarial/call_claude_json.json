@@ -40,6 +40,56 @@
       ]
     }
   },
+  "002e0f46b56e0086d020194fea3d75b6": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, $m\\angle B = 35^\\circ$. Using the Corollary to the Triangle Sum Theorem, find $m\\angle ",
+      "recorded_at": 1794654378.481672
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "m\u2220A",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "right_triangle",
+          "point": "C",
+          "quote": "\u25b3ABC"
+        },
+        {
+          "items": [
+            "B"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220B = 35\u00b0",
+          "value": 35
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
   "003b37a28a0aaf02138adf2388f457bf": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -8219,6 +8269,60 @@
       ]
     }
   },
+  "46546949fe22412f98fe253f4f45abba": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle PQR$, $\\overline{EF} \\parallel \\overline{PQ}$ and intersects $\\overline{PR}$ at $S$. Find $PS",
+      "recorded_at": 1794654367.727508
+    },
+    "response": {
+      "find": [
+        {
+          "item": "PS",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "EF",
+            "PQ"
+          ],
+          "kind": "parallel",
+          "quote": "EF \u2225 PQ"
+        },
+        {
+          "items": [
+            "EF",
+            "PR"
+          ],
+          "kind": "intersect",
+          "point": "S",
+          "quote": "intersects PR at S"
+        }
+      ],
+      "points": [
+        "P",
+        "Q",
+        "R",
+        "E",
+        "F",
+        "S"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "EF",
+        "PQ",
+        "PR",
+        "PS"
+      ],
+      "triangles": [
+        "PQR"
+      ]
+    }
+  },
   "46f0daa89673166c43adb48b7f116602": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -10098,6 +10202,65 @@
       "segments": [],
       "triangles": [
         "ABC"
+      ]
+    }
+  },
+  "56316d5ff9c9e3ea4ebc48f18f137fad": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle PQR$, ray $\\overrightarrow{QT} \\perp \\overline{PQ}$ and intersects $\\overline{PR}$ at $S$. Fi",
+      "recorded_at": 1794654373.502541
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "PS",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "QT",
+            "PQ"
+          ],
+          "kind": "perpendicular",
+          "quote": "ray $\\overrightarrow{QT} \\perp \\overline{PQ}$"
+        },
+        {
+          "items": [
+            "QT",
+            "PR"
+          ],
+          "kind": "intersect",
+          "point": "S",
+          "quote": "intersects $\\overline{PR}$ at $S$"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "P",
+        "Q",
+        "R",
+        "S",
+        "T"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [
+        "QT"
+      ],
+      "requested": [],
+      "segments": [
+        "PQ",
+        "PR",
+        "PS"
+      ],
+      "triangles": [
+        "PQR"
       ]
     }
   },
@@ -14394,6 +14557,59 @@
       "triangles": []
     }
   },
+  "787e27ec2c8a02976ea89dfa891cc500": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle PQR$, $\\overline{EF} \\parallel \\overline{PQ}$ and intersects $\\overline{PR}$ at $S$. Find $PS",
+      "recorded_at": 1794654367.8750908
+    },
+    "response": {
+      "find": [
+        {
+          "item": "PS",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "EF",
+            "PQ"
+          ],
+          "kind": "parallel",
+          "quote": "EF \u2225 PQ"
+        },
+        {
+          "items": [
+            "EF",
+            "PR"
+          ],
+          "kind": "intersect",
+          "point": "S",
+          "quote": "intersects PR at S"
+        }
+      ],
+      "points": [
+        "P",
+        "Q",
+        "R",
+        "E",
+        "F",
+        "S"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "EF",
+        "PQ",
+        "PR"
+      ],
+      "triangles": [
+        "PQR"
+      ]
+    }
+  },
   "78952d30cf51eeb869fad59c70edb714": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -17620,6 +17836,65 @@
       "requested": []
     }
   },
+  "91cd6b2d85f5f9f2b5690459e1f06af1": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle PQR$, ray $\\overrightarrow{QT} \\perp \\overline{PQ}$ and intersects $\\overline{PR}$ at $S$. Fi",
+      "recorded_at": 1794654373.384001
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "PS",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "QT",
+            "PQ"
+          ],
+          "kind": "perpendicular",
+          "quote": "ray $\\overrightarrow{QT} \\perp \\overline{PQ}$"
+        },
+        {
+          "items": [
+            "QT",
+            "PR"
+          ],
+          "kind": "intersect",
+          "point": "S",
+          "quote": "intersects $\\overline{PR}$ at $S$"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "P",
+        "Q",
+        "R",
+        "S",
+        "T"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [
+        "QT"
+      ],
+      "requested": [],
+      "segments": [
+        "PQ",
+        "PR",
+        "PS"
+      ],
+      "triangles": [
+        "PQR"
+      ]
+    }
+  },
   "92cb4413c3176a0f4a354ca9f406f2ab": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -18321,6 +18596,71 @@
       "triangles": []
     }
   },
+  "9b7f78bfbf7968a7b76df29f5e9e2486": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, altitude $\\overline{CD}$ is perpendicular to $\\overline{AB}$, $AB = 8$ and $CD = 2$. Fi",
+      "recorded_at": 1794654384.665112
+    },
+    "response": {
+      "find": [
+        {
+          "item": "area of \u25b3ABC",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "CD",
+            "AB"
+          ],
+          "kind": "perpendicular",
+          "quote": "altitude $\\overline{CD}$ is perpendicular to $\\overline{AB}$"
+        },
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "on_segment",
+          "point": "D",
+          "quote": "altitude $\\overline{CD}$ is perpendicular to $\\overline{AB}$"
+        },
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "$AB = 8$",
+          "value": 8
+        },
+        {
+          "items": [
+            "CD"
+          ],
+          "kind": "equal_length",
+          "quote": "$CD = 2$",
+          "value": 2
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "CD",
+        "AB"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
   "9bd0d44204c6c99cb059df88ca881cfc": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -18928,6 +19268,131 @@
       "triangles": []
     }
   },
+  "9fef56694ba4a6310ebbd4a4ebf6a2c1": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle PQR$, $\\overline{QT} \\perp \\overline{PR}$ and $\\overline{EF} \\parallel \\overline{PQ}$ and int",
+      "recorded_at": 1794654363.353726
+    },
+    "response": {
+      "find": [
+        {
+          "item": "PS",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "QT",
+            "PR"
+          ],
+          "kind": "perpendicular",
+          "quote": "QT \u22a5 PR"
+        },
+        {
+          "items": [
+            "EF",
+            "PQ"
+          ],
+          "kind": "parallel",
+          "quote": "EF \u2225 PQ"
+        },
+        {
+          "items": [
+            "PR"
+          ],
+          "kind": "on_segment",
+          "point": "S",
+          "quote": "intersects PR at S"
+        }
+      ],
+      "points": [
+        "P",
+        "Q",
+        "R",
+        "T",
+        "E",
+        "F",
+        "S"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "QT",
+        "PR",
+        "EF",
+        "PQ"
+      ],
+      "triangles": [
+        "PQR"
+      ]
+    }
+  },
+  "a04e822817388f78a728a2b04f64a64e": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle PQR$, $\\overline{QT} \\perp \\overline{PR}$ and $\\overline{EF} \\parallel \\overline{PQ}$ and int",
+      "recorded_at": 1794654363.3949819
+    },
+    "response": {
+      "find": [
+        {
+          "item": "PS",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "QT",
+            "PR"
+          ],
+          "kind": "perpendicular",
+          "quote": "QT \u22a5 PR"
+        },
+        {
+          "items": [
+            "EF",
+            "PQ"
+          ],
+          "kind": "parallel",
+          "quote": "EF \u2225 PQ"
+        },
+        {
+          "items": [
+            "PR"
+          ],
+          "kind": "on_segment",
+          "point": "S",
+          "quote": "intersects PR at S"
+        }
+      ],
+      "points": [
+        "P",
+        "Q",
+        "R",
+        "T",
+        "E",
+        "F",
+        "S"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "QT",
+        "PR",
+        "EF",
+        "PQ",
+        "PS"
+      ],
+      "triangles": [
+        "PQR"
+      ]
+    }
+  },
   "a058920fbc9d3506e47c3c5539585014": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -19204,6 +19669,56 @@
         "EF"
       ],
       "triangles": []
+    }
+  },
+  "a1c610a96465a3017969a0b0b69a7d72": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, $m\\angle B = 35^\\circ$. Using the Corollary to the Triangle Sum Theorem, find $m\\angle ",
+      "recorded_at": 1794654379.1129441
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "A",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "right_triangle",
+          "point": "C",
+          "quote": "Corollary to the Triangle Sum Theorem"
+        },
+        {
+          "items": [
+            "B"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220B = 35\u00b0",
+          "value": 35
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": [
+        "ABC"
+      ]
     }
   },
   "a221eb6171997dd6df05406bf711806f": {
@@ -21988,6 +22503,76 @@
       ],
       "prove": [],
       "requested": []
+    }
+  },
+  "b7378fa72072b05c7446ad50a07e88b3": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, altitude $\\overline{CD}$ is perpendicular to $\\overline{AB}$, $AB = 8$ and $CD = 2$. Fi",
+      "recorded_at": 1794654385.557565
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "area of \u25b3ABC",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "CD",
+            "AB"
+          ],
+          "kind": "perpendicular",
+          "quote": "altitude $\\overline{CD}$ is perpendicular to $\\overline{AB}$"
+        },
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "on_segment",
+          "point": "D",
+          "quote": "altitude $\\overline{CD}$ is perpendicular to $\\overline{AB}$"
+        },
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "$AB = 8$",
+          "value": 8
+        },
+        {
+          "items": [
+            "CD"
+          ],
+          "kind": "equal_length",
+          "quote": "$CD = 2$",
+          "value": 2
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "CD",
+        "AB"
+      ],
+      "triangles": [
+        "ABC"
+      ]
     }
   },
   "b75004947b36a393748f3c3b25d297ca": {

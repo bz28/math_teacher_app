@@ -25,6 +25,7 @@ from typing import Any
 
 import pytest
 
+from api.core.construction_figures import trusted_reading
 from api.core.geometry.dsl import ConstructionFigure
 from api.core.geometry.facts import (
     Fact,
@@ -32,9 +33,7 @@ from api.core.geometry.facts import (
     Target,
     coverage_gaps,
     grounded,
-    merged,
     standard_reading,
-    unverifiable,
     without_other,
 )
 from api.core.geometry.figure_check import check_construction
@@ -52,14 +51,15 @@ def gaps(text: str, facts: FigureFacts) -> list[str]:
     return coverage_gaps(text, without_other(standard_reading(grounded(facts, text))))
 
 
+def trusted(text: str, facts: FigureFacts) -> FigureFacts | None:
+    """The pipeline's plain-code half with both readings equal (the facts
+    the drawing is checked against, derived facts included)."""
+    return trusted_reading(text, facts, facts)[0]
+
+
 def passes(text: str, facts: FigureFacts, figure: ConstructionFigure) -> bool:
-    """The pipeline with both readings equal: standard form, coverage,
-    verifiers, then the drawing check."""
-    a = without_other(standard_reading(grounded(facts, text)))
-    if coverage_gaps(text, a):
-        return False
-    m = merged(a, a)
-    return not unverifiable(m) and not check_construction(figure, text, facts=m)
+    t = trusted(text, facts)
+    return t is not None and not check_construction(figure, text, facts=t)
 
 
 def _iso(apex: str, b1: str, b2: str, ox: float, base_angle: float) -> dict[str, tuple[float, float]]:
@@ -86,11 +86,14 @@ def test_each_base_angle_of_a_named_triangle_is_that_triangles() -> None:
     text = (r"Isosceles $\triangle ABC$ has $AB = AC$ and isosceles $\triangle DEF$ has $DE = DF$. "
             r"Each base angle of $\triangle DEF$ measures $50^\circ$. Find $m\angle D$.")
     q = "Each base angle of △DEF measures 50°"
-    assert not passes(text, _two_iso(q, "BC"), TWO_ISO_WRONG)
-    assert gaps(text, _two_iso(q, "BC")) != []
-    assert gaps(text, _two_iso(q, "EF")) == []  # DEF's base angles: accounted for (and checked: refused)
-    assert not passes(text, _two_iso(q, "EF"), TWO_ISO_WRONG)
-    assert gaps(text, _two_iso(q, "E")) != []  # one of the two only
+    # Round 8: the words' own facts (∠E = ∠F = 50°) are checked, whichever
+    # angles the reading put the measure on.
+    for vs in ("BC", "EF", "E"):
+        assert not passes(text, _two_iso(q, vs), TWO_ISO_WRONG), vs
+    right = fig(points={**_iso("A", "B", "C", 0, 50), **_iso("D", "E", "F", 6, 50)},
+                segments=["AB", "BC", "CA", "DE", "EF", "FD"], tick_groups=[["AB", "AC"], ["DE", "DF"]],
+                angle_labels={"DEF": "50°", "DFE": "50°"})
+    assert passes(text, _two_iso(q, "EF"), right)
 
 
 def test_each_base_angle_with_two_isosceles_triangles_and_none_named_is_a_gap() -> None:
@@ -115,7 +118,9 @@ def test_the_base_triangle_comes_from_its_stated_equal_legs() -> None:
         return FigureFacts(points=list("ABC"), triangles=["ABC"], find=[Target(kind="angle", item="A")],
                            givens=[legs, *[F("angle_measure", [v], value=50, quote=q) for v in vs]])
     assert gaps(text, facts("BC")) == []
-    assert gaps(text, facts("AB")) != []
+    t = trusted(text, facts("AB"))  # read on the wrong angles: the words' own ∠B, ∠C are checked too
+    # (The reading's own m∠B = 50° is the derived ∠ABC, so it isn't added twice.)
+    assert t is not None and {g.items[0] for g in t.givens if g.kind == "angle_measure"} == {"A", "B", "ACB"}
 
 
 RESP_TEXT = (r"$\overleftrightarrow{AB} \parallel \overleftrightarrow{CD}$, with transversal "
@@ -138,10 +143,14 @@ def test_respectively_follows_the_order_the_text_names_the_lines() -> None:
                         "G": (3.4, 3), "H": (1.6, 0)},
                 lines=[{"through": ["A", "B"]}, {"through": ["C", "D"]}, {"through": ["E", "F"]}],
                 parallel_groups=[["AB", "CD"]])
-    assert not passes(RESP_TEXT, _resp(["CD", "AB"], "CD", "AB"), wrong)
-    assert gaps(RESP_TEXT, _resp(["CD", "AB"], "CD", "AB")) != []
-    assert gaps(RESP_TEXT, _resp(["AB", "CD"], "CD", "AB")) != []
-    assert gaps(RESP_TEXT, _resp(["CD", "AB"], "AB", "CD")) == []  # right points, any order in the reading
+    right = fig(points={"A": (0, 0), "B": (6, 0), "C": (0, 3), "D": (6, 3), "E": (1, -1), "F": (4, 4),
+                        "G": (1.6, 0), "H": (3.4, 3)},
+                lines=[{"through": ["A", "B"]}, {"through": ["C", "D"]}, {"through": ["E", "F"]}],
+                parallel_groups=[["AB", "CD"]])
+    for order in (["CD", "AB"], ["AB", "CD"]):
+        for gl, hl in (("CD", "AB"), ("AB", "CD")):
+            assert not passes(RESP_TEXT, _resp(order, gl, hl), wrong), (order, gl)
+    assert passes(RESP_TEXT, _resp(["CD", "AB"], "AB", "CD"), right)
 
 
 INT_TEXT = (r"In $\triangle PQR$, ray $QT$ bisects $\angle PQR$, with $QS = 5$, and intersects $\overline{PR}$ "
@@ -166,27 +175,36 @@ def test_the_subject_of_intersects_is_the_clauses_subject() -> None:
     wrong = fig(points={"P": p, "Q": q, "R": r, "S": s, "T": (3, 3)}, segments=["PQ", "QR", "RP", "QS"],
                 rays=["QT"], arc_groups=[["PQT", "TQR"]], side_labels={"QS": "5"})
     assert not passes(INT_TEXT, _int_facts(), wrong)
-    assert gaps(INT_TEXT, _int_facts()) != []
-    on_qt = F("on_line", ["QT"], point="S", quote="intersects PR at point S")
-    assert gaps(INT_TEXT, _int_facts(on_qt)) == []
-    assert not passes(INT_TEXT, _int_facts(on_qt), wrong)
+    a = 5 * math.sqrt(2)
+    right = fig(points={"P": (a, 0), "Q": (0, 0), "R": (0, a), "S": (a / 2, a / 2), "T": (2, 2)},
+                segments=["PQ", "QR", "RP", "QS"], rays=["QT"], arc_groups=[["PQT", "TQR"]], side_labels={"QS": "5"})
+    assert passes(INT_TEXT, _int_facts(), right)
 
 
-@pytest.mark.parametrize("text, subject_ok", [
-    (r"$\overleftrightarrow{EF}$ intersects $\overleftrightarrow{AB}$ at $G$.", True),
-    (r"$\overline{QS}$, the bisector of $\angle PQR$, intersects $\overline{PR}$ at $S$.", True),
-    (r"In $\triangle PQR$, ray $QS$ bisects $\angle PQR$ and intersects $\overline{PR}$ at point $S$.", True),
-    (r"In $\triangle PQR$ the ray bisects $\angle PQR$ and intersects $\overline{PR}$ at point $S$.", False),
+@pytest.mark.parametrize("text, subject", [
+    (r"$\overleftrightarrow{EF}$ intersects $\overleftrightarrow{AB}$ at $G$.", "EF"),
+    (r"$\overline{QS}$, the bisector of $\angle PQR$, intersects $\overline{PR}$ at $S$.", "QS"),
+    (r"In $\triangle PQR$, ray $QS$ bisects $\angle PQR$ and intersects $\overline{PR}$ at point $S$.", "QS"),
+    (r"In $\triangle PQR$, $\overline{EF} \parallel \overline{PQ}$ and intersects $\overline{PR}$ at $S$.", "EF"),
+    # Round 8: the nearest name heading a verb phrase in the clause; a
+    # subject of two names is ambiguous.
+    (r"In $\triangle PQR$, $\overline{QT} \perp \overline{PR}$ and $\overline{EF} \parallel \overline{PQ}$ and "
+     r"intersects $\overline{PR}$ at $S$.", "EF"),
+    (r"In $\triangle PQR$, $\overline{QT}$ and $\overline{EF}$ are drawn and intersects $\overline{PR}$ at $S$.",
+     None),
+    (r"In $\triangle PQR$, $\overline{QT}$ and $\overline{EF} \parallel \overline{PQ}$ and intersects "
+     r"$\overline{PR}$ at $S$.", None),
+    (r"In $\triangle PQR$, ray $QT$ and ray $EF$ are drawn and intersects $\overline{PR}$ at $S$.", None),
+    (r"In $\triangle PQR$ the ray bisects $\angle PQR$ and intersects $\overline{PR}$ at point $S$.", None),
 ])
-def test_the_subject_grammar(text: str, subject_ok: bool) -> None:
+def test_the_subject_grammar(text: str, subject: str | None) -> None:
     from api.core.geometry import coverage as cv
+    from api.core.geometry.figure_check import _clean
 
-    toks = cv.tokens(text, set("ABEFGPQRS"))
+    toks = cv.tokens(_clean(text), set("ABEFGPQRST"))
     at = next(n for n, k in enumerate(toks) if k.norm == "intersects")
-    subject = cv._subject_of(toks, at)
-    assert (subject is not None) == subject_ok, subject
-    if subject is not None:
-        assert subject.norm in ("EF", "QS")
+    found = cv._subject_of(toks, at)
+    assert (found.norm if found else None) == subject
 
 
 EXT_TEXT = (r"In $\triangle PQR$, an exterior angle is formed at vertex $P$ by extending side $\overline{RP}$ beyond "
@@ -207,11 +225,12 @@ def test_the_exterior_angle_at_p_is_the_one_its_extension_makes() -> None:
     q = (4 * math.cos(math.radians(70)), 4 * math.sin(math.radians(70)))
     wrong = fig(points={"P": p, "Q": q, "R": r, "T": (3, 0)}, segments=["PQ", "QR", "RP", "PT"],
                 angle_labels={"QPR": "110°"})  # interior 110°: the exterior is 70°
-    for items in (["P"], ["QPR"]):
+    for items in (["P"], ["QPR"], ["QPT"]):
         assert not passes(EXT_TEXT, _ext(items), wrong), items
-        assert gaps(EXT_TEXT, _ext(items)) != [], items
-    assert gaps(EXT_TEXT, _ext(["QPT"])) == []
-    assert not passes(EXT_TEXT, _ext(["QPT"]), wrong)
+    q2 = (4 * math.cos(math.radians(110)), 4 * math.sin(math.radians(110)))
+    right = fig(points={"P": p, "Q": q2, "R": r, "T": (3, 0)}, segments=["PQ", "QR", "RP", "PT"],
+                angle_labels={"QPT": "110°"})
+    assert passes(EXT_TEXT, _ext(["QPT"]), right)
 
 
 def test_using_properties_of_parallel_lines_asserts_parallel_lines() -> None:
@@ -299,8 +318,7 @@ def test_one_acute_angle_with_two_triangles_names_no_angle() -> None:
 def test_an_exterior_angle_formed_by_an_extension_needs_that_extension() -> None:
     text = (r"In $\triangle PQR$, an exterior angle is formed at vertex $P$ by extending side $\overline{RP}$ beyond "
             r"$P$ to point $T$.")
+    # Round 8: the words' extension is derived and checked, read or not.
     without = FigureFacts(points=list("PQRT"), triangles=["PQR"], givens=[])
-    assert gaps(text, without) != []
-    with_ = FigureFacts(points=list("PQRT"), triangles=["PQR"], givens=[
-        F("extension", ["RP"], point="T", quote="extending side RP beyond P to point T")])
-    assert gaps(text, with_) == []
+    t = trusted(text, without)
+    assert t is not None and any(g.kind == "extension" and g.items == ["RP"] and g.point == "T" for g in t.givens)

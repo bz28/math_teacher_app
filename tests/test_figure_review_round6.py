@@ -30,6 +30,7 @@ from typing import Any
 
 import pytest
 
+from api.core.construction_figures import trusted_reading
 from api.core.geometry import coverage as cv
 from api.core.geometry.dsl import ConstructionFigure
 from api.core.geometry.facts import Fact, FigureFacts, Target, coverage_gaps, standard_reading
@@ -44,10 +45,23 @@ def F(kind: str, items: tuple[str, ...] | list[str] = (), **kw: Any) -> Fact:  #
     return Fact(kind=kind, items=list(items), **kw)  # type: ignore[arg-type]
 
 
+def trusted(text: str, facts: FigureFacts) -> FigureFacts | None:
+    """The facts the drawing is checked against (both readings equal),
+    with the facts code derives from the words; None when refused."""
+    return trusted_reading(text, facts, facts)[0]
+
+
 def refused(text: str, facts: FigureFacts, figure: ConstructionFigure) -> bool:
-    """The pipeline's order: the standard reading, its coverage, the check."""
-    s = standard_reading(facts)
-    return bool(coverage_gaps(text, s)) or bool(check_construction(figure, text, facts=s))
+    """The pipeline's order: the trusted reading (standard form, coverage,
+    derived facts), then the check."""
+    t = trusted(text, facts)
+    return t is None or bool(check_construction(figure, text, facts=t))
+
+
+def derived(text: str, facts: FigureFacts) -> list[tuple[Any, ...]]:
+    """What code derives from the words (round 8: added to the checked
+    facts whatever the reading says)."""
+    return [(d.kind, tuple(d.items), d.point, d.value, d.expr) for d in cv.coverage(text, standard_reading(facts))[1]]
 
 
 # ── 1. A quote accounts only for what its fact uses ─────────────────
@@ -81,20 +95,34 @@ def test_an_overlong_quote_accounts_only_for_its_own_fact() -> None:
     assert refused(text, facts, wrong)
 
 
+def _iso_pts(base_angle: float) -> dict[str, tuple[float, float]]:
+    """Isosceles △ABC with apex A over base BC = 4."""
+    return {"B": (0, 0), "C": (4, 0), "A": (2, 2 * math.tan(math.radians(base_angle)))}
+
+
 def test_a_quote_naming_no_part_accounts_for_nothing() -> None:
     """Found in round 6: "the vertex angle measures 40°" read as m∠B = 40°
-    (a base angle) passed: the quote names no angle, so which angle is the
-    reading's choice alone."""
+    (a base angle) passed. Round 8: the words name the apex by role, so
+    code derives m∠A = 40° and checks it whatever the reading says; the
+    reading's m∠B = 40° then fits no isosceles drawing."""
     text = r"In isosceles $\triangle ABC$ with $AB = AC$, the vertex angle measures $40^\circ$. Find $m\angle C$."
+    iso = F("isosceles", ["ABC"], point="A", quote="isosceles △ABC with AB = AC")
     facts = FigureFacts(points=list("ABC"), triangles=["ABC"], find=[Target(kind="angle", item="C")], givens=[
-        F("isosceles", ["ABC"], point="A", quote="isosceles △ABC with AB = AC"),
-        F("angle_measure", ["B"], value=40, quote="the vertex angle measures 40°")])
-    assert coverage_gaps(text, facts) == ["“measures 40°”"]
-    # Named, it is accounted for.
+        iso, F("angle_measure", ["B"], value=40, quote="the vertex angle measures 40°")])
+    assert derived(text, facts) == [("angle_measure", ("BAC",), None, 40.0, None)]
+    base_40 = fig(points=_iso_pts(40), segments=["AB", "BC", "CA"], tick_groups=[["AB", "AC"]],
+                  angle_labels={"ABC": "40°"})
+    apex_40 = fig(points=_iso_pts(70), segments=["AB", "BC", "CA"], tick_groups=[["AB", "AC"]],
+                  angle_labels={"BAC": "40°"})
+    assert refused(text, facts, base_40) and refused(text, facts, apex_40)
+    right = facts.model_copy(update={"givens": [iso, F("angle_measure", ["A"], value=40,
+                                                        quote="the vertex angle measures 40°")]})
+    assert not refused(text, right, apex_40) and refused(text, right, base_40)
+    # Named, it is accounted for by the fact at the name.
     named = (r"In isosceles $\triangle ABC$ with $AB = AC$, the vertex angle $\angle A$ measures $40^\circ$. "
              r"Find $m\angle C$.")
-    at_a = facts.model_copy(update={"givens": [facts.givens[0], F("angle_measure", ["A"], value=40,
-                                                                    quote="the vertex angle ∠A measures 40°")]})
+    at_a = facts.model_copy(update={"givens": [iso, F("angle_measure", ["A"], value=40,
+                                                       quote="the vertex angle ∠A measures 40°")]})
     assert coverage_gaps(named, at_a) == []
 
 
@@ -354,12 +382,26 @@ def test_a_method_accounts_only_for_its_own_name(text: str) -> None:
 
 @pytest.mark.parametrize("text", [
     r"In $\triangle ABC$, $m\angle A = 40^\circ$. Find $m\angle B$ by the Triangle Sum Theorem.",
-    r"In $\triangle ABC$, $m\angle A = 40^\circ$. Use the Corollary to the Triangle Sum Theorem to find $m\angle B$.",
-    r"In $\triangle ABC$, $m\angle A = 40^\circ$. Find $m\angle B$ using SAS and the Reflexive Property.",
-    r"In $\triangle ABC$, $m\angle A = 40^\circ$. Find $m\angle B$ using the SAS Congruence Postulate.",
+    r"In $\triangle ABC$, $m\angle A = 40^\circ$. Find $m\angle B$ using the Reflexive Property.",
 ])
 def test_a_methods_name_is_accounted_for(text: str) -> None:
     assert coverage_gaps(text, METHOD_FACTS) == [], text
+
+
+CONGRUENT = METHOD_FACTS.model_copy(update={"points": list("ABCD"), "triangles": ["ABC", "ADC"], "prove": [
+    F("congruent_triangles", ["ABC", "ADC"], quote="△ABC ≅ △ADC")]})
+
+
+@pytest.mark.parametrize("text", [
+    r"In $\triangle ABC$, $m\angle A = 40^\circ$. Find $m\angle B$ using SAS and the Reflexive Property.",
+    r"In $\triangle ABC$, $m\angle A = 40^\circ$. Find $m\angle B$ using the SAS Congruence Postulate.",
+])
+def test_a_congruence_method_needs_a_stated_congruence(text: str) -> None:
+    """Round 8 (D): a method that applies only to some figure asserts it;
+    "by SAS" is accounted for only when the reading states congruent
+    triangles."""
+    assert any("SAS" in g for g in coverage_gaps(text, METHOD_FACTS)), text
+    assert not any("SAS" in g for g in coverage_gaps(text, CONGRUENT)), text
 
 
 @pytest.mark.parametrize("text, word", [
@@ -373,6 +415,9 @@ def test_a_methods_name_is_accounted_for(text: str) -> None:
     (r"In $\triangle ABC$, $m\angle A = 40^\circ$. Find $m\angle B$ using the Vertical Angles Theorem.", "Vertical"),
     (r"In $\triangle ABC$, $m\angle A = 40^\circ$. Find $m\angle B$ using properties of parallel lines.", "parallel"),
     (r"In $\triangle ABC$, $m\angle A = 40^\circ$. Find $m\angle B$ using HL.", "HL"),
+    # Round 8 (D): the corollary is about a right triangle's acute angles.
+    (r"In $\triangle ABC$, $m\angle A = 40^\circ$. Use the Corollary to the Triangle Sum Theorem to find "
+     r"$m\angle B$.", "Corollary"),
 ])
 def test_a_method_that_asserts_a_relation_is_a_gap(text: str, word: str) -> None:
     assert any(word in g for g in coverage_gaps(text, METHOD_FACTS)), text
@@ -395,33 +440,47 @@ EACH = r"In isosceles $\triangle ABC$, $AB = AC$. Each base angle measures $(5x 
 
 
 def test_each_base_angle_needs_a_fact_on_both_base_angles() -> None:
+    """Round 8 (A): "each base angle" derives a measure on both base angles,
+    checked whatever the reading says; a reading measuring a base angle
+    otherwise is refused as contradicting the words."""
     q = "Each base angle measures (5x − 3)°"
     both = iso_facts(F("angle_measure", ["B"], expr="5x-3", quote=q), F("angle_measure", ["C"], expr="5x-3", quote=q))
     assert coverage_gaps(EACH, both) == []
+    want = [("angle_measure", ("ABC",), None, None, "5x-3"), ("angle_measure", ("ACB",), None, None, "5x-3")]
     one = iso_facts(F("angle_measure", ["B"], expr="5x-3", quote=q))
-    assert coverage_gaps(EACH, one) != []
-    apex = iso_facts(F("angle_measure", ["B"], expr="5x-3", quote=q), F("angle_measure", ["A"], expr="5x-3", quote=q))
-    assert coverage_gaps(EACH, apex) != []
+    assert derived(EACH, one) == want  # ∠C too, though the reading has only ∠B
+    t = trusted(EACH, one)
+    assert t is not None and [g.items for g in t.givens if g.kind == "angle_measure"] == [["B"], ["ACB"]]
     differ = iso_facts(F("angle_measure", ["B"], expr="5x-3", quote=q), F("angle_measure", ["C"], expr="5x+3", quote=q))
-    assert coverage_gaps(EACH, differ) != []
+    assert trusted(EACH, differ) is None
+    flipped = iso_facts(F("angle_measure", ["B"], expr="5x+3", quote=q))  # the sign read wrong
+    assert coverage_gaps(EACH, flipped) and trusted(EACH, flipped) is None
 
 
 def test_the_base_angles_named_after_satisfy_are_the_base_angles() -> None:
+    """The angles named after "the base angles satisfy" are the base
+    angles: code derives the legs they make equal (AB = AC for ∠B, ∠C;
+    CA = CB for ∠B, ∠A), checked whatever the reading says."""
     text = (r"In isosceles $\triangle ABC$, $AB = AC$. The base angles satisfy $m\angle B = (5y - 8)^\circ$ and "
             r"$m\angle C = (3y + 14)^\circ$. Find $y$.")
     givens = [F("angle_measure", ["B"], expr="5y-8", quote="m∠B = (5y - 8)°"),
               F("angle_measure", ["C"], expr="3y+14", quote="m∠C = (3y + 14)°")]
-    assert coverage_gaps(text, iso_facts(*givens, find=[Target(kind="other", item="y")])) == []
+    right = iso_facts(*givens, find=[Target(kind="other", item="y")])
+    assert coverage_gaps(text, right) == [] and derived(text, right) == [("congruent_segments", ("AB", "AC"), None,
+                                                                          None, None)]
     wrong = text.replace(r"m\angle C", r"m\angle A")
     givens_a = [givens[0], F("angle_measure", ["A"], expr="3y+14", quote="m∠A = (3y + 14)°")]
-    assert any("base" in g for g in coverage_gaps(wrong, iso_facts(*givens_a, find=[Target(kind="other", item="y")])))
+    assert derived(wrong, iso_facts(*givens_a, find=[Target(kind="other", item="y")])) == [
+        ("congruent_segments", ("CA", "CB"), None, None, None)]
 
 
 def test_the_vertex_angle_unnamed_is_the_apex() -> None:
     text = r"In isosceles $\triangle ABC$, $AB = AC$. The vertex angle measures $40^\circ$. Find $x$."
     q = "The vertex angle measures 40°"
     assert coverage_gaps(text, iso_facts(F("angle_measure", ["A"], value=40, quote=q))) == []
-    assert coverage_gaps(text, iso_facts(F("angle_measure", ["B"], value=40, quote=q)))
+    # Read at B, the words still put 40° at the apex A.
+    assert derived(text, iso_facts(F("angle_measure", ["B"], value=40, quote=q))) == [
+        ("angle_measure", ("BAC",), None, 40.0, None)]
 
 
 def test_one_acute_angle_and_the_other_are_the_two_acute_angles() -> None:
@@ -454,16 +513,20 @@ def test_parts_that_share_an_endpoint_or_a_side() -> None:
 
 
 def test_a_ray_that_intersects_a_side_at_its_own_point() -> None:
+    """Round 8 (A, B): "ray QS … intersects PR at point S" derives S on
+    segment PR (the overline), whatever the reading says; with another ray
+    named, S is on that ray too (on_ray, not a line)."""
     text = r"In $\triangle PQR$, ray $QS$ bisects $\angle PQR$ and intersects $\overline{PR}$ at point $S$."
     givens = [F("bisects_angle", ["QS", "PQR"], quote="ray QS bisects ∠PQR"),
               F("on_segment", ["PR"], point="S", quote="intersects PR at point S")]
     facts = FigureFacts(points=list("PQRS"), triangles=["PQR"], rays=["QS"], givens=givens)
     assert coverage_gaps(text, facts) == []
-    assert coverage_gaps(text, facts.model_copy(update={"givens": givens[:1]})) != []  # S on PR: no fact
+    on_pr = ("on_segment", ("PR",), "S", None, None)
+    assert derived(text, facts.model_copy(update={"givens": givens[:1]})) == [on_pr]  # no fact in the reading
     other = r"In $\triangle PQR$, ray $QT$ bisects $\angle PQR$ and intersects $\overline{PR}$ at point $S$."
-    assert coverage_gaps(other, facts.model_copy(update={
-        "points": list("PQRST"), "rays": ["QT"],
-        "givens": [F("bisects_angle", ["QT", "PQR"], quote="ray QT bisects ∠PQR"), givens[1]]})) != []
+    qt = facts.model_copy(update={"points": list("PQRST"), "rays": ["QT"], "givens": [
+        F("bisects_angle", ["QT", "PQR"], quote="ray QT bisects ∠PQR"), givens[1]]})
+    assert derived(other, qt) == [on_pr, ("on_ray", ("QT",), "S", None, None)]
 
 
 def test_an_exterior_angle_needs_its_extension() -> None:
@@ -471,9 +534,9 @@ def test_an_exterior_angle_needs_its_extension() -> None:
     text = (r"In $\triangle PQR$, an exterior angle is formed at vertex $P$ by extending side $\overline{RP}$ beyond "
             r"$P$. Find the measure of the exterior angle at $P$.")
     facts = FigureFacts(points=list("PQR"), triangles=["PQR"], givens=[ext])
-    assert coverage_gaps(text, facts) == []
-    assert coverage_gaps(text, facts.model_copy(update={"givens": [F("extension", ["PR"],
-                                                                     quote="extending side RP beyond P")]})) != []
+    assert coverage_gaps(text, facts) == [] and derived(text, facts) == [("extension", ("RP",), None, None, None)]
+    assert trusted(text, facts.model_copy(update={"givens": [F("extension", ["PR"],
+                                                               quote="extending side RP beyond P")]})) is None
     at_q = text.replace("vertex $P$", "vertex $Q$")  # no stated extension makes an exterior angle at Q
     assert coverage_gaps(at_q, facts) != []
     beyond_r = text.replace("beyond $P$", "beyond $R$")  # the other direction: RP read the wrong way
@@ -482,9 +545,11 @@ def test_an_exterior_angle_needs_its_extension() -> None:
     text = r"In $\triangle ABC$, side $\overline{BC}$ is extended to point $D$. Find the exterior angle $\angle ACD$."
     facts = FigureFacts(points=list("ABCD"), triangles=["ABC"], find=[Target(kind="angle", item="ACD")],
                         givens=[F("extension", ["BC"], point="D", quote="side BC is extended to point D")])
-    assert coverage_gaps(text, facts) == []
-    assert coverage_gaps(text.replace("ACD", "ABD"), facts.model_copy(update={
-        "find": [Target(kind="angle", item="ABD")]})) != []
+    assert coverage_gaps(text, facts) == [] and derived(text, facts) == [("extension", ("BC",), "D", None, None)]
+    # "the exterior angle ∠ABD" puts D past B: with BC extended past C to D
+    # no drawing has both.
+    abd = facts.model_copy(update={"find": [Target(kind="angle", item="ABD")]})
+    assert derived(text.replace("ACD", "ABD"), abd) == [("extension", ("CB",), "D", None, None)]
 
 
 def test_each_and_both_in_a_target_and_an_arc_on_the_circle() -> None:
@@ -504,6 +569,8 @@ def test_each_and_both_in_a_target_and_an_arc_on_the_circle() -> None:
 
 
 def test_respectively_matches_the_points_to_the_lines_in_order() -> None:
+    """"at points G and H respectively" derives G on the first line and H
+    on the second (text order), whatever order the reading has."""
     text = (r"$\overleftrightarrow{AB} \parallel \overleftrightarrow{CD}$, with transversal "
             r"$\overleftrightarrow{EF}$ cutting both lines at points $G$ and $H$ respectively.")
     q = "cutting both lines at points G and H respectively"
@@ -512,9 +579,11 @@ def test_respectively_matches_the_points_to_the_lines_in_order() -> None:
               F("intersect", ["EF", "AB"], point="G", quote=q), F("intersect", ["EF", "CD"], point="H", quote=q)]
     facts = FigureFacts(points=list("ABCDEFGH"), lines=["AB", "CD", "EF"], givens=givens)
     assert coverage_gaps(text, facts) == []
+    want = [("intersect", ("EF", "AB"), "G", None, None), ("intersect", ("EF", "CD"), "H", None, None)]
     swapped = [*givens[:2], F("intersect", ["EF", "AB"], point="H", quote=q), F("intersect", ["EF", "CD"], point="G",
                                                                                  quote=q)]
-    assert coverage_gaps(text, facts.model_copy(update={"givens": swapped})) != []
+    for g in (givens, swapped, givens[:2]):
+        assert derived(text, facts.model_copy(update={"givens": g})) == want
 
 
 def test_legs_with_their_lengths_and_an_altitude_drawn_to_the_hypotenuse() -> None:
@@ -535,14 +604,31 @@ def test_legs_with_their_lengths_and_an_altitude_drawn_to_the_hypotenuse() -> No
     "Clearly state each statement and its corresponding reason.", "State the theorem you used.",
     "State which theorem you used.", "Leave answers in simplest radical form.",
     "Express each answer in simplest radical form.",
-    "You may use AAS or ASA congruence, and CPCTC.",
-    "You may use the Parallel Postulate and the Reflexive Property.",
-    "Write a two-column proof using triangle congruence (SSS or SAS) and CPCTC.",
+    "You may use the Reflexive Property.",
     "Set up and solve a proportion using the similarity ratio.",
 ])
 def test_an_instruction_phrase_is_accounted_for_whole(text: str) -> None:
     facts = FigureFacts(points=list("AB"), segments=["AB"], givens=[F("equal_length", ["AB"], value=5, quote="AB = 5")])
     assert coverage_gaps(rf"$AB = 5$. {text}", facts) == [], text
+
+
+@pytest.mark.parametrize("text, kind", [
+    ("You may use AAS or ASA congruence, and CPCTC.", "congruent_triangles"),
+    ("You may use AAS or ASA congruence.", "congruent_triangles"),
+    ("Write a two-column proof using triangle congruence (SSS or SAS) and CPCTC.", "congruent_triangles"),
+    ("You may use the Parallel Postulate and the Reflexive Property.", "parallel"),
+])
+def test_an_instruction_naming_a_method_needs_its_figure(text: str, kind: str) -> None:
+    """Round 8 (D): the congruence methods and the Parallel Postulate are
+    accounted for only when the reading states congruent triangles or
+    parallel lines."""
+    base = FigureFacts(points=list("ABCD"), segments=["AB", "CD"],
+                       givens=[F("equal_length", ["AB"], value=5, quote="AB = 5")])
+    text = rf"$AB = 5$. {text}"
+    assert coverage_gaps(text, base) != [], text
+    stated = F("congruent_triangles", ["ABC", "DBC"], quote="x") if kind == "congruent_triangles" else F(
+        "parallel", ["AB", "CD"], quote="x")
+    assert coverage_gaps(text, base.model_copy(update={"prove": [stated]})) == [], text
 
 
 @pytest.mark.parametrize("text, word", [
@@ -577,12 +663,12 @@ async def test_an_other_fact_one_reading_has_is_no_disagreement(monkeypatch: pyt
 
 def test_one_base_angle_read_alone_names_no_angle() -> None:
     """"One base angle measures 50°" is true of both base angles (they are
-    equal); read as one of them only, which one is the reading's choice."""
+    equal): code derives both, whichever one the reading chose."""
     text = r"In isosceles $\triangle ABC$, $AB = AC$. One base angle measures $50^\circ$. Find $x$."
     q = "One base angle measures 50°"
-    assert coverage_gaps(text, iso_facts(F("angle_measure", ["B"], value=50, quote=q)))
-    assert coverage_gaps(text, iso_facts(F("angle_measure", ["B"], value=50, quote=q),
-                                         F("angle_measure", ["C"], value=50, quote=q))) == []
+    want = [("angle_measure", ("ABC",), None, 50.0, None), ("angle_measure", ("ACB",), None, 50.0, None)]
+    assert derived(text, iso_facts(F("angle_measure", ["B"], value=50, quote=q))) == want
+    assert derived(text, iso_facts(F("angle_measure", ["C"], value=50, quote=q))) == want
 
 
 def test_one_acute_angle_needs_the_other_said_of_the_other() -> None:
@@ -603,13 +689,17 @@ def test_share_side_only_for_listed_triangles() -> None:
 
 
 def test_an_altitude_goes_to_the_side_opposite_its_vertex() -> None:
+    """Round 8 (A): "altitude AD" in △ABC derives AD ⊥ BC with foot D, the
+    side opposite A, whatever side the reading puts it on."""
     text = r"In $\triangle ABC$, altitude $\overline{AD}$ is perpendicular to $\overline{BC}$."
     facts = FigureFacts(points=list("ABCD"), triangles=["ABC"],
                         givens=[F("perpendicular", ["AD", "BC"], point="D", quote="AD is perpendicular to BC")])
     assert coverage_gaps(text, facts) == []
+    assert derived(text, facts) == [("perpendicular", ("AD", "BC"), "D", None, None)]
     wrong = text.replace("BC}$.", "AB}$.")
-    assert coverage_gaps(wrong, facts.model_copy(update={"givens": [
-        F("perpendicular", ["AD", "AB"], point="D", quote="AD is perpendicular to AB")]})) == ["“altitude”"]
+    assert derived(wrong, facts.model_copy(update={"givens": [
+        F("perpendicular", ["AD", "AB"], point="D", quote="AD is perpendicular to AB")]})) == [
+        ("perpendicular", ("AD", "BC"), "D", None, None)]
 
 
 def test_using_your_value_of_accounts_for_the_unknown_only_when_it_is_asked() -> None:

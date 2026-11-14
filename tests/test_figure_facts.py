@@ -368,9 +368,9 @@ def test_messages_are_written_by_code_not_quoted() -> None:
 @pytest.mark.parametrize(("a", "b"), [
     # Naming a figure is no fact.
     (_r(Fact(kind="other", items=["ABC"], quote="In △ABC"), triangles=["ABC"]), _r(triangles=["ABC"])),
-    # "EF meets AB at X" and "X is on EF and on AB".
+    # "Lines EF and AB meet at X" and "X is on line EF and on line AB".
     (_r(Fact(kind="intersect", items=["EF", "AB"], point="X")),
-     _r(Fact(kind="on_segment", items=["EF"], point="X"), Fact(kind="on_segment", items=["AB"], point="X"))),
+     _r(Fact(kind="on_line", items=["EF"], point="X"), Fact(kind="on_line", items=["AB"], point="X"))),
     # "isosceles" said besides the equal sides that make it so.
     (_r(Fact(kind="isosceles", items=["ABC"]), Fact(kind="congruent_segments", items=["AB", "AC"])),
      _r(Fact(kind="congruent_segments", items=["AB", "AC"]))),
@@ -386,6 +386,18 @@ def test_messages_are_written_by_code_not_quoted() -> None:
 ])
 def test_other_words_for_the_same_reading_agree(a: FigureFacts, b: FigureFacts) -> None:
     assert disagreements(a, b) == [] and disagreements(b, a) == []
+
+
+def test_a_point_on_a_segment_is_not_a_point_on_its_line() -> None:
+    """Review round 8 (B): the comparison is lossless. Lines meeting at X
+    put X on both lines; "X is on EF and on AB" (segments) is stricter, so
+    the readings disagree rather than one passing for the other."""
+    a = _r(Fact(kind="intersect", items=["EF", "AB"], point="X"))
+    b = _r(Fact(kind="on_segment", items=["EF"], point="X"), Fact(kind="on_segment", items=["AB"], point="X"))
+    assert disagreements(a, b) != [] and disagreements(b, a) != []
+    ray = _r(Fact(kind="on_ray", items=["EF"], point="X"))
+    for other in ("on_segment", "on_line"):
+        assert disagreements(ray, _r(Fact(kind=other, items=["EF"], point="X"))) != [], other
 
 
 def test_agreed_readings_keep_both_wordings_checks() -> None:
