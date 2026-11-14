@@ -22,6 +22,7 @@ from typing import Any, Literal
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core import photo_store
 from api.core.image_utils import (
     crop_region_for_vision,
     pdf_pages_as_images,
@@ -245,7 +246,12 @@ async def extract_student_work_from_pages(
     (`tests/harness/probes/extraction_fidelity.py`) draws its own pages
     with known ground truth, which is the only way to assert that the
     transcript says what the ink says.
+
+    `files` are stored page entries (`photo_store`): each page's bytes are
+    fetched from the photo bucket here, at full resolution — the drawing
+    check below crops from the original pixels.
     """
+    files = await photo_store.load_pages(files)
 
     briefing = _format_problems_briefing(problems)
     instruction = (

@@ -40,6 +40,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, undefer
 
+from api.core import photo_store
 from api.core.audit_log import record_student_activity
 from api.core.constants import MAX_SUBMISSION_FILES, MAX_SUBMISSION_TOTAL_BYTES
 from api.core.image_utils import (
@@ -670,9 +671,9 @@ class StudentSubmissionDetail(BaseModel):
     submission_id: str
     submitted_at: datetime
     is_late: bool
-    # List of {data, media_type} the student submitted. Null only when
-    # the row pre-dates the multi-file column (no real users yet so
-    # this is more about graceful read than a real branch).
+    # The pages the student submitted, as presigned URLs (never the
+    # bytes — the pending screen polls this every few seconds). Null only
+    # when the row pre-dates the multi-file column.
     files: list[SubmissionFileOut] | None
     final_answers: dict[str, str]
     # Full Vision extraction (steps + final_answers + confidence).
@@ -2305,6 +2306,19 @@ async def _validated_upload_files(body: SubmitHomeworkRequest) -> list[dict[str,
     return validated_files
 
 
+async def _store_photos(submission_id: uuid.UUID, files: list[dict[str, str]]) -> list[dict[str, Any]]:
+    """Put a turn-in's validated pages in the photo store; the entries to
+    save on the row. 503 when the store can't take them — the turn-in is
+    refused, never saved without its photos."""
+    try:
+        return await photo_store.store_pages(submission_id, files)
+    except photo_store.PhotoStoreError as e:
+        raise HTTPException(
+            status_code=503,
+            detail="Couldn't save your photos just now — please try again in a moment",
+        ) from e
+
+
 async def _resubmit_reopened(
     db: AsyncSession,
     user: User,
@@ -2335,6 +2349,7 @@ async def _resubmit_reopened(
     from api.models.grading_job import STATUS_RUNNING, GradingJob
 
     validated_files = await _validated_upload_files(body)
+    stored_files = await _store_photos(submission_id, validated_files)
     sub = (await db.execute(
         select(Submission)
         .where(Submission.id == submission_id, Submission.reopened_at.is_not(None))
@@ -2342,6 +2357,7 @@ async def _resubmit_reopened(
         .with_for_update().execution_options(populate_existing=True)
     )).scalar_one_or_none()
     if sub is None:
+        await photo_store.delete_pages(stored_files)
         raise HTTPException(status_code=409, detail="Already submitted")
     # Locked too: a drain claims a job by updating this row, so its claim
     # waits on this transaction and then finds the job gone — it can't
@@ -2353,6 +2369,7 @@ async def _resubmit_reopened(
     )).scalar_one_or_none()
     if job_status == STATUS_RUNNING:
         await db.rollback()
+        await photo_store.delete_pages(stored_files)
         raise HTTPException(
             status_code=409,
             detail="Your last turn-in is being graded right now — try again in a minute",
@@ -2370,7 +2387,7 @@ async def _resubmit_reopened(
     )
     await clear_grading(db, submission_id)
     is_late = days_late(now, due_at) > 0
-    sub.files = validated_files
+    sub.files = stored_files
     sub.final_answers = None
     sub.extraction = None
     sub.extraction_edits = None
@@ -2471,12 +2488,17 @@ async def submit_homework(
         raise HTTPException(status_code=403, detail="Not enrolled in this assignment")
 
     is_late = days_late(now, due_at) > 0
+    # The id is chosen here, not by the insert: the photos are stored
+    # under it before the row exists.
+    new_submission_id = uuid.uuid4()
+    stored_files = await _store_photos(new_submission_id, validated_files)
     submission = Submission(
+        id=new_submission_id,
         assignment_id=assignment_id,
         student_id=user.id,
         section_id=section_id,
         status="submitted",
-        files=validated_files,
+        files=stored_files,
         # final_answers is left null on new submissions; the next PR
         # (integrity checker) populates it from a Vision-extracted
         # confirm-and-edit step. The column is preserved so legacy
@@ -2494,6 +2516,7 @@ async def submit_homework(
         # (assignment_id, student_id). Convert the raw 500 into the
         # same 409 the application-layer check returns.
         await db.rollback()
+        await photo_store.delete_pages(stored_files)
         raise HTTPException(status_code=409, detail="Already submitted") from None
     await db.refresh(submission)
 
@@ -2908,6 +2931,7 @@ async def retake_submission(
         raise HTTPException(status_code=409, detail=block)
 
     validated_files = await _validated_upload_files(body)
+    stored_files = await _store_photos(submission_id, validated_files)
 
     now = datetime.now(UTC)
     # Measured against the student's effective due date, like submit
@@ -2947,7 +2971,7 @@ async def retake_submission(
             .exists(),
         )
         .values(
-            files=validated_files,
+            files=stored_files,
             extraction=None,
             extraction_edits=None,
             extraction_edited_at=None,
@@ -2960,6 +2984,7 @@ async def retake_submission(
     )
     if result.rowcount == 0:  # type: ignore[attr-defined]
         await db.rollback()
+        await photo_store.delete_pages(stored_files)
         raise HTTPException(
             status_code=409,
             detail="Submission state changed — reload and try again",
@@ -3048,7 +3073,7 @@ async def get_my_submission(
         submission_id=str(sub.id),
         submitted_at=sub.submitted_at,
         is_late=sub.is_late,
-        files=sub.files,
+        files=photo_store.pages_out(sub.files),
         final_answers=dict(sub.final_answers or {}),
         extraction=sub.extraction,
         extraction_confirmed_at=sub.extraction_confirmed_at,

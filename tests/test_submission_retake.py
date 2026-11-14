@@ -24,7 +24,7 @@ from api.database import get_session_factory
 from api.models.assignment import Submission, SubmissionAttempt, SubmissionGrade
 from api.models.integrity_check import IntegrityCheckSubmission
 from api.routes.school_student_practice import drain_integrity_background_tasks
-from tests.conftest import PAGE_PNG
+from tests.conftest import PAGE_PNG, served_pages, stored_pages
 from tests.test_student_activity_events import _assert_meta_contract
 
 
@@ -132,7 +132,7 @@ async def test_retake_replaces_the_photos_reads_them_again_and_keeps_the_origina
     assert after.retaken_at is not None
     assert after.submitted_at > before.submitted_at
     # The page turned on the upload screen is stored turned, as at submit.
-    turned = Image.open(io.BytesIO(base64.b64decode((after.files or [])[0]["data"])))
+    turned = Image.open(io.BytesIO(base64.b64decode((await stored_pages(after.files))[0])))
     assert turned.size == (1600, 1200)
     # Nothing destroyed: the original turn-in, whole, as attempt 1.
     [original] = await _attempts(sid)
@@ -515,7 +515,7 @@ async def test_the_teacher_sees_the_retake_and_the_original(
 
     r = await client.get(originals_url, headers=_auth(world["teacher_token"]))
     assert r.status_code == 200, r.text
-    assert [f["data"] for f in r.json()["files"]] == [PAGE_PNG]
+    assert await served_pages(client, r.json()["files"]) == [PAGE_PNG]
     # A student can't read them through the teacher route.
     r = await client.get(originals_url, headers=_auth(world["student_token"]))
     assert r.status_code in (401, 403)
