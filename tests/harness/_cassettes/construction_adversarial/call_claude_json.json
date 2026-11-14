@@ -8979,6 +8979,75 @@
       "triangles": []
     }
   },
+  "4e028e817fe7d603e784d5d47546bd84": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nGiven: $\\overline{AB} \\parallel \\overline{CD}$, and $\\overrightarrow{EF}$ cuts both lines at points $G$ and",
+      "recorded_at": 1794657674.153145
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "GH",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        },
+        {
+          "items": [
+            "EF",
+            "AB"
+          ],
+          "kind": "intersect",
+          "point": "G",
+          "quote": "cuts both lines at points G and H respectively"
+        },
+        {
+          "items": [
+            "EF",
+            "CD"
+          ],
+          "kind": "intersect",
+          "point": "H",
+          "quote": "cuts both lines at points G and H respectively"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [
+        "EF"
+      ],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD",
+        "GH"
+      ],
+      "triangles": []
+    }
+  },
   "4e29e5659f802d4f727c39945328deea": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -21477,6 +21546,68 @@
       "triangles": []
     }
   },
+  "b0074327202e7effc8922932e6e70dbf": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nGiven: $\\overline{AB} \\parallel \\overline{CD}$, and $\\overline{EF}$ cuts both lines at points $G$ and $H$ r",
+      "recorded_at": 1794657663.276971
+    },
+    "response": {
+      "find": [
+        {
+          "item": "GH",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        },
+        {
+          "items": [
+            "EF",
+            "AB"
+          ],
+          "kind": "intersect",
+          "point": "G",
+          "quote": "EF cuts both lines at points G and H respectively"
+        },
+        {
+          "items": [
+            "EF",
+            "CD"
+          ],
+          "kind": "intersect",
+          "point": "H",
+          "quote": "EF cuts both lines at points G and H respectively"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD",
+        "EF",
+        "GH"
+      ]
+    }
+  },
   "b0fd82c07f6488bd543e6b60fb81dc86": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -29202,6 +29333,74 @@
       ]
     }
   },
+  "f79567905d77c8cb944687803e12b7d1": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nGiven: $\\overline{AB} \\parallel \\overline{CD}$, and $\\overline{EF}$ cuts both lines at points $G$ and $H$ r",
+      "recorded_at": 1794657664.534483
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "GH",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        },
+        {
+          "items": [
+            "EF",
+            "AB"
+          ],
+          "kind": "intersect",
+          "point": "G",
+          "quote": "EF cuts both lines at points G and H respectively"
+        },
+        {
+          "items": [
+            "EF",
+            "CD"
+          ],
+          "kind": "intersect",
+          "point": "H",
+          "quote": "EF cuts both lines at points G and H respectively"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD",
+        "EF",
+        "GH"
+      ],
+      "triangles": []
+    }
+  },
   "f997f475e655257647f6c18282f41210": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -29767,6 +29966,75 @@
       "rays": [],
       "requested": [],
       "segments": [],
+      "triangles": []
+    }
+  },
+  "fb5793211718a809983be2e59d99e1ed": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nGiven: $\\overline{AB} \\parallel \\overline{CD}$, and $\\overrightarrow{EF}$ cuts both lines at points $G$ and",
+      "recorded_at": 1794657673.9318411
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "GH",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        },
+        {
+          "items": [
+            "EF",
+            "AB"
+          ],
+          "kind": "intersect",
+          "point": "G",
+          "quote": "cuts both lines at points G and H respectively"
+        },
+        {
+          "items": [
+            "EF",
+            "CD"
+          ],
+          "kind": "intersect",
+          "point": "H",
+          "quote": "cuts both lines at points G and H respectively"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [
+        "EF"
+      ],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD",
+        "GH"
+      ],
       "triangles": []
     }
   },

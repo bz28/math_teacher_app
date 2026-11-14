@@ -730,6 +730,24 @@ CASES: list[dict[str, Any]] = [
      "bad": _fig({"A": [0, 0], "B": [8, 0], "C": [0, 5], "D": [0, 3]}, segments=["AB", "BC", "CA", "CD"],
                  side_labels={"AB": "8", "CD": "2"}, right_angles=["CAB"]),
      "why": "D is not on AB, so CD is not the altitude"},
+    # Review round 9: "respectively" keeps each part's written kind.
+    {"id": "round9-respectively-segment",
+     "text": r"Given: $\overline{AB} \parallel \overline{CD}$, and $\overline{EF}$ cuts both lines at points $G$ and "
+             r"$H$ respectively. Find $GH$.",
+     "good": _fig({"A": [0, 0], "B": [6, 0], "C": [0, 4], "D": [6, 4], "E": [3, -1], "F": [3, 5], "G": [3, 0],
+                   "H": [3, 4]}, segments=["AB", "CD", "EF"], parallel_groups=[["AB", "CD"]]),
+     "bad": _fig({"A": [0, 0], "B": [6, 0], "C": [0, 4], "D": [6, 4], "E": [3, 5], "F": [3, 6], "G": [3, 0],
+                  "H": [3, 4]}, segments=["AB", "CD", "EF"], parallel_groups=[["AB", "CD"]]),
+     "why": "segment EF lies above both segments; G and H are only on its line"},
+    # (Declined: both readings write EF as a line, which the ray "EF" is not.)
+    {"id": "round9-respectively-ray", "expect_declined": True,
+     "text": r"Given: $\overline{AB} \parallel \overline{CD}$, and $\overrightarrow{EF}$ cuts both lines at points "
+             r"$G$ and $H$ respectively. Find $GH$.",
+     "good": _fig({"A": [0, 0], "B": [6, 0], "C": [0, 4], "D": [6, 4], "E": [3, 5], "F": [3, 3], "G": [3, 0],
+                   "H": [3, 4]}, segments=["AB", "CD"], rays=["EF"], parallel_groups=[["AB", "CD"]]),
+     "bad": _fig({"A": [0, 0], "B": [6, 0], "C": [0, 4], "D": [6, 4], "E": [3, 5], "F": [3, 6], "G": [3, 0],
+                  "H": [3, 4]}, segments=["AB", "CD"], rays=["EF"], parallel_groups=[["AB", "CD"]]),
+     "why": "ray EF points away from both segments; G and H are behind E"},
 ]
 
 
