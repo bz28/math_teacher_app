@@ -266,8 +266,9 @@ async def extract_student_work_from_pages(
         raw = f.get("data", "")
         recorded_media = f.get("media_type", "image/jpeg")
         base64_data, media_type = _strip_data_url_prefix(raw, recorded_media)
-        # EXIF-orient + fit to the reader's native resolution.
-        parts = [prepare_page_for_reader(base64_data, media_type)]
+        # EXIF-orient + fit to the reader's native resolution. Resampling
+        # a page to ~3.75 MP is CPU work: keep it off the event loop.
+        parts = [await asyncio.to_thread(prepare_page_for_reader, base64_data, media_type)]
         if media_type == "application/pdf":
             # Sent as a document, a PDF page is rasterized by the API at a
             # fixed ~1.2 MP, so a photo printed to PDF reached the reader
