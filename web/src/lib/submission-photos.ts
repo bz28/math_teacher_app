@@ -23,6 +23,29 @@ const REUSE_MARGIN_MS = 10 * 60 * 1000;
 
 const urls = new Map<string, { url: string; expiresAt: number }>();
 
+// Pages are re-signed BEFORE their URLs die, not after: a PDF <embed>, an
+// "open" link, or an <img> served from the browser cache never fires
+// `onError`, so waiting for a failure would leave those dead. One timer
+// fires when the soonest URL leaves the reuse window; it forgets the URLs
+// that have, and asks the pages showing photos to re-fetch.
+let timer: ReturnType<typeof setTimeout> | undefined;
+
+function schedule(): void {
+  if (typeof window === "undefined") return;
+  clearTimeout(timer);
+  let soonest = Infinity;
+  for (const { expiresAt } of urls.values()) soonest = Math.min(soonest, expiresAt);
+  if (soonest === Infinity) return;
+  timer = setTimeout(() => {
+    const now = Date.now();
+    for (const [id, { expiresAt }] of urls) {
+      if (expiresAt - now <= REUSE_MARGIN_MS) urls.delete(id);
+    }
+    schedule();
+    window.dispatchEvent(new Event(PHOTO_URLS_EXPIRED));
+  }, Math.max(0, soonest - REUSE_MARGIN_MS - Date.now()));
+}
+
 /** `files` with each page's URL swapped for the one this tab already
  *  loaded, when that one is still good. Call on every response that
  *  carries photos. */
@@ -35,15 +58,19 @@ export function stablePhotoUrls<T extends SubmissionFile>(
 ): T[] | null {
   if (!files) return files;
   const now = Date.now();
-  return files.map((f) => {
+  let changed = false;
+  const out = files.map((f) => {
     if (!f.id || f.expires_in == null) return f;
     const cached = urls.get(f.id);
     if (cached && cached.expiresAt - now > REUSE_MARGIN_MS) {
       return { ...f, url: cached.url };
     }
     urls.set(f.id, { url: f.url, expiresAt: now + f.expires_in * 1000 });
+    changed = true;
     return f;
   });
+  if (changed) schedule();
+  return out;
 }
 
 /** Fired when a photo failed to load because its URL had expired (a tab

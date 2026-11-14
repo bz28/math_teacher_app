@@ -3921,13 +3921,23 @@ function SubmissionDetailPanel({
       originalsState?.key === `${detail.submission_id}:${n}` ? originalsState.status : null,
     [originalsState, detail.submission_id],
   );
-  // Their URLs expire like the live photos': drop them, so the next open
-  // fetches freshly signed ones.
+  // Their URLs expire like the live photos': re-sign the loaded attempt
+  // in place, so an open gallery keeps showing it instead of closing.
+  const originalsKey = originals?.key;
   useEffect(() => {
-    const forget = () => setOriginals(null);
-    window.addEventListener(PHOTO_URLS_EXPIRED, forget);
-    return () => window.removeEventListener(PHOTO_URLS_EXPIRED, forget);
-  }, []);
+    if (!originalsKey) return;
+    const [sid, n] = originalsKey.split(":");
+    const refresh = () => {
+      teacher
+        .attemptFiles(sid, Number(n))
+        .then(({ files }) =>
+          setOriginals((cur) => (cur?.key === originalsKey ? { key: originalsKey, files } : cur)),
+        )
+        .catch(() => {});
+    };
+    window.addEventListener(PHOTO_URLS_EXPIRED, refresh);
+    return () => window.removeEventListener(PHOTO_URLS_EXPIRED, refresh);
+  }, [originalsKey]);
   // A retake replaced this turn-in's first photos: the newest attempt.
   // Every attempt before it came before a reopen — the earlier turn-ins,
   // and any photos a retake replaced on one of them.
