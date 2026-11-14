@@ -416,9 +416,9 @@ def test_bisector_allows_no_sector_arc_or_shading() -> None:
     facts = FigureFacts(points=list("ABCD"), rays=["BD", "BA", "BC"], givens=[F("bisects_angle", ["BD", "ABC"])])
     pts = {"A": (4, 0), "B": (0, 0), "C": (4 * math.cos(math.radians(80)), 4 * math.sin(math.radians(80))),
            "D": (4 * math.cos(math.radians(40)), 4 * math.sin(math.radians(40)))}
-    f = fig(points=pts, rays=["BA", "BC", "BD"], sectors=[{"center": "B", "endpoints": ["A", "D"]}],
-            shaded=[{"polygon": ["A", "B", "D"]}])
-    assert check(f, text, facts) == ["extra arc not in the problem", "extra shading not in the problem"]
+    sector = {"center": "B", "endpoints": ["A", "D"]}
+    f = fig(points=pts, rays=["BA", "BC", "BD"], sectors=[sector], shaded=[{"sector": sector}])
+    assert check(f, text, facts) == ["extra sector not in the problem", "extra shading not in the problem"]
     sector_text = text + " Shade the sector $ABD$."
     assert check(f, sector_text, facts) == []
 
@@ -431,19 +431,58 @@ def _reply_env() -> None:
 
 
 def test_the_models_reply_never_describes_the_figure() -> None:
+    """Round 2 6 / round 3 A (p4): when a proposal touches the figure, the
+    reply is written by code from the proposal. No sentence of the model's
+    is shown, however it describes the picture."""
     _reply_env()
-    from api.core.construction_figures import without_figure_talk
+    from api.core.question_bank_chat import _construction_reply
 
+    text = r"In $\triangle ABC$, $\overline{AB} \cong \overline{AC}$."
+    facts = FigureFacts(points=list("ABC"), triangles=["ABC"], givens=[F("congruent_segments", ["AB", "AC"])])
+    spec = {"type": "geometry", "shape": "construction", "points": {"A": [2, 3], "B": [0, 0], "C": [4, 0]},
+            "segments": ["AB", "BC", "CA"], "tick_groups": [["AB", "AC"]]}
+    item = SimpleNamespace(figure_spec=None, figure_svg=None, final_answer="", solution_steps=None)
+    proposal = {"figure_spec": spec, "figure_svg": "<svg/>", "figure_facts": facts.model_dump()}
     for said in ("Done! I've dropped the perpendicular to the base as well.",
                  "I put in the altitude too, so students can see the height.",
-                 "The altitude now splits the base in half.",
                  "Shaded the region between them.",
-                 "Here you go!",
-                 "I reworded the question and added the altitude.",
-                 "I reworded the question so BD is longer."):
-        assert without_figure_talk(said) == "", said
-    kept = "I reworded the question so the answer is a whole number."
-    assert without_figure_talk(f"Sure! {kept}") == kept
+                 "I wrote the answer by the top corner so students can check their work.",
+                 "The question's parallelogram is now wider and tilted to the right.",
+                 "The hexagon in the problem is now regular and rotated to sit flat.",
+                 "The region the question asks about is now colored blue.",
+                 "Students can now see the 40° from the problem near the top.",
+                 "The kite in the problem is now upright with the answer written inside.",
+                 "I made the question harder by asking for the angle instead."):
+        out = _construction_reply(f"Sure! {said}", proposal, item, "draw it", text,
+                                  top_construction=True, top_issues=[], step_drops={})
+        assert out == "I've added a diagram with points A, B and C; the givens are marked.", said
+
+
+def test_the_reply_says_what_the_proposal_changed() -> None:
+    """Round 3 A: the question, steps and answer sentences come from the
+    proposal's difference from the item, not from the model."""
+    _reply_env()
+    from api.core.question_bank_chat import _construction_reply
+
+    text = r"In $\triangle ABC$, $\overline{AB} \cong \overline{AC}$."
+    steps = [{"title": "Base angles", "description": "AB = AC so the base angles match."}]
+    item = SimpleNamespace(figure_spec=None, figure_svg=None, final_answer="5", solution_steps=steps)
+    common = {"top_construction": True, "top_issues": ["the given AB ≅ AC is not true in the drawing"],
+              "step_drops": {}}
+    same = {"question": None, "solution_steps": steps, "final_answer": "5"}
+    out = _construction_reply("I changed the question so AB = 10.", same, item, "draw it", text, **common)
+    assert out == "I couldn't draw a correct diagram: the given AB ≅ AC is not true in the drawing."
+    changed = {"question": text + " Find BC.", "solution_steps": [{"title": "New", "description": "x"}],
+               "final_answer": "6"}
+    out = _construction_reply("Sure!", changed, item, "draw it", text, **common)
+    assert out.split("\n\n")[0] == (
+        "I reworded the question. I rewrote the solution steps. The final answer is now “6”.")
+    out = _construction_reply("Sure!", changed, item, "draw it", text, resolved=True, **common)
+    assert out.startswith("I reworded the question. The solution steps and final answer below were re-derived")
+    # Nothing touches a figure: the model's own reply stands.
+    out = _construction_reply("I tightened the wording.", {"question": text}, item, "tidy", text,
+                              top_construction=False, top_issues=[], step_drops={})
+    assert out == "I tightened the wording."
 
 
 def test_a_part_asked_for_by_description_is_reported_not_added() -> None:

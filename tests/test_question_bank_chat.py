@@ -295,6 +295,8 @@ class TestDroppedFigureIsReported:
         item.question = question
         item.solution_steps = None
         item.final_answer = None
+        item.figure_spec = None
+        item.figure_svg = None
         item.generation_prompt = None
         return item
 
@@ -324,8 +326,10 @@ class TestDroppedFigureIsReported:
         proposal = ai_msg["proposal"]
         assert proposal["final_answer"] == "$10$"
         assert proposal["figure_spec"] is None and proposal["figure_svg"] is None
+        # The model's "I've added a diagram with WM labeled." is not shown:
+        # code says what the proposal changed.
         assert ai_msg["text"] == (
-            "I've added a diagram with WM labeled.\n\n"
+            "The final answer is now “$10$”.\n\n"
             "I couldn't draw the diagram. The diagram tool can't label a "
             "polygon's diagonals yet. This proposal doesn't include one."
         )
@@ -358,7 +362,8 @@ class TestDroppedFigureIsReported:
         })
 
         assert ai_msg["proposal"]["question"] == self.PROOF
-        assert ai_msg["text"].startswith("I've rewritten the problem.")
+        assert ai_msg["text"].startswith(
+            "I reworded the question. The solution steps and final answer below were re-derived independently")
         assert ai_msg["text"].endswith("also needs point S. This proposal doesn't include one.")
 
     async def test_dropped_step_figure_is_reported(
@@ -379,7 +384,7 @@ class TestDroppedFigureIsReported:
             "polygon's diagonals yet. That step is shown without one."
         )
 
-    async def test_valid_figure_leaves_reply_alone(
+    async def test_valid_figure_is_reported_by_code(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         ai_msg = await self._chat(monkeypatch, r"Find $m\angle R$ in $\triangle QRT$.", {
@@ -388,4 +393,5 @@ class TestDroppedFigureIsReported:
         })
 
         assert ai_msg["proposal"]["figure_svg"]
-        assert ai_msg["text"] == "I've added the diagram."
+        # Code writes the reply when the proposal has a figure.
+        assert ai_msg["text"] == "I've added a diagram."
