@@ -21,6 +21,7 @@ from api.routes.contact import router as contact_router
 from api.routes.grading_drain import router as grading_drain_router
 from api.routes.health import router as health_router
 from api.routes.image import router as image_router
+from api.routes.integrity_check import drain_streamed_turns
 from api.routes.integrity_check import router as integrity_router
 from api.routes.practice import router as practice_router
 from api.routes.school_student_practice import router as school_student_router
@@ -77,6 +78,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     yield
 
+    # Streamed integrity turns run detached from their request; finish
+    # them before the engine goes away.
+    await drain_streamed_turns()
     await engine.dispose()
 
 

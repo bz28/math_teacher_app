@@ -20,6 +20,14 @@ const SESSION_CREATE_TIMEOUT = 90_000;
 // An inline AI grade: the server allows the grader 300s (a long homework's
 // reasoning streams at ~70 tokens/s), plus margin for the round trip.
 const AI_GRADE_TIMEOUT = 330_000;
+// A streamed integrity turn fails on SILENCE, not duration: the server
+// sends a heartbeat comment every ~5s while its agent loop works, so only
+// a server (or connection) that has really gone quiet trips this. A long
+// but healthy turn — six model calls run past 15s in prod — never does.
+// The overall cap stays above the loop's worst case so a server that
+// keeps the connection open but never finishes still surfaces.
+const TURN_STREAM_IDLE_TIMEOUT = 15_000;
+const TURN_STREAM_MAX_TIMEOUT = 90_000;
 
 // A homework submit carries every page inline as base64, so its wall-
 // clock is the student's upload speed, not our server. A fixed timeout
@@ -585,7 +593,13 @@ export function isCredentialPath(path: string): boolean {
 
 async function apiFetch<T>(
   path: string,
-  options: RequestInit & { timeout?: number } = {},
+  options: RequestInit & {
+    timeout?: number;
+    /** Reads a successful response's body in place of `res.json()`, with
+     *  the timeout still running — for a streamed body, which can take as
+     *  long as the request itself. */
+    read?: (res: Response) => Promise<T>;
+  } = {},
   // Set only by the post-refresh retry below. Bounds the retry at one
   // attempt: without it, an endpoint that keeps 401ing after a
   // SUCCESSFUL refresh (token revoked mid-flight, user deactivated,
@@ -595,7 +609,7 @@ async function apiFetch<T>(
   // have woken it, on the most-called endpoint in the app.
   retried = false,
 ): Promise<T> {
-  const { timeout = DEFAULT_TIMEOUT, ...fetchOpts } = options;
+  const { timeout = DEFAULT_TIMEOUT, read, ...fetchOpts } = options;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeout);
@@ -661,6 +675,19 @@ async function apiFetch<T>(
       throw new ApiError(res.status, body);
     }
 
+    if (read) {
+      try {
+        return await read(res);
+      } catch (e) {
+        if (e instanceof ApiError) throw e;
+        // The body broke off — our own timeout, or the connection
+        // dropped. To the caller that's the same as a fetch that never
+        // got a response, so it reads the same way.
+        const isTimeout = (e as { name?: string }).name === "AbortError";
+        setApiHealth(true);
+        throw new NetworkError(isTimeout ? "timeout" : "fetch_failed");
+      }
+    }
     if (res.status === 204) return undefined as T;
     return res.json();
   } finally {
@@ -669,6 +696,85 @@ async function apiFetch<T>(
 }
 
 // ── Auth endpoints ──
+
+/** Split complete server-sent events off the front of `buffer`. Returns
+ *  them and whatever's left (a partial event still arriving). Comment
+ *  lines (`:`) are dropped. */
+export function parseSseEvents(buffer: string): {
+  events: { event: string; data: string }[];
+  rest: string;
+} {
+  const blocks = buffer.split("\n\n");
+  const rest = blocks.pop() ?? "";
+  const events: { event: string; data: string }[] = [];
+  for (const block of blocks) {
+    let event = "message";
+    const data: string[] = [];
+    for (const line of block.split("\n")) {
+      if (!line || line.startsWith(":")) continue;
+      const colon = line.indexOf(":");
+      const field = colon === -1 ? line : line.slice(0, colon);
+      const value = colon === -1 ? "" : line.slice(colon + 1).replace(/^ /, "");
+      if (field === "event") event = value;
+      else if (field === "data") data.push(value);
+    }
+    if (data.length) events.push({ event, data: data.join("\n") });
+  }
+  return { events, rest };
+}
+
+/** Read /turn/stream: forward `delta`s, resolve on `done`, and turn an
+ *  `error` into the ApiError the unstreamed /turn would have thrown. */
+async function readTurnStream(
+  res: Response,
+  onText: (bubble: number, text: string) => void,
+  idleTimeout: number,
+): Promise<IntegrityStateResponse> {
+  if (!res.body) throw new TypeError("no response body");
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await readWithin(reader, idleTimeout);
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parsed = parseSseEvents(buffer);
+    buffer = parsed.rest;
+    for (const { event, data } of parsed.events) {
+      if (event === "delta") {
+        const d = JSON.parse(data) as { bubble: number; text: string };
+        onText(d.bubble, d.text);
+      } else if (event === "done") {
+        void reader.cancel();
+        return JSON.parse(data) as IntegrityStateResponse;
+      } else if (event === "error") {
+        const e = JSON.parse(data) as { status: number; detail: string };
+        throw new ApiError(e.status, { detail: e.detail });
+      }
+    }
+  }
+  throw new TypeError("the stream ended without a result");
+}
+
+/** One `reader.read()`, abandoned (and the stream cancelled) when nothing
+ *  arrives for `ms`. Rejects as an AbortError, like our request timeout. */
+async function readWithin<T>(
+  reader: ReadableStreamDefaultReader<T>,
+  ms: number,
+): Promise<ReadableStreamReadResult<T>> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const silence = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      reject(Object.assign(new Error("the stream went quiet"), { name: "AbortError" }));
+      void reader.cancel();
+    }, ms);
+  });
+  try {
+    return await Promise.race([reader.read(), silence]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export const auth = {
   checkEmail(email: string) {
@@ -3118,7 +3224,14 @@ export const schoolStudent = {
       `/school/student/integrity/submissions/${submissionId}`,
     );
   },
-  postIntegrityTurn(
+  /** Send a reply and stream the agent's answer. `onText(bubble, text)`
+   *  gets each piece of agent text as it's written — appended to bubble
+   *  `bubble`, one bubble per agent message — but only text the turn is
+   *  certain to show. Resolves with the same state the turn would return
+   *  unstreamed, which replaces the streamed bubbles; rejects (dropping
+   *  them) on an error, or when the stream goes silent for `idleTimeout`
+   *  (the server pings every ~5s while it works). */
+  streamIntegrityTurn(
     submissionId: string,
     body: {
       message: string;
@@ -3131,10 +3244,17 @@ export const schoolStudent = {
        *  backend TurnTelemetry model. */
       telemetry?: IntegrityTurnTelemetry;
     },
+    onText: (bubble: number, text: string) => void,
+    idleTimeout: number = TURN_STREAM_IDLE_TIMEOUT,
   ) {
     return apiFetch<IntegrityStateResponse>(
-      `/school/student/integrity/submissions/${submissionId}/turn`,
-      { method: "POST", body: JSON.stringify(body) },
+      `/school/student/integrity/submissions/${submissionId}/turn/stream`,
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+        timeout: TURN_STREAM_MAX_TIMEOUT,
+        read: (res) => readTurnStream(res, onText, idleTimeout),
+      },
     );
   },
   /** Student signs off on Vision's reading. Server stamps

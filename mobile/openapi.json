@@ -14197,6 +14197,61 @@
         ]
       }
     },
+    "/v1/school/student/integrity/submissions/{submission_id}/turn/stream": {
+      "post": {
+        "description": "/turn, streamed: the same turn, with the agent's words sent as\nthe model writes them instead of all at once when it's done.\n\nOnly text already certain to be shown is streamed (see\nprocess_student_turn); the `done` event carries exactly what /turn\nreturns. A refused reply (closed check, short message, spent stuck\ntap) gets the same plain HTTP error /turn gives, before any stream\nstarts.\n\nThe turn runs in its own task on its own session, so a student who\ndrops the connection mid-reply still has the turn saved \u2014 as with\n/turn \u2014 instead of it being cancelled along with the stream.",
+        "operationId": "post_student_turn_stream_v1_school_student_integrity_submissions__submission_id__turn_stream_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "submission_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Submission Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TurnRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {}
+            },
+            "description": "Server-sent events. `delta` {bubble, text}: agent text as it's written, appended to bubble `bubble` (one per agent message). Then exactly one of `done` (the IntegrityStateResponse /turn returns \u2014 the authoritative result, which replaces the streamed bubbles) or `error` {status, detail} (the status and detail /turn would have answered with). While nothing else is being sent, a `: ping` comment goes out every few seconds, so a client can time out on silence rather than on total duration."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Post Student Turn Stream",
+        "tags": [
+          "integrity"
+        ]
+      }
+    },
     "/v1/school/student/practice/activity": {
       "get": {
         "description": "The authenticated student's own practice/learn history. Totals\nplus recent activity grouped by practice set. Optionally scoped to\none course. Read-only; scoped to the caller's own student_id so a\nstudent can never see another student's history.",
