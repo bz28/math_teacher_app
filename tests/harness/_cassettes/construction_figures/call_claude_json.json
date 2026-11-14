@@ -171,6 +171,55 @@
       ]
     }
   },
+  "0483978ab56499b4b2ca6dc2ad8e8adc": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nGiven: $\\overline{BD}$ bisects $\\angle ABC$, and $\\overline{DA} \\perp \\overline{BA}$, $\\overline{DC} \\perp ",
+      "recorded_at": 1794633520.118478
+    },
+    "response": {
+      "figure_spec": {
+        "arc_groups": [
+          [
+            "ABD",
+            "DBC"
+          ]
+        ],
+        "points": {
+          "A": [
+            5,
+            0
+          ],
+          "B": [
+            0,
+            0
+          ],
+          "C": [
+            0.868,
+            4.924
+          ],
+          "D": [
+            5,
+            4.196
+          ]
+        },
+        "right_angles": [
+          "DAB",
+          "DCB"
+        ],
+        "segments": [
+          "BA",
+          "BC",
+          "BD",
+          "DA",
+          "DC"
+        ],
+        "shape": "construction",
+        "type": "geometry"
+      }
+    }
+  },
   "0976d26ca10654ec074658c368b9b87f": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -2758,6 +2807,83 @@
       "reply": "Here's a figure for the question showing both triangles with their side labels. I computed coordinates so that the side lengths match exactly (JK=17, KL=27, JL=26 at x=7), with the corresponding sides of \u25b3MNP congruent and tick-marked."
     }
   },
+  "2efc2cca2edc7cb98b72051c90abd73a": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nSince $\\overline{BC} \\parallel \\overline{AD}$, the diagonal $\\overline{AC}$ is a transversal cutting those ",
+      "recorded_at": 1794633470.529578
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "BC",
+            "AD"
+          ],
+          "kind": "parallel",
+          "quote": "BC \u2225 AD"
+        },
+        {
+          "items": [
+            "AC",
+            "BC",
+            "AD"
+          ],
+          "kind": "transversal",
+          "quote": "the diagonal AC is a transversal cutting those parallel lines"
+        },
+        {
+          "items": [
+            "BCA",
+            "DAC"
+          ],
+          "kind": "alternate_interior",
+          "quote": "the angles on opposite sides of the transversal between the parallel lines are congruent: \u2220BCA \u2245 \u2220DAC"
+        },
+        {
+          "items": [
+            "BCA",
+            "DAC"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220BCA \u2245 \u2220DAC"
+        },
+        {
+          "items": [
+            "BCA"
+          ],
+          "kind": "other",
+          "quote": "\u2220BCA is at vertex C, inside \u25b3ABC, between sides BC and AC"
+        },
+        {
+          "items": [
+            "DAC"
+          ],
+          "kind": "other",
+          "quote": "\u2220DAC is at vertex A, inside \u25b3CDA, between sides DA and AC"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "BC",
+        "AD",
+        "AC"
+      ],
+      "triangles": [
+        "ABC",
+        "CDA"
+      ]
+    }
+  },
   "3074272c5a756a6faecaad3d0b4874a1": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -3747,6 +3873,49 @@
         "solution_steps": null
       },
       "reply": "Here's the figure for the question \u2014 it shows triangle ABC with BC extended to D, plus the midpoint construction with M and E used in the proof."
+    }
+  },
+  "437bcd781c5d9616eff39df877bf09a8": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nRay $\\overrightarrow{BD}$ lies in the interior of $\\angle ABC$. If $m\\angle ABD = 4x + 6$, $m\\angle DBC = 2",
+      "recorded_at": 1794633488.9078379
+    },
+    "response": {
+      "figure_spec": {
+        "angle_labels": {
+          "ABC": "74\u00b0",
+          "ABD": "4x + 6",
+          "DBC": "2x + 14"
+        },
+        "points": {
+          "A": [
+            1.378,
+            4.806
+          ],
+          "B": [
+            0,
+            0
+          ],
+          "C": [
+            5.0,
+            0.0
+          ],
+          "D": [
+            4.24,
+            2.65
+          ]
+        },
+        "rays": [
+          "BA",
+          "BC",
+          "BD"
+        ],
+        "segments": [],
+        "shape": "construction",
+        "type": "geometry"
+      }
     }
   },
   "443efb2ad4664695ec6b2c65082b8760": {
@@ -7082,6 +7251,66 @@
       "reply": "Here's a figure showing the circle with radius 8, the central angle of 3\u03c0/4 radians, and the intercepted arc marked."
     }
   },
+  "7a503acdf6d0a27c162ce7ecefe43913": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn $\\triangle ABC$, the angle bisectors from all three vertices meet at the incenter $I$. If $\\angle BAC = ",
+      "recorded_at": 1794633498.1440609
+    },
+    "response": {
+      "figure_spec": {
+        "angle_labels": {
+          "ABC": "58\u00b0",
+          "BAC": "72\u00b0"
+        },
+        "arc_groups": [
+          [
+            "BAI",
+            "IAC"
+          ],
+          [
+            "ABI",
+            "IBC"
+          ],
+          [
+            "BCI",
+            "ICA"
+          ]
+        ],
+        "points": {
+          "A": [
+            2.988,
+            4.782
+          ],
+          "B": [
+            0.0,
+            0.0
+          ],
+          "C": [
+            7.0,
+            0.0
+          ],
+          "I": [
+            3.199,
+            1.774
+          ]
+        },
+        "rays": [
+          "AI",
+          "BI",
+          "CI"
+        ],
+        "segments": [
+          "AB",
+          "BC",
+          "CA"
+        ],
+        "shape": "construction",
+        "type": "geometry"
+      }
+    }
+  },
   "7af9f9f0c37c42dc10594adcee53d394": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -7628,6 +7857,67 @@
       ],
       "triangles": [
         "ABC"
+      ]
+    }
+  },
+  "7ea478223d282f2824f9ecf90f55ed06": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nAt point $M$, segments $\\overline{AM}$ and $\\overline{DM}$ cross. Any two straight lines that cross form **",
+      "recorded_at": 1794633469.825439
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AM",
+            "DM"
+          ],
+          "kind": "intersect",
+          "point": "M",
+          "quote": "At point M, segments AM and DM cross."
+        },
+        {
+          "items": [
+            "AMB",
+            "DMC"
+          ],
+          "kind": "vertical_angles",
+          "quote": "Any two straight lines that cross form vertical angles \u2014 the angles directly across from each other \u2014 and vertical angles are always equal: \u2220AMB = \u2220DMC"
+        },
+        {
+          "items": [
+            "AMB",
+            "DMC"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220AMB = \u2220DMC"
+        },
+        {
+          "items": [],
+          "kind": "other",
+          "quote": "This is our second pair of congruent angles, at the other end of side BM."
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "M"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "AM",
+        "DM",
+        "BM"
+      ],
+      "triangles": [
+        "ABM",
+        "DCM"
       ]
     }
   },
@@ -8355,6 +8645,50 @@
         "solution_steps": null
       },
       "reply": "Here's a right triangle figure with the right angle marked at C and the two acute angle expressions labeled at A and B."
+    }
+  },
+  "8cd4027baa79762f98a97a22a83088f5": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn isosceles $\\triangle ABC$, $AB = AC$. The vertex angle at $A$ measures $(4x + 6)\u00b0$ and each base angle m",
+      "recorded_at": 1794633502.75732
+    },
+    "response": {
+      "figure_spec": {
+        "angle_labels": {
+          "ABC": "(5x \u2212 3)\u00b0",
+          "ACB": "(5x \u2212 3)\u00b0",
+          "BAC": "(4x + 6)\u00b0"
+        },
+        "points": {
+          "A": [
+            4.0,
+            7.302
+          ],
+          "B": [
+            0.0,
+            0.0
+          ],
+          "C": [
+            8.0,
+            0.0
+          ]
+        },
+        "segments": [
+          "AB",
+          "AC",
+          "BC"
+        ],
+        "shape": "construction",
+        "tick_groups": [
+          [
+            "AB",
+            "AC"
+          ]
+        ],
+        "type": "geometry"
+      }
     }
   },
   "8f266dc0294c0b4581574c076a1c6a67": {
@@ -10952,6 +11286,39 @@
       }
     }
   },
+  "b142b14a6819cb243775b6f963ca5085": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nTriangle $ABC$ has vertices $A(0, 0)$, $B(6, 0)$, and $C(3, 4)$. Find the exact perimeter of $\\triangle ABC",
+      "recorded_at": 1794633480.6552582
+    },
+    "response": {
+      "figure_spec": {
+        "points": {
+          "A": [
+            0,
+            0
+          ],
+          "B": [
+            6,
+            0
+          ],
+          "C": [
+            3,
+            4
+          ]
+        },
+        "segments": [
+          "AB",
+          "AC",
+          "BC"
+        ],
+        "shape": "construction",
+        "type": "geometry"
+      }
+    }
+  },
   "b1a648b85c1d308e45e3225871c927fb": {
     "meta": {
       "mode": "bank_chat",
@@ -11847,6 +12214,53 @@
       "reply": "Here's the diagram for the question \u2014 it shows isosceles triangle ABC with D as the midpoint of BC and segment AD drawn, with the given congruences marked."
     }
   },
+  "bb6a8abbdfb677026ebd0dd008c681bd": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn $\\triangle PQR$, the interior angles satisfy $m\\angle P = (3x + 10)\u00b0$, $m\\angle Q = (2x - 5)\u00b0$, and $\\an",
+      "recorded_at": 1794633507.7459662
+    },
+    "response": {
+      "figure_spec": {
+        "angle_labels": {
+          "PQR": "(2x\u22125)\u00b0",
+          "QPR": "(3x+10)\u00b0"
+        },
+        "points": {
+          "P": [
+            0,
+            4
+          ],
+          "Q": [
+            7.216,
+            0
+          ],
+          "R": [
+            0,
+            0
+          ],
+          "_ext": [
+            0,
+            6
+          ]
+        },
+        "rays": [
+          "P_ext"
+        ],
+        "right_angles": [
+          "PRQ"
+        ],
+        "segments": [
+          "RP",
+          "PQ",
+          "QR"
+        ],
+        "shape": "construction",
+        "type": "geometry"
+      }
+    }
+  },
   "bb71858b9b377e5bd031ed42296ad822": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -12476,6 +12890,86 @@
       "reply": "Here are both triangles drawn side by side with the given side lengths labeled and the similar-triangle correspondence clear."
     }
   },
+  "c15eb7a77af67d3dbbf2e62a705e25c5": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nGiven: $\\overleftrightarrow{AB} \\parallel \\overleftrightarrow{CD}$, with transversal $\\overleftrightarrow{E",
+      "recorded_at": 1794633519.13167
+    },
+    "response": {
+      "figure_spec": {
+        "lines": [
+          {
+            "name": "AB",
+            "through": [
+              "A",
+              "B"
+            ]
+          },
+          {
+            "name": "CD",
+            "through": [
+              "C",
+              "D"
+            ]
+          },
+          {
+            "name": "EF",
+            "through": [
+              "E",
+              "F"
+            ]
+          }
+        ],
+        "parallel_groups": [
+          [
+            "AB",
+            "CD"
+          ]
+        ],
+        "points": {
+          "A": [
+            0,
+            6
+          ],
+          "B": [
+            10,
+            6
+          ],
+          "C": [
+            0,
+            2
+          ],
+          "D": [
+            10,
+            2
+          ],
+          "E": [
+            2,
+            10
+          ],
+          "F": [
+            8,
+            -2
+          ],
+          "G": [
+            4,
+            6
+          ],
+          "H": [
+            6,
+            2
+          ]
+        },
+        "segments": [
+          "GH"
+        ],
+        "shape": "construction",
+        "type": "geometry"
+      }
+    }
+  },
   "c17befa355ff33ec39e15d42c173fcfe": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -12831,6 +13325,122 @@
       "triangles": [
         "WXM",
         "ZYM"
+      ]
+    }
+  },
+  "c9f67b443e32b84aa9fc21ec73e59603": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nGiven: $\\triangle ABC$ with $\\overline{DE} \\parallel \\overline{BC}$, where $D$ is on $\\overline{AB}$ and $E",
+      "recorded_at": 1794633505.42688
+    },
+    "response": {
+      "figure_spec": {
+        "parallel_groups": [
+          [
+            "DE",
+            "BC"
+          ]
+        ],
+        "points": {
+          "A": [
+            5,
+            8
+          ],
+          "B": [
+            1,
+            2
+          ],
+          "C": [
+            9,
+            2
+          ],
+          "D": [
+            3.4,
+            5.6
+          ],
+          "E": [
+            6.6,
+            5.6
+          ]
+        },
+        "segments": [
+          "AB",
+          "BC",
+          "CA",
+          "DE"
+        ],
+        "shape": "construction",
+        "type": "geometry"
+      }
+    }
+  },
+  "ca1bb80031259dfa181859253d1b9031": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nSince $\\overline{BC} \\parallel \\overline{AD}$, the diagonal $\\overline{AC}$ is a transversal cutting those ",
+      "recorded_at": 1794633470.260607
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "BC",
+            "AD"
+          ],
+          "kind": "parallel",
+          "quote": "BC \u2225 AD"
+        },
+        {
+          "items": [
+            "AC",
+            "BC",
+            "AD"
+          ],
+          "kind": "transversal",
+          "quote": "the diagonal AC is a transversal cutting those parallel lines"
+        },
+        {
+          "items": [
+            "BCA",
+            "DAC"
+          ],
+          "kind": "alternate_interior",
+          "quote": "the angles on opposite sides of the transversal between the parallel lines are congruent: \u2220BCA \u2245 \u2220DAC"
+        },
+        {
+          "items": [
+            "BCA",
+            "DAC"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220BCA \u2245 \u2220DAC"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "BC",
+        "AD",
+        "AC"
+      ],
+      "triangles": [
+        "ABC",
+        "CDA"
       ]
     }
   },
@@ -14118,6 +14728,72 @@
         }
       },
       "reply": "Here's a triangle figure with the three angle expressions labeled. Since one angle works out to exactly 90\u00b0, I've placed the triangle as a right triangle with the right angle at A."
+    }
+  },
+  "db6314311d75d9b3f314ae43d3c095be": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nAt point $M$, segments $\\overline{AM}$ and $\\overline{DM}$ cross. Any two straight lines that cross form **",
+      "recorded_at": 1794633470.82532
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AM",
+            "DM"
+          ],
+          "kind": "intersect",
+          "point": "M",
+          "quote": "At point M, segments AM and DM cross."
+        },
+        {
+          "items": [
+            "AMB",
+            "DMC"
+          ],
+          "kind": "vertical_angles",
+          "quote": "Any two straight lines that cross form vertical angles \u2014 the angles directly across from each other"
+        },
+        {
+          "items": [
+            "AMB",
+            "DMC"
+          ],
+          "kind": "congruent_angles",
+          "quote": "vertical angles are always equal: \u2220AMB = \u2220DMC"
+        },
+        {
+          "items": [
+            "AMB",
+            "DMC"
+          ],
+          "kind": "other",
+          "quote": "This is our second pair of congruent angles, at the other end of side BM."
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "M",
+        "D",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AM",
+        "DM",
+        "BM"
+      ],
+      "triangles": []
     }
   },
   "ddc7f477b21852c86b02f5bfd7c0db1e": {
@@ -15912,6 +16588,71 @@
         "ABD",
         "CBD"
       ]
+    }
+  },
+  "f63de68f3445abd24e95c142b6d9f7b4": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nGiven: $\\overleftrightarrow{PQ}$ is the perpendicular bisector of $\\overline{AB}$, meeting $\\overline{AB}$ ",
+      "recorded_at": 1794633482.836782
+    },
+    "response": {
+      "figure_spec": {
+        "lines": [
+          {
+            "name": "PQ",
+            "through": [
+              "P",
+              "Q"
+            ]
+          }
+        ],
+        "points": {
+          "A": [
+            -3,
+            0
+          ],
+          "B": [
+            3,
+            0
+          ],
+          "M": [
+            0,
+            0
+          ],
+          "P": [
+            0,
+            4
+          ],
+          "Q": [
+            0,
+            -1.5
+          ],
+          "X": [
+            0,
+            3
+          ]
+        },
+        "right_angles": [
+          "XMA"
+        ],
+        "segments": [
+          "AM",
+          "MB",
+          "XM",
+          "XA",
+          "XB"
+        ],
+        "shape": "construction",
+        "tick_groups": [
+          [
+            "AM",
+            "MB"
+          ]
+        ],
+        "type": "geometry"
+      }
     }
   },
   "f709c0173249cd96c566a00658ed014f": {

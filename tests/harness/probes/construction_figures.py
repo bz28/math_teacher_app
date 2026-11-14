@@ -154,6 +154,18 @@ BY_EYE: dict[str, tuple[str, str]] = {
     "07a8c9b1": ("b7517f3e1151", "right"),  # △ABC ∼ △DEF; 4, 6, 5 and DE 10 to scale; EF, DF unlabelled
     "21807dd6": ("f7b3f1d6132d", "right"),  # ∠A 52°, ∠B 79°, arcs to ∠D, ∠E; ∠C, ∠F (the answer) unlabelled
     "afee316c": ("5aff074e7614", "right"),  # M the midpoint of AC and BD (ticks)
+    # Looked at 2026-11-14 after review round 3 and the breadth batch.
+    "1c5107aa": ("5e42bb77d775", "right"),  # ∠ABD 42°, ∠DBC 32° as 4x + 6, 2x + 14 (x = 9)
+    "6c5008f2": ("e9e9c05d1879", "right"),  # at its coordinates; the parallels to prove unmarked
+    "df891226": ("1ceca1259bb7", "right"),  # right ∠R; ∠P 61°, ∠Q 29° (x = 17); RP extended past P
+    "430894a4": ("9f78d3637ab0", "right"),  # ∠A 72°, ∠B 58°; the bisectors meet at I; ∠BIC unlabelled
+    "ab10c024": ("c107ef00e7d6", "right"),  # AB ≅ AC; vertex ≈ 57.4°, base angles ≈ 61.3° (x = 90/7)
+    "08e3224d": ("1842b9ac4fc2", "right"),  # A(0, 0), B(6, 0), C(3, 4) to scale; the perimeter unlabelled
+    "9d6733ba": ("6efcef0f92b8", "right"),  # PQ ⊥ AB at its midpoint M; X on PQ; XA, XB unmarked
+    "bac5ea12": ("6fcbe94aac23", "right"),  # BD bisects ∠ABC (40° each); DA ⊥ BA, DC ⊥ BC boxed; DA, DC unmarked
+    "0511d648": ("36a9785d0e59", "right"),  # AB ∥ CD cut by EF at G and H; ∠AGH, ∠GHD unmarked
+    "dee52ce7": ("6333df6365d1", "right"),  # DE ∥ BC, D on AB, E on AC (arrows); the angle sum to prove unmarked
+    "dd5e6fa8": ("48d94fa608c2", "right"),  # AB ≅ AC, D the midpoint of BC (ticks), AD drawn; ∠ABC, ∠ACB unmarked
 }
 
 # A known-wrong version of each case's figure (a point moved so a given is
@@ -197,6 +209,17 @@ NEGATIVES: dict[str, dict[str, Any]] = {
     "afee316c": {"move": {"D": [4.5, -1.5]}},  # M not the midpoint of BD
     "dd7ab4c1-step": {"move": {"D": [7, 0]}},  # BC ≇ DA
     "7ef5c01b-step": {"move": {"M": [5, 1.5]}},  # M not the midpoint of BC
+    "1c5107aa": {"move": {"D": [2.5, 4.33]}},  # ∠ABD 14°, ∠DBC 60°: no x fits both
+    "6c5008f2": {"move": {"C": [6, 7]}},  # C not at (6, 6)
+    "df891226": {"move": {"Q": [4, 0]}},  # ∠P, ∠Q 45° each: no x fits both
+    "430894a4": {"move": {"I": [3.5, 1.5]}},  # I on no bisector
+    "ab10c024": {"move": {"A": [4, 5]}},  # base angles 51.3°, vertex 77.3°: no x fits both
+    "08e3224d": {"move": {"C": [2, 4]}},  # C not at (3, 4)
+    "9d6733ba": {"move": {"X": [1, 3]}},  # X off line PQ
+    "bac5ea12": {"move": {"D": [5, 2]}},  # BD no longer bisects ∠ABC; DC not ⊥ BC
+    "0511d648": {"move": {"H": [7, 2]}},  # H off EF
+    "dee52ce7": {"move": {"E": [7, 5.6]}},  # E off AC
+    "dd5e6fa8": {"move": {"D": [4, 2]}},  # D not the midpoint of BC
 }
 
 # A sentence claiming a figure exists, or that a part was drawn.
@@ -458,7 +481,7 @@ def summarize(results: list[dict[str, Any]], redraws: dict[str, int]) -> dict[st
             1 for r in results for why in r["readings"] if any("can't verify" in w for w in why)
         ),
         "described_in_words": sum(
-            1 for r in results for why in r["readings"] if any("in words rather than naming" in w for w in why)
+            1 for r in results for why in r["readings"] if any("in words without naming its points" in w for w in why)
         ),
         "impossible_numbers": sum(
             1 for r in results for why in r["readings"] if any("check the problem for a typo" in w for w in why)

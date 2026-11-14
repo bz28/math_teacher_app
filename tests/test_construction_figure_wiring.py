@@ -13,7 +13,7 @@ from sqlalchemy import select
 
 import api.core.question_bank_generation as qbg
 from api.core import assignment_generation
-from api.core.construction_figures import failure_sentence, figure_sentence, without_figure_talk
+from api.core.construction_figures import failure_sentence, figure_sentence
 from api.core.geometry.facts import Fact, FigureFacts, Part, Target
 from api.core.question_bank_chat import _chat_system_prompt, _construction_reply
 from api.database import get_session_factory
@@ -178,11 +178,6 @@ def test_failure_sentence() -> None:
     )
 
 
-def test_without_figure_talk_keeps_the_rest() -> None:
-    reply = "Here's the diagram with diagonal AC drawn. I also tightened the wording. AC is labelled."
-    assert without_figure_talk(reply) == "I also tightened the wording."
-
-
 def _item(**kw: Any) -> Any:
     return SimpleNamespace(**{"figure_spec": None, "figure_svg": None, "question": PROBLEM, **kw})
 
@@ -224,8 +219,10 @@ def test_chat_reply_reports_a_dropped_step_figure() -> None:
         PROBLEM, top_construction=False, top_issues=[],
         step_drops={2: ["point D is not where the question's figure puts it"]},
     )
+    # The model's "The steps are clearer now." is not shown: code says what
+    # changed, from the proposal.
     assert out == (
-        "The steps are clearer now.\n\nI couldn't draw the diagram for step 2: point D is not where the "
+        "I rewrote the solution steps.\n\nI couldn't draw the diagram for step 2: point D is not where the "
         "question's figure puts it. That step is shown without one."
     )
 
@@ -327,18 +324,22 @@ async def test_redraw_uses_the_same_model_and_mode_with_room_to_work() -> None:
 
 
 def test_round1_figure_talk_naming_parts_is_dropped() -> None:
-    """Finding 6a: the model writes before anything is drawn, so a sentence
-    that names points or says it connected / included something goes."""
+    """Finding 6a: the model writes before anything is drawn, so when the
+    proposal has a figure none of its words are shown (round 3 replaced the
+    word filter with a reply written by code)."""
+    proposal = {"figure_spec": GOOD, "figure_svg": "<svg/>", "figure_facts": READING.model_dump()}
     for said in (
         "I connected B to D and put angle 1 at E.",
         "I've included the diagonal BD so students can see both triangles.",
         "Now BD splits the square into two triangles, with the right angle at C shown.",
         "The diagonal BD now appears too.",
-        "Now BD and AC cross at E.",  # names only
-        "I've included the diagonal so students can see both triangles.",  # figure words only
-        "I extended it past the top so it's easier to see.",  # a figure verb only
+        "Now BD and AC cross at E.",
+        "I've included the diagonal so students can see both triangles.",
+        "I extended it past the top so it's easier to see.",
     ):
-        assert without_figure_talk(said + " I also tightened the wording.") == "I also tightened the wording.", said
+        out = _construction_reply(said + " I also tightened the wording.", proposal, _item(), "draw it", PROBLEM,
+                                  top_construction=True, top_issues=[], step_drops={})
+        assert out == "I've added a diagram with points A, B, C and D; the givens are marked.", said
 
 
 def test_round1_parts_the_teacher_asks_to_connect_must_be_drawn() -> None:
@@ -388,8 +389,8 @@ def test_round1_empty_mark_group_is_dropped_not_a_crash(name: str, junk: list[st
     kept, svg, issues = qbg._check_figure(spec, PROBLEM, facts=READING)
     assert svg and issues == [] and kept is not None and junk not in kept[name]
     out = qbg._render_step_figures(
-        [{"title": "t", "description": "d", "figure_spec": spec}], question_text=PROBLEM, question_spec=GOOD,
-        facts=READING,
+        [{"title": "t", "description": "d", "figure_spec": spec, "figure_facts": READING.model_dump()}],
+        question_text=PROBLEM, question_spec=GOOD,
     )
     assert out[0]["figure_svg"]
 
@@ -596,3 +597,49 @@ def test_the_chat_is_shown_the_facts_the_figures_are_checked_against() -> None:
     with_facts = _figure_context(_item(figure_spec=GOOD, figure_facts=READING.model_dump(), chat_messages=[]))
     assert "checked against" in with_facts and '"congruent_segments"' in with_facts
     assert "checked against" not in _figure_context(_item(figure_spec=GOOD, figure_facts=None, chat_messages=[]))
+
+
+async def test_accept_checks_a_step_figure_against_the_steps_own_facts(client: Any, world: dict[str, Any]) -> None:
+    """Round 3 (p9): accept re-checks each step figure against the facts the
+    chat read for that step, stored on the step; a step without them keeps
+    no figure."""
+    from sqlalchemy import text
+
+    from api.models.course import CourseTeacher
+
+    item_id = world["pending_sibling_id"]
+    hdr = {"Authorization": f"Bearer {world['teacher_token']}"}
+    kept = {**GOOD, "segments": [*GOOD["segments"], "AC"]}
+    step = {"title": "Draw AC", "description": "Draw the diagonal AC.", "figure_spec": kept}
+    async with get_session_factory()() as s:
+        course_id = (await s.execute(
+            text("SELECT course_id FROM assignments WHERE id=:id"), {"id": world["assignment_id"]},
+        )).scalar_one()
+        s.add(CourseTeacher(course_id=course_id, teacher_id=world["teacher_id"], role="owner"))
+        item = await s.get(QuestionBankItem, item_id)
+        assert item is not None
+        item.question = PROBLEM
+        item.figure_spec, item.figure_facts = GOOD, READING.model_dump()
+        item.chat_messages = [
+            {"role": "teacher", "text": "add a step figure"},
+            {"role": "ai", "text": "ok", "proposal": {
+                "solution_steps": [{**step, "figure_facts": READING.model_dump()}]}},
+            {"role": "ai", "text": "ok", "proposal": {"solution_steps": [step]}},
+        ]
+        await s.commit()
+
+    r = await client.post(f"/v1/teacher/question-bank/{item_id}/chat/accept", json={"message_index": 1}, headers=hdr)
+    assert r.status_code == 200, r.text
+    async with get_session_factory()() as s:
+        item = await s.get(QuestionBankItem, item_id)
+        assert item is not None and item.solution_steps
+        first = item.solution_steps[0]
+        assert first.get("figure_svg") and first["figure_facts"] == READING.model_dump()
+        item.chat_messages = [{**m, "accepted": False, "superseded": False} for m in item.chat_messages or []]
+        await s.commit()
+    r = await client.post(f"/v1/teacher/question-bank/{item_id}/chat/accept", json={"message_index": 2}, headers=hdr)
+    assert r.status_code == 200, r.text
+    async with get_session_factory()() as s:
+        item = await s.get(QuestionBankItem, item_id)
+        assert item is not None and item.solution_steps
+        assert "figure_svg" not in item.solution_steps[0]

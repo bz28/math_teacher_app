@@ -313,11 +313,96 @@ CASES: list[dict[str, Any]] = [
      "bad": _fig({"A": [4, 0], "B": [0, 0], "C": [0.695, 3.939], "D": [3.064, 2.571]}, rays=["BA", "BC", "BD"],
                  sectors=[{"center": "B", "endpoints": ["A", "D"]}], shaded=[{"polygon": ["A", "B", "D"]}]),
      "why": "a sector and shading the problem never mentions"},
+    # Review round 3 and the breadth batch: each new fact kind and each
+    # reviewer scenario, a correct and a wrong figure.
+    {"id": "r3-coordinates",
+     "text": r"Triangle $ABC$ has vertices $A(0, 0)$, $B(4, 0)$, and $C(0, 3)$. Find $BC$.",
+     "good": _fig({"A": [0, 0], "B": [4, 0], "C": [0, 3]}, segments=["AB", "BC", "CA"]),
+     "bad": _fig({"A": [0, 0], "B": [4, 0], "C": [2, 3]}, segments=["AB", "BC", "CA"]),
+     "why": "C is not at (0, 3)"},
+    {"id": "r3-interior-ray",
+     "text": r"Ray $BD$ lies in the interior of $\angle ABC$. If $m\angle ABD = 30^\circ$ and "
+             r"$m\angle ABC = 80^\circ$, find $m\angle DBC$.",
+     "good": _fig({"B": [0, 0], "A": [5, 0], "D": [4.33, 2.5], "C": [0.868, 4.924]}, rays=["BA", "BD", "BC"]),
+     "bad": _fig({"B": [0, 0], "A": [5, 0], "D": [-2.5, 4.33], "C": [0.868, 4.924]}, rays=["BA", "BD", "BC"]),
+     "why": "ray BD is outside ∠ABC"},
+    {"id": "r3-extension",
+     "text": r"In $\triangle ABC$, side $\overline{BC}$ is extended to point $D$. "
+             r"Find the exterior angle $\angle ACD$.",
+     "good": _fig({"A": [2, 4], "B": [0, 0], "C": [5, 0], "D": [8, 0]}, segments=["AB", "BC", "CA", "CD"]),
+     "bad": _fig({"A": [2, 4], "B": [0, 0], "C": [5, 0], "D": [-3, 0]}, segments=["AB", "BC", "CA", "BD"]),
+     "why": "D is behind B, not past C"},
+    {"id": "r3-bowtie",
+     "text": r"$ABCD$ is an isosceles trapezoid with $\overline{AB} \parallel \overline{CD}$. Find $m\angle A$.",
+     "good": _fig({"A": [0, 0], "B": [4, 0], "C": [3, 2], "D": [1, 2]}, segments=["AB", "BC", "CD", "DA"]),
+     "bad": _fig({"A": [0, 0], "B": [4, 0], "C": [1, 2], "D": [3, 2]}, segments=["AB", "BC", "CD", "DA"]),
+     "why": "sides BC and DA cross: a bowtie"},
+    {"id": "r3-extra-circle",
+     "text": r"Points $A$ and $B$ lie on circle $O$. Find $m\angle AOB$.",
+     "good": _fig({"O": [0, 0], "A": [3, 0], "B": [0, 3]}, segments=["OA", "OB"],
+                  circles=[{"center": "O", "through": "A"}]),
+     "bad": _fig({"O": [0, 0], "A": [3, 0], "B": [0, 3]}, segments=["OA", "OB"],
+                 circles=[{"center": "O", "through": "A"}, {"center": "O", "radius": 1}],
+                 sectors=[{"center": "O", "endpoints": ["A", "B"]}]),
+     "why": "a second circle and a sector the problem never mentions"},
+    {"id": "r3-arc-centre",
+     "text": r"Points $A$ and $B$ lie on circle $O$. Find the length of arc $AB$ if $m\angle AOB = 90^\circ$.",
+     "good": _fig({"O": [0, 0], "A": [3, 0], "B": [0, 3]}, segments=["OA", "OB"],
+                  circles=[{"center": "O", "through": "A"}], arcs=[{"center": "O", "endpoints": ["A", "B"]}],
+                  right_angles=["AOB"]),
+     "bad": _fig({"O": [0, 0], "A": [3, 0], "B": [0, 3], "_c": [3, 3]}, segments=["OA", "OB"],
+                 circles=[{"center": "O", "through": "A"}], arcs=[{"center": "_c", "endpoints": ["A", "B"]}],
+                 right_angles=["AOB"]),
+     "why": "arc AB is drawn around another centre, off the circle"},
+    {"id": "r3-shading",
+     "text": r"$\triangle ABC$ and $\triangle ABD$ share side $\overline{AB}$, and $\triangle ABD$ is shaded. "
+             r"Find the area of the shaded region.",
+     "good": _fig({"A": [0, 0], "B": [6, 0], "C": [3, 5], "D": [3, 2]}, segments=["AB", "BC", "CA", "AD", "BD"],
+                  shaded=[{"polygon": ["A", "B", "D"]}]),
+     "bad": _fig({"A": [0, 0], "B": [6, 0], "C": [3, 5], "D": [3, 2]}, segments=["AB", "BC", "CA", "AD", "BD"],
+                 shaded=[{"polygon": ["A", "D", "C"]}]),
+     "why": "the shading is on another region"},
+    {"id": "r3-algebra-bracket",
+     "text": r"$m\angle ABD = 2(x + 5)^\circ$ and $m\angle DBC = (x + 20)^\circ$, and "
+             r"$\angle ABD \cong \angle DBC$. Find $x$.",
+     "good": _fig({"B": [0, 0], "A": [5, 0], "D": [4.33, 2.5], "C": [2.5, 4.33]}, rays=["BA", "BD", "BC"],
+                  arc_groups=[["ABD", "DBC"]]),
+     "bad": _fig({"B": [0, 0], "A": [5, 0], "D": [4.096, 2.868], "C": [1.71, 4.698]}, rays=["BA", "BD", "BC"],
+                 arc_groups=[["ABD", "DBC"]]),
+     "why": "35° each, where x = 10 makes them 30°"},
+    {"id": "r3-far-helper",
+     "text": r"In $\triangle ABC$, $D$ lies on $\overline{BC}$ and $\overline{AB} \cong \overline{AC}$. "
+             r"Find $m\angle BAD$.",
+     "good": _fig({"A": [5, 9], "B": [0, 0], "C": [10, 0], "D": [5, 0]}, segments=["AB", "BC", "CA", "AD"],
+                  tick_groups=[["AB", "AC"]]),
+     "bad": _fig({"A": [5, 9], "B": [0, 0], "C": [10, 0], "D": [5, 0.38], "_z": [100, 0]},
+                 segments=["AB", "BC", "CA", "AD"], tick_groups=[["AB", "AC"]]),
+     "why": "D off BC, hidden behind a far helper point that loosens the tolerance"},
+    {"id": "r3-equal-words",
+     "text": r"In $\triangle ABC$, $\angle A$ and $\angle B$ are equal, and $AB = 6$. Find $m\angle C$.",
+     "good": _fig({"A": [0, 0], "B": [6, 0], "C": [3, 4]}, segments=["AB", "BC", "CA"]),
+     "bad": _fig({"A": [0, 0], "B": [6, 0], "C": [1, 4]}, segments=["AB", "BC", "CA"]),
+     "why": "∠A and ∠B are not equal"},
+    {"id": "r3-two-equal-sides",
+     "text": r"In $\triangle ADC$, $DA = DC$ and $m\angle A = 50^\circ$. Find $m\angle D$.",
+     "good": _fig({"A": [0, 0], "D": [3, 3.575], "C": [6, 0]}, segments=["AD", "DC", "CA"]),
+     "bad": _fig({"A": [0, 0], "D": [2, 2.384], "C": [6, 0]}, segments=["AD", "DC", "CA"]),
+     "why": "DA ≠ DC"},
+    {"id": "r3-step-altitude",
+     "text": r"In $\triangle ABC$, $AB = 5$, $AC = 5$, and $BC = 6$. Find the area of $\triangle ABC$.",
+     "base": _fig({"A": [3, 4], "B": [0, 0], "C": [6, 0]}, segments=["AB", "BC", "CA"]),
+     "step": r"Altitude: Draw altitude $\overline{AD} \perp \overline{BC}$ with $D$ the midpoint of "
+             r"$\overline{BC}$. Then $BD = 3$ and $AD = 4$.",
+     "good": _fig({"A": [3, 4], "B": [0, 0], "C": [6, 0], "D": [3, 0]}, segments=["AB", "BC", "CA", "AD"],
+                  right_angles=["ADC"]),
+     "bad": _fig({"A": [3, 4], "B": [0, 0], "C": [6, 0], "D": [1.5, 0]}, segments=["AB", "BC", "CA", "AD"]),
+     "why": "the step's D is not the midpoint and AD is not ⊥ BC"},
 ]
 
 
 async def run_case(case: dict[str, Any]) -> dict[str, Any]:
     import api.core.question_bank_generation as qbg
+    from api.core.geometry.facts import FigureFacts
 
     answer, request = case.get("answer", ""), case.get("request", "")
     try:
@@ -328,9 +413,21 @@ async def run_case(case: dict[str, Any]) -> dict[str, Any]:
         return {"id": case["id"], "error": repr(e)[:200], "reading": [], "good": None, "bad": None,
                 "bad_caught": False, "bad_fixed_by_removing_marks": False}
 
+    step_text = case.get("step")
+    if step_text is not None and facts is not None:
+        # A step figure: the step is read too, and its figure checked
+        # against the question's facts and the step's.
+        step = {"title": step_text.split(": ", 1)[0], "description": step_text.split(": ", 1)[1],
+                "figure_spec": case["good"]}
+        step_why = await qbg.read_step_facts([step], question_text=case["text"], facts=facts, mode="bank_chat",
+                                             user_id=None)
+        why = [*why, *step_why.get(1, [])]
+        facts = step.get("figure_facts")
+
     def check(spec: dict[str, Any]) -> tuple[list[str], dict[str, Any] | None]:
         shown, svg, issues = qbg._check_figure(
-            spec, case["text"], final_answer=answer, request=request, facts=facts,
+            spec, case["text"], final_answer=answer, request=request, facts=facts, step_text=step_text,
+            base=case.get("base"),
         )
         return ([], shown) if svg else (issues, None)
 
@@ -340,8 +437,10 @@ async def run_case(case: dict[str, Any]) -> dict[str, Any]:
     # shown is the correct figure (a mark the problem doesn't give, such as
     # the statement to prove, is removed rather than refused).
     caught = bool(bad) or _same(shown, case["good"])
+    if isinstance(facts, FigureFacts):
+        facts = facts.model_dump()
     return {
-        "id": case["id"], "error": "", "reading": why, "facts": facts.model_dump() if facts else None,
+        "id": case["id"], "error": "", "reading": why, "facts": facts,
         "good": good, "bad": bad, "bad_caught": caught,
         "bad_fixed_by_removing_marks": not bad and caught,
     }

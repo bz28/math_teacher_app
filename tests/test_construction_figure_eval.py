@@ -38,7 +38,7 @@ KNOWN_WRONG_PASSED = {"77195d48-step1"}
 # the rest are honest declines (the two readings disagreed, or the figure
 # failed its check twice). A change that draws fewer fails here.
 # 15 of the first 24 (21 should get one), 5 of the 25 breadth problems, 12 of the 20 in breadth set 2.
-DRAWN_FLOOR = 32
+DRAWN_FLOOR = 43
 
 
 @pytest.mark.asyncio

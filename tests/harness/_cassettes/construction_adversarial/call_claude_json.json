@@ -1,4 +1,45 @@
 {
+  "001ff4e43d20d6250c580f9b1ebd9488": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\n$\\triangle ABC$ and $\\triangle ABD$ share side $\\overline{AB}$, and $\\triangle ABD$ is shaded. Find the are",
+      "recorded_at": 1794633253.7841861
+    },
+    "response": {
+      "find": [
+        {
+          "item": "area of \u25b3ABD (the shaded region)",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "AB"
+          ],
+          "kind": "congruent_segments",
+          "quote": "\u25b3ABC and \u25b3ABD share side AB"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "AB"
+      ],
+      "triangles": [
+        "ABC",
+        "ABD"
+      ]
+    }
+  },
   "010ac77a41b529b3d902bc4464d4f082": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -93,6 +134,114 @@
         "AC"
       ],
       "triangles": []
+    }
+  },
+  "05091e511e699b91c15cdbe267797833": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, side $\\overline{BC}$ is extended to point $D$. Find the exterior angle $\\angle ACD$.\n\nT",
+      "recorded_at": 1794633249.278393
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "ACD",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "BD"
+          ],
+          "kind": "on_segment",
+          "point": "C",
+          "quote": "side BC is extended to point D"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "BC",
+        "CD"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "061117c6b4908ffdd0991e43ab30bcf5": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, $AB = 5$, $AC = 5$, and $BC = 6$. Find the area of $\\triangle ABC$.\n\nThe teacher's mess",
+      "recorded_at": 1794633260.738204
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "area of \u25b3ABC",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "AB = 5",
+          "value": 5
+        },
+        {
+          "items": [
+            "AC"
+          ],
+          "kind": "equal_length",
+          "quote": "AC = 5",
+          "value": 5
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "equal_length",
+          "quote": "BC = 6",
+          "value": 6
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "AC",
+        "BC"
+      ],
+      "triangles": [
+        "ABC"
+      ]
     }
   },
   "0875d91eda0ad43b861c0819bc4cbe3f": {
@@ -1036,6 +1185,54 @@
       ]
     }
   },
+  "257e170877037b184dec7cd0aa9cb7ac": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, side $\\overline{BC}$ is extended to point $D$. Find the exterior angle $\\angle ACD$.\n\nT",
+      "recorded_at": 1794633249.1068869
+    },
+    "response": {
+      "find": [
+        {
+          "item": "ACD",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "BD"
+          ],
+          "kind": "on_segment",
+          "point": "C",
+          "quote": "side BC is extended to point D"
+        },
+        {
+          "items": [
+            "BC",
+            "D"
+          ],
+          "kind": "other",
+          "quote": "side BC is extended to point D"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "BC"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
   "2609501c0d4c0236c55b05f0ccce37b9": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -1075,6 +1272,75 @@
       "rays": [],
       "requested": [],
       "segments": [],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "27d42171df6e14c45c6ef82468f06325": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nDraw altitude $\\overline{AD} \\perp \\overline{BC}$ with $D$ the midpoint of $\\overline{BC}$. Then $BD = 3$ a",
+      "recorded_at": 1794633412.696268
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AD",
+            "BC"
+          ],
+          "kind": "perpendicular",
+          "quote": "altitude $\\overline{AD} \\perp \\overline{BC}$"
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "on_segment",
+          "point": "D",
+          "quote": "altitude $\\overline{AD} \\perp \\overline{BC}$ with $D$ the midpoint of $\\overline{BC}$"
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "midpoint",
+          "point": "D",
+          "quote": "$D$ the midpoint of $\\overline{BC}$"
+        },
+        {
+          "items": [
+            "BD"
+          ],
+          "kind": "equal_length",
+          "quote": "$BD = 3$",
+          "value": 3
+        },
+        {
+          "items": [
+            "AD"
+          ],
+          "kind": "equal_length",
+          "quote": "$AD = 4$",
+          "value": 4
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "AD",
+        "BC",
+        "BD"
+      ],
       "triangles": [
         "ABC"
       ]
@@ -1128,6 +1394,63 @@
       "triangles": [
         "ABC"
       ]
+    }
+  },
+  "293cb6acefbbf073c9ec475fa859abff": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n$m\\angle ABD = 2(x + 5)^\\circ$ and $m\\angle DBC = (x + 20)^\\circ$, and $\\angle ABD \\cong \\angle DBC$. Find ",
+      "recorded_at": 1794633254.810841
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "expr": "2(x + 5)",
+          "items": [
+            "ABD"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220ABD = 2(x + 5)\u00b0"
+        },
+        {
+          "expr": "x + 20",
+          "items": [
+            "DBC"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220DBC = (x + 20)\u00b0"
+        },
+        {
+          "items": [
+            "ABD",
+            "DBC"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220ABD \u2245 \u2220DBC"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": []
     }
   },
   "2d20d5030733273775d852de35ea49e3": {
@@ -1663,6 +1986,56 @@
       "triangles": []
     }
   },
+  "3910b9e2cb710a2f0aeaaaa264c30ef4": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ADC$, $DA = DC$ and $m\\angle A = 50^\\circ$. Find $m\\angle D$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794633258.13084
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "ADC",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ADC"
+          ],
+          "kind": "isosceles",
+          "point": "D",
+          "quote": "DA = DC"
+        },
+        {
+          "items": [
+            "DAC"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220A = 50\u00b0",
+          "value": 50
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "D",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": [
+        "ADC"
+      ]
+    }
+  },
   "3a406e0d407b811848d94c2ae6ffb0cf": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -1892,6 +2265,64 @@
       ]
     }
   },
+  "47cdbd4fb4cafb8b4a1885dc8e7a8e21": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, $D$ lies on $\\overline{BC}$ and $\\overline{AB} \\cong \\overline{AC}$. Find $m\\angle BAD$",
+      "recorded_at": 1794633255.812096
+    },
+    "response": {
+      "find": [
+        {
+          "item": "BAD",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "on_segment",
+          "point": "D",
+          "quote": "D lies on BC"
+        },
+        {
+          "items": [
+            "AB",
+            "AC"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB \u2245 AC"
+        },
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "isosceles",
+          "point": "A",
+          "quote": "AB \u2245 AC"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "BC",
+        "AB",
+        "AC"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
   "4ce142df54cc7c78dcecf5936c5c6dba": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -1984,6 +2415,56 @@
       ],
       "polygons": [
         "ABCD"
+      ],
+      "prove": [],
+      "requested": []
+    }
+  },
+  "4ef0b546890f9bb5ea52e8950322c2ab": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\n$m\\angle ABD = 2(x + 5)^\\circ$ and $m\\angle DBC = (x + 20)^\\circ$, and $\\angle ABD \\cong \\angle DBC$. Find ",
+      "recorded_at": 1794633253.839552
+    },
+    "response": {
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "expr": "2(x + 5)",
+          "items": [
+            "ABD"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220ABD = 2(x + 5)\u00b0"
+        },
+        {
+          "expr": "x + 20",
+          "items": [
+            "DBC"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220DBC = (x + 20)\u00b0"
+        },
+        {
+          "items": [
+            "ABD",
+            "DBC"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220ABD \u2245 \u2220DBC"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
       ],
       "prove": [],
       "requested": []
@@ -3148,6 +3629,52 @@
       "triangles": []
     }
   },
+  "6dc396225ea88fb00456969ec073fc13": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nPoints $A$ and $B$ lie on circle $O$. Find the length of arc $AB$ if $m\\angle AOB = 90^\\circ$.\n\nThe teacher",
+      "recorded_at": 1794633252.699445
+    },
+    "response": {
+      "circles": [
+        "O"
+      ],
+      "find": [
+        {
+          "item": "length of arc AB",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "circle": "O",
+          "items": [
+            "A",
+            "B"
+          ],
+          "kind": "on_circle",
+          "quote": "Points A and B lie on circle O"
+        },
+        {
+          "circle": "O",
+          "items": [
+            "AOB"
+          ],
+          "kind": "central_angle",
+          "quote": "m\u2220AOB = 90\u00b0",
+          "value": 90
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "O"
+      ],
+      "prove": [],
+      "requested": []
+    }
+  },
   "6e9cd66af83104652a34049a2a377399": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -3440,6 +3967,60 @@
       ]
     }
   },
+  "7a4d85fc29c0dfd89a0371fbcb8c45f0": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nRay $BD$ lies in the interior of $\\angle ABC$. If $m\\angle ABD = 30^\\circ$ and $m\\angle ABC = 80^\\circ$, fi",
+      "recorded_at": 1794633249.0716102
+    },
+    "response": {
+      "find": [
+        {
+          "item": "DBC",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "BD"
+          ],
+          "kind": "other",
+          "quote": "Ray BD lies in the interior of \u2220ABC"
+        },
+        {
+          "items": [
+            "ABD"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220ABD = 30\u00b0",
+          "value": 30
+        },
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220ABC = 80\u00b0",
+          "value": 80
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "rays": [
+        "BD",
+        "BA",
+        "BC"
+      ],
+      "requested": []
+    }
+  },
   "7addd7abd0d4991e50d3636586893e37": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -3560,6 +4141,137 @@
       "requested": [],
       "segments": [],
       "triangles": []
+    }
+  },
+  "809c33c0fb9cd7c7cc9b0a2442f0e7a2": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, $AB = 5$, $AC = 5$, and $BC = 6$. Find the area of $\\triangle ABC$.\n\nThe teacher's mess",
+      "recorded_at": 1794633258.8743
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "area of \u25b3ABC",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "AB = 5",
+          "value": 5
+        },
+        {
+          "items": [
+            "AC"
+          ],
+          "kind": "equal_length",
+          "quote": "AC = 5",
+          "value": 5
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "equal_length",
+          "quote": "BC = 6",
+          "value": 6
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "AC",
+        "BC"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "82f15bd5479c64c957a2451ad6e02ae0": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nAltitude: Draw altitude $\\overline{AD} \\perp \\overline{BC}$ with $D$ the midpoint of $\\overline{BC}$. Then ",
+      "recorded_at": 1794633265.657019
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AD",
+            "BC"
+          ],
+          "kind": "perpendicular",
+          "quote": "Draw altitude $\\overline{AD} \\perp \\overline{BC}$"
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "on_segment",
+          "point": "D",
+          "quote": "Draw altitude $\\overline{AD} \\perp \\overline{BC}$ with $D$ the midpoint of $\\overline{BC}$"
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "midpoint",
+          "point": "D",
+          "quote": "$D$ the midpoint of $\\overline{BC}$"
+        },
+        {
+          "items": [
+            "BD"
+          ],
+          "kind": "equal_length",
+          "quote": "$BD = 3$",
+          "value": 3
+        },
+        {
+          "items": [
+            "AD"
+          ],
+          "kind": "equal_length",
+          "quote": "$AD = 4$",
+          "value": 4
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "AD",
+        "BC",
+        "BD"
+      ],
+      "triangles": [
+        "ABC"
+      ]
     }
   },
   "87f4d02061dfaa6b75d6be23644626e9": {
@@ -3751,6 +4463,67 @@
       ]
     }
   },
+  "8d14bf904895b69b231ee1b53449800c": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ADC$, $DA = DC$ and $m\\angle A = 50^\\circ$. Find $m\\angle D$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794633258.635736
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "ADC",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ADC"
+          ],
+          "kind": "isosceles",
+          "point": "D",
+          "quote": "DA = DC"
+        },
+        {
+          "items": [
+            "DA",
+            "DC"
+          ],
+          "kind": "congruent_segments",
+          "quote": "DA = DC"
+        },
+        {
+          "items": [
+            "DAC"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220A = 50\u00b0",
+          "value": 50
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "D",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "DA",
+        "DC"
+      ],
+      "triangles": [
+        "ADC"
+      ]
+    }
+  },
   "8d293b646b570f84c0a08929deb9d9d3": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -3912,6 +4685,64 @@
       ]
     }
   },
+  "901db9b6de5f7d11bb6425e93e4f2ce9": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nTriangle $ABC$ has vertices $A(0, 0)$, $B(4, 0)$, and $C(0, 3)$. Find $BC$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794633249.516428
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "BC",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "expr": "A is at (0, 0)",
+          "items": [
+            "A"
+          ],
+          "kind": "other",
+          "quote": "A(0, 0)"
+        },
+        {
+          "expr": "B is at (4, 0)",
+          "items": [
+            "B"
+          ],
+          "kind": "other",
+          "quote": "B(4, 0)"
+        },
+        {
+          "expr": "C is at (0, 3)",
+          "items": [
+            "C"
+          ],
+          "kind": "other",
+          "quote": "C(0, 3)"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
   "93e15392bbe55d9fa01be6d5041dfc12": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -3971,6 +4802,58 @@
       "requested": [],
       "segments": [],
       "triangles": []
+    }
+  },
+  "942772a2f29a4efd1b4d430108ade8cc": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, $\\angle A$ and $\\angle B$ are equal, and $AB = 6$. Find $m\\angle C$.\n\nThe teacher's mes",
+      "recorded_at": 1794633257.36053
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "C",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "A",
+            "B"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220A and \u2220B are equal"
+        },
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "AB = 6",
+          "value": 6
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB"
+      ],
+      "triangles": [
+        "ABC"
+      ]
     }
   },
   "9ae692c9e69b304681c469828773bc5f": {
@@ -4107,6 +4990,43 @@
       "triangles": [
         "ABC"
       ]
+    }
+  },
+  "9ee62212204b38b861a431bec193bae6": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nPoints $A$ and $B$ lie on circle $O$. Find $m\\angle AOB$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794633251.495439
+    },
+    "response": {
+      "circles": [
+        "O"
+      ],
+      "find": [
+        {
+          "item": "AOB",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "circle": "O",
+          "items": [
+            "A",
+            "B"
+          ],
+          "kind": "on_circle",
+          "quote": "Points A and B lie on circle O"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "O"
+      ],
+      "prove": [],
+      "requested": []
     }
   },
   "a221eb6171997dd6df05406bf711806f": {
@@ -4334,6 +5254,43 @@
       "requested": []
     }
   },
+  "a67eccd735d7a1ffdf6ad0f7bac7032b": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nPoints $A$ and $B$ lie on circle $O$. Find $m\\angle AOB$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794633251.6117408
+    },
+    "response": {
+      "circles": [
+        "O"
+      ],
+      "find": [
+        {
+          "item": "AOB",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "circle": "O",
+          "items": [
+            "A",
+            "B"
+          ],
+          "kind": "on_circle",
+          "quote": "Points A and B lie on circle O."
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "O"
+      ],
+      "prove": [],
+      "requested": []
+    }
+  },
   "ac3b84de8e8d0d5db2ec9b00683fedb4": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -4409,6 +5366,50 @@
         }
       ],
       "points": [],
+      "prove": [],
+      "requested": []
+    }
+  },
+  "aeb513122c454de36bc1b09882e2a0f8": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\n$ABCD$ is an isosceles trapezoid with $\\overline{AB} \\parallel \\overline{CD}$. Find $m\\angle A$.\n\nThe teach",
+      "recorded_at": 1794633248.457315
+    },
+    "response": {
+      "find": [
+        {
+          "item": "A",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABCD"
+          ],
+          "kind": "isosceles_trapezoid",
+          "quote": "ABCD is an isosceles trapezoid"
+        },
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [
+        "ABCD"
+      ],
       "prove": [],
       "requested": []
     }
@@ -4695,6 +5696,115 @@
       ]
     }
   },
+  "d16a96eec93334217b4b0755dc08c578": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nAltitude: Draw altitude $\\overline{AD} \\perp \\overline{BC}$ with $D$ the midpoint of $\\overline{BC}$. Then ",
+      "recorded_at": 1794633264.8872
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AD",
+            "BC"
+          ],
+          "kind": "perpendicular",
+          "quote": "Draw altitude AD \u22a5 BC"
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "midpoint",
+          "point": "D",
+          "quote": "D the midpoint of BC"
+        },
+        {
+          "items": [
+            "BD"
+          ],
+          "kind": "equal_length",
+          "quote": "BD = 3",
+          "value": 3
+        },
+        {
+          "items": [
+            "AD"
+          ],
+          "kind": "equal_length",
+          "quote": "AD = 4",
+          "value": 4
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "AD",
+        "BC",
+        "BD"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "d1a309cd382a0a128e4a11e0fc26d8dc": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n$ABCD$ is an isosceles trapezoid with $\\overline{AB} \\parallel \\overline{CD}$. Find $m\\angle A$.\n\nThe teach",
+      "recorded_at": 1794633248.7105339
+    },
+    "response": {
+      "find": [
+        {
+          "item": "A",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABCD"
+          ],
+          "kind": "isosceles_trapezoid",
+          "quote": "ABCD is an isosceles trapezoid"
+        },
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [
+        "ABCD"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD"
+      ]
+    }
+  },
   "d2fb2453bb2a3ad45dc7c51929735e4e": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -4934,6 +6044,64 @@
       "rays": [],
       "requested": [],
       "segments": [],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "dcc9b051fae6fc37bd78e44a8441d3e2": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, $D$ lies on $\\overline{BC}$ and $\\overline{AB} \\cong \\overline{AC}$. Find $m\\angle BAD$",
+      "recorded_at": 1794633255.5189068
+    },
+    "response": {
+      "find": [
+        {
+          "item": "BAD",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "on_segment",
+          "point": "D",
+          "quote": "D lies on BC"
+        },
+        {
+          "items": [
+            "AB",
+            "AC"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB \u2245 AC"
+        },
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "isosceles",
+          "point": "A",
+          "quote": "AB \u2245 AC"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "BC",
+        "AB",
+        "AC"
+      ],
       "triangles": [
         "ABC"
       ]
@@ -5242,6 +6410,164 @@
       ]
     }
   },
+  "eb3502474261e490bde7a28b59c3dc76": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nTriangle $ABC$ has vertices $A(0, 0)$, $B(4, 0)$, and $C(0, 3)$. Find $BC$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794633250.0319822
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "BC",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "expr": "(0, 0)",
+          "items": [
+            "A"
+          ],
+          "kind": "other",
+          "quote": "Triangle ABC has vertices A(0, 0)"
+        },
+        {
+          "expr": "(4, 0)",
+          "items": [
+            "B"
+          ],
+          "kind": "other",
+          "quote": "B(4, 0)"
+        },
+        {
+          "expr": "(0, 3)",
+          "items": [
+            "C"
+          ],
+          "kind": "other",
+          "quote": "C(0, 3)"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "ec7c49d4b6a13fd237c9de7e0409e1a6": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n$\\triangle ABC$ and $\\triangle ABD$ share side $\\overline{AB}$, and $\\triangle ABD$ is shaded. Find the are",
+      "recorded_at": 1794633252.888919
+    },
+    "response": {
+      "find": [
+        {
+          "item": "area of \u25b3ABD (shaded region)",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "AB"
+          ],
+          "kind": "congruent_segments",
+          "quote": "\u25b3ABC and \u25b3ABD share side AB"
+        },
+        {
+          "items": [
+            "ABD"
+          ],
+          "kind": "other",
+          "quote": "\u25b3ABD is shaded"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "AB"
+      ],
+      "triangles": [
+        "ABC",
+        "ABD"
+      ]
+    }
+  },
+  "edc5161d39dc263aa110c65cac718b98": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, $\\angle A$ and $\\angle B$ are equal, and $AB = 6$. Find $m\\angle C$.\n\nThe teacher's mes",
+      "recorded_at": 1794633256.868709
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "C",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "A",
+            "B"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220A and \u2220B are equal"
+        },
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "AB = 6",
+          "value": 6
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
   "ee4149316cdf2c8531116c843714b1a6": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -5318,6 +6644,51 @@
         "ABC",
         "A'B'C'"
       ]
+    }
+  },
+  "f26462f1d6e81f01b36153480486f081": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nPoints $A$ and $B$ lie on circle $O$. Find the length of arc $AB$ if $m\\angle AOB = 90^\\circ$.\n\nThe teacher",
+      "recorded_at": 1794633252.8327081
+    },
+    "response": {
+      "circles": [
+        "O"
+      ],
+      "find": [
+        {
+          "item": "length of arc AB",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "circle": "O",
+          "items": [
+            "A",
+            "B"
+          ],
+          "kind": "on_circle",
+          "quote": "Points A and B lie on circle O."
+        },
+        {
+          "items": [
+            "AOB"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220AOB = 90\u00b0",
+          "value": 90
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "O"
+      ],
+      "prove": [],
+      "requested": []
     }
   },
   "f3bb0e4c84bf03a386c2f0fe02249816": {
@@ -5417,6 +6788,75 @@
       "requested": []
     }
   },
+  "fa41c7b8cd1133804a6e7e17f21467f5": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nDraw altitude $\\overline{AD} \\perp \\overline{BC}$ with $D$ the midpoint of $\\overline{BC}$. Then $BD = 3$ a",
+      "recorded_at": 1794633412.451222
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AD",
+            "BC"
+          ],
+          "kind": "perpendicular",
+          "quote": "altitude AD \u22a5 BC"
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "on_segment",
+          "point": "D",
+          "quote": "altitude AD \u22a5 BC with D the midpoint of BC"
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "midpoint",
+          "point": "D",
+          "quote": "D the midpoint of BC"
+        },
+        {
+          "items": [
+            "BD"
+          ],
+          "kind": "equal_length",
+          "quote": "BD = 3",
+          "value": 3
+        },
+        {
+          "items": [
+            "AD"
+          ],
+          "kind": "equal_length",
+          "quote": "AD = 4",
+          "value": 4
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "AD",
+        "BC",
+        "BD"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
   "faeeb2a9d6f5b107913aa4550e41f268": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -5461,6 +6901,59 @@
         "ABC",
         "DEF"
       ]
+    }
+  },
+  "fb93cb2b22fece195fbd26031c8b191a": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nRay $BD$ lies in the interior of $\\angle ABC$. If $m\\angle ABD = 30^\\circ$ and $m\\angle ABC = 80^\\circ$, fi",
+      "recorded_at": 1794633249.293087
+    },
+    "response": {
+      "find": [
+        {
+          "item": "DBC",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "BD",
+            "ABC"
+          ],
+          "kind": "other",
+          "quote": "Ray BD lies in the interior of \u2220ABC"
+        },
+        {
+          "items": [
+            "ABD"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220ABD = 30\u00b0",
+          "value": 30
+        },
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220ABC = 80\u00b0",
+          "value": 80
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "rays": [
+        "BD"
+      ],
+      "requested": []
     }
   },
   "fbb6a1090d75ed20f179cdaae8159b8f": {
