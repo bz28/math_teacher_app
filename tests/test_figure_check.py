@@ -330,11 +330,20 @@ def test_extra_circle_arc_and_shading() -> None:
     arc = {"center": "A", "endpoints": ["B", "C"]}
     assert "extra arc not in the problem" in messages(problem, fig(**base, arcs=[arc]))
     assert "extra shading not in the problem" in messages(problem, fig(**base, shaded=[{"polygon": ["A", "B", "C"]}]))
-    ok = r"Given $\triangle ABC$. A circle with center $A$ passes through $B$; the shaded sector is between arc $BC$."
+    ok = (r"Given $\triangle ABC$. A circle with center $A$ passes through $B$ and $C$; "
+          r"sector $BAC$ is shaded and arc $BC$ marked.")
+    on = {"points": {"A": (0, 0), "B": (4, 0), "C": (0, 4)}, "segments": ["AB", "BC", "CA"],
+          "circles": [{"center": "A", "through": "B"}]}
     assert "extra" not in kinds(
-        ok, fig(**base, circles=[{"center": "A", "through": "B"}], arcs=[{"center": "A", "endpoints": ["B", "C"]}],
+        ok, fig(**on, arcs=[{"center": "A", "endpoints": ["B", "C"]}],
                 shaded=[{"sector": {"center": "A", "endpoints": ["B", "C"]}}]),
     )
+    # "circle" alone allows no arc; shading only the region the problem shades.
+    assert "extra arc not in the problem" in messages(
+        r"A circle with center $A$ passes through $B$ and $C$.",
+        fig(**on, arcs=[{"center": "A", "endpoints": ["B", "C"]}]))
+    assert "the shading is not on the region the problem says is shaded" in messages(
+        ok, fig(**on, shaded=[{"polygon": ["A", "B", "C"]}]))
 
 
 def test_unnamed_problem_allows_any_piece() -> None:

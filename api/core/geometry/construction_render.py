@@ -21,6 +21,7 @@ from api.core.geometry.dsl import (
     ConstructionFigure,
     is_hidden,
     split_points,
+    used_points,
 )
 from api.core.geometry.renderer import (
     _CANONICAL_SPAN,
@@ -274,9 +275,12 @@ def _angle_label_spot(
 def render_construction(spec: ConstructionFigure) -> str:
     raw = {k: (float(x), float(y)) for k, (x, y) in spec.points.items()}
 
-    # Extent in the spec's own units: every point plus every circle.
-    xs = [x for x, _ in raw.values()]
-    ys = [y for _, y in raw.values()]
+    # Extent in the spec's own units: every point the figure shows or draws
+    # with (an unused helper point would only shrink the figure), plus
+    # every circle.
+    used = used_points(spec)
+    xs = [x for k, (x, _) in raw.items() if k in used]
+    ys = [y for k, (_, y) in raw.items() if k in used]
     for circle in spec.circles:
         cx, cy = raw[circle.center]
         through = raw[circle.through or circle.center]

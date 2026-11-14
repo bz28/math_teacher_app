@@ -37,9 +37,9 @@ import math
 import re
 from collections.abc import Collection, Iterable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, cast
 
-from api.core.geometry.dsl import ConstructionFigure, is_hidden, split_points
+from api.core.geometry.dsl import ConstructionFigure, is_hidden, split_points, used_points
 
 Point = tuple[float, float]
 
@@ -112,6 +112,37 @@ _FIGURE_WORDS: dict[str, str] = {
     "radius": r"\b(?:circum|in)?radius\b",
     "radii": r"\bradii\b",
 }
+
+
+_REGION_WORD = r"(?:\\triangle\s*|triangles?\s+|sectors?\s+|regions?\s+|quadrilaterals?\s+|polygons?\s+)"
+
+
+def shaded_regions(text: str) -> list[tuple[Any, ...]]:
+    """The regions the (cleaned) text names as shaded: "the shaded triangle
+    ABD", "shade sector AOB", "region ABCD is shaded". A sector XYZ is
+    centred at Y. Shading the text describes any other way ("the shaded
+    region outside the triangle") can't be held to a drawing, so it gives
+    nothing here and any shading drawn for it is refused."""
+    out: list[tuple[Any, ...]] = []
+    for m in _shading_statements(text):
+        pts = tuple(re.findall(r"[A-Z][0-9]*'*", m.group("n")))
+        if "sector" in (m.group("w") or "").lower() and len(pts) == 3:
+            region: tuple[Any, ...] = ("sector", pts[1], frozenset((pts[0], pts[2])))
+        else:
+            region = ("polygon", pts)
+        if region not in out:
+            out.append(region)
+    return out
+
+
+def _shading_statements(text: str) -> list[re.Match[str]]:
+    """Where the (cleaned) text says a named region is shaded: code reads
+    these, so they need no fact of a reading's."""
+    names = r"\{?\s*(?P<n>(?-i:(?:[A-Z][0-9]*'*){3,}))\s*\}?(?![A-Za-z])"  # capitals, however the words are cased
+    return [m for pattern in (
+        rf"\bshad(?:e|ed|es|ing)\s+(?:the\s+|a\s+)?(?P<w>{_REGION_WORD})?{names}",
+        rf"(?P<w>{_REGION_WORD}){names}\s+(?:is|are)\s+shaded",
+    ) for m in re.finditer(pattern, text, re.IGNORECASE)]
 
 
 def figure_words(text: str) -> set[str]:
@@ -231,6 +262,11 @@ class ProblemParts:
     target_segments: set[frozenset[str]] = field(default_factory=set)
     # Measures and lengths the problem gives as algebra: (part, "2x + 5").
     expressions: list[tuple[Any, str]] = field(default_factory=list)
+    # The circles the problem has, by center ("" for one it doesn't name).
+    circles: list[str] = field(default_factory=list)
+    # The regions the problem says are shaded: ("polygon", (A, B, D)) or
+    # ("sector", center, frozenset of the two ends).
+    shaded: list[tuple[Any, ...]] = field(default_factory=list)
 
 
 # Where the statement to prove starts.
@@ -265,6 +301,13 @@ def parse_problem(text: str, *, extra: str = "") -> ProblemParts:
     out.numbers = _numbers(t)
     lower = t.lower()
     out.words = figure_words(t)
+    out.shaded = shaded_regions(t)
+    out.circles = sorted(set(re.findall(
+        rf"(?:\bcircle|\\odot)\s*(?:(?:with\s+)?cent(?:er|re)(?:ed)?\s*(?:at\s*)?(?:point\s*)?)?\{{?\s*({_PT})(?![A-Za-z])",
+        t, re.IGNORECASE,
+    )))
+    if not out.circles and "circle" in out.words:
+        out.circles = [""]
     out.transversal = re.search(r"\btransversals?\b", lower) is not None
     for source in (t, _clean(extra)):
         _collect_parts(source, out)
@@ -275,6 +318,7 @@ def parse_problem(text: str, *, extra: str = "") -> ProblemParts:
     )) + 2 * len(re.findall(r"\btransversals\b", t, re.IGNORECASE))
     out.givens = _relations(given, out)
     out.prove = _relations(prove, out) if prove else []
+    out.givens += coordinate_relations(t)
     # Every point a relation names must be drawn.
     for rel in (*out.givens, *out.prove):
         out.points |= _rel_points(rel)
@@ -494,29 +538,133 @@ def _all_bare_pairs_are_points(pairs: list[tuple[str, str]], parts: ProblemParts
     return all(set(p) <= parts.points for p in pairs)
 
 
+class _UnparsedError(ValueError):
+    """Algebra the parser doesn't read: the fact it came from can't be checked."""
+
+
+def _polynomial(expr: str) -> dict[str, float]:
+    """Algebra as {variable: coefficient} plus "" for the constant, read by a
+    small recursive parser: + − × ÷, brackets ( ) [ ] { }, implicit
+    multiplication ("2x", "2(x + 5)", "(x + 1)3"), unary minus, \\frac.
+    Only first-degree terms of single letters: a product of two terms that
+    both hold a variable, a power, or anything unknown raises _UnparsedError."""
+    t = str(expr).replace("−", "-").replace("–", "-").replace("·", "*").replace("×", "*").replace("÷", "/")
+    t = re.sub(r"\\(?:left|right)\b", "", t)
+    t = re.sub(r"\\(?:cdot|times)\b", "*", t)
+    t = re.sub(r"\\div\b", "/", t)
+    t = re.sub(r"\^\s*\{?\s*\\circ\s*\}?|\\circ|°|\\,|\\!|\\;|\$", " ", t)
+    t = re.sub(r"\\[dt]?frac\s*", r"\\frac", t)
+    tokens = re.findall(r"\\frac|\d+(?:\.\d+)?|\.\d+|[a-z]|[-+*/()\[\]{}^]|\S", t)
+    pos = 0
+
+    def peek() -> str | None:
+        return tokens[pos] if pos < len(tokens) else None
+
+    def take(want: str | None = None) -> str:
+        nonlocal pos
+        tok = peek()
+        if tok is None or (want is not None and tok != want):
+            raise _UnparsedError(expr)
+        pos += 1
+        return tok
+
+    def add(p: dict[str, float], q: dict[str, float], sign: float = 1.0) -> dict[str, float]:
+        out = dict(p)
+        for k, v in q.items():
+            out[k] = out.get(k, 0.0) + sign * v
+        return out
+
+    def mul(p: dict[str, float], q: dict[str, float]) -> dict[str, float]:
+        pv = {k for k, v in p.items() if k and v}
+        qv = {k for k, v in q.items() if k and v}
+        if pv and qv:
+            raise _UnparsedError(expr)  # x·y or x²: not first degree
+        c, other = (p.get("", 0.0), q) if not pv else (q.get("", 0.0), p)
+        return {k: c * v for k, v in other.items()}
+
+    def const(p: dict[str, float]) -> float:
+        if any(k and v for k, v in p.items()):
+            raise _UnparsedError(expr)
+        return p.get("", 0.0)
+
+    closing = {"(": ")", "[": "]", "{": "}"}
+
+    def atom() -> dict[str, float]:
+        tok = take()
+        if tok in closing:
+            inner = sum_()
+            take(closing[tok])
+            return inner
+        if tok == "\\frac":
+            take("{")
+            num = sum_()
+            take("}")
+            take("{")
+            den = const(sum_())
+            take("}")
+            if den == 0:
+                raise _UnparsedError(expr)
+            return {k: v / den for k, v in num.items()}
+        if re.fullmatch(r"\d+(?:\.\d+)?|\.\d+", tok):
+            return {"": float(tok)}
+        if re.fullmatch(r"[a-z]", tok):
+            return {tok: 1.0}
+        raise _UnparsedError(expr)
+
+    def factor() -> dict[str, float]:
+        tok = peek()
+        if tok in ("-", "+"):
+            take()
+            inner = factor()
+            return {k: -v for k, v in inner.items()} if tok == "-" else inner
+        return atom()  # a power ("x^2") is left unread, so the whole fails
+
+    def term() -> dict[str, float]:
+        out = factor()
+        while True:
+            tok = peek()
+            if tok == "*":
+                take()
+                out = mul(out, factor())
+            elif tok == "/":
+                take()
+                den = const(factor())
+                if den == 0:
+                    raise _UnparsedError(expr)
+                out = {k: v / den for k, v in out.items()}
+            elif tok is not None and (tok in closing or tok == "\\frac" or re.fullmatch(r"[a-z]|\d.*|\.\d+", tok)):
+                out = mul(out, atom())  # implicit: "2x", "2(x + 5)", "(x + 1)(2)"
+            else:
+                return out
+
+    def sum_() -> dict[str, float]:
+        out = term()
+        while peek() in ("+", "-"):
+            sign = 1.0 if take() == "+" else -1.0
+            out = add(out, term(), sign)
+        return out
+
+    if not tokens:
+        raise _UnparsedError(expr)
+    result = sum_()
+    if pos != len(tokens):
+        raise _UnparsedError(expr)
+    return result
+
+
 def _linear(expr: str) -> tuple[float, float, str] | None:
-    """'3x', '2x + 5', '4x-10', 'x' → (a, b, var) for a·var + b; None for
-    anything else (two variables, brackets, powers)."""
-    e = re.sub(r"\s+", "", expr)
-    if not e or not re.fullmatch(r"[-+]?[\d.]*\*?[a-z]?(?:[-+][\d.]*\*?[a-z]?)*", e):
+    """'3x', '2x + 5', '2(x + 5)', '-(x - 3)' → (a, b, var) for a·var + b;
+    None for anything else (two variables, powers, nothing to solve for,
+    or algebra the parser can't read)."""
+    try:
+        poly = _polynomial(expr)
+    except _UnparsedError:
         return None
-    a = b = 0.0
-    var = ""
-    for sign, num, v in re.findall(r"([-+]?)([\d.]*)\*?([a-z]?)", e):
-        if not num and not v:
-            continue
-        try:
-            value = float(num) if num else 1.0
-        except ValueError:
-            return None
-        value = -value if sign == "-" else value
-        if v:
-            if var and v != var:
-                return None
-            var, a = v, a + value
-        else:
-            b += value
-    return (a, b, var) if var and a else None
+    variables = [k for k, v in poly.items() if k and abs(v) > 1e-12]
+    if len(variables) != 1:
+        return None
+    var = variables[0]
+    return (poly[var], poly.get("", 0.0), var)
 
 
 def _ang_key(a: Any) -> Any:
@@ -541,8 +689,7 @@ def linear_expr(expr: str) -> tuple[float, float, str] | None:
     """A measure or length written as algebra ("2x + 5", "(3x)°") as
     (a, b, var) for a·var + b; None when it isn't one variable to the
     first power (then no drawing can be checked against it)."""
-    e = re.sub(r"[()°\s]|\^\s*\\circ|\\circ", "", str(expr).replace("−", "-"))
-    return _linear(e)
+    return _linear(str(expr))
 
 
 def algebra_relation(rels: list[_Relation]) -> _Relation | None:
@@ -790,9 +937,19 @@ class _Drawing:
     def __init__(self, fig: ConstructionFigure) -> None:
         self.fig = fig
         self.p: dict[str, Point] = {k: (float(x), float(y)) for k, (x, y) in fig.points.items()}
-        xs = [q[0] for q in self.p.values()]
-        ys = [q[1] for q in self.p.values()]
-        self.scale = max(max(xs) - min(xs), max(ys) - min(ys), 1e-9)
+        # The figure's size, which every tolerance is relative to: the points
+        # it shows or draws with, and its circles. A helper point nothing
+        # uses is left out (it would make the tolerances as loose as it is
+        # far away) and refused by the checker.
+        self.used = used_points(fig)
+        xs = [q[0] for k, q in self.p.items() if k in self.used]
+        ys = [q[1] for k, q in self.p.items() if k in self.used]
+        for c in fig.circles:
+            cx, cy = self.p[c.center]
+            r = float(c.radius) if c.radius is not None else _dist(self.p[c.center], self.p[c.through or c.center])
+            xs += [cx - r, cx + r]
+            ys += [cy - r, cy + r]
+        self.scale = max(max(xs) - min(xs), max(ys) - min(ys), 1e-9) if xs else 1e-9
         # (kind, a, b): seg a→b, ray from a through b, or line through a, b.
         self.pieces: list[tuple[str, str, str]] = (
             [("seg", *_two(s)) for s in fig.segments]
@@ -1028,6 +1185,71 @@ def check_construction(
     return issues
 
 
+def _extended(d: _Drawing, start: str, end: str, to: str) -> bool | None:
+    """Segment start→end is extended past `end`: to the point `to` (in line,
+    past `end`, and the piece end→to drawn), or, with no point named, by
+    some drawn piece from `end` running on away from `start`."""
+    p = d.p
+    if start not in p or end not in p or (to and to not in p):
+        return None
+    a, b = p[start], p[end]
+
+    def past(q: Point) -> bool:
+        return d.collinear(a, b, q) and d.param(a, b, q) > 1 + _TOL_APART
+
+    if to:
+        return past(p[to]) and (d.seg_drawn(end, to) or d.seg_drawn(start, to) or d.ray_drawn(end, to)
+                                or d.ray_drawn(start, to) or d.line_through(start, to))
+    for kind, x, y in d.pieces:
+        for u, w in ((x, y), (y, x)) if kind != "ray" else ((x, y),):
+            if kind == "ray" and u == end and past(p[w]):
+                return True
+            if kind == "seg" and {u, w} & {end, start} and past(p[w]) and d.param(a, b, p[u]) <= 1 + _TOL_APART:
+                return True
+            if kind == "line" and d.collinear(a, b, p[u]) and d.collinear(a, b, p[w]):
+                return True
+    return False
+
+
+def coordinates(text: str) -> dict[str, tuple[float, float]]:
+    """Points the problem places at coordinates: "A(0, 0)", "B (4, 2)"."""
+    num = r"(-?\d+(?:\.\d+)?)"
+    out: dict[str, tuple[float, float]] = {}
+    for m in re.finditer(rf"(?<![A-Za-z\\])({_PT})\s*=?\s*\(\s*{num}\s*,\s*{num}\s*\)", text.replace("−", "-")):
+        out.setdefault(m.group(1), (float(m.group(2)), float(m.group(3))))
+    return out
+
+
+def coordinate_relations(text: str) -> list[_Relation]:
+    """The problem's coordinates as one check (read by code from the text)."""
+    at = coordinates(text)
+    if len(at) < 2:
+        return []
+    said = ", ".join(f"{n}({x:g}, {y:g})" for n, (x, y) in sorted(at.items()))
+    return [_Relation("coords", (tuple(sorted(at.items())),), f"the points are at {said}")]
+
+
+def _at_coordinates(d: _Drawing, at: dict[str, tuple[float, float]]) -> bool | None:
+    """The points sit where the problem's coordinates put them, up to one
+    shift and one (positive) scale: the same shape, the same way up."""
+    if not all(n in d.p for n in at) or len(at) < 2:
+        return None
+    names = sorted(at)
+    gx = sum(at[n][0] for n in names) / len(names)
+    gy = sum(at[n][1] for n in names) / len(names)
+    dx = sum(d.p[n][0] for n in names) / len(names)
+    dy = sum(d.p[n][1] for n in names) / len(names)
+    given = [(at[n][0] - gx, at[n][1] - gy) for n in names]
+    drawn = [(d.p[n][0] - dx, d.p[n][1] - dy) for n in names]
+    norm = sum(x * x + y * y for x, y in given)
+    if norm <= 0:
+        return None
+    k = sum(gx_ * x + gy_ * y for (gx_, gy_), (x, y) in zip(given, drawn)) / norm
+    if k <= 0:
+        return False
+    return all(_dist((k * g[0], k * g[1]), q) <= 0.01 * d.scale for g, q in zip(given, drawn))
+
+
 def _has_transversal(d: _Drawing) -> bool:
     """Some drawn piece cuts across two parallel ones."""
     return any(_crosses_parallels(d, pc) for pc in d.pieces)
@@ -1108,6 +1330,18 @@ def _holds(rel: _Relation, d: _Drawing) -> bool | None:
             return _angle_pair(d, args[0], d.resolve(args[1]), d.resolve(args[2]))
         if k == "algebra":
             return _algebra_holds(d, args[0], args[1])
+        if k == "interior":
+            # Ray v→end lies strictly inside ∠x v y: the two parts add up to it.
+            v, end, arms = cast(tuple[str, str, tuple[str, str]], args)
+            x, y = arms
+            if not all(n in p for n in (v, end, x, y)):
+                return None
+            part1, part2 = _angle(p[x], p[v], p[end]), _angle(p[end], p[v], p[y])
+            return part1 > _TOL_ANG and part2 > _TOL_ANG and abs(part1 + part2 - _angle(p[x], p[v], p[y])) < _TOL_ANG
+        if k == "beyond":
+            return _extended(d, *args)
+        if k == "coords":
+            return _at_coordinates(d, dict(args[0]))
         if k == "linepar":
             n1, n2 = args
             if n1 not in d.lines or n2 not in d.lines:
@@ -1232,9 +1466,12 @@ def _holds(rel: _Relation, d: _Drawing) -> bool | None:
 
 
 def _degenerate(d: _Drawing, parts: ProblemParts) -> list[str]:
-    """Named points drawn on one spot, and named triangles and polygons
-    drawn flat (no area, or three corners in a row)."""
+    """Named points drawn on one spot; named triangles and polygons drawn
+    flat (no area, or three corners in a row) or crossed (a bow-tie); a
+    helper point nothing in the figure uses."""
     out: list[str] = []
+    if any(is_hidden(n) and n not in d.used for n in d.p):
+        out.append("a helper point is used by nothing in the figure; remove it")
     named = sorted(n for n in d.p if not is_hidden(n))
     for i, a in enumerate(named):
         for b in named[i + 1:]:
@@ -1243,18 +1480,68 @@ def _degenerate(d: _Drawing, parts: ProblemParts) -> list[str]:
     for poly in dict.fromkeys(parts.polygons):
         if len(set(poly)) != len(poly) or not all(n in d.p for n in poly):
             continue
-        q = [d.p[n] for n in poly]
         what = ("triangle " if len(poly) == 3 else "") + "".join(poly)
-        area = abs(sum(q[i - 1][0] * q[i][1] - q[i][0] * q[i - 1][1] for i in range(len(q)))) / 2
-        if area < 1e-3 * d.scale * d.scale:
-            out.append(f"{what} is drawn flat (it has no area)")
-            continue
-        for i in range(len(q)):
-            turn = _angle(q[i - 1], q[i], q[(i + 1) % len(q)])
-            if math.isnan(turn) or turn < _TOL_CORNER or turn > 180 - _TOL_CORNER:
-                corners = ", ".join(poly[(i + j) % len(poly)] for j in (-1, 0, 1))
+        flaw = _polygon_flaw([d.p[n] for n in poly], d.scale)
+        if flaw is not None:
+            kind, i, j = flaw
+            if kind == "flat":
+                out.append(f"{what} is drawn flat (it has no area)")
+            elif kind == "short":
+                side = poly[i] + poly[(i + 1) % len(poly)]
+                out.append(f"{what} is drawn with side {side} too short to see, so it is drawn flat")
+            elif kind == "row":
+                corners = ", ".join(poly[(i + k) % len(poly)] for k in (-1, 0, 1))
                 out.append(f"{what} is drawn with {corners} in a row, so {poly[i]} is no corner")
+            else:
+                s1 = poly[i] + poly[(i + 1) % len(poly)]
+                s2 = poly[j] + poly[(j + 1) % len(poly)]
+                out.append(f"{what} is drawn with sides {s1} and {s2} crossing, so it is no {_poly_word(poly)}")
     return out
+
+
+def _polygon_flaw(q: list[Point], scale: float) -> tuple[str, int, int] | None:
+    """Why the cycle of points `q` is no real polygon: ("flat", 0, 0) with
+    no area, ("short", i, 0) when side i is too short to see (a sliver),
+    ("row", i, 0) when corner i lies in a row with its neighbours,
+    ("cross", i, j) when sides i and j (not next to each other) meet: a
+    bow-tie is not a quadrilateral. None for a real (simple) polygon."""
+    n = len(q)
+    area = abs(sum(q[i - 1][0] * q[i][1] - q[i][0] * q[i - 1][1] for i in range(n))) / 2
+    if area < 1e-3 * scale * scale:
+        return ("flat", 0, 0)
+    for i in range(n):
+        if _dist(q[i], q[(i + 1) % n]) < _TOL_APART * scale:
+            return ("short", i, 0)
+    for i in range(n):
+        turn = _angle(q[i - 1], q[i], q[(i + 1) % n])
+        if math.isnan(turn) or turn < _TOL_CORNER or turn > 180 - _TOL_CORNER:
+            return ("row", i, 0)
+    for i in range(n):
+        for j in range(i + 2, n):
+            if i == 0 and j == n - 1:
+                continue  # neighbours: they share corner 0
+            if _sides_meet(q[i], q[(i + 1) % n], q[j], q[(j + 1) % n], scale):
+                return ("cross", i, j)
+    return None
+
+
+def _sides_meet(p1: Point, p2: Point, q1: Point, q2: Point, scale: float) -> bool:
+    """Two sides touch or cross (a side's end on the other counts)."""
+    tol = 1e-6 * scale * scale
+    d1, d2 = _cross(p1, p2, q1), _cross(p1, p2, q2)
+    d3, d4 = _cross(q1, q2, p1), _cross(q1, q2, p2)
+    if d1 * d2 < -tol and d3 * d4 < -tol:
+        return True
+
+    def on(a: Point, b: Point, c: Point) -> bool:
+        return abs(_cross(a, b, c)) <= tol and min(a[0], b[0]) - 1e-9 <= c[0] <= max(a[0], b[0]) + 1e-9 \
+            and min(a[1], b[1]) - 1e-9 <= c[1] <= max(a[1], b[1]) + 1e-9
+
+    return on(p1, p2, q1) or on(p1, p2, q2) or on(q1, q2, p1) or on(q1, q2, p2)
+
+
+def _poly_word(poly: tuple[str, ...] | str) -> str:
+    return {3: "triangle", 4: "quadrilateral", 5: "pentagon", 6: "hexagon"}.get(len(poly), "polygon")
 
 
 def _overlaps(d: _Drawing, parts: ProblemParts) -> list[str]:
@@ -1366,7 +1653,9 @@ def _has_shape(d: _Drawing, shape: str) -> bool:
                 continue  # each 4-cycle once
             if all(frozenset((cycle[i], cycle[(i + 1) % size])) in edge for i in range(size)):
                 pts = [d.p[n] for n in cycle]
-                if size == 3 and abs(_cross(pts[0], pts[1], pts[2])) < 1e-9:
+                # A flat, cornerless or crossed cycle is no shape at all,
+                # lettered or not.
+                if _polygon_flaw(pts, d.scale) is not None:
                     continue
                 if _shape_holds(shape, pts):
                     return True
@@ -1623,14 +1912,87 @@ def _extras(d: _Drawing, parts: ProblemParts, base: ConstructionFigure | None) -
     out = [
         f"extra {kind if kind != 'seg' else 'segment'} not in the problem: {_show_seg(a, b)}" for kind, a, b in loose
     ]
+    return out + _curved_extras(d, parts)
+
+
+def _curved_extras(d: _Drawing, parts: ProblemParts) -> list[str]:
+    """Each circle, arc, sector and shaded region is one the problem has:
+    a circle per circle it names (centred where it says), an arc or sector
+    only where it speaks of one, centred at its circle's centre with both
+    ends on that circle, and shading only on a region it names as shaded."""
+    out: list[str] = []
     words = parts.words
-    if d.fig.circles and "circle" not in words:
-        out.append("extra circle not in the problem")
-    if (d.fig.arcs or d.fig.sectors) and not ({"arc", "sector", "circle"} & words):
-        out.append("extra arc not in the problem")
-    if d.fig.shaded and not ({"shade", "sector"} & words):
-        out.append("extra shading not in the problem")
+    room = {c: parts.circles.count(c) for c in parts.circles}
+    kept = []
+    for c in d.fig.circles:
+        key = "" if is_hidden(c.center) else c.center
+        if room.get(key, 0) > 0:
+            room[key] -= 1
+            kept.append(c)
+        else:
+            out.append("extra circle not in the problem")
+
+    def on_kept(center: str, ends: list[str]) -> bool:
+        if any(c.center == center and all(_on_circle(d, c, n) for n in ends) for c in kept):
+            return True
+        # A sector of a problem with no circle ("shade sector ABD"): centred
+        # at a named point, its ends equally far from it.
+        r1, r2 = (_dist(d.p[center], d.p[n]) for n in ends)
+        return not parts.circles and not is_hidden(center) and abs(r1 - r2) <= _TOL_LEN * max(r1, r2)
+
+    def show(ends: list[str]) -> str:
+        named = [n for n in ends if not is_hidden(n)]
+        return f" {''.join(named)}" if len(named) == 2 else ""
+
+    for kind, pieces, word in (("arc", d.fig.arcs, {"arc"}), ("sector", d.fig.sectors, {"sector"})):
+        for arc in pieces:
+            if not word & words:
+                out.append(f"extra {kind} not in the problem")
+            elif not on_kept(arc.center, arc.endpoints):
+                out.append(
+                    f"the {kind}{show(arc.endpoints)} is not drawn on the problem's circle "
+                    "(centred at its centre, with both ends on it)",
+                )
+    for region in d.fig.shaded:
+        if region.sector is not None:
+            drawn: tuple[Any, ...] = ("sector", region.sector.center, frozenset(region.sector.endpoints))
+            if drawn in parts.shaded and not on_kept(region.sector.center, region.sector.endpoints):
+                out.append(
+                    "the shaded sector is not drawn on the problem's circle "
+                    "(centred at its centre, with both ends on it)",
+                )
+                continue
+        else:
+            drawn = ("polygon", tuple(region.polygon or ()))
+        if not any(_same_region(drawn, want) for want in parts.shaded):
+            out.append(
+                "extra shading not in the problem" if not ({"shade"} & words)
+                else "the shading is not on the region the problem says is shaded",
+            )
+    # And each region the problem says is shaded is drawn shaded.
+    shown = [("sector", r.sector.center, frozenset(r.sector.endpoints)) if r.sector is not None
+             else ("polygon", tuple(r.polygon or ())) for r in d.fig.shaded]
+    for want in parts.shaded:
+        if not any(_same_region(x, want) for x in shown):
+            if want[0] == "sector":
+                a, b = sorted(want[2])
+                what = f"sector {a}{want[1]}{b}"
+            else:
+                what = "".join(want[1])
+            out.append(f"not drawn: the shading of {what}")
     return out
+
+
+def _same_region(a: tuple[Any, ...], b: tuple[Any, ...]) -> bool:
+    if a[0] != b[0]:
+        return False
+    if a[0] == "sector":
+        return bool(a[1] == b[1] and a[2] == b[2])
+    x, y = list(a[1]), list(b[1])
+    if len(x) != len(y) or set(x) != set(y):
+        return False
+    turns = [y[i:] + y[:i] for i in range(len(y))]
+    return x in turns or x[::-1] in turns
 
 
 def _meets(d: _Drawing, p1: tuple[str, str, str], p2: tuple[str, str, str]) -> bool:
