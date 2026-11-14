@@ -9,13 +9,24 @@ nothing and never reach either hook.
     with spending_cap("unit-5-proofs", cap_usd=5.0) as spend:
         ...  # run the cases
     print(spend.row())
+
+A shared ledger keeps a total across runs (and across sessions): with
+`ledger` and `total_usd`, a set refuses to start when the ledger's total
+plus this set's cap could pass the total, and every run that made a live
+call appends {date, set, calls, tokens_in, tokens_out, usd} to it. The
+probes take them from HARNESS_EVAL_LEDGER and HARNESS_EVAL_TOTAL_USD.
 """
 
 from __future__ import annotations
 
 import contextlib
+import datetime
+import fcntl
+import json
+import os
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 # $ per million tokens: (input, output, cache read, cache write).
@@ -87,12 +98,53 @@ class Spend:
 
 
 @contextlib.contextmanager
-def spending_cap(name: str, cap_usd: float = 5.0) -> Iterator[Spend]:
+def _locked(path: Path) -> Iterator[list[dict[str, Any]]]:
+    """The ledger's entries, read and written back under an exclusive lock
+    (two sessions may run evals at once)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "a+") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            fh.seek(0)
+            text = fh.read().strip()
+            entries: list[dict[str, Any]] = json.loads(text) if text else []
+            before = list(entries)
+            yield entries
+            if entries != before:
+                fh.seek(0)
+                fh.truncate()
+                fh.write(json.dumps(entries, indent=1))
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
+
+
+def ledger_total(path: Path) -> float:
+    with _locked(path) as entries:
+        return float(sum(float(e.get("usd", 0)) for e in entries))
+
+
+def ledger_from_env() -> tuple[Path | None, float | None]:
+    raw, total = os.environ.get("HARNESS_EVAL_LEDGER"), os.environ.get("HARNESS_EVAL_TOTAL_USD")
+    return (Path(raw) if raw else None), (float(total) if total else None)
+
+
+@contextlib.contextmanager
+def spending_cap(name: str, cap_usd: float = 5.0, *, ledger: Path | None = None,
+                 total_usd: float | None = None) -> Iterator[Spend]:
     """Price every live call of the block and refuse the one that could
     pass `cap_usd`. Hooks the client's own cost check (run before each live
-    call) and its call log (run after each, with the usage)."""
+    call) and its call log (run after each, with the usage). With a ledger,
+    refuse to start when its total plus `cap_usd` could pass `total_usd`,
+    and append this run's spend when it made a live call."""
     from api.core import llm_client
 
+    if ledger is not None and total_usd is not None:
+        spent = ledger_total(ledger)
+        if spent + cap_usd > total_usd + 1e-9:
+            raise SpendingCapError(
+                f"LEDGER: set {name!r} not started: ${spent:.2f} of the ${total_usd:.2f} total is spent, "
+                f"and this set's ${cap_usd:.2f} cap could pass it."
+            )
     spend = Spend(name, cap_usd)
     real_log = llm_client._log_and_persist
     tracker = llm_client.cost_tracker
@@ -114,3 +166,9 @@ def spending_cap(name: str, cap_usd: float = 5.0) -> Iterator[Spend]:
     finally:
         llm_client._log_and_persist = real_log  # type: ignore[assignment]
         tracker.check_limit = real_check  # type: ignore[method-assign]
+        if ledger is not None and spend.calls:
+            with _locked(ledger) as entries:
+                entries.append({
+                    "date": datetime.date.today().isoformat(), "set": name, "calls": spend.calls,
+                    "tokens_in": spend.tokens_in, "tokens_out": spend.tokens_out, "usd": round(spend.usd, 4),
+                })
