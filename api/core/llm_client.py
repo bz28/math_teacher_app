@@ -997,6 +997,32 @@ def _serialize_content_blocks(blocks: list[Any]) -> list[dict[str, Any]]:
     return out
 
 
+async def _stream_message(
+    client: Any, request: dict[str, Any], on_text: TextDeltaCallback,
+) -> Any:
+    """`messages.stream` the request, forwarding each text delta, and
+    return the final Message — the same one `create` returns."""
+    async with client.messages.stream(**request) as stream:
+        async for event in stream:
+            if (
+                event.type == "content_block_delta"
+                and event.delta.type == "text_delta"
+            ):
+                await on_text(event.index, event.delta.text)
+        return await stream.get_final_message()
+
+
+def _stream_failure_is_retryable(e: Exception) -> bool:
+    """Whether `create` could succeed where the stream failed. A request
+    the API refused as invalid (a 4xx other than 429) fails the same way
+    again; anything else — an error event mid-stream (which arrives on
+    the 200), overload, 5xx, a broken connection — is what the SDK's
+    own retries exist for."""
+    if isinstance(e, anthropic.APIStatusError):
+        return not (400 <= e.status_code < 500 and e.status_code != 429)
+    return True
+
+
 @_cassetted(default_model=MODEL_REASON)
 async def call_claude_conversation(
     system_prompt: str,
@@ -1090,14 +1116,23 @@ async def call_claude_conversation(
         if on_text is None:
             response = await client.messages.create(**request)
         else:
-            async with client.messages.stream(**request) as stream:
-                async for event in stream:
-                    if (
-                        event.type == "content_block_delta"
-                        and event.delta.type == "text_delta"
-                    ):
-                        await on_text(event.index, event.delta.text)
-                response = await stream.get_final_message()
+            try:
+                response = await _stream_message(client, request, on_text)
+            except Exception as e:
+                if not _stream_failure_is_retryable(e):
+                    raise
+                # The SDK retries a failed `create` (overloaded, 5xx, a
+                # dropped connection) but not a stream that fails after its
+                # first byte — an overloaded error mid-stream, a transport
+                # drop. Make the same call the unstreamed path makes, with
+                # those retries, so streaming never fails a call `create`
+                # would have survived. The caller's final result replaces
+                # whatever partial text already streamed.
+                logger.warning(
+                    "streamed %s call failed (%s); retrying unstreamed",
+                    mode, type(e).__name__,
+                )
+                response = await client.messages.create(**request)
         latency_ms = round((time.monotonic() - start) * 1000, 2)
 
         # Build a compact text summary of the final assistant output

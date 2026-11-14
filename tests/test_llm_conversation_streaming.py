@@ -13,6 +13,8 @@ from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import anthropic
+import httpx
 import pytest
 
 import tests.harness.cassette as cass_mod
@@ -153,3 +155,54 @@ async def test_cassette_key_ignores_on_text_and_replay_feeds_it(
         assert seen == [(0, "Why did you divide by 2?")]
     finally:
         cass_mod._instance = None
+
+
+class _BrokenStream(_Stream):
+    """Streams the first text delta, then the connection drops."""
+
+    def __aiter__(self) -> Any:
+        async def gen() -> Any:
+            yield _events()[1]
+            raise httpx.ReadError("connection dropped mid-stream")
+        return gen()
+
+
+def _client_with_stream(stream: Any = None, enter_error: Exception | None = None) -> Any:
+    client = _client()
+    ctx = MagicMock()
+    ctx.__aenter__ = AsyncMock(return_value=stream, side_effect=enter_error)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+    client.messages.stream = MagicMock(return_value=ctx)
+    return client
+
+
+@pytest.mark.asyncio
+async def test_a_stream_failing_midway_falls_back_to_the_retried_create() -> None:
+    """The SDK retries a failed `create` but not a stream that breaks after
+    its first byte. A mid-stream failure re-makes the call unstreamed, so a
+    call `create` would have survived still succeeds and logs one row."""
+    async def on_text(i: int, t: str) -> None:
+        pass
+
+    client = _client_with_stream(stream=_BrokenStream())
+    blocks, persist = await _call(client, on_text)
+    assert client.messages.create.called
+    assert blocks == (await _call(_client(), None))[0]
+    assert persist.call_count == 1
+    assert persist.call_args.kwargs["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_an_invalid_request_is_not_retried_unstreamed() -> None:
+    async def on_text(i: int, t: str) -> None:
+        pass
+
+    bad = anthropic.BadRequestError(
+        "invalid request",
+        response=httpx.Response(400, request=httpx.Request("POST", "http://x")),
+        body=None,
+    )
+    client = _client_with_stream(enter_error=bad)
+    with pytest.raises(RuntimeError):
+        await _call(client, on_text)
+    assert not client.messages.create.called
