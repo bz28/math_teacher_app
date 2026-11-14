@@ -72,6 +72,11 @@ SETS: dict[str, list[str]] = {
                 "0f6b22c4", "61be26f8", "354df559", "9c2dc3c8", "9c35c230", "6c5008f2", "dba1e5fb", "779c31b5",
                 "a5ec9d41", "df891226", "922733e1", "430894a4", "809a530c", "986bb01d", "97b3010d", "ab10c024",
                 "08e3224d"],
+    # Read after review round 2, to test its fixes: angle and length algebra,
+    # midsegments, altitudes, bisectors, exterior angles, a perpendicular bisector.
+    "breadth2": ["9d6733ba", "bac5ea12", "6bbeedc1", "0511d648", "dee52ce7", "dd5e6fa8", "2d8021e3", "62b136b2",
+                 "b7b1595b", "0ac94bc0", "1c9d21ab", "218c4a7a", "c188b1e1", "95c727b2", "98cb2a48", "18ce1004",
+                 "584320a7", "07a8c9b1", "21807dd6", "afee316c"],
 }
 
 # By-eye verdict per case, after looking at every rendered figure:
@@ -104,7 +109,7 @@ BY_EYE: dict[str, tuple[str, str]] = {
     # Looked at 2026-11-12 after the problem-reading redesign (two AI
     # readings checked by code; angle algebra solved from the facts).
     "985bff41": ("6f29d0281571", "right"),  # ∠AOB 61°, ∠BOC 36°, ∠COD 83°; OA, OD opposite
-    "2d01d709": ("e27ae6ebc4cb", "right"),  # vertical angles 1 and 3, both 41°
+    "2d01d709": ("935f42a0ae31", "right"),  # vertical angles 1 and 3, both 41°
     "d9f94a62": ("edb221230af9", "right"),  # BD bisects ∠ABC and is ⊥ AC
     "589e4a97": ("cc949543b72e", "right"),  # two angle pairs marked; QT, ST unmarked
     "dd7ab4c1": ("2650050a4e9b", "right"),  # BC ≅ DA, BC ∥ AD, diagonal AC
@@ -120,20 +125,35 @@ BY_EYE: dict[str, tuple[str, str]] = {
     # (cosmetic: F's name sits on AB's label "12")
     "099d8962": ("eff508f3d677", "right"),  # WX ≅ YZ, ∠W ≅ ∠Y, ∠X ≅ ∠Z, meeting at V
     "d5a862d3": ("2d5194fc59d7", "right"),  # legs 5 and 12 to scale, hypotenuse 13, b unlabelled
-    "dd7ab4c1-step": ("ca59cf60e077", "right"),  # BC ≅ DA, BC ∥ AD, diagonal AC
-    "dd7ab4c1-step-step3": ("768d2f28df5d", "right"),  # alternate interior angles at A and C
+    "dd7ab4c1-step": ("dbbd01e5fcf0", "right"),  # BC ≅ DA, BC ∥ AD, diagonal AC
+    "dd7ab4c1-step-step3": ("ff8d5e707ee8", "right"),  # alternate interior angles at A and C
     "e87bd653": ("6d4e00ff5e1d", "right"),  # SAS marks
     "7ef5c01b-step": ("b6ec68ce21d7", "right"),
     "7ef5c01b-step-step4": ("ed6d9dc38966", "right"),  # vertical angles at M
     # Looked at 2026-11-12 after angle pairs, circle grounding and prove marks removed.
     "2f44f46d": ("9171372e18da", "right"),  # DE ∥ BC, D on AB, E on AC; ∠ADE ≅ ∠ABC not marked
     # Breadth set, looked at 2026-11-13.
-    "ab8b7fbc": ("61672020f442", "right"),  # inscribed ∠BAC 38°, central ∠BOC unlabelled (the answer)
+    "ab8b7fbc": ("c86384791eab", "right"),  # inscribed ∠BAC 38°, central ∠BOC unlabelled (the answer)
     "9488adfe": ("1378d832cc0d", "right"),  # QS bisects ∠PQR (45° each at x = 7), halves labelled
     "809a530c": ("0dd6b6c1eece", "right"),  # midsegment MN: M, N midpoints (ticks), MN half of YZ
     "986bb01d": ("e669bbd3ec63", "right"),  # ray QS bisects ∠PQR; PS:SR = 12:18 to scale
     # (cosmetic: PR's "25" sits just right of S, by the ray)
     "97b3010d": ("c98d12c35871", "right"),  # right angle at Q, altitude QS ⊥ PR, PS 4 and SR 9 to scale
+    # Breadth set 2, looked at 2026-11-13 after review round 2.
+    # (cosmetic: the "∠AED" label crowds E's name)
+    "2d8021e3": ("a719360feaaf", "right"),  # lines AB, CD meet at E; ∠AEC, ∠BED and the linear pair's ∠AED named
+    "b7b1595b": ("33629597b3d9", "right"),  # altitude CD to hypotenuse AB, AD 4 and DB 9 to scale, right angles boxed
+    "0ac94bc0": ("e3e590cb9d5f", "right"),  # midsegment MN; MN = 3x − 1 is half of BC = 8x − 14 (x = 6)
+    # (cosmetic: "(3x + 4)°" touches AC)
+    "1c9d21ab": ("b86f58cdcf73", "right"),  # right angle at C; ∠A 37°, ∠B 53° as (3x + 4)°, (6x − 13)° (x = 11)
+    "218c4a7a": ("ae46c145719e", "right"),  # PQ ≅ PR; base angles (5y − 8)° = (3y + 14)° = 47°
+    "c188b1e1": ("f0050810d694", "right"),  # RS = RT; base angles 64.15°, vertex 51.7° (x = 198/13)
+    "95c727b2": ("97496d672c65", "right"),  # XY ≅ XZ; base angles (7k − 9)° = (4k + 18)° = 54°
+    "18ce1004": ("00636307c0c6", "right"),  # △FGH ≅ △PQR; FG = 3x − 1 and PQ = 2x + 5 drawn equal
+    "584320a7": ("f3e243e9c24a", "right"),  # right angle at C, legs 9 and 40 to scale; AB (the answer) unlabelled
+    "07a8c9b1": ("b7517f3e1151", "right"),  # △ABC ∼ △DEF; 4, 6, 5 and DE 10 to scale; EF, DF unlabelled
+    "21807dd6": ("f7b3f1d6132d", "right"),  # ∠A 52°, ∠B 79°, arcs to ∠D, ∠E; ∠C, ∠F (the answer) unlabelled
+    "afee316c": ("5aff074e7614", "right"),  # M the midpoint of AC and BD (ticks)
 }
 
 # A known-wrong version of each case's figure (a point moved so a given is
@@ -163,6 +183,18 @@ NEGATIVES: dict[str, dict[str, Any]] = {
     "12c77989": {"move": {"F": [5.4, 4]}},  # ∠D ≠ ∠A
     "e87bd653": {"move": {"F": [8.5, 0]}},  # BC ≠ EF
     "099d8962": {"move": {"Z": [0.553, 5]}},  # ∠X ≇ ∠Z
+    "2d8021e3": {"move": {"D": [7.571, 5]}},  # E off line CD
+    "b7b1595b": {"move": {"C": [4, 5]}},  # no right angle at C
+    "0ac94bc0": {"move": {"N": [6.5, 2.625]}},  # N on AC but not its midpoint
+    "1c9d21ab": {"move": {"B": [5, 0]}},  # ∠A 45°: (3x + 4)° and (6x − 13)° no longer fit one x
+    "218c4a7a": {"move": {"P": [4, 6]}},  # base angles 56°, not 47°
+    "c188b1e1": {"move": {"R": [4, 4]}},  # vertex 90°, base 45°: no x fits both
+    "95c727b2": {"move": {"X": [4, 3]}},  # base angles 37°, not 54°
+    "18ce1004": {"move": {"Q": [9, 0]}},  # PQ ≠ FG: the triangles aren't congruent
+    "584320a7": {"side_label": {"AB": "41"}},  # prints the answer
+    "07a8c9b1": {"move": {"F": [4.281, 5]}},  # △DEF no longer similar to △ABC
+    "21807dd6": {"label": {"BCA": "49°"}},  # prints the answer
+    "afee316c": {"move": {"D": [4.5, -1.5]}},  # M not the midpoint of BD
     "dd7ab4c1-step": {"move": {"D": [7, 0]}},  # BC ≇ DA
     "7ef5c01b-step": {"move": {"M": [5, 1.5]}},  # M not the midpoint of BC
 }

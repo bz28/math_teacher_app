@@ -1,6 +1,6 @@
 """The construction-figure eval, replayed at $0 from its recorded cassettes.
 
-24 real prod geometry problems (tests/harness/_corpus/construction_figures.json)
+69 real prod geometry problems (tests/harness/_corpus/construction_figures.json)
 go through the real workshop-chat path with the teacher's request; the
 model's answers, including the two readings of each problem, were recorded
 once (tests/harness/_cassettes/construction_figures/). Every figure was
@@ -37,7 +37,8 @@ KNOWN_WRONG_PASSED = {"77195d48-step1"}
 # figures; checked against the agreed reading, 15 are drawn and right, and
 # the rest are honest declines (the two readings disagreed, or the figure
 # failed its check twice). A change that draws fewer fails here.
-DRAWN_FLOOR = 20  # 15 of the first 24 (21 should get one), 5 of the 25 breadth problems
+# 15 of the first 24 (21 should get one), 5 of the 25 breadth problems, 12 of the 20 in breadth set 2.
+DRAWN_FLOOR = 32
 
 
 @pytest.mark.asyncio

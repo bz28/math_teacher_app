@@ -1,4 +1,48 @@
 {
+  "010ac77a41b529b3d902bc4464d4f082": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, $D$ is a point on $\\overline{BC}$ and $\\overline{AD} \\perp \\overline{BC}$.\n\nThe teacher",
+      "recorded_at": 1794615639.539893
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "on_segment",
+          "point": "D",
+          "quote": "D is a point on BC"
+        },
+        {
+          "items": [
+            "AD",
+            "BC"
+          ],
+          "kind": "perpendicular",
+          "quote": "AD \u22a5 BC"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "BC",
+        "AD"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
   "02e019a63d7c28db28c63dec2b0d8cc7": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -281,6 +325,71 @@
       "requested": [],
       "segments": [],
       "triangles": []
+    }
+  },
+  "0a668f7cd49effba1a4d6f77174bf1d9": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nGiven $\\overline{AB} \\parallel \\overline{CD}$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794615631.325797
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD"
+      ]
+    }
+  },
+  "0b5bf70f5d45e0ca2897ff41add9a508": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n$\\overrightarrow{BD}$ is the bisector of $\\angle ABC$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794615644.8821409
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "BD",
+            "ABC"
+          ],
+          "kind": "bisects_angle",
+          "quote": "BD is the bisector of \u2220ABC"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "rays": [
+        "BD"
+      ],
+      "requested": []
     }
   },
   "0f250d2e8885700ecdc3afbcd4a5f0ee": {
@@ -672,6 +781,96 @@
       "requested": []
     }
   },
+  "1d2fa0f3bcd93bdbce6a8deaa00e6661": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nGiven: ABCD is a parallelogram. Prove: $\\overline{AB} \\cong \\overline{CD}$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794615631.964902
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "ABCD"
+          ],
+          "kind": "parallelogram",
+          "quote": "ABCD is a parallelogram."
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [
+        "ABCD"
+      ],
+      "prove": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB \u2245 CD"
+        }
+      ],
+      "requested": []
+    }
+  },
+  "1fb32250091904baef527271e8aa90b9": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, $\\angle A \\cong \\angle C$ and $m\\angle A = 50^\\circ$. Find $m\\angle C$.\n\nFinal answer (",
+      "recorded_at": 1794615638.08306
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "C",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "A",
+            "C"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220A \u2245 \u2220C"
+        },
+        {
+          "items": [
+            "A"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220A = 50\u00b0",
+          "value": 50
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
   "224bcdd732a4d5a9ea55aa328b007893": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -862,6 +1061,56 @@
           "kind": "equal_length",
           "quote": "has side length 6",
           "value": 6
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "28e003c300ce970af77c69c82b323fce": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, $\\angle A \\cong \\angle C$ and $m\\angle A = 50^\\circ$. Find $m\\angle C$.\n\nFinal answer (",
+      "recorded_at": 1794615638.297537
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "C",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "A",
+            "C"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220A \u2245 \u2220C"
+        },
+        {
+          "items": [
+            "A"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220A = 50\u00b0",
+          "value": 50
         }
       ],
       "lines": [],
@@ -1172,6 +1421,51 @@
       ]
     }
   },
+  "32ccb33d663ba3c6ecff1ebd7e8e1e18": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\n$E$ is the intersection of $\\overline{AC}$ and $\\overline{BD}$, and $\\overline{AB} \\parallel \\overline{CD}$",
+      "recorded_at": 1794615645.3301032
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AC",
+            "BD"
+          ],
+          "kind": "intersect",
+          "point": "E",
+          "quote": "E is the intersection of AC and BD"
+        },
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "AC",
+        "BD",
+        "AB",
+        "CD"
+      ]
+    }
+  },
   "330b91cb75308c07fd99d45753a184da": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -1211,6 +1505,38 @@
         "ABC",
         "A'B'C'"
       ]
+    }
+  },
+  "3363aeaaebed61259f4eaa7f0197a95c": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\n$\\overrightarrow{BD}$ is the bisector of $\\angle ABC$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794615645.3442078
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "BD",
+            "ABC"
+          ],
+          "kind": "bisects_angle",
+          "quote": "BD is the bisector of \u2220ABC"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "rays": [
+        "BD"
+      ],
+      "requested": []
     }
   },
   "34302beddcfa82e91d511760cf97bb6e": {
@@ -1469,6 +1795,103 @@
       "triangles": []
     }
   },
+  "4332c11c6f1ac35d2ef3710d9cf3c86b": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, $m\\angle A = 40^\\circ$ and $\\overline{AB} \\cong \\overline{AC}$.\n\nThe teacher's message:",
+      "recorded_at": 1794615642.033309
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "A"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220A = 40\u00b0",
+          "value": 40
+        },
+        {
+          "items": [
+            "AB",
+            "AC"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB \u2245 AC"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "AC"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "44bc588a57807b06d77834ea0cbfc384": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, $\\overline{AB} \\cong \\overline{AC}$. Prove: $\\angle B \\cong \\angle C$.\n\nThe teacher's m",
+      "recorded_at": 1794615633.118253
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "AC"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB \u2245 AC"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "B",
+            "C"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220B \u2245 \u2220C"
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "AC"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
   "4ce142df54cc7c78dcecf5936c5c6dba": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -1704,6 +2127,59 @@
       ]
     }
   },
+  "5313b3c0d0da075e22a3fa5e965b6008": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nGiven $\\overline{AB} \\parallel \\overline{CD}$ and $\\overline{EF} \\parallel \\overline{GH}$.\n\nThe teacher's m",
+      "recorded_at": 1794615643.128748
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        },
+        {
+          "items": [
+            "EF",
+            "GH"
+          ],
+          "kind": "parallel",
+          "quote": "EF \u2225 GH"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD",
+        "EF",
+        "GH"
+      ],
+      "triangles": []
+    }
+  },
   "56e7950ae7a019b75a919cb72b8cbe75": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -1782,6 +2258,115 @@
         "EF"
       ],
       "triangles": []
+    }
+  },
+  "57d740c88185646d0cf00ba1e8777843": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n$AB = 5$ and $\\overline{AB} \\cong \\overline{CD}$. Find $CD$.\n\nFinal answer (shown only so you know what is ",
+      "recorded_at": 1794615639.047481
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "CD",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "AB = 5",
+          "value": 5
+        },
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB \u2245 CD"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD"
+      ],
+      "triangles": []
+    }
+  },
+  "5b80cf3a4d291aee693a98dd20dff04c": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, $\\overline{AB} \\cong \\overline{AC}$. Prove: $\\angle B \\cong \\angle C$.\n\nThe teacher's m",
+      "recorded_at": 1794615633.6226292
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "isosceles",
+          "point": "A",
+          "quote": "AB \u2245 AC"
+        },
+        {
+          "items": [
+            "AB",
+            "AC"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB \u2245 AC"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "B",
+            "C"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220B \u2245 \u2220C"
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "AC"
+      ],
+      "triangles": [
+        "ABC"
+      ]
     }
   },
   "5b8b4aba2f220d7049a89d9d83fe8366": {
@@ -2320,6 +2905,55 @@
       "triangles": []
     }
   },
+  "687e20587c210ce360da083f4b96c8fc": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nGiven: ABCD is a parallelogram. Prove: $\\overline{AB} \\cong \\overline{CD}$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794615632.7273479
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "ABCD"
+          ],
+          "kind": "parallelogram",
+          "quote": "ABCD is a parallelogram"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [
+        "ABCD"
+      ],
+      "prove": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB \u2245 CD"
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD"
+      ],
+      "triangles": []
+    }
+  },
   "698ad771113308208e3e28383ebacaad": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -2374,6 +3008,40 @@
       ],
       "prove": [],
       "requested": []
+    }
+  },
+  "6c31012a87df3fc4e56b0958a17057e5": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nLines $m$ and $n$ are parallel.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794615632.0776372
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "m",
+            "n"
+          ],
+          "kind": "parallel",
+          "quote": "Lines m and n are parallel."
+        }
+      ],
+      "lines": [],
+      "named_lines": [
+        "m",
+        "n"
+      ],
+      "points": [],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": []
     }
   },
   "6c6684dbc58618e3568c236c28c4e65a": {
@@ -2596,6 +3264,51 @@
       "triangles": []
     }
   },
+  "72dee1c2358452822c0709de8485f45f": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n$E$ is the intersection of $\\overline{AC}$ and $\\overline{BD}$, and $\\overline{AB} \\parallel \\overline{CD}$",
+      "recorded_at": 1794615645.369822
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AC",
+            "BD"
+          ],
+          "kind": "intersect",
+          "point": "E",
+          "quote": "E is the intersection of AC and BD"
+        },
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "AC",
+        "BD",
+        "AB",
+        "CD"
+      ]
+    }
+  },
   "7927e32b73bce7756b9cd03f23214079": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -2680,6 +3393,51 @@
       ],
       "prove": [],
       "requested": []
+    }
+  },
+  "79d954f4d52c9954759765adc4bf63fe": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, $m\\angle A = x^\\circ$ and $m\\angle B = (2x)^\\circ$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794615636.576572
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "expr": "x",
+          "items": [
+            "A"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220A = x\u00b0"
+        },
+        {
+          "expr": "2x",
+          "items": [
+            "B"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220B = (2x)\u00b0"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": [
+        "ABC"
+      ]
     }
   },
   "7addd7abd0d4991e50d3636586893e37": {
@@ -2802,6 +3560,54 @@
       "requested": [],
       "segments": [],
       "triangles": []
+    }
+  },
+  "87f4d02061dfaa6b75d6be23644626e9": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, $AB = 2x$ and $AC = 2x$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794615636.5726762
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "expr": "2x",
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "AB = 2x"
+        },
+        {
+          "expr": "2x",
+          "items": [
+            "AC"
+          ],
+          "kind": "equal_length",
+          "quote": "AC = 2x"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "AC"
+      ],
+      "triangles": [
+        "ABC"
+      ]
     }
   },
   "880d436a741e0efe31865a4422c192ac": {
@@ -3007,6 +3813,59 @@
       "triangles": []
     }
   },
+  "8dc6d5342d985b4a51cbed5f5c2039f5": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, $\\overline{AB} \\cong \\overline{AC}$ and $m\\angle B = 50^\\circ$. Find $m\\angle A$.\n\nFina",
+      "recorded_at": 1794615640.8290539
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "m\u2220A",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "AC"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB \u2245 AC"
+        },
+        {
+          "items": [
+            "B"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220B = 50\u00b0",
+          "value": 50
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "AC"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
   "8e73d7b385ea5c6bc325f21e784771ba": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -3204,6 +4063,50 @@
       "requested": [],
       "segments": [],
       "triangles": []
+    }
+  },
+  "9cf2fff48dd4771fffbae1eeb3fdc961": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, $D$ is a point on $\\overline{BC}$ and $\\overline{AD} \\perp \\overline{BC}$.\n\nThe teacher",
+      "recorded_at": 1794615640.4252942
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "on_segment",
+          "point": "D",
+          "quote": "D is a point on BC"
+        },
+        {
+          "items": [
+            "AD",
+            "BC"
+          ],
+          "kind": "perpendicular",
+          "quote": "AD \u22a5 BC"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "BC",
+        "AD"
+      ],
+      "triangles": [
+        "ABC"
+      ]
     }
   },
   "a221eb6171997dd6df05406bf711806f": {
@@ -3560,6 +4463,238 @@
       "triangles": []
     }
   },
+  "be7baa62886e96fac7c58eb03bdc70c3": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, $m\\angle A = x^\\circ$ and $m\\angle B = (2x)^\\circ$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794615636.491192
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "expr": "x",
+          "items": [
+            "A"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220A = x\u00b0"
+        },
+        {
+          "expr": "2x",
+          "items": [
+            "B"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220B = (2x)\u00b0"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "bf18b22742b0b49d1c43be1e33392ce3": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nGiven $\\overline{AB} \\parallel \\overline{CD}$ and $\\overline{EF} \\parallel \\overline{GH}$.\n\nThe teacher's m",
+      "recorded_at": 1794615642.632561
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        },
+        {
+          "items": [
+            "EF",
+            "GH"
+          ],
+          "kind": "parallel",
+          "quote": "EF \u2225 GH"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD",
+        "EF",
+        "GH"
+      ],
+      "triangles": []
+    }
+  },
+  "c237b9230ea7a6281e1f96a5f4e37f38": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, $AB = 2x$ and $AC = 2x$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794615636.691587
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "expr": "2x",
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "AB = 2x"
+        },
+        {
+          "expr": "2x",
+          "items": [
+            "AC"
+          ],
+          "kind": "equal_length",
+          "quote": "AC = 2x"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "ca9bb994cf2c2949d12c5effd54524d0": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, $m\\angle A = 40^\\circ$ and $\\overline{AB} \\cong \\overline{AC}$.\n\nThe teacher's message:",
+      "recorded_at": 1794615642.4359639
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "A"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220A = 40\u00b0",
+          "value": 40
+        },
+        {
+          "items": [
+            "AB",
+            "AC"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB \u2245 AC"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "AC"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "cbb23cc0053c659b563aea6dd8c3b7a9": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n$D$ is between $A$ and $B$, and $\\overline{CD} \\perp \\overline{AB}$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794615643.362473
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "on_segment",
+          "point": "D",
+          "quote": "D is between A and B"
+        },
+        {
+          "items": [
+            "CD",
+            "AB"
+          ],
+          "kind": "perpendicular",
+          "quote": "CD \u22a5 AB"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD"
+      ]
+    }
+  },
   "d2fb2453bb2a3ad45dc7c51929735e4e": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -3601,6 +4736,98 @@
       "rays": [],
       "requested": [],
       "segments": [],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "d381a57d1e878522beda695e1c1f560f": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nGiven $\\overline{AB} \\parallel \\overline{CD}$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794615632.521502
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD"
+      ],
+      "triangles": []
+    }
+  },
+  "d6d1b9d917f4c63b329315192607308f": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, $\\overline{AB} \\cong \\overline{AC}$ and $m\\angle B = 50^\\circ$. Find $m\\angle A$.\n\nFina",
+      "recorded_at": 1794615642.415043
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "m\u2220A",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "AC"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB \u2245 AC"
+        },
+        {
+          "items": [
+            "B"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220B = 50\u00b0",
+          "value": 50
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "AC"
+      ],
       "triangles": [
         "ABC"
       ]
@@ -3931,6 +5158,88 @@
         "AC"
       ],
       "triangles": []
+    }
+  },
+  "ea5435a2c727f28e87bdd84e957fd123": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, $D$ lies on $\\overline{BC}$. Draw $\\overline{AD}$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794615634.973788
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "on_segment",
+          "point": "D",
+          "quote": "D lies on BC"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "requested": [
+        {
+          "item": "AD",
+          "kind": "segment"
+        }
+      ],
+      "segments": [
+        "BC",
+        "AD"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "eb2c88b6e5c775c9ba608a1e9c0cb3bd": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, $D$ lies on $\\overline{BC}$. Draw $\\overline{AD}$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794615634.9220428
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "on_segment",
+          "point": "D",
+          "quote": "D lies on BC"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "requested": [
+        {
+          "item": "AD",
+          "kind": "segment"
+        }
+      ],
+      "segments": [
+        "BC",
+        "AD"
+      ],
+      "triangles": [
+        "ABC"
+      ]
     }
   },
   "ee4149316cdf2c8531116c843714b1a6": {
@@ -4307,6 +5616,122 @@
         "CD",
         "EF"
       ]
+    }
+  },
+  "fc30c5c4cd06c0945dce08233db3d71f": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\n$D$ is between $A$ and $B$, and $\\overline{CD} \\perp \\overline{AB}$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794615643.922488
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "on_segment",
+          "point": "D",
+          "quote": "D is between A and B"
+        },
+        {
+          "items": [
+            "CD",
+            "AB"
+          ],
+          "kind": "perpendicular",
+          "point": "D",
+          "quote": "CD \u22a5 AB"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD"
+      ]
+    }
+  },
+  "fcf49d0f4148bcb9bb48081a988618e6": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\n$AB = 5$ and $\\overline{AB} \\cong \\overline{CD}$. Find $CD$.\n\nFinal answer (shown only so you know what is ",
+      "recorded_at": 1794615638.597916
+    },
+    "response": {
+      "find": [
+        {
+          "item": "CD",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "AB = 5",
+          "value": 5
+        },
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB \u2245 CD"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD"
+      ]
+    }
+  },
+  "fd771ee6d65fee34a597a20ee595efb0": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nLines $m$ and $n$ are parallel.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794615631.4971268
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "m",
+            "n"
+          ],
+          "kind": "parallel",
+          "quote": "Lines m and n are parallel."
+        }
+      ],
+      "named_lines": [
+        "m",
+        "n"
+      ],
+      "points": [],
+      "prove": [],
+      "requested": []
     }
   },
   "fe5fd3e80cd5bd1aeee5df3f2b686020": {
