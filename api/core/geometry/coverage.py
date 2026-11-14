@@ -83,7 +83,7 @@ _LENGTH = ("length", "lengths", "long", "measures", "equals", "equal", "units", 
            "inches", "meters", _EQ)
 VOCAB: dict[str, frozenset[str]] = {k: frozenset(v) for k, v in {
     "parallel": ("parallel", "sym:parallel"),
-    "perpendicular": ("perpendicular", "sym:perp", "altitude", "to", "at", *_RIGHT),
+    "perpendicular": ("perpendicular", "sym:perp", "to", "at", *_RIGHT),  # "altitude": its own rule
     "congruent_segments": ("congruent", "sym:cong", "equal", "same", *_LENGTH),
     "congruent_angles": ("congruent", "sym:cong", "equal", "same", *_MEASURE),
     "equal_length": ("equal", *_LENGTH),
@@ -468,7 +468,8 @@ def _same_expression(f: Fact, k: Tok, exprs: dict[int, dict[str, float] | None])
 
 
 def _fact_accounts(f: Fact, run: list[Tok], facts: FigureFacts, out: list[Fact],
-                   exprs: dict[int, dict[str, float] | None] | None = None) -> list[Tok]:
+                   exprs: dict[int, dict[str, float] | None] | None = None,
+                   parts: FigureFacts | None = None) -> list[Tok]:
     """The tokens of a quote's run that the fact uses; none at all when the
     run holds no word or symbol of the fact's own relation."""
     vocab = VOCAB.get(f.kind)
@@ -480,7 +481,7 @@ def _fact_accounts(f: Fact, run: list[Tok], facts: FigureFacts, out: list[Fact],
     relation = not vocab  # a numbered angle's label has no relation word
     # A part named by its role, exactly ("each base angle", "the vertex
     # angle", "one acute angle … the other"): those words, and the part.
-    role = _named_by_role(f, run, facts, out)
+    role = _named_by_role(f, run, parts or facts, out)
     named = bool(role)  # the quote names a part of the fact
     if f.kind == "perpendicular" and any(k.norm == "altitude" for k in run):
         vocab = vocab | {"drawn"}  # "altitude QS is drawn to PR"
@@ -557,16 +558,16 @@ def _triangle_tok(run: list[Tok], i: int) -> bool:
 
 def _the_triangle(run: list[Tok], at: int, facts: FigureFacts, fits: Any) -> tuple[list[str], list[Tok]] | None:
     """The triangle a role phrase is about: the one named right after it
-    ("each base angle of △DEF"), else the only listed triangle that fits.
-    With its name's token, if named."""
+    ("each base angle of △DEF"), else the only triangle the text names that
+    fits (`facts` holds the text's triangles, not a reading's). With its
+    name's token, if named."""
     j = at
     if j + 1 < len(run) and run[j].kind == "word" and run[j].norm == "of":
         if j + 2 < len(run) and run[j + 1].kind == "word" and run[j + 1].norm == "triangle":
             j += 1
         if j + 1 < len(run) and _triangle_tok(run, j + 1):
             tri = split_names(run[j + 1].norm)
-            listed = any(set(split_names(x)) == set(tri) for x in facts.triangles)
-            return (tri, [run[j], run[j + 1]]) if listed and fits(tri) else None
+            return (tri, [run[j], run[j + 1]]) if fits(tri) else None
         return None
     cands = [split_names(x) for x in facts.triangles if fits(split_names(x))]
     return (cands[0], []) if len(cands) == 1 else None
@@ -612,7 +613,7 @@ def _named_by_role(f: Fact, run: list[Tok], facts: FigureFacts, out: list[Fact])
                 tri, named = found
                 apex = _apex(tri, have)
                 if is_([measure(_angle_at(tri, b)) for b in tri if b != apex]):
-                    return {id(run[i]), id(run[i + 1]), *map(id, named)}
+                    return {id(run[i]), id(run[i + 1]), *(id(x) for x in named[:-1])}
             return set()
         if _seq(run, i, "vertex", "angle"):
             found = _the_triangle(run, i + 2, facts, lambda tr: _apex(tr, have) is not None)
@@ -620,7 +621,7 @@ def _named_by_role(f: Fact, run: list[Tok], facts: FigureFacts, out: list[Fact])
                 tri, named = found
                 apex = _apex(tri, have)
                 if apex and is_([measure(_angle_at(tri, apex))]):
-                    return {id(run[i]), *map(id, named)}
+                    return {id(run[i]), *(id(x) for x in named[:-1])}
             return set()
         if _seq(run, i, "one", "acute", "angle") or _seq(run, i, "the", "other"):
             rights = [(tr, v) for tr in map(split_names, facts.triangles) if len(tr) == 3
@@ -686,7 +687,21 @@ def coverage_gaps(text: str, facts: FigureFacts) -> list[str]:
     return coverage(text, facts)[0]
 
 
-def coverage(text: str, facts: FigureFacts) -> tuple[list[str], list[Fact]]:
+def _text_triangles(toks: list[Tok]) -> list[str]:
+    """The triangles the text names: "△ABC", "triangle ABC" ("right
+    triangle PQR", "isosceles triangle ABC")."""
+    out: list[str] = []
+    words = [k for k in toks if k.kind != "punct"]
+    for i, k in enumerate(words):
+        three = k.kind == "name" and len(split_names(k.norm)) == 3
+        if three and (k.wrap == "triangle" or (i and words[i - 1].kind == "word"
+                                               and words[i - 1].norm in ("triangle", "triangles"))):
+            if not any(set(split_names(x)) == set(split_names(k.norm)) for x in out):
+                out.append(k.norm)
+    return out
+
+
+def coverage(text: str, facts: FigureFacts, context: str = "") -> tuple[list[str], list[Fact]]:
     """The gaps, and the facts code derived from the words (see "Derived
     facts"), which the drawing is checked against too."""
     derived: list[Fact] = []
@@ -696,6 +711,12 @@ def coverage(text: str, facts: FigureFacts) -> tuple[list[str], list[Fact]]:
     gaps = [f"point {n}" for n in sorted(parse_problem(text).points - set(facts.points))]
     toks = tokens(t, set(facts.points))
     exprs = _expressions(t, toks)
+    # The parts a derived fact is about are the ones the TEXT names, never
+    # a reading's own lists (a reading that left out △CBE would make
+    # "altitude CD" fit the other triangle).
+    # (A step's text uses its question's: `context`.)
+    from_context = _text_triangles(tokens(_clean(context), set(facts.points))) if context else []
+    named = facts.model_copy(update={"triangles": list(dict.fromkeys([*_text_triangles(toks), *from_context]))})
 
     def mark(a: int, b: int, only: tuple[str, ...] = ()) -> None:
         for k in toks:
@@ -714,7 +735,7 @@ def coverage(text: str, facts: FigureFacts) -> tuple[list[str], list[Fact]]:
     for f in [*facts.givens, *facts.prove]:
         for piece in re.split(r"\s*…\s*|\.\.\.", f.quote or ""):
             for found in _find_runs(toks, tokens(_clean(piece), set(facts.points))):
-                for k in _fact_accounts(f, found, facts, derived, exprs):
+                for k in _fact_accounts(f, found, facts, derived, exprs, named):
                     k.done = True
     # 2. What is asked.
     _targets(t, toks, facts)
@@ -727,7 +748,7 @@ def coverage(text: str, facts: FigureFacts) -> tuple[list[str], list[Fact]]:
     for m in re.finditer(_LIST_MARK, t, re.IGNORECASE):
         mark(*m.span())
     for rx, needs in [*_METHODS, (_WHETHER, "")]:  # "by SAS"; "whether AB ∥ CD"
-        if _states_a(needs, facts):
+        if _states_a(needs, named):
             for m in rx.finditer(t):
                 mark(*m.span(), only=("word", "punct"))
     if facts.triangles or any(len(split_names(p)) == 3 for p in facts.polygons):
@@ -737,7 +758,7 @@ def coverage(text: str, facts: FigureFacts) -> tuple[list[str], list[Fact]]:
                 mark(m.start(), m.end() + (end.end() if end else 0))
     _named_parts(toks, facts)
     _hypotenuse_and_legs(toks, facts)
-    _exact_rules(t, toks, facts, derived)
+    _exact_rules(t, toks, named, derived)
     _draw(toks, facts)
     # A clause said again exactly is accounted for when the first saying is.
     clauses = _clauses(t)
@@ -1026,7 +1047,7 @@ def _exact_rules(t: str, toks: list[Tok], facts: FigureFacts, out: list[Fact]) -
         # "OA, OB, OC, and OD all share endpoint O": every part named before
         # it in the sentence is a ray named from O (so it starts at O by its
         # name), drawn as a listed ray. "△ABC and △ABD share side AB": every
-        # part named before is a listed triangle whose name holds A and B.
+        # part named before is a triangle whose name holds A and B.
         if k.norm == "share":
             j = i + 1
             while j < len(words) and words[j].norm in ("a", "the", "common"):
@@ -1042,10 +1063,9 @@ def _exact_rules(t: str, toks: list[Tok], facts: FigureFacts, out: list[Fact]) -
                     tri_names = [w for w in before if w.wrap == "triangle"]
                     ok = len(tri_names) == len(before) >= 2 and all(
                         set(split_names(x)) <= set(split_names(w.norm)) and len(split_names(x)) == (
-                            2 if what == "side" else 1) for w in tri_names) and all(
-                        any(set(split_names(w.norm)) == set(tr) for tr in tris) for w in tri_names)
-                if ok:
-                    done(*before, *words[i:j + 2])
+                            2 if what == "side" else 1) for w in tri_names)
+                if ok:  # (the triangles' own names: accounted for only by a reading's listed ones)
+                    done(*(w for w in before if w.wrap != "triangle"), *words[i:j + 2])
                     if i and words[i - 1].norm == "all":
                         done(words[i - 1])
         # "[subject] intersects PR at (point) S": S is on PR and on the
@@ -1110,14 +1130,26 @@ def _exact_rules(t: str, toks: list[Tok], facts: FigureFacts, out: list[Fact]) -
                 ext = _extensions_past(words[j + 1].norm, facts)
                 if len(ext) == 1:
                     done(k, words[i + 1], words[j], words[j + 1])
-        # "altitude CD (is drawn to AB)": CD is perpendicular to the side
-        # opposite C of the one listed triangle with corner C (not D).
+        # "altitude CD [of △CBE] (is drawn to AB)": CD is perpendicular to
+        # the side opposite C of the triangle the text names after it, or
+        # else of the one triangle the text names with corner C (not D);
+        # two candidates: a gap.
         if k.norm == "altitude" and is_name(i + 1, 2):
             c, d = split_names(words[i + 1].norm)
-            holding = [tr for tr in tris if c in tr and d not in tr]
-            if len(holding) == 1:
+            j = i + 2
+            of: list[Tok] = []
+            if norm_seq(j, 1) == ["of"]:
+                q = j + 1 + (norm_seq(j + 1, 1) == ["triangle"])
+                if is_name(q, 3):
+                    of = words[j:q + 1]
+            holding = [tr for tr in tris if c in tr and d not in tr and (
+                not of or set(tr) == set(split_names(of[-1].norm)))]
+            if len(holding) == 1 and (of or norm_seq(j, 1) != ["of"]):
                 opposite = "".join(x for x in holding[0] if x != c)
-                derive([Fact(kind="perpendicular", items=[c + d, opposite], point=d)], [k])
+                past = j + len(of)
+                drawn = words[past:past + 2] if norm_seq(past, 2) == ["is", "drawn"] else []
+                derive([Fact(kind="perpendicular", items=[c + d, opposite], point=d)],
+                       [k, words[i + 1], *of[:-1], *drawn])
         # "transversal EF cutting both lines at points G and H respectively":
         # the two lines named before EF in the sentence, in the order the
         # text names them; G is where EF meets the first, H the second. Each

@@ -325,10 +325,24 @@ def trusted_reading(problem_text: str, a: FigureFacts, b: FigureFacts, *, reques
     # drawing whatever the readings say, so each reading is compared with
     # them added: one that left out a foot the words state agrees with one
     # that wrote it.
-    gaps, derived = coverage(problem_text, a)
-    derived_b = coverage(problem_text, b)[1]
-    clash = derived_conflicts(a, derived) or derived_conflicts(b, derived_b)
-    a, b = with_derived(a, derived), with_derived(b, derived_b)
+    # Coverage runs on both readings; the derived facts come from the
+    # text's own words and parts, so both must derive the same ones. They
+    # are worked out once, then added to both readings (and so to the
+    # checked facts).
+    gaps, derived = coverage(problem_text, a, step_of or "")
+    gaps_b, derived_b = coverage(problem_text, b, step_of or "")
+    gaps = list(dict.fromkeys([*gaps, *gaps_b]))
+
+    def said(ds: list[Any]) -> set[tuple[Any, ...]]:
+        return {(d.kind, tuple(d.items), d.point, d.value, d.expr, d.circle) for d in ds}
+
+    if said(derived) != said(derived_b):
+        logger.warning("figure facts: the readings derive different facts from the words: %s",
+                       sorted(map(str, said(derived) ^ said(derived_b))))
+        return None, ["two readings of the problem disagree about what its words state, so the figure can't be "
+                      "checked"]
+    clash = derived_conflicts(a, derived) or derived_conflicts(b, derived)
+    a, b = with_derived(a, derived), with_derived(b, derived)
     differ = disagreements(a, b)
     if differ:
         logger.warning("figure facts: the two readings differ: %s", differ)
