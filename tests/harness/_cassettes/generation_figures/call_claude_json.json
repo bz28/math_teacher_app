@@ -1,4 +1,138 @@
 {
+  "00d27f0a4e05b008838b7631d637fe9b": {
+    "meta": {
+      "mode": "generate_questions_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn any right triangle, the **hypotenuse is the side opposite the right angle** \u2014 it's always the longest si",
+      "recorded_at": 1794652165.24135
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "WXZ"
+          ],
+          "kind": "right_triangle",
+          "point": "X",
+          "quote": "In \u25b3WXZ: the right angle is at X"
+        },
+        {
+          "items": [
+            "YZX"
+          ],
+          "kind": "right_triangle",
+          "point": "Z",
+          "quote": "In \u25b3YZX: the right angle is at Z"
+        },
+        {
+          "items": [
+            "WZ",
+            "YX"
+          ],
+          "kind": "congruent_segments",
+          "quote": "WZ \u2245 YX"
+        },
+        {
+          "circle": null,
+          "expr": null,
+          "items": [
+            "WZ"
+          ],
+          "kind": "other",
+          "point": null,
+          "quote": "the side opposite it, WZ, is the hypotenuse",
+          "value": null
+        },
+        {
+          "circle": null,
+          "expr": null,
+          "items": [
+            "YX"
+          ],
+          "kind": "other",
+          "point": null,
+          "quote": "the side opposite it, YX, is the hypotenuse",
+          "value": null
+        }
+      ],
+      "points": [
+        "W",
+        "X",
+        "Y",
+        "Z"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "WZ",
+        "YX"
+      ],
+      "triangles": [
+        "WXZ",
+        "YZX"
+      ]
+    }
+  },
+  "032d2a71a4eab02c9dfb232bf94f9c8c": {
+    "meta": {
+      "mode": "generate_questions_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn the figure below, $M$ is the midpoint of $\\overline{AC}$ and $\\overline{BM} \\perp \\overline{AC}$.\n\n**Giv",
+      "recorded_at": 1794649563.577804
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AC"
+          ],
+          "kind": "midpoint",
+          "point": "M",
+          "quote": "M is the midpoint of $\\overline{AC}$"
+        },
+        {
+          "items": [
+            "BM",
+            "AC"
+          ],
+          "kind": "perpendicular",
+          "quote": "$\\overline{BM} \\perp \\overline{AC}$"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "M"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "ABM",
+            "CBM"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "$\\triangle ABM \\cong \\triangle CBM$"
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AC",
+        "BM"
+      ],
+      "triangles": [
+        "ABM",
+        "CBM"
+      ]
+    }
+  },
   "0527786d9604be299d6ceae73c97a8cb": {
     "meta": {
       "mode": "generate_questions_facts_b",
@@ -69,6 +203,115 @@
       "triangles": [
         "ABC",
         "DEF"
+      ]
+    }
+  },
+  "0685707fae9a20c050bc30797786f529": {
+    "meta": {
+      "mode": "generate_questions_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nBecause $E$ is the **midpoint** of $\\overline{BC}$, it splits the segment into two equal halves by definiti",
+      "recorded_at": 1794651338.830554
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "midpoint",
+          "point": "E",
+          "quote": "E is the midpoint of BC"
+        },
+        {
+          "items": [
+            "BE",
+            "CE"
+          ],
+          "kind": "congruent_segments",
+          "quote": "BE = CE"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "B",
+        "C",
+        "E"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "BC",
+        "BE",
+        "CE"
+      ],
+      "triangles": []
+    }
+  },
+  "06f10031143d60a6bdb37a2ff2e6aa3f": {
+    "meta": {
+      "mode": "generate_questions_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nWe have two right triangles, $\\triangle WXZ$ and $\\triangle YZX$, sitting side by side and sharing the base",
+      "recorded_at": 1794651338.874793
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "WXZ"
+          ],
+          "kind": "right_angle",
+          "quote": "Both triangles have a right angle"
+        },
+        {
+          "items": [
+            "WZ",
+            "YX"
+          ],
+          "kind": "congruent_segments",
+          "quote": "hypotenuses are equal"
+        },
+        {
+          "items": [
+            "XZ",
+            "XZ"
+          ],
+          "kind": "congruent_segments",
+          "quote": "They share a leg"
+        }
+      ],
+      "points": [
+        "W",
+        "X",
+        "Y",
+        "Z"
+      ],
+      "prove": [
+        {
+          "items": [
+            "WXZ",
+            "YZX"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "two right triangles are congruent if their hypotenuses are equal AND one leg is equal"
+        }
+      ],
+      "requested": [],
+      "segments": [
+        "XZ",
+        "WZ",
+        "YX"
+      ],
+      "triangles": [
+        "WXZ",
+        "YZX"
       ]
     }
   },
@@ -191,6 +434,132 @@
       ],
       "prove": [],
       "requested": []
+    }
+  },
+  "0dbf65998213ecc8dc8e57683e5fa187": {
+    "meta": {
+      "mode": "generate_questions_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nSecond Side: Shared side $BM = BM$: The segment $\\overline{BM}$ is a side of **both** triangles. Any segmen",
+      "recorded_at": 1794650510.2040162
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "BM",
+            "BM"
+          ],
+          "kind": "congruent_segments",
+          "quote": "BM = BM"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "B",
+        "M"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "BM"
+      ],
+      "triangles": []
+    }
+  },
+  "10db032055607d585340b144b829c200": {
+    "meta": {
+      "mode": "generate_questions_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn the figure below, $\\overline{QS}$ is a diameter of circle $O$, and $R$ is a point on the circle. The ins",
+      "recorded_at": 1794649565.4901838
+    },
+    "response": {
+      "circles": [
+        "O"
+      ],
+      "find": [
+        {
+          "item": "value of x",
+          "kind": "other"
+        },
+        {
+          "item": "measure of arc QR",
+          "kind": "other"
+        },
+        {
+          "item": "measure of arc RS",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "circle": "O",
+          "items": [
+            "QS"
+          ],
+          "kind": "diameter",
+          "quote": "QS is a diameter of circle O"
+        },
+        {
+          "circle": "O",
+          "items": [
+            "R"
+          ],
+          "kind": "on_circle",
+          "quote": "R is a point on the circle"
+        },
+        {
+          "circle": "O",
+          "items": [
+            "QRS"
+          ],
+          "kind": "inscribed_angle",
+          "quote": "The inscribed angle \u2220QRS = 90\u00b0",
+          "value": 90
+        },
+        {
+          "items": [
+            "QRS"
+          ],
+          "kind": "angle_measure",
+          "quote": "\u2220QRS = 90\u00b0",
+          "value": 90
+        },
+        {
+          "expr": "3x + 5",
+          "items": [],
+          "kind": "other",
+          "quote": "\u2322QR = (3x + 5)\u00b0"
+        },
+        {
+          "expr": "7x - 1",
+          "items": [],
+          "kind": "other",
+          "quote": "\u2322RS = (7x \u2212 1)\u00b0"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "O",
+        "Q",
+        "R",
+        "S"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "QS"
+      ],
+      "triangles": []
     }
   },
   "118fe9b8a3fae8c5679f50e0ec270a90": {
@@ -403,6 +772,100 @@
       ]
     }
   },
+  "1664a993e0b19420b8b15f2d86f27573": {
+    "meta": {
+      "mode": "generate_questions_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn the figure below, line $t$ is tangent to circle $O$ at point $T$, and $\\overline{TV}$ is a chord. The mi",
+      "recorded_at": 1794649565.475411
+    },
+    "response": {
+      "circles": [
+        "O"
+      ],
+      "find": [
+        {
+          "item": "equation relating the tangent-chord angle to its intercepted arc",
+          "kind": "other"
+        },
+        {
+          "item": "x",
+          "kind": "other"
+        },
+        {
+          "item": "m arc TV",
+          "kind": "other"
+        },
+        {
+          "item": "UTV",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "circle": "O",
+          "items": [
+            "t"
+          ],
+          "kind": "tangent",
+          "point": "T",
+          "quote": "line t is tangent to circle O at point T"
+        },
+        {
+          "circle": "O",
+          "items": [
+            "TV"
+          ],
+          "kind": "chord",
+          "quote": "TV is a chord"
+        },
+        {
+          "expr": "10x + 4",
+          "items": [
+            "TV"
+          ],
+          "kind": "other",
+          "quote": "minor arc TV = (10x + 4)\u00b0"
+        },
+        {
+          "expr": "6x + 8",
+          "items": [
+            "UTV"
+          ],
+          "kind": "angle_measure",
+          "quote": "the tangent-chord angle \u2220UTV = (6x + 8)\u00b0"
+        },
+        {
+          "items": [
+            "t"
+          ],
+          "kind": "on_line",
+          "point": "U",
+          "quote": "ray TU lies along tangent t"
+        }
+      ],
+      "lines": [],
+      "named_lines": [
+        "t"
+      ],
+      "points": [
+        "O",
+        "T",
+        "U",
+        "V"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [
+        "TU"
+      ],
+      "requested": [],
+      "segments": [
+        "TV"
+      ],
+      "triangles": []
+    }
+  },
   "1c2c8e91d5b57256f71c92a570d01523": {
     "meta": {
       "mode": "generate_questions_facts_a",
@@ -491,6 +954,395 @@
       "segments": [
         "TV"
       ]
+    }
+  },
+  "200ade14c98c6070f49579b55132afae": {
+    "meta": {
+      "mode": "generate_questions_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nWe have point $M$ on $\\overline{AC}$ with two special properties: it's the **midpoint** (so it cuts $\\overl",
+      "recorded_at": 1794650511.717171
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AC"
+          ],
+          "kind": "midpoint",
+          "point": "M",
+          "quote": "it's the midpoint (so it cuts AC into two equal halves)"
+        },
+        {
+          "items": [
+            "BM",
+            "AC"
+          ],
+          "kind": "perpendicular",
+          "quote": "BM is perpendicular to AC"
+        },
+        {
+          "items": [
+            "BM",
+            "BM"
+          ],
+          "kind": "congruent_segments",
+          "quote": "the two triangles share side BM"
+        },
+        {
+          "items": [
+            "BMA"
+          ],
+          "kind": "right_angle",
+          "quote": "creating two right angles"
+        },
+        {
+          "items": [
+            "BMC"
+          ],
+          "kind": "right_angle",
+          "quote": "creating two right angles"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "M"
+      ],
+      "prove": [
+        {
+          "items": [
+            "ABM",
+            "CBM"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "\u25b3ABM \u2245 \u25b3CBM"
+        }
+      ],
+      "requested": [],
+      "segments": [
+        "AC",
+        "BM",
+        "AM",
+        "CM"
+      ],
+      "triangles": [
+        "ABM",
+        "CBM"
+      ]
+    }
+  },
+  "203ebc97171f2069d1fad41837809e3c": {
+    "meta": {
+      "mode": "generate_questions_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn the figure below, point $O$ is the center of the circle. $\\overline{OA}$, $\\overline{OB}$, and $\\overlin",
+      "recorded_at": 1794649564.389863
+    },
+    "response": {
+      "circles": [
+        "O"
+      ],
+      "find": [
+        {
+          "item": "ACB",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "O"
+          ],
+          "kind": "other",
+          "quote": "point O is the center of the circle"
+        },
+        {
+          "circle": "O",
+          "items": [
+            "OA"
+          ],
+          "kind": "radius",
+          "quote": "OA, OB, and OC are radii"
+        },
+        {
+          "circle": "O",
+          "items": [
+            "OB"
+          ],
+          "kind": "radius",
+          "quote": "OA, OB, and OC are radii"
+        },
+        {
+          "circle": "O",
+          "items": [
+            "OC"
+          ],
+          "kind": "radius",
+          "quote": "OA, OB, and OC are radii"
+        },
+        {
+          "circle": "O",
+          "items": [
+            "AOB"
+          ],
+          "kind": "central_angle",
+          "quote": "The central angle \u2220AOB = 112\u00b0",
+          "value": 112
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "O",
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "OA",
+        "OB",
+        "OC"
+      ],
+      "triangles": []
+    }
+  },
+  "219d5c3e66d72302ae2f22af9e6ccc1d": {
+    "meta": {
+      "mode": "generate_questions_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn circle $O$ below, central angle $\\angle AOB = 124\u00b0$ and $C$ is a point on the major arc $\\widehat{AB}$. ",
+      "recorded_at": 1794649647.691294
+    },
+    "response": {
+      "circles": [
+        "O"
+      ],
+      "find": [
+        {
+          "item": "ACB",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "circle": "O",
+          "items": [
+            "A",
+            "B",
+            "C"
+          ],
+          "kind": "on_circle",
+          "quote": "In circle O"
+        },
+        {
+          "circle": "O",
+          "items": [
+            "AOB"
+          ],
+          "kind": "central_angle",
+          "quote": "central angle \u2220AOB = 124\u00b0",
+          "value": 124
+        },
+        {
+          "items": [
+            "C"
+          ],
+          "kind": "other",
+          "quote": "C is a point on the major arc AB"
+        }
+      ],
+      "points": [
+        "O",
+        "A",
+        "B",
+        "C"
+      ],
+      "prove": [],
+      "requested": []
+    }
+  },
+  "22ae80f16178fbf374e96bbbea800bac": {
+    "meta": {
+      "mode": "generate_questions_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn the figure below, $\\overline{AD}$ and $\\overline{BC}$ intersect at $E$, with $\\overline{AE} \\cong \\overl",
+      "recorded_at": 1794650517.3733
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AD",
+            "BC"
+          ],
+          "kind": "intersect",
+          "point": "E",
+          "quote": "AD and BC intersect at E"
+        },
+        {
+          "items": [
+            "AE",
+            "DE"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AE \u2245 DE"
+        },
+        {
+          "items": [
+            "CAE",
+            "BDE"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220CAE \u2245 \u2220BDE"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ],
+      "prove": [
+        {
+          "items": [
+            "ACE",
+            "DBE"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "\u25b3ACE \u2245 \u25b3DBE"
+        }
+      ],
+      "requested": [],
+      "segments": [
+        "AD",
+        "BC",
+        "AE",
+        "DE"
+      ],
+      "triangles": [
+        "ACE",
+        "DBE"
+      ]
+    }
+  },
+  "238d877f866cfb7f224b00142ee64e9f": {
+    "meta": {
+      "mode": "generate_questions_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn the figure below, $\\overline{WX} \\cong \\overline{ZY}$ and $\\overline{WZ} \\cong \\overline{XY}$.\n\n**Given:",
+      "recorded_at": 1794649562.9997041
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "WX",
+            "ZY"
+          ],
+          "kind": "congruent_segments",
+          "quote": "\\overline{WX} \\cong \\overline{ZY}"
+        },
+        {
+          "items": [
+            "WZ",
+            "XY"
+          ],
+          "kind": "congruent_segments",
+          "quote": "\\overline{WZ} \\cong \\overline{XY}"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "W",
+        "X",
+        "Y",
+        "Z"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "WXY",
+            "ZYX"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "\\triangle WXY \\cong \\triangle ZYX"
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "WX",
+        "ZY",
+        "WZ",
+        "XY"
+      ],
+      "triangles": [
+        "WXY",
+        "ZYX"
+      ]
+    }
+  },
+  "297d69737f9d3c0b2208087f487e3352": {
+    "meta": {
+      "mode": "generate_questions",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn the figure below, $\\overline{WX} \\cong \\overline{ZY}$ and $\\overline{WZ} \\cong \\overline{XY}$.\n\n**Given:",
+      "recorded_at": 1794649582.726857
+    },
+    "response": {
+      "figure_spec": {
+        "points": {
+          "W": [
+            0,
+            3
+          ],
+          "X": [
+            6,
+            3
+          ],
+          "Y": [
+            6,
+            0
+          ],
+          "Z": [
+            0,
+            0
+          ]
+        },
+        "segments": [
+          "WX",
+          "XY",
+          "WY",
+          "ZY",
+          "ZX",
+          "WZ"
+        ],
+        "shape": "construction",
+        "tick_groups": [
+          [
+            "WX",
+            "ZY"
+          ],
+          [
+            "WZ",
+            "XY"
+          ]
+        ],
+        "type": "geometry"
+      }
     }
   },
   "2a4b3177027da360eed148f98cf7eafb": {
@@ -653,6 +1505,206 @@
       "segments": [
         "AC",
         "BD"
+      ]
+    }
+  },
+  "2e714a412fdc74d9e396dd04f91c2ebc": {
+    "meta": {
+      "mode": "decompose",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Problem: In the figure below, $M$ is the midpoint of $\\overline{AC}$ and $\\overline{BM} \\perp \\overline{AC}$.\n\n**Giv",
+      "recorded_at": 1794649710.4168031
+    },
+    "response": {
+      "answer_type": "diagram",
+      "final_answer": "$\\triangle ABM \\cong \\triangle CBM$ by **SAS**: $AM = MC$ (midpoint), $\\angle BMA = \\angle BMC = 90\u00b0$ (perpendicular), $BM = BM$ (reflexive). $\\blacksquare$",
+      "steps": [
+        {
+          "description": "We have point $M$ on $\\overline{AC}$ with two special properties: it's the **midpoint** (so it cuts $\\overline{AC}$ into two equal halves), and $\\overline{BM}$ is **perpendicular** to $\\overline{AC}$ (creating two right angles). We want to show $\\triangle ABM \\cong \\triangle CBM$.\n\nThe key insight: the two triangles share side $\\overline{BM}$, have equal legs from the midpoint, and both have a right angle. That's the **SAS pattern** (Side-Angle-Side) \u2014 two sides and the angle *between* them match up. We just need to identify those three matching pieces.",
+          "figure_spec": {
+            "points": {
+              "A": [
+                0,
+                0
+              ],
+              "B": [
+                4,
+                5
+              ],
+              "C": [
+                8,
+                0
+              ],
+              "M": [
+                4,
+                0
+              ]
+            },
+            "right_angles": [
+              "BMC"
+            ],
+            "segments": [
+              "AB",
+              "BM",
+              "BC",
+              "AC"
+            ],
+            "shape": "construction",
+            "tick_groups": [
+              [
+                "AM",
+                "MC"
+              ]
+            ],
+            "type": "geometry"
+          },
+          "title": "Understand the Setup"
+        },
+        {
+          "description": "By definition, a **midpoint** divides a segment into two congruent halves. Since $M$ is the midpoint of $\\overline{AC}$:\n$$AM = MC$$\nThis is our **first pair of equal sides**.",
+          "figure_spec": {
+            "points": {
+              "A": [
+                0,
+                0
+              ],
+              "B": [
+                4,
+                5
+              ],
+              "C": [
+                8,
+                0
+              ],
+              "M": [
+                4,
+                0
+              ]
+            },
+            "right_angles": [
+              "BMC"
+            ],
+            "segments": [
+              "AB",
+              "BM",
+              "BC",
+              "AC"
+            ],
+            "shape": "construction",
+            "tick_groups": [
+              [
+                "AM",
+                "MC"
+              ]
+            ],
+            "type": "geometry"
+          },
+          "title": "First Side: Midpoint gives $AM = MC$"
+        },
+        {
+          "description": "Because $\\overline{BM} \\perp \\overline{AC}$, it creates right angles on **both sides** of $M$. That means:\n$$\\angle BMA = 90\u00b0 \\quad \\text{and} \\quad \\angle BMC = 90\u00b0$$\nSo $\\angle BMA = \\angle BMC$. This is the **included angle** sitting between the two pairs of sides we're matching \u2014 exactly what SAS requires.",
+          "figure_spec": {
+            "arc_groups": [
+              [
+                "BMA",
+                "BMC"
+              ]
+            ],
+            "points": {
+              "A": [
+                0,
+                0
+              ],
+              "B": [
+                4,
+                5
+              ],
+              "C": [
+                8,
+                0
+              ],
+              "M": [
+                4,
+                0
+              ]
+            },
+            "right_angles": [
+              "BMA",
+              "BMC"
+            ],
+            "segments": [
+              "AB",
+              "BM",
+              "BC",
+              "AC"
+            ],
+            "shape": "construction",
+            "tick_groups": [
+              [
+                "AM",
+                "MC"
+              ]
+            ],
+            "type": "geometry"
+          },
+          "title": "Included Angle: Perpendicular gives two right angles"
+        },
+        {
+          "description": "The segment $\\overline{BM}$ is a side of **both** triangles. Any segment is equal to itself \u2014 this is the **Reflexive Property**:\n$$BM = BM$$\nThis is our **second pair of equal sides**.",
+          "figure_spec": {
+            "arc_groups": [
+              [
+                "BMA",
+                "BMC"
+              ]
+            ],
+            "points": {
+              "A": [
+                0,
+                0
+              ],
+              "B": [
+                4,
+                5
+              ],
+              "C": [
+                8,
+                0
+              ],
+              "M": [
+                4,
+                0
+              ]
+            },
+            "right_angles": [
+              "BMA",
+              "BMC"
+            ],
+            "segments": [
+              "AB",
+              "BM",
+              "BC",
+              "AC"
+            ],
+            "shape": "construction",
+            "tick_groups": [
+              [
+                "AM",
+                "MC"
+              ],
+              [
+                "BM",
+                "BM"
+              ]
+            ],
+            "type": "geometry"
+          },
+          "title": "Second Side: Shared side $BM = BM$"
+        },
+        {
+          "description": "We now have all three pieces of **SAS** lined up between $\\triangle ABM$ and $\\triangle CBM$:\n\n| $\\triangle ABM$ | $\\triangle CBM$ | Reason |\n|---|---|---|\n| $AM$ | $MC$ | $M$ is the midpoint of $\\overline{AC}$ |\n| $\\angle BMA$ | $\\angle BMC$ | $\\overline{BM} \\perp \\overline{AC}$ (both $= 90\u00b0$) |\n| $BM$ | $BM$ | Reflexive Property |\n\nTwo sides and the **included** angle of one triangle equal two sides and the included angle of the other, so by **SAS**:\n$$\\triangle ABM \\cong \\triangle CBM \\quad \\blacksquare$$",
+          "title": "Conclude: SAS Congruence"
+        }
       ]
     }
   },
@@ -854,6 +1906,309 @@
         "ABE",
         "CDE"
       ]
+    }
+  },
+  "3a5068f9e5a2260a78a8f483eddff63e": {
+    "meta": {
+      "mode": "generate_questions_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nA tangent and a chord meet at point $P$ on circle $Q$. The chord creates a minor arc $\\widehat{PR}$ and a m",
+      "recorded_at": 1794649649.212378
+    },
+    "response": {
+      "circles": [
+        "Q"
+      ],
+      "find": [
+        {
+          "item": "degree measure of minor arc PR",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "circle": "Q",
+          "items": [
+            "P",
+            "R"
+          ],
+          "kind": "on_circle",
+          "quote": "A tangent and a chord meet at point P on circle Q"
+        },
+        {
+          "circle": "Q",
+          "items": [
+            "t"
+          ],
+          "kind": "tangent",
+          "point": "P",
+          "quote": "A tangent and a chord meet at point P on circle Q"
+        },
+        {
+          "circle": "Q",
+          "items": [
+            "PR"
+          ],
+          "kind": "chord",
+          "quote": "A tangent and a chord meet at point P on circle Q"
+        },
+        {
+          "items": [
+            "RPt"
+          ],
+          "kind": "angle_measure",
+          "quote": "The angle between the tangent line t and chord PR measures 73\u00b0",
+          "value": 73
+        }
+      ],
+      "named_lines": [
+        "t"
+      ],
+      "points": [
+        "P",
+        "Q",
+        "R"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "PR"
+      ]
+    }
+  },
+  "3a9007da196c573de34d1fb2ace66739": {
+    "meta": {
+      "mode": "generate_questions_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nVertical Angles at E: Segments $\\overline{AE}$ and $\\overline{DE}$ cross at $E$, forming two pairs of verti",
+      "recorded_at": 1794651338.734964
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AE",
+            "DE"
+          ],
+          "kind": "intersect",
+          "point": "E",
+          "quote": "Segments $\\overline{AE}$ and $\\overline{DE}$ cross at $E$"
+        },
+        {
+          "items": [
+            "AEB",
+            "DEC"
+          ],
+          "kind": "vertical_angles",
+          "quote": "forming two pairs of vertical angles"
+        },
+        {
+          "items": [
+            "AEB",
+            "DEC"
+          ],
+          "kind": "congruent_angles",
+          "quote": "$\\angle AEB \\cong \\angle DEC$"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "AE",
+        "DE"
+      ],
+      "triangles": [
+        "ABE",
+        "DCE"
+      ]
+    }
+  },
+  "3c8724842888085264cf735c6785d427": {
+    "meta": {
+      "mode": "generate_questions_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn the figure below, $M$ is the midpoint of $\\overline{AC}$, and $\\overline{BM}$ bisects $\\angle ABD$ with ",
+      "recorded_at": 1794649649.91116
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AC"
+          ],
+          "kind": "midpoint",
+          "point": "M",
+          "quote": "M is the midpoint of $\\overline{AC}$"
+        },
+        {
+          "items": [
+            "BM",
+            "ABD"
+          ],
+          "kind": "bisects_angle",
+          "quote": "$\\overline{BM}$ bisects $\\angle ABD$"
+        },
+        {
+          "items": [
+            "AB",
+            "DB"
+          ],
+          "kind": "congruent_segments",
+          "quote": "$\\overline{AB} \\cong \\overline{DB}$"
+        },
+        {
+          "items": [
+            "ABM",
+            "DBM"
+          ],
+          "kind": "congruent_angles",
+          "quote": "$\\angle ABM \\cong \\angle DBM$"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "M"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "ABM",
+            "DBM"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "$\\triangle ABM \\cong \\triangle DBM$"
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AC",
+        "BM",
+        "AB",
+        "DB"
+      ],
+      "triangles": [
+        "ABM",
+        "DBM"
+      ]
+    }
+  },
+  "3ca25d0a2eaf8cf1478b64aaa2774fda": {
+    "meta": {
+      "mode": "generate_questions_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nVertical Angles at E: Segments $\\overline{AE}$ and $\\overline{DE}$ cross at $E$, forming two pairs of verti",
+      "recorded_at": 1794651338.626973
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AE",
+            "DE"
+          ],
+          "kind": "intersect",
+          "point": "E",
+          "quote": "Segments $\\overline{AE}$ and $\\overline{DE}$ cross at $E$"
+        },
+        {
+          "items": [
+            "AEB",
+            "DEC"
+          ],
+          "kind": "vertical_angles",
+          "quote": "forming two pairs of vertical angles"
+        },
+        {
+          "items": [
+            "AEB",
+            "DEC"
+          ],
+          "kind": "congruent_angles",
+          "quote": "$\\angle AEB \\cong \\angle DEC$"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "AE",
+        "DE"
+      ],
+      "triangles": [
+        "ABE",
+        "DCE"
+      ]
+    }
+  },
+  "3ee9b6c084cb1e17ad5423d4a6d8eb5f": {
+    "meta": {
+      "mode": "generate_questions_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nFirst Side: Midpoint gives $AM = MC$: By definition, a **midpoint** divides a segment into two congruent ha",
+      "recorded_at": 1794650510.414751
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AC"
+          ],
+          "kind": "midpoint",
+          "point": "M",
+          "quote": "M is the midpoint of AC"
+        },
+        {
+          "items": [
+            "AM",
+            "MC"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AM = MC"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "M",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AM",
+        "MC",
+        "AC"
+      ],
+      "triangles": []
     }
   },
   "41a3309cc13bd8c3ee29c69b33efcbdf": {
@@ -1450,6 +2805,104 @@
       ]
     }
   },
+  "48ca0144e1c144b941451318d8168e2c": {
+    "meta": {
+      "mode": "generate_questions_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn the figure below, point $O$ is the center of the circle. $\\overline{OA}$, $\\overline{OB}$, and $\\overlin",
+      "recorded_at": 1794649565.619661
+    },
+    "response": {
+      "circles": [
+        "O"
+      ],
+      "find": [
+        {
+          "item": "ACB",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "circle": "O",
+          "items": [
+            "O"
+          ],
+          "kind": "other",
+          "quote": "point O is the center of the circle"
+        },
+        {
+          "circle": "O",
+          "items": [
+            "OA"
+          ],
+          "kind": "radius",
+          "quote": "OA, OB, and OC are radii"
+        },
+        {
+          "circle": "O",
+          "items": [
+            "OB"
+          ],
+          "kind": "radius",
+          "quote": "OA, OB, and OC are radii"
+        },
+        {
+          "circle": "O",
+          "items": [
+            "OC"
+          ],
+          "kind": "radius",
+          "quote": "OA, OB, and OC are radii"
+        },
+        {
+          "circle": "O",
+          "items": [
+            "AOB"
+          ],
+          "kind": "central_angle",
+          "quote": "central angle \u2220AOB = 112\u00b0",
+          "value": 112
+        },
+        {
+          "circle": "O",
+          "items": [
+            "A",
+            "B",
+            "C"
+          ],
+          "kind": "on_circle",
+          "quote": "OA, OB, and OC are radii"
+        },
+        {
+          "circle": "O",
+          "items": [
+            "ACB"
+          ],
+          "kind": "inscribed_angle",
+          "quote": "inscribed angle \u2220ACB"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "O",
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "OA",
+        "OB",
+        "OC"
+      ],
+      "triangles": []
+    }
+  },
   "496cc5127f6213e12eb067cd5cd5a8b4": {
     "meta": {
       "mode": "generate_questions_facts_a",
@@ -1495,6 +2948,532 @@
         "MT"
       ],
       "triangles": []
+    }
+  },
+  "4a02de537081457c3ae20183968f931a": {
+    "meta": {
+      "mode": "generate_questions_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn the figure below, $\\overline{WX} \\perp \\overline{XZ}$, $\\overline{YZ} \\perp \\overline{XZ}$, and $\\overli",
+      "recorded_at": 1794649649.1320472
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "WX",
+            "XZ"
+          ],
+          "kind": "perpendicular",
+          "quote": "WX \u22a5 XZ"
+        },
+        {
+          "items": [
+            "YZ",
+            "XZ"
+          ],
+          "kind": "perpendicular",
+          "quote": "YZ \u22a5 XZ"
+        },
+        {
+          "items": [
+            "WZ",
+            "YX"
+          ],
+          "kind": "congruent_segments",
+          "quote": "WZ \u2245 YX"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "W",
+        "X",
+        "Y",
+        "Z"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "WXZ",
+            "YZX"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "\u25b3WXZ \u2245 \u25b3YZX by the Hypotenuse-Leg Theorem"
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "WX",
+        "XZ",
+        "YZ",
+        "WZ",
+        "YX"
+      ],
+      "triangles": [
+        "WXZ",
+        "YZX"
+      ]
+    }
+  },
+  "4c8547b983a8c38ec1f723c5ba68d6ec": {
+    "meta": {
+      "mode": "generate_questions_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn the figure below, $\\overline{WX} \\perp \\overline{XZ}$, $\\overline{YZ} \\perp \\overline{XZ}$, and $\\overli",
+      "recorded_at": 1794649649.013333
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "WX",
+            "XZ"
+          ],
+          "kind": "perpendicular",
+          "quote": "WX \u22a5 XZ"
+        },
+        {
+          "items": [
+            "YZ",
+            "XZ"
+          ],
+          "kind": "perpendicular",
+          "quote": "YZ \u22a5 XZ"
+        },
+        {
+          "items": [
+            "WZ",
+            "YX"
+          ],
+          "kind": "congruent_segments",
+          "quote": "WZ \u2245 YX"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "W",
+        "X",
+        "Y",
+        "Z"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "WXZ",
+            "YZX"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "\u25b3WXZ \u2245 \u25b3YZX by the Hypotenuse-Leg Theorem"
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "WX",
+        "XZ",
+        "YZ",
+        "WZ",
+        "YX"
+      ],
+      "triangles": [
+        "WXZ",
+        "YZX"
+      ]
+    }
+  },
+  "4cc7f9cca990230935e2233488b46448": {
+    "meta": {
+      "mode": "generate_questions_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nFrom the given information:\n- $\\overline{WX} \\perp \\overline{XZ}$ means $\\angle WXZ = 90\u00b0$, so $\\triangle W",
+      "recorded_at": 1794651339.622756
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "WXZ"
+          ],
+          "kind": "angle_measure",
+          "quote": "\u2220WXZ = 90\u00b0",
+          "value": 90
+        },
+        {
+          "items": [
+            "WXZ"
+          ],
+          "kind": "right_triangle",
+          "point": "X",
+          "quote": "\u25b3WXZ is a right triangle with the right angle at X"
+        },
+        {
+          "items": [
+            "YZX"
+          ],
+          "kind": "angle_measure",
+          "quote": "\u2220YZX = 90\u00b0",
+          "value": 90
+        },
+        {
+          "items": [
+            "YZX"
+          ],
+          "kind": "right_triangle",
+          "point": "Z",
+          "quote": "\u25b3YZX is a right triangle with the right angle at Z"
+        }
+      ],
+      "points": [
+        "W",
+        "X",
+        "Y",
+        "Z"
+      ],
+      "prove": [
+        {
+          "items": [
+            "WXZ",
+            "YZX"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "Both triangles qualify for the HL Theorem"
+        }
+      ],
+      "requested": [],
+      "segments": [
+        "WX",
+        "XZ",
+        "YZ",
+        "WZ",
+        "YX"
+      ],
+      "triangles": [
+        "WXZ",
+        "YZX"
+      ]
+    }
+  },
+  "4e12324cf2c8ee4dbbc499ad42c6f2a0": {
+    "meta": {
+      "mode": "generate_questions",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Teacher's instructions:\nMix of congruent-triangle proofs and find-the-measure problems (SSS/SAS/ASA/AAS/HL) and circ",
+      "recorded_at": 1794649643.9360142
+    },
+    "response": {
+      "questions": [
+        {
+          "difficulty": "medium",
+          "figure_spec": {
+            "arc_groups": [
+              [
+                "ABM",
+                "DBM"
+              ]
+            ],
+            "points": {
+              "A": [
+                0.0,
+                0.0
+              ],
+              "B": [
+                3.0,
+                4.0
+              ],
+              "C": [
+                8.0,
+                0.0
+              ],
+              "D": [
+                8.0,
+                0.0
+              ],
+              "M": [
+                4.0,
+                0.0
+              ]
+            },
+            "segments": [
+              "AB",
+              "BM",
+              "DB",
+              "AM",
+              "MD"
+            ],
+            "shape": "construction",
+            "tick_groups": [
+              [
+                "AB",
+                "DB"
+              ],
+              [
+                "AM",
+                "MD"
+              ]
+            ],
+            "type": "geometry"
+          },
+          "requires_drawing": false,
+          "text": "In the figure below, $M$ is the midpoint of $\\overline{AC}$, and $\\overline{BM}$ bisects $\\angle ABD$ with $\\overline{AB} \\cong \\overline{DB}$.\n\n**Given:** $M$ is the midpoint of $\\overline{AC}$; $\\overline{AB} \\cong \\overline{DB}$; $\\angle ABM \\cong \\angle DBM$.\n\n**Prove:** $\\triangle ABM \\cong \\triangle DBM$.",
+          "title": "SAS congruence proof \u2014 triangles sharing a side"
+        },
+        {
+          "difficulty": "easy",
+          "figure_spec": {
+            "angle_labels": {
+              "AOB": "124\u00b0"
+            },
+            "arc_groups": [
+              [
+                "AOB"
+              ]
+            ],
+            "circles": [
+              {
+                "center": "O",
+                "through": "A"
+              }
+            ],
+            "points": {
+              "A": [
+                1.431,
+                5.985
+              ],
+              "B": [
+                6.569,
+                5.985
+              ],
+              "C": [
+                4.0,
+                0.2
+              ],
+              "O": [
+                4.0,
+                4.0
+              ]
+            },
+            "segments": [
+              "OA",
+              "OB",
+              "CA",
+              "CB"
+            ],
+            "shape": "construction",
+            "type": "geometry"
+          },
+          "requires_drawing": false,
+          "text": "In circle $O$ below, central angle $\\angle AOB = 124\u00b0$ and $C$ is a point on the major arc $\\widehat{AB}$. Find the measure of inscribed angle $\\angle ACB$.",
+          "title": "Inscribed and central angles \u2014 find the measure"
+        },
+        {
+          "difficulty": "medium",
+          "figure_spec": {
+            "points": {
+              "W": [
+                0.0,
+                3.0
+              ],
+              "X": [
+                0.0,
+                0.0
+              ],
+              "Y": [
+                6.0,
+                3.0
+              ],
+              "Z": [
+                6.0,
+                0.0
+              ]
+            },
+            "right_angles": [
+              "WXZ",
+              "YZX"
+            ],
+            "segments": [
+              "WX",
+              "XZ",
+              "YZ",
+              "WZ",
+              "YX"
+            ],
+            "shape": "construction",
+            "tick_groups": [
+              [
+                "WZ",
+                "YX"
+              ]
+            ],
+            "type": "geometry"
+          },
+          "requires_drawing": false,
+          "text": "In the figure below, $\\overline{WX} \\perp \\overline{XZ}$, $\\overline{YZ} \\perp \\overline{XZ}$, and $\\overline{WZ} \\cong \\overline{YX}$.\n\n**Given:** $\\overline{WX} \\perp \\overline{XZ}$; $\\overline{YZ} \\perp \\overline{XZ}$; $\\overline{WZ} \\cong \\overline{YX}$.\n\n**Prove:** $\\triangle WXZ \\cong \\triangle YZX$ by the Hypotenuse-Leg Theorem.",
+          "title": "HL congruence \u2014 right triangles with shared hypotenuse"
+        },
+        {
+          "difficulty": "medium",
+          "figure_spec": {
+            "angle_labels": {
+              "_t1PR": "73\u00b0"
+            },
+            "arcs": [
+              {
+                "center": "Q",
+                "endpoints": [
+                  "P",
+                  "R"
+                ]
+              }
+            ],
+            "circles": [
+              {
+                "center": "Q",
+                "through": "P"
+              }
+            ],
+            "lines": [
+              {
+                "name": "t",
+                "through": [
+                  "_t1",
+                  "_t2"
+                ]
+              }
+            ],
+            "points": {
+              "P": [
+                4.0,
+                0.0
+              ],
+              "Q": [
+                4.0,
+                4.0
+              ],
+              "R": [
+                0.717,
+                5.924
+              ],
+              "_t1": [
+                1.5,
+                0.0
+              ],
+              "_t2": [
+                6.5,
+                0.0
+              ]
+            },
+            "segments": [
+              "PR"
+            ],
+            "shape": "construction",
+            "type": "geometry"
+          },
+          "requires_drawing": false,
+          "text": "A tangent and a chord meet at point $P$ on circle $Q$. The chord creates a minor arc $\\widehat{PR}$ and a major arc $\\widehat{PR}$. The angle between the tangent line $t$ and chord $\\overline{PR}$ measures $73\u00b0$. Find the degree measure of minor arc $\\widehat{PR}$.",
+          "title": "Chord\u2013tangent angle \u2014 find the arc"
+        },
+        {
+          "difficulty": "easy",
+          "figure_spec": {
+            "points": {
+              "K": [
+                9.0,
+                11.736
+              ],
+              "L": [
+                0.0,
+                0.0
+              ],
+              "M": [
+                18.0,
+                0.0
+              ],
+              "N": [
+                9.0,
+                -11.736
+              ]
+            },
+            "segments": [
+              "LK",
+              "KM",
+              "LM",
+              "LN",
+              "NM"
+            ],
+            "shape": "construction",
+            "side_labels": {
+              "KM": "22 ft",
+              "LK": "15 ft",
+              "LM": "18 ft",
+              "LN": "15 ft",
+              "NM": "22 ft"
+            },
+            "tick_groups": [
+              [
+                "LK",
+                "LN"
+              ],
+              [
+                "KM",
+                "NM"
+              ],
+              [
+                "LM"
+              ]
+            ],
+            "type": "geometry"
+          },
+          "requires_drawing": false,
+          "text": "A city park has two triangular garden plots, $\\triangle KLM$ and $\\triangle NLM$, that share a common border along $\\overline{LM}$. A survey shows that $KL = NL = 15\\ \\text{ft}$, $KM = NM = 22\\ \\text{ft}$, and $LM = 18\\ \\text{ft}$. A landscape architect claims the two plots are congruent. Identify which triangle congruence theorem (SSS, SAS, ASA, AAS, or HL) guarantees $\\triangle KLM \\cong \\triangle NLM$, and explain how you know.",
+          "title": "Triangle congruence word problem \u2014 park fence"
+        }
+      ]
+    }
+  },
+  "4f69e789c43f06a3717493b1f1ea3caf": {
+    "meta": {
+      "mode": "generate_questions_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nBoth triangles contain $\\overline{XZ}$ as a leg \u2014 it is literally the same segment, shared between the two ",
+      "recorded_at": 1794652162.8620899
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "XZ",
+            "XZ"
+          ],
+          "kind": "congruent_segments",
+          "quote": "any segment is congruent to itself: XZ \u2245 XZ"
+        }
+      ],
+      "points": [
+        "W",
+        "X",
+        "Y",
+        "Z"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "XZ"
+      ],
+      "triangles": [
+        "WXZ",
+        "YZX"
+      ]
     }
   },
   "4faae59c630b9138079348d3e1691efa": {
@@ -1694,6 +3673,174 @@
       "triangles": [
         "PMQ",
         "TMS"
+      ]
+    }
+  },
+  "5929f8908b15feff3e4789c32db1d21a": {
+    "meta": {
+      "mode": "generate_questions_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn the figure below, line $t$ is tangent to circle $O$ at point $T$, and $\\overline{TV}$ is a chord. The mi",
+      "recorded_at": 1794649565.1729019
+    },
+    "response": {
+      "circles": [
+        "O"
+      ],
+      "find": [
+        {
+          "item": "equation relating the tangent-chord angle to its intercepted arc",
+          "kind": "other"
+        },
+        {
+          "item": "x",
+          "kind": "other"
+        },
+        {
+          "item": "arc TV",
+          "kind": "angle"
+        },
+        {
+          "item": "UTV",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "circle": "O",
+          "items": [
+            "t"
+          ],
+          "kind": "tangent",
+          "point": "T",
+          "quote": "line t is tangent to circle O at point T"
+        },
+        {
+          "circle": "O",
+          "items": [
+            "TV"
+          ],
+          "kind": "chord",
+          "quote": "TV is a chord"
+        },
+        {
+          "circle": "O",
+          "expr": "10x + 4",
+          "items": [
+            "TV"
+          ],
+          "kind": "central_angle",
+          "quote": "minor arc TV = (10x + 4)\u00b0"
+        },
+        {
+          "expr": "6x + 8",
+          "items": [
+            "UTV"
+          ],
+          "kind": "angle_measure",
+          "quote": "tangent-chord angle \u2220UTV = (6x + 8)\u00b0"
+        },
+        {
+          "items": [
+            "t"
+          ],
+          "kind": "on_line",
+          "point": "U",
+          "quote": "ray TU lies along tangent t"
+        }
+      ],
+      "named_lines": [
+        "t"
+      ],
+      "points": [
+        "O",
+        "T",
+        "U",
+        "V"
+      ],
+      "prove": [],
+      "rays": [
+        "TU"
+      ],
+      "requested": [],
+      "segments": [
+        "TV"
+      ]
+    }
+  },
+  "5a9bc5cd60f6d627896b47bf2fed1c5d": {
+    "meta": {
+      "mode": "generate_questions_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nWe have point $M$ on $\\overline{AC}$ with two special properties: it's the **midpoint** (so it cuts $\\overl",
+      "recorded_at": 1794650511.810762
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AC"
+          ],
+          "kind": "midpoint",
+          "point": "M",
+          "quote": "it's the midpoint (so it cuts AC into two equal halves)"
+        },
+        {
+          "items": [
+            "BM",
+            "AC"
+          ],
+          "kind": "perpendicular",
+          "quote": "BM is perpendicular to AC"
+        },
+        {
+          "items": [
+            "BM",
+            "BM"
+          ],
+          "kind": "congruent_segments",
+          "quote": "the two triangles share side BM"
+        },
+        {
+          "items": [
+            "BMA"
+          ],
+          "kind": "right_angle",
+          "quote": "creating two right angles"
+        },
+        {
+          "items": [
+            "BMC"
+          ],
+          "kind": "right_angle",
+          "quote": "creating two right angles"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "M"
+      ],
+      "prove": [
+        {
+          "items": [
+            "ABM",
+            "CBM"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "We want to show \u25b3ABM \u2245 \u25b3CBM"
+        }
+      ],
+      "requested": [],
+      "segments": [
+        "AC",
+        "BM"
+      ],
+      "triangles": [
+        "ABM",
+        "CBM"
       ]
     }
   },
@@ -1918,6 +4065,159 @@
       "segments": [
         "TV"
       ]
+    }
+  },
+  "626980a54f90d3055e424d99f23c279e": {
+    "meta": {
+      "mode": "generate_questions_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn the figure below, $M$ is the midpoint of $\\overline{AC}$ and $\\overline{BM} \\perp \\overline{AC}$.\n\n**Giv",
+      "recorded_at": 1794649563.659508
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AC"
+          ],
+          "kind": "midpoint",
+          "point": "M",
+          "quote": "M is the midpoint of $\\overline{AC}$"
+        },
+        {
+          "items": [
+            "BM",
+            "AC"
+          ],
+          "kind": "perpendicular",
+          "quote": "$\\overline{BM} \\perp \\overline{AC}$"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "M"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "ABM",
+            "CBM"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "$\\triangle ABM \\cong \\triangle CBM$"
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AC",
+        "BM"
+      ],
+      "triangles": [
+        "ABM",
+        "CBM"
+      ]
+    }
+  },
+  "6c09729900d6863324d9b310ffe318bb": {
+    "meta": {
+      "mode": "generate_questions_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nSecond Side: Shared side $BM = BM$: The segment $\\overline{BM}$ is a side of **both** triangles. Any segmen",
+      "recorded_at": 1794650510.050751
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "BM",
+            "BM"
+          ],
+          "kind": "congruent_segments",
+          "quote": "BM = BM"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "B",
+        "M"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "BM"
+      ],
+      "triangles": [
+        "ABM",
+        "CBM"
+      ]
+    }
+  },
+  "6c8b2c83425e048c2741e0498cd3f507": {
+    "meta": {
+      "mode": "generate_questions_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn circle $O$ below, central angle $\\angle AOB = 124\u00b0$ and $C$ is a point on the major arc $\\widehat{AB}$. ",
+      "recorded_at": 1794649647.979842
+    },
+    "response": {
+      "circles": [
+        "O"
+      ],
+      "find": [
+        {
+          "item": "ACB",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "circle": "O",
+          "items": [
+            "A",
+            "B",
+            "C"
+          ],
+          "kind": "on_circle",
+          "quote": "In circle O"
+        },
+        {
+          "circle": "O",
+          "items": [
+            "AOB"
+          ],
+          "kind": "central_angle",
+          "quote": "central angle \u2220AOB = 124\u00b0",
+          "value": 124
+        },
+        {
+          "items": [
+            "C"
+          ],
+          "kind": "other",
+          "quote": "C is a point on the major arc AB"
+        }
+      ],
+      "points": [
+        "O",
+        "A",
+        "B",
+        "C"
+      ],
+      "prove": [],
+      "requested": []
     }
   },
   "6d856151b4bf0ea3ce5f7244e6456754": {
@@ -2299,6 +4599,83 @@
       ]
     }
   },
+  "6e39c2d177894c1d0a46252d3573dc19": {
+    "meta": {
+      "mode": "generate_questions_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn the figure below, $\\overline{QS}$ is a diameter of circle $O$, and $R$ is a point on the circle. The ins",
+      "recorded_at": 1794649564.1652522
+    },
+    "response": {
+      "circles": [
+        "O"
+      ],
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        },
+        {
+          "item": "arc QR",
+          "kind": "other"
+        },
+        {
+          "item": "arc RS",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "circle": "O",
+          "items": [
+            "QS"
+          ],
+          "kind": "diameter",
+          "quote": "QS is a diameter of circle O"
+        },
+        {
+          "circle": "O",
+          "items": [
+            "R"
+          ],
+          "kind": "on_circle",
+          "quote": "R is a point on the circle"
+        },
+        {
+          "circle": "O",
+          "items": [
+            "QRS"
+          ],
+          "kind": "inscribed_angle",
+          "quote": "inscribed angle \u2220QRS = 90\u00b0",
+          "value": 90
+        },
+        {
+          "expr": "3x + 5",
+          "items": [],
+          "kind": "other",
+          "quote": "\u2322QR = (3x + 5)\u00b0"
+        },
+        {
+          "expr": "7x - 1",
+          "items": [],
+          "kind": "other",
+          "quote": "\u2322RS = (7x - 1)\u00b0"
+        }
+      ],
+      "points": [
+        "O",
+        "Q",
+        "R",
+        "S"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "QS"
+      ]
+    }
+  },
   "75fff6dbd5848a174c4ea055f579102c": {
     "meta": {
       "mode": "decompose",
@@ -2422,6 +4799,138 @@
           "description": "Line up the three facts side-by-side in the order **Side \u2013 Angle \u2013 Side**, matching each part of $\\triangle PMQ$ to the corresponding part of $\\triangle TMS$:\n\n| $\\triangle PMQ$ | Reason | $\\triangle TMS$ |\n|---|---|---|\n| $\\overline{PM}$ | Midpoint of $\\overline{PT}$ | $\\overline{TM}$ \u2713 |\n| $\\angle PMQ$ | Given | $\\angle TMS$ \u2713 |\n| $\\overline{QM}$ | Given | $\\overline{SM}$ \u2713 |\n\nThe **angle is included** between both pairs of sides, satisfying SAS exactly. Therefore:\n$$\\triangle PMQ \\cong \\triangle TMS \\quad (\\text{SAS})$$",
           "title": "Apply SAS \u2192 Triangles Congruent"
         }
+      ]
+    }
+  },
+  "7c6f236067137ed5c4c3119fadd67c53": {
+    "meta": {
+      "mode": "generate_questions_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nWe have two right triangles, $\\triangle WXZ$ and $\\triangle YZX$, sitting side by side and sharing the base",
+      "recorded_at": 1794651339.541769
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "WXZ"
+          ],
+          "kind": "right_triangle",
+          "point": "X",
+          "quote": "Both triangles have a right angle"
+        },
+        {
+          "items": [
+            "YZX"
+          ],
+          "kind": "right_triangle",
+          "point": "Z",
+          "quote": "Both triangles have a right angle"
+        },
+        {
+          "items": [
+            "WZ",
+            "YX"
+          ],
+          "kind": "congruent_segments",
+          "quote": "Their hypotenuses are congruent"
+        },
+        {
+          "items": [
+            "XZ",
+            "XZ"
+          ],
+          "kind": "congruent_segments",
+          "quote": "They share a leg"
+        }
+      ],
+      "points": [
+        "W",
+        "X",
+        "Y",
+        "Z"
+      ],
+      "prove": [
+        {
+          "items": [
+            "WXZ",
+            "YZX"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "\u25b3WXZ \u2245 \u25b3YZX by the Hypotenuse-Leg Theorem"
+        }
+      ],
+      "requested": [],
+      "segments": [
+        "XZ",
+        "WZ",
+        "YX"
+      ],
+      "triangles": [
+        "WXZ",
+        "YZX"
+      ]
+    }
+  },
+  "7fc9801c316a2317dea9762ed4e5e5d3": {
+    "meta": {
+      "mode": "generate_questions_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn the figure below, $\\overline{WX} \\cong \\overline{ZY}$ and $\\overline{WZ} \\cong \\overline{XY}$.\n\n**Given:",
+      "recorded_at": 1794649563.527503
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "WX",
+            "ZY"
+          ],
+          "kind": "congruent_segments",
+          "quote": "\\overline{WX} \\cong \\overline{ZY}"
+        },
+        {
+          "items": [
+            "WZ",
+            "XY"
+          ],
+          "kind": "congruent_segments",
+          "quote": "\\overline{WZ} \\cong \\overline{XY}"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "W",
+        "X",
+        "Y",
+        "Z"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "WXY",
+            "ZYX"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "\\triangle WXY \\cong \\triangle ZYX"
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "WX",
+        "ZY",
+        "WZ",
+        "XY"
+      ],
+      "triangles": [
+        "WXY",
+        "ZYX"
       ]
     }
   },
@@ -2679,6 +5188,138 @@
       ]
     }
   },
+  "931926ecd0574ae0e8512d88276a0860": {
+    "meta": {
+      "mode": "generate_questions_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn the figure below, $\\overline{AB} \\parallel \\overline{CD}$ and $E$ is the midpoint of $\\overline{BC}$.\n\n*",
+      "recorded_at": 1794649563.187574
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "midpoint",
+          "point": "E",
+          "quote": "E is the midpoint of BC"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "ABE",
+            "DCE"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "\u25b3ABE \u2245 \u25b3DCE"
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD",
+        "BC"
+      ],
+      "triangles": [
+        "ABE",
+        "DCE"
+      ]
+    }
+  },
+  "933aa6df380caa7b63703502d1349b57": {
+    "meta": {
+      "mode": "generate_questions_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn the figure below, $\\overline{AD}$ and $\\overline{BC}$ intersect at $E$, with $\\overline{AE} \\cong \\overl",
+      "recorded_at": 1794649563.8208709
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AD",
+            "BC"
+          ],
+          "kind": "intersect",
+          "point": "E",
+          "quote": "AD and BC intersect at E"
+        },
+        {
+          "items": [
+            "AE",
+            "DE"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AE \u2245 DE"
+        },
+        {
+          "items": [
+            "CAE",
+            "BDE"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220CAE \u2245 \u2220BDE"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "ACE",
+            "DBE"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "\u25b3ACE \u2245 \u25b3DBE"
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AD",
+        "BC",
+        "AE",
+        "DE"
+      ],
+      "triangles": [
+        "ACE",
+        "DBE"
+      ]
+    }
+  },
   "9418fb7c3af22b7dc32e954957b40edb": {
     "meta": {
       "mode": "generate_questions_facts_a",
@@ -2893,6 +5534,161 @@
       ]
     }
   },
+  "98345aba7d1d1ec67a1e31354f9604fe": {
+    "meta": {
+      "mode": "generate_questions_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nA tangent and a chord meet at point $P$ on circle $Q$. The chord creates a minor arc $\\widehat{PR}$ and a m",
+      "recorded_at": 1794649650.174056
+    },
+    "response": {
+      "circles": [
+        "Q"
+      ],
+      "find": [
+        {
+          "item": "degree measure of minor arc PR",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "circle": "Q",
+          "items": [
+            "P",
+            "R"
+          ],
+          "kind": "on_circle",
+          "quote": "A tangent and a chord meet at point P on circle Q"
+        },
+        {
+          "circle": "Q",
+          "items": [
+            "t"
+          ],
+          "kind": "tangent",
+          "point": "P",
+          "quote": "A tangent and a chord meet at point P on circle Q"
+        },
+        {
+          "circle": "Q",
+          "items": [
+            "PR"
+          ],
+          "kind": "chord",
+          "quote": "A tangent and a chord meet at point P on circle Q"
+        },
+        {
+          "items": [],
+          "kind": "other",
+          "quote": "The chord creates a minor arc PR and a major arc PR"
+        },
+        {
+          "items": [
+            "RPt"
+          ],
+          "kind": "angle_measure",
+          "quote": "The angle between the tangent line t and chord PR measures 73\u00b0",
+          "value": 73
+        }
+      ],
+      "lines": [],
+      "named_lines": [
+        "t"
+      ],
+      "points": [
+        "P",
+        "Q",
+        "R"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "PR"
+      ],
+      "triangles": []
+    }
+  },
+  "98f929f2f6fe7877d2508e9ccf4d6ceb": {
+    "meta": {
+      "mode": "generate_questions_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nFrom the given information:\n- $\\overline{WX} \\perp \\overline{XZ}$ means $\\angle WXZ = 90\u00b0$, so $\\triangle W",
+      "recorded_at": 1794652165.410579
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "WXZ"
+          ],
+          "kind": "angle_measure",
+          "quote": "\u2220WXZ = 90\u00b0",
+          "value": 90
+        },
+        {
+          "items": [
+            "WXZ"
+          ],
+          "kind": "right_triangle",
+          "point": "X",
+          "quote": "\u25b3WXZ is a right triangle with the right angle at X"
+        },
+        {
+          "items": [
+            "YZX"
+          ],
+          "kind": "angle_measure",
+          "quote": "\u2220YZX = 90\u00b0",
+          "value": 90
+        },
+        {
+          "items": [
+            "YZX"
+          ],
+          "kind": "right_triangle",
+          "point": "Z",
+          "quote": "\u25b3YZX is a right triangle with the right angle at Z"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "W",
+        "X",
+        "Y",
+        "Z"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "WXZ",
+            "YZX"
+          ],
+          "kind": "other",
+          "quote": "Both triangles qualify for the HL Theorem"
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "WX",
+        "XZ",
+        "YZ",
+        "WZ",
+        "YX"
+      ],
+      "triangles": [
+        "WXZ",
+        "YZX"
+      ]
+    }
+  },
   "9a2aceff761f9879c977c6ef99f71a4c": {
     "meta": {
       "mode": "generate_questions_facts_a",
@@ -2978,6 +5774,92 @@
       ]
     }
   },
+  "9d04666d4570f25e4384169e6d248080": {
+    "meta": {
+      "mode": "generate_questions_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nWe have two parallel segments $\\overline{AB}$ and $\\overline{CD}$, connected by segment $\\overline{BC}$. Po",
+      "recorded_at": 1794651341.0293381
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "two parallel segments $\\overline{AB}$ and $\\overline{CD}$"
+        },
+        {
+          "items": [
+            "AB",
+            "CD",
+            "BC"
+          ],
+          "kind": "other",
+          "quote": "connected by segment $\\overline{BC}$"
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "midpoint",
+          "point": "E",
+          "quote": "Point $E$ is the midpoint of $\\overline{BC}$"
+        },
+        {
+          "items": [
+            "AE"
+          ],
+          "kind": "other",
+          "quote": "segments $\\overline{AE}$ and $\\overline{DE}$ are drawn"
+        },
+        {
+          "items": [
+            "DE"
+          ],
+          "kind": "other",
+          "quote": "segments $\\overline{AE}$ and $\\overline{DE}$ are drawn"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "ABE",
+            "DCE"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "We'll look for two angles and the included side \u2014 an **ASA** pattern \u2014 using the parallel lines to generate angle pairs."
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD",
+        "BC",
+        "AE",
+        "DE"
+      ],
+      "triangles": [
+        "ABE",
+        "DCE"
+      ]
+    }
+  },
   "a2aa09f5e8d93f2b1ba832ac37f12613": {
     "meta": {
       "mode": "generate_questions_facts_b",
@@ -3044,6 +5926,42 @@
       "triangles": [
         "PMQ",
         "TMS"
+      ]
+    }
+  },
+  "a53cf5b5b11048fd79c876f4eaf7e436": {
+    "meta": {
+      "mode": "generate_questions_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nBoth triangles contain $\\overline{XZ}$ as a leg \u2014 it is literally the same segment, shared between the two ",
+      "recorded_at": 1794652162.632797
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "XZ",
+            "XZ"
+          ],
+          "kind": "congruent_segments",
+          "quote": "any segment is congruent to itself: XZ \u2245 XZ"
+        }
+      ],
+      "points": [
+        "W",
+        "X",
+        "Y",
+        "Z"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "XZ"
+      ],
+      "triangles": [
+        "WXZ",
+        "YZX"
       ]
     }
   },
@@ -3202,6 +6120,159 @@
       ]
     }
   },
+  "a9bd948ce0d491d34f77857e381bc990": {
+    "meta": {
+      "mode": "generate_questions_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nBecause $\\overline{BM} \\perp \\overline{AC}$, it creates right angles on **both sides** of $M$. That means:\n",
+      "recorded_at": 1794650510.541099
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "BM",
+            "AC"
+          ],
+          "kind": "perpendicular",
+          "quote": "BM \u22a5 AC"
+        },
+        {
+          "items": [
+            "BMA"
+          ],
+          "kind": "right_angle",
+          "quote": "\u2220BMA = 90\u00b0"
+        },
+        {
+          "items": [
+            "BMC"
+          ],
+          "kind": "right_angle",
+          "quote": "\u2220BMC = 90\u00b0"
+        },
+        {
+          "items": [
+            "BMA",
+            "BMC"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220BMA = \u2220BMC"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "M"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "BM",
+        "AC"
+      ],
+      "triangles": [
+        "ABM",
+        "CBM"
+      ]
+    }
+  },
+  "abe5efe853eb285d07fd6e5811ee5274": {
+    "meta": {
+      "mode": "generate_questions_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nA city park has two triangular garden plots, $\\triangle KLM$ and $\\triangle NLM$, that share a common borde",
+      "recorded_at": 1794649650.619343
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "LM",
+            "LM"
+          ],
+          "kind": "congruent_segments",
+          "quote": "share a common border along $\\overline{LM}$"
+        },
+        {
+          "items": [
+            "KL"
+          ],
+          "kind": "equal_length",
+          "quote": "KL = NL = 15\\ \\text{ft}",
+          "value": 15
+        },
+        {
+          "items": [
+            "NL"
+          ],
+          "kind": "equal_length",
+          "quote": "KL = NL = 15\\ \\text{ft}",
+          "value": 15
+        },
+        {
+          "items": [
+            "KM"
+          ],
+          "kind": "equal_length",
+          "quote": "KM = NM = 22\\ \\text{ft}",
+          "value": 22
+        },
+        {
+          "items": [
+            "NM"
+          ],
+          "kind": "equal_length",
+          "quote": "KM = NM = 22\\ \\text{ft}",
+          "value": 22
+        },
+        {
+          "items": [
+            "LM"
+          ],
+          "kind": "equal_length",
+          "quote": "LM = 18\\ \\text{ft}",
+          "value": 18
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "K",
+        "L",
+        "M",
+        "N"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "KLM",
+            "NLM"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "$\\triangle KLM \\cong \\triangle NLM$"
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "LM",
+        "KL",
+        "NL",
+        "KM",
+        "NM"
+      ],
+      "triangles": [
+        "KLM",
+        "NLM"
+      ]
+    }
+  },
   "ad7a0aface7a10089f32db6e4b559756": {
     "meta": {
       "mode": "generate_questions_facts_a",
@@ -3275,6 +6346,70 @@
       ]
     }
   },
+  "b268e0ac8d54456423fcd56a15582fd5": {
+    "meta": {
+      "mode": "generate_questions_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nSegment $\\overline{BC}$ acts as a **transversal** cutting the two parallel lines $\\overline{AB}$ and $\\over",
+      "recorded_at": 1794651339.73679
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "BC",
+            "AB",
+            "CD"
+          ],
+          "kind": "transversal",
+          "quote": "Segment $\\overline{BC}$ acts as a **transversal** cutting the two parallel lines $\\overline{AB}$ and $\\overline{CD}$"
+        },
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "$\\overline{AB} \\parallel \\overline{CD}$ is given"
+        },
+        {
+          "items": [
+            "ABE",
+            "DCE"
+          ],
+          "kind": "alternate_interior",
+          "quote": "alternate interior angles are congruent \u2014 they sit on opposite sides of the transversal, between the parallel lines:\n$$\\angle ABE \\cong \\angle DCE$$"
+        },
+        {
+          "items": [
+            "ABE",
+            "DCE"
+          ],
+          "kind": "congruent_angles",
+          "quote": "alternate interior angles are congruent \u2014 they sit on opposite sides of the transversal, between the parallel lines:\n$$\\angle ABE \\cong \\angle DCE$$"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "BC",
+        "AB",
+        "CD"
+      ],
+      "triangles": [
+        "ABE",
+        "DCE"
+      ]
+    }
+  },
   "b26ddb539f617856f1f7dc9876f04c58": {
     "meta": {
       "mode": "generate_questions_facts_a",
@@ -3327,6 +6462,100 @@
       "triangles": [
         "ABE",
         "CDE"
+      ]
+    }
+  },
+  "b2e6569b6130e7ffce362ab0db7473e1": {
+    "meta": {
+      "mode": "generate_questions_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nA city park has two triangular garden plots, $\\triangle KLM$ and $\\triangle NLM$, that share a common borde",
+      "recorded_at": 1794649650.855264
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "LM",
+            "LM"
+          ],
+          "kind": "congruent_segments",
+          "quote": "share a common border along $\\overline{LM}$"
+        },
+        {
+          "items": [
+            "KL"
+          ],
+          "kind": "equal_length",
+          "quote": "KL = NL = 15\\ \\text{ft}",
+          "value": 15
+        },
+        {
+          "items": [
+            "NL"
+          ],
+          "kind": "equal_length",
+          "quote": "KL = NL = 15\\ \\text{ft}",
+          "value": 15
+        },
+        {
+          "items": [
+            "KM"
+          ],
+          "kind": "equal_length",
+          "quote": "KM = NM = 22\\ \\text{ft}",
+          "value": 22
+        },
+        {
+          "items": [
+            "NM"
+          ],
+          "kind": "equal_length",
+          "quote": "KM = NM = 22\\ \\text{ft}",
+          "value": 22
+        },
+        {
+          "items": [
+            "LM"
+          ],
+          "kind": "equal_length",
+          "quote": "LM = 18\\ \\text{ft}",
+          "value": 18
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "K",
+        "L",
+        "M",
+        "N"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "KLM",
+            "NLM"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "$\\triangle KLM \\cong \\triangle NLM$"
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "LM",
+        "KL",
+        "NL",
+        "KM",
+        "NM"
+      ],
+      "triangles": [
+        "KLM",
+        "NLM"
       ]
     }
   },
@@ -3550,6 +6779,328 @@
       ]
     }
   },
+  "b7c37cf3229c0e64ef182068f39d347a": {
+    "meta": {
+      "mode": "generate_questions_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nBecause $\\overline{BM} \\perp \\overline{AC}$, it creates right angles on **both sides** of $M$. That means:\n",
+      "recorded_at": 1794650510.6829839
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "BM",
+            "AC"
+          ],
+          "kind": "perpendicular",
+          "quote": "BM \u22a5 AC"
+        },
+        {
+          "items": [
+            "BMA"
+          ],
+          "kind": "right_angle",
+          "quote": "\u2220BMA = 90\u00b0"
+        },
+        {
+          "items": [
+            "BMC"
+          ],
+          "kind": "right_angle",
+          "quote": "\u2220BMC = 90\u00b0"
+        },
+        {
+          "items": [
+            "BMA",
+            "BMC"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220BMA = \u2220BMC"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "M"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "BM",
+        "AC"
+      ],
+      "triangles": []
+    }
+  },
+  "b7e24edd14eb1940c764ab3ce16bce7e": {
+    "meta": {
+      "mode": "generate_questions_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nWe have two parallel segments $\\overline{AB}$ and $\\overline{CD}$, connected by segment $\\overline{BC}$. Po",
+      "recorded_at": 1794651339.609932
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "$\\overline{AB}$ and $\\overline{CD}$, connected by segment $\\overline{BC}$"
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "midpoint",
+          "point": "E",
+          "quote": "Point $E$ is the midpoint of $\\overline{BC}$"
+        },
+        {
+          "items": [
+            "AE"
+          ],
+          "kind": "other",
+          "quote": "segments $\\overline{AE}$ and $\\overline{DE}$ are drawn"
+        },
+        {
+          "items": [
+            "DE"
+          ],
+          "kind": "other",
+          "quote": "segments $\\overline{AE}$ and $\\overline{DE}$ are drawn"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ],
+      "prove": [
+        {
+          "items": [
+            "ABE",
+            "DCE"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "$\\triangle ABE \\cong \\triangle DCE$"
+        }
+      ],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD",
+        "BC",
+        "AE",
+        "DE"
+      ],
+      "triangles": [
+        "ABE",
+        "DCE"
+      ]
+    }
+  },
+  "bca33a552f2a70a5d6c05ec0fb66dc93": {
+    "meta": {
+      "mode": "decompose",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Problem: In the figure below, $\\overline{WX} \\perp \\overline{XZ}$, $\\overline{YZ} \\perp \\overline{XZ}$, and $\\overli",
+      "recorded_at": 1794649717.038574
+    },
+    "response": {
+      "answer_type": "text",
+      "final_answer": "$\\triangle WXZ \\cong \\triangle YZX$ by the **Hypotenuse-Leg Theorem**, because:\n- $\\angle WXZ = \\angle YZX = 90\u00b0$ (given perpendiculars)\n- $\\overline{WZ} \\cong \\overline{YX}$ (given \u2014 hypotenuses)\n- $\\overline{XZ} \\cong \\overline{ZX}$ (Reflexive Property \u2014 shared leg)",
+      "steps": [
+        {
+          "description": "We have two right triangles, $\\triangle WXZ$ and $\\triangle YZX$, sitting side by side and sharing the base segment $\\overline{XZ}$.\n\nThe **Hypotenuse-Leg (HL) Theorem** says: two right triangles are congruent if their **hypotenuses** are equal AND one **leg** is equal. Our game plan is to find exactly those three pieces:\n1. Both triangles have a **right angle** (makes them right triangles \u2713)\n2. Their **hypotenuses** are congruent (given \u2713)\n3. They share a **leg** (reflexive property \u2713)",
+          "figure_spec": {
+            "points": {
+              "W": [
+                0.0,
+                3.0
+              ],
+              "X": [
+                0.0,
+                0.0
+              ],
+              "Y": [
+                6.0,
+                3.0
+              ],
+              "Z": [
+                6.0,
+                0.0
+              ]
+            },
+            "right_angles": [
+              "WXZ",
+              "YZX"
+            ],
+            "segments": [
+              "WX",
+              "XZ",
+              "YZ",
+              "WZ",
+              "YX"
+            ],
+            "shape": "construction",
+            "tick_groups": [
+              [
+                "WZ",
+                "YX"
+              ]
+            ],
+            "type": "geometry"
+          },
+          "title": "Understand the Setup"
+        },
+        {
+          "description": "From the given information:\n- $\\overline{WX} \\perp \\overline{XZ}$ means $\\angle WXZ = 90\u00b0$, so $\\triangle WXZ$ is a **right triangle** with the right angle at $X$.\n- $\\overline{YZ} \\perp \\overline{XZ}$ means $\\angle YZX = 90\u00b0$, so $\\triangle YZX$ is a **right triangle** with the right angle at $Z$.\n\nBoth triangles qualify for the HL Theorem.",
+          "figure_spec": {
+            "points": {
+              "W": [
+                0.0,
+                3.0
+              ],
+              "X": [
+                0.0,
+                0.0
+              ],
+              "Y": [
+                6.0,
+                3.0
+              ],
+              "Z": [
+                6.0,
+                0.0
+              ]
+            },
+            "right_angles": [
+              "WXZ",
+              "YZX"
+            ],
+            "segments": [
+              "WX",
+              "XZ",
+              "YZ",
+              "WZ",
+              "YX"
+            ],
+            "shape": "construction",
+            "tick_groups": [
+              [
+                "WZ",
+                "YX"
+              ]
+            ],
+            "type": "geometry"
+          },
+          "title": "Establish Right Triangles"
+        },
+        {
+          "description": "In any right triangle, the **hypotenuse is the side opposite the right angle** \u2014 it's always the longest side.\n\n- In $\\triangle WXZ$: the right angle is at $X$, so the side opposite it, $\\overline{WZ}$, is the hypotenuse.\n- In $\\triangle YZX$: the right angle is at $Z$, so the side opposite it, $\\overline{YX}$, is the hypotenuse.\n\nThe problem gives us $\\overline{WZ} \\cong \\overline{YX}$ directly \u2014 the **hypotenuses are congruent**. \u2713",
+          "figure_spec": {
+            "points": {
+              "W": [
+                0.0,
+                3.0
+              ],
+              "X": [
+                0.0,
+                0.0
+              ],
+              "Y": [
+                6.0,
+                3.0
+              ],
+              "Z": [
+                6.0,
+                0.0
+              ]
+            },
+            "right_angles": [
+              "WXZ",
+              "YZX"
+            ],
+            "segments": [
+              "WX",
+              "XZ",
+              "YZ",
+              "WZ",
+              "YX"
+            ],
+            "shape": "construction",
+            "tick_groups": [
+              [
+                "WZ",
+                "YX"
+              ]
+            ],
+            "type": "geometry"
+          },
+          "title": "Identify the Hypotenuses"
+        },
+        {
+          "description": "Both triangles contain $\\overline{XZ}$ as a leg \u2014 it is literally the same segment, shared between the two triangles.\n\nBy the **Reflexive Property of Congruence**, any segment is congruent to itself:\n$$\\overline{XZ} \\cong \\overline{XZ}$$\n\nThis gives us the congruent **leg** required by the HL Theorem. \u2713",
+          "figure_spec": {
+            "points": {
+              "W": [
+                0.0,
+                3.0
+              ],
+              "X": [
+                0.0,
+                0.0
+              ],
+              "Y": [
+                6.0,
+                3.0
+              ],
+              "Z": [
+                6.0,
+                0.0
+              ]
+            },
+            "right_angles": [
+              "WXZ",
+              "YZX"
+            ],
+            "segments": [
+              "WX",
+              "XZ",
+              "YZ",
+              "WZ",
+              "YX"
+            ],
+            "shape": "construction",
+            "tick_groups": [
+              [
+                "WZ",
+                "YX"
+              ],
+              [
+                "XZ",
+                "ZX"
+              ]
+            ],
+            "type": "geometry"
+          },
+          "title": "Shared Leg by Reflexive Property"
+        },
+        {
+          "description": "All three conditions of the **Hypotenuse-Leg Theorem** are satisfied:\n\n| Condition | $\\triangle WXZ$ | $\\triangle YZX$ |\n|---|---|---|\n| Right angle | $\\angle WXZ = 90\u00b0$ | $\\angle YZX = 90\u00b0$ |\n| Hypotenuse $\\cong$ | $\\overline{WZ}$ | $\\overline{YX}$ |\n| Leg $\\cong$ | $\\overline{XZ}$ | $\\overline{ZX}$ |\n\nTherefore, by the Hypotenuse-Leg Theorem:\n$$\\triangle WXZ \\cong \\triangle YZX \\quad \\blacksquare$$",
+          "title": "Apply the HL Theorem"
+        }
+      ]
+    }
+  },
   "c688f66eb5d9263185274b11ce1f0435": {
     "meta": {
       "mode": "generate_questions_facts_b",
@@ -3770,6 +7321,144 @@
         "ABC",
         "DEF"
       ]
+    }
+  },
+  "d10d67a7911c69fb081ef8be2656e612": {
+    "meta": {
+      "mode": "generate_questions_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nConclude by ASA: We now have two angles and the **included side** (the side between those two angles) match",
+      "recorded_at": 1794651339.641788
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        },
+        {
+          "items": [
+            "ABE",
+            "DCE"
+          ],
+          "kind": "alternate_interior",
+          "quote": "Alternate interior angles, AB \u2225 CD"
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "midpoint",
+          "point": "E",
+          "quote": "E is the midpoint of BC"
+        },
+        {
+          "items": [
+            "BE",
+            "CE"
+          ],
+          "kind": "congruent_segments",
+          "quote": "E is the midpoint of BC"
+        },
+        {
+          "items": [
+            "AEB",
+            "DEC"
+          ],
+          "kind": "vertical_angles",
+          "quote": "Vertical angles"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ],
+      "prove": [
+        {
+          "items": [
+            "ABE",
+            "DCE"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "\u25b3ABE \u2245 \u25b3DCE"
+        }
+      ],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD",
+        "BC",
+        "BE",
+        "CE"
+      ],
+      "triangles": [
+        "ABE",
+        "DCE"
+      ]
+    }
+  },
+  "d14369c47188228a39e201a898c0b4b2": {
+    "meta": {
+      "mode": "generate_questions",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn the figure below, $\\overline{AB} \\parallel \\overline{CD}$ and $E$ is the midpoint of $\\overline{BC}$.\n\n*",
+      "recorded_at": 1794649620.698132
+    },
+    "response": {
+      "figure_spec": {
+        "parallel_groups": [
+          [
+            "AB",
+            "CD"
+          ]
+        ],
+        "points": {
+          "A": [
+            -2,
+            4
+          ],
+          "B": [
+            2,
+            4
+          ],
+          "C": [
+            2,
+            0
+          ],
+          "D": [
+            6,
+            0
+          ],
+          "E": [
+            2,
+            2
+          ]
+        },
+        "segments": [
+          "AB",
+          "BE",
+          "EC",
+          "CD",
+          "AE",
+          "DE"
+        ],
+        "shape": "construction",
+        "tick_groups": [
+          [
+            "BE",
+            "EC"
+          ]
+        ],
+        "type": "geometry"
+      }
     }
   },
   "d6abc18b7ed5abc4c94f3a4322b2d415": {
@@ -4047,6 +7736,306 @@
       ]
     }
   },
+  "daa987c7b165b0720691c5ef0b92a91c": {
+    "meta": {
+      "mode": "decompose",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Problem: In the figure below, $\\overline{AB} \\parallel \\overline{CD}$ and $E$ is the midpoint of $\\overline{BC}$.\n\n*",
+      "recorded_at": 1794649719.319028
+    },
+    "response": {
+      "answer_type": "diagram",
+      "final_answer": "$\\triangle ABE \\cong \\triangle DCE$ by **ASA**:\n- $\\angle ABE \\cong \\angle DCE$ (alternate interior angles, $\\overline{AB} \\parallel \\overline{CD}$)\n- $BE = CE$ ($E$ is the midpoint of $\\overline{BC}$)\n- $\\angle AEB \\cong \\angle DEC$ (vertical angles)",
+      "steps": [
+        {
+          "description": "We have two parallel segments $\\overline{AB}$ and $\\overline{CD}$, connected by segment $\\overline{BC}$. Point $E$ is the midpoint of $\\overline{BC}$, and segments $\\overline{AE}$ and $\\overline{DE}$ are drawn, forming triangles $\\triangle ABE$ and $\\triangle DCE$.\n\nThe key insight: $E$ sits between the two parallel lines, so it's a natural \"pivot\" point. We'll look for two angles and the included side \u2014 an **ASA** pattern \u2014 using the parallel lines to generate angle pairs.",
+          "figure_spec": {
+            "parallel_groups": [
+              [
+                "AB",
+                "CD"
+              ]
+            ],
+            "points": {
+              "A": [
+                -2,
+                4
+              ],
+              "B": [
+                2,
+                4
+              ],
+              "C": [
+                2,
+                0
+              ],
+              "D": [
+                6,
+                0
+              ],
+              "E": [
+                2,
+                2
+              ]
+            },
+            "segments": [
+              "AB",
+              "BE",
+              "EC",
+              "CD",
+              "AE",
+              "DE"
+            ],
+            "shape": "construction",
+            "tick_groups": [
+              [
+                "BE",
+                "EC"
+              ]
+            ],
+            "type": "geometry"
+          },
+          "title": "Understand the Setup"
+        },
+        {
+          "description": "Segments $\\overline{AE}$ and $\\overline{DE}$ cross at $E$, forming two pairs of vertical angles. Vertical angles are always congruent, so:\n$$\\angle AEB \\cong \\angle DEC$$\nThink of it this way: when two straight lines cross, the angles directly across from each other are mirror images \u2014 they must be equal.",
+          "figure_spec": {
+            "arc_groups": [
+              [
+                "AEB",
+                "DEC"
+              ]
+            ],
+            "parallel_groups": [
+              [
+                "AB",
+                "CD"
+              ]
+            ],
+            "points": {
+              "A": [
+                -2,
+                4
+              ],
+              "B": [
+                2,
+                4
+              ],
+              "C": [
+                2,
+                0
+              ],
+              "D": [
+                6,
+                0
+              ],
+              "E": [
+                2,
+                2
+              ]
+            },
+            "segments": [
+              "AB",
+              "BE",
+              "EC",
+              "CD",
+              "AE",
+              "DE"
+            ],
+            "shape": "construction",
+            "tick_groups": [
+              [
+                "BE",
+                "EC"
+              ]
+            ],
+            "type": "geometry"
+          },
+          "title": "Vertical Angles at E"
+        },
+        {
+          "description": "Segment $\\overline{BC}$ acts as a **transversal** cutting the two parallel lines $\\overline{AB}$ and $\\overline{CD}$. When a transversal crosses parallel lines, alternate interior angles are congruent \u2014 they sit on opposite sides of the transversal, between the parallel lines:\n$$\\angle ABE \\cong \\angle DCE$$\nThis works because $\\overline{AB} \\parallel \\overline{CD}$ is given.",
+          "figure_spec": {
+            "arc_groups": [
+              [
+                "AEB",
+                "DEC"
+              ],
+              [
+                "ABE",
+                "DCE"
+              ]
+            ],
+            "parallel_groups": [
+              [
+                "AB",
+                "CD"
+              ]
+            ],
+            "points": {
+              "A": [
+                -2,
+                4
+              ],
+              "B": [
+                2,
+                4
+              ],
+              "C": [
+                2,
+                0
+              ],
+              "D": [
+                6,
+                0
+              ],
+              "E": [
+                2,
+                2
+              ]
+            },
+            "segments": [
+              "AB",
+              "BE",
+              "EC",
+              "CD",
+              "AE",
+              "DE"
+            ],
+            "shape": "construction",
+            "tick_groups": [
+              [
+                "BE",
+                "EC"
+              ]
+            ],
+            "type": "geometry"
+          },
+          "title": "Alternate Interior Angles"
+        },
+        {
+          "description": "Because $E$ is the **midpoint** of $\\overline{BC}$, it splits the segment into two equal halves by definition:\n$$BE = CE$$\nThis is the shared side between our two angle pairs \u2014 exactly the **included side** we need for ASA.",
+          "figure_spec": {
+            "arc_groups": [
+              [
+                "AEB",
+                "DEC"
+              ],
+              [
+                "ABE",
+                "DCE"
+              ]
+            ],
+            "parallel_groups": [
+              [
+                "AB",
+                "CD"
+              ]
+            ],
+            "points": {
+              "A": [
+                -2,
+                4
+              ],
+              "B": [
+                2,
+                4
+              ],
+              "C": [
+                2,
+                0
+              ],
+              "D": [
+                6,
+                0
+              ],
+              "E": [
+                2,
+                2
+              ]
+            },
+            "segments": [
+              "AB",
+              "BE",
+              "EC",
+              "CD",
+              "AE",
+              "DE"
+            ],
+            "shape": "construction",
+            "tick_groups": [
+              [
+                "BE",
+                "EC"
+              ]
+            ],
+            "type": "geometry"
+          },
+          "title": "Midpoint Gives Equal Sides"
+        },
+        {
+          "description": "We now have two angles and the **included side** (the side between those two angles) matching in both triangles:\n\n| $\\triangle ABE$ | $\\triangle DCE$ | Reason |\n|---|---|---|\n| $\\angle ABE$ | $\\angle DCE$ | Alternate interior angles, $\\overline{AB} \\parallel \\overline{CD}$ |\n| $BE$ | $CE$ | $E$ is the midpoint of $\\overline{BC}$ |\n| $\\angle AEB$ | $\\angle DEC$ | Vertical angles |\n\nBy **ASA** (Angle\u2013Side\u2013Angle), two triangles are congruent when two angles and the included side of one equal the corresponding parts of the other:\n$$\\triangle ABE \\cong \\triangle DCE \\qquad \\blacksquare$$",
+          "figure_spec": {
+            "arc_groups": [
+              [
+                "AEB",
+                "DEC"
+              ],
+              [
+                "ABE",
+                "DCE"
+              ]
+            ],
+            "parallel_groups": [
+              [
+                "AB",
+                "CD"
+              ]
+            ],
+            "points": {
+              "A": [
+                -2,
+                4
+              ],
+              "B": [
+                2,
+                4
+              ],
+              "C": [
+                2,
+                0
+              ],
+              "D": [
+                6,
+                0
+              ],
+              "E": [
+                2,
+                2
+              ]
+            },
+            "segments": [
+              "AB",
+              "BE",
+              "EC",
+              "CD",
+              "AE",
+              "DE"
+            ],
+            "shape": "construction",
+            "tick_groups": [
+              [
+                "BE",
+                "EC"
+              ]
+            ],
+            "type": "geometry"
+          },
+          "title": "Conclude by ASA"
+        }
+      ]
+    }
+  },
   "db211c3ddc6bbf996bd10dc258c42865": {
     "meta": {
       "mode": "generate_questions_facts_b",
@@ -4106,6 +8095,84 @@
       "triangles": [
         "ABE",
         "CDE"
+      ]
+    }
+  },
+  "db2afedd21bb71b2a5c8b534daa8720e": {
+    "meta": {
+      "mode": "generate_questions_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn the figure below, $M$ is the midpoint of $\\overline{AC}$, and $\\overline{BM}$ bisects $\\angle ABD$ with ",
+      "recorded_at": 1794649649.698472
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AC"
+          ],
+          "kind": "midpoint",
+          "point": "M",
+          "quote": "M is the midpoint of $\\overline{AC}$"
+        },
+        {
+          "items": [
+            "BM",
+            "ABD"
+          ],
+          "kind": "bisects_angle",
+          "quote": "$\\overline{BM}$ bisects $\\angle ABD$"
+        },
+        {
+          "items": [
+            "AB",
+            "DB"
+          ],
+          "kind": "congruent_segments",
+          "quote": "$\\overline{AB} \\cong \\overline{DB}$"
+        },
+        {
+          "items": [
+            "ABM",
+            "DBM"
+          ],
+          "kind": "congruent_angles",
+          "quote": "$\\angle ABM \\cong \\angle DBM$"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "M"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "ABM",
+            "DBM"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "$\\triangle ABM \\cong \\triangle DBM$"
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AC",
+        "BM",
+        "AB",
+        "DB"
+      ],
+      "triangles": [
+        "ABM",
+        "DBM"
       ]
     }
   },
@@ -4200,6 +8267,67 @@
       "model": "claude-sonnet-4-6",
       "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn the figure below, $\\overline{AB} \\parallel \\overline{CD}$ and $E$ is the midpoint of $\\overline{BC}$.\n\n*",
       "recorded_at": 1794639829.311179
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "midpoint",
+          "point": "E",
+          "quote": "E is the midpoint of BC"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "ABE",
+            "DCE"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "\u25b3ABE \u2245 \u25b3DCE"
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD",
+        "BC"
+      ],
+      "triangles": [
+        "ABE",
+        "DCE"
+      ]
+    }
+  },
+  "dfcf095b258d5afca45da16013355642": {
+    "meta": {
+      "mode": "generate_questions_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn the figure below, $\\overline{AB} \\parallel \\overline{CD}$ and $E$ is the midpoint of $\\overline{BC}$.\n\n*",
+      "recorded_at": 1794649563.120021
     },
     "response": {
       "circles": [],
@@ -4487,6 +8615,215 @@
       ]
     }
   },
+  "eb8699c8a6e42a191375a86222acd8bb": {
+    "meta": {
+      "mode": "generate_questions_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nConclude by ASA: We now have two angles and the **included side** (the side between those two angles) match",
+      "recorded_at": 1794651339.9473212
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "ABE",
+            "DCE"
+          ],
+          "kind": "alternate_interior",
+          "quote": "Alternate interior angles, $\\overline{AB} \\parallel \\overline{CD}$"
+        },
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "$\\overline{AB} \\parallel \\overline{CD}$"
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "midpoint",
+          "point": "E",
+          "quote": "$E$ is the midpoint of $\\overline{BC}$"
+        },
+        {
+          "items": [
+            "BE",
+            "CE"
+          ],
+          "kind": "congruent_segments",
+          "quote": "$E$ is the midpoint of $\\overline{BC}$"
+        },
+        {
+          "items": [
+            "AEB",
+            "DEC"
+          ],
+          "kind": "vertical_angles",
+          "quote": "Vertical angles"
+        },
+        {
+          "items": [
+            "ABE",
+            "DCE"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "$\\triangle ABE \\cong \\triangle DCE$"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD",
+        "BC",
+        "BE",
+        "CE"
+      ],
+      "triangles": [
+        "ABE",
+        "DCE"
+      ]
+    }
+  },
+  "eefed3d5b1e7118b212508e0454b024f": {
+    "meta": {
+      "mode": "generate_questions_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn any right triangle, the **hypotenuse is the side opposite the right angle** \u2014 it's always the longest si",
+      "recorded_at": 1794652164.933202
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "WXZ"
+          ],
+          "kind": "right_triangle",
+          "point": "X",
+          "quote": "In \u25b3WXZ: the right angle is at X"
+        },
+        {
+          "expr": "WZ is the hypotenuse of \u25b3WXZ",
+          "items": [
+            "WZ"
+          ],
+          "kind": "other",
+          "quote": "the side opposite it, WZ, is the hypotenuse"
+        },
+        {
+          "items": [
+            "YZX"
+          ],
+          "kind": "right_triangle",
+          "point": "Z",
+          "quote": "In \u25b3YZX: the right angle is at Z"
+        },
+        {
+          "expr": "YX is the hypotenuse of \u25b3YZX",
+          "items": [
+            "YX"
+          ],
+          "kind": "other",
+          "quote": "the side opposite it, YX, is the hypotenuse"
+        },
+        {
+          "items": [
+            "WZ",
+            "YX"
+          ],
+          "kind": "congruent_segments",
+          "quote": "WZ \u2245 YX directly \u2014 the hypotenuses are congruent"
+        }
+      ],
+      "points": [
+        "W",
+        "X",
+        "Y",
+        "Z"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "WZ",
+        "YX"
+      ],
+      "triangles": [
+        "WXZ",
+        "YZX"
+      ]
+    }
+  },
+  "f2e43b268d80a2a7ba6f1443c4a06cd9": {
+    "meta": {
+      "mode": "generate_questions",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn the figure below, $M$ is the midpoint of $\\overline{AC}$, and $\\overline{BM}$ bisects $\\angle ABD$ with ",
+      "recorded_at": 1794649689.2314749
+    },
+    "response": {
+      "figure_spec": {
+        "arc_groups": [
+          [
+            "ABM",
+            "DBM"
+          ]
+        ],
+        "points": {
+          "A": [
+            3.214,
+            2.17
+          ],
+          "B": [
+            0.0,
+            6.0
+          ],
+          "C": [
+            -3.214,
+            -2.17
+          ],
+          "D": [
+            -3.214,
+            2.17
+          ],
+          "M": [
+            0.0,
+            0.0
+          ]
+        },
+        "segments": [
+          "AB",
+          "AM",
+          "MC",
+          "BM",
+          "DB"
+        ],
+        "shape": "construction",
+        "tick_groups": [
+          [
+            "AB",
+            "DB"
+          ],
+          [
+            "AM",
+            "MC"
+          ]
+        ],
+        "type": "geometry"
+      }
+    }
+  },
   "f54bee825c2a3d742421bdc612d9f703": {
     "meta": {
       "mode": "generate_questions_facts_b",
@@ -4645,6 +8982,157 @@
       "triangles": [
         "PMQ",
         "TMS"
+      ]
+    }
+  },
+  "fa105837f1106cb4a43096b702ca258e": {
+    "meta": {
+      "mode": "generate_questions_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nSegment $\\overline{BC}$ acts as a **transversal** cutting the two parallel lines $\\overline{AB}$ and $\\over",
+      "recorded_at": 1794651339.061088
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "BC",
+            "AB",
+            "CD"
+          ],
+          "kind": "transversal",
+          "quote": "Segment BC acts as a transversal cutting the two parallel lines AB and CD"
+        },
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD is given"
+        },
+        {
+          "items": [
+            "ABE",
+            "DCE"
+          ],
+          "kind": "alternate_interior",
+          "quote": "alternate interior angles are congruent \u2014 they sit on opposite sides of the transversal, between the parallel lines: \u2220ABE \u2245 \u2220DCE"
+        },
+        {
+          "items": [
+            "ABE",
+            "DCE"
+          ],
+          "kind": "congruent_angles",
+          "quote": "\u2220ABE \u2245 \u2220DCE"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "BC",
+        "AB",
+        "CD"
+      ],
+      "triangles": [
+        "ABE",
+        "DCE"
+      ]
+    }
+  },
+  "fc05574255eadd65adf3679c8698ec5b": {
+    "meta": {
+      "mode": "generate_questions_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nBecause $E$ is the **midpoint** of $\\overline{BC}$, it splits the segment into two equal halves by definiti",
+      "recorded_at": 1794651338.478582
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "midpoint",
+          "point": "E",
+          "quote": "E is the midpoint of BC"
+        },
+        {
+          "items": [
+            "BE",
+            "CE"
+          ],
+          "kind": "congruent_segments",
+          "quote": "BE = CE"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "B",
+        "C",
+        "E"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "BC",
+        "BE",
+        "CE"
+      ],
+      "triangles": []
+    }
+  },
+  "fcf9fb2cda0f9e6ac795588c0c58ce3d": {
+    "meta": {
+      "mode": "generate_questions_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nFirst Side: Midpoint gives $AM = MC$: By definition, a **midpoint** divides a segment into two congruent ha",
+      "recorded_at": 1794650509.79705
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AC"
+          ],
+          "kind": "midpoint",
+          "point": "M",
+          "quote": "M is the midpoint of $\\overline{AC}$"
+        },
+        {
+          "items": [
+            "AM",
+            "MC"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AM = MC"
+        }
+      ],
+      "points": [
+        "A",
+        "M",
+        "C"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "AM",
+        "MC"
       ]
     }
   },
