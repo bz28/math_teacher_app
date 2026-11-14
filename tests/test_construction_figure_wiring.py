@@ -193,7 +193,9 @@ def test_chat_reply_replaces_the_models_figure_talk() -> None:
         "Sure! Here's the drawing with diagonal AC drawn.", proposal, _item(), "can you provide the drawing?",
         PROBLEM, top_construction=True, top_issues=[], step_drops={},
     )
-    assert out == "Sure!\n\nI've added a diagram with points A, B, C and D; the givens are marked."
+    # "Sure!" says nothing about the problem's words, answer or steps: only
+    # code's sentence is left.
+    assert out == "I've added a diagram with points A, B, C and D; the givens are marked."
 
 
 def test_chat_reply_when_the_figure_fails_and_nothing_else_changes() -> None:

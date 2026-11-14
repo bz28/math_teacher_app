@@ -318,7 +318,7 @@ def test_a_relation_the_reading_has_is_no_gap() -> None:
         "points": [*reading.points, "E", "F", "G", "H"],
         "givens": [Fact(kind="parallel", items=["EF", "GH"]), Fact(kind="midpoint", items=["AB"], point="M")],
     })
-    assert coverage_gaps(text, wrong) == ["“\\parallel” (about A, B, C, D, M)"]
+    assert coverage_gaps(text, wrong) == ["“∥” (about A, B, C, D)"]
 
 
 def test_a_point_the_reading_leaves_out_is_a_gap() -> None:
@@ -703,6 +703,9 @@ async def test_points_a_reading_made_up_mean_the_problem_is_unnamed(monkeypatch:
     assert invented_points(r, r"In $\triangle ABC$, $\overrightarrow{BD}$ is opposite $\overrightarrow{BC}$.") == []
     primed = FigureFacts(points=["A", "B", "C", "A'", "B'", "C'"])
     assert invented_points(primed, r"Given: $\triangle ABC \cong \triangle A^{\prime}B^{\prime}C^{\prime}$.") == []
+    assert invented_points(primed, "Given: △ABC ≅ △A′B′C′.") == []
+    # A reading may write its primes as ′ too.
+    assert invented_points(FigureFacts(points=["A′", "B′"]), "$A'B'$") == []
     _stub_readings(monkeypatch, r, r)
     facts, why = await _why(text)
     assert facts is None

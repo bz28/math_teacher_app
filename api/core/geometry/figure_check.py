@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import math
 import re
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -51,6 +51,10 @@ _TOL_LABEL_ANG = 1.5
 _TOL_COLLINEAR = 0.004
 # Step figures: a shared point may move at most this fraction of the span.
 _TOL_MOVE = 0.01
+# Two named points closer than this fraction of the span sit on one spot.
+_TOL_APART = 0.02
+# A polygon corner straighter (or sharper) than this many degrees is no corner.
+_TOL_CORNER = 2.0
 
 
 def _two(ref: str) -> tuple[str, str]:
@@ -98,7 +102,22 @@ _PTLIST = rf"{_PT}(?:{_SEP}{_PT})*"
 # After a number: not part of an expression ("2x + 5", "3(x+1)").
 _NOT_ALGEBRA = r"(?![\d.])(?!\s*°?\s*(?:[a-z](?![a-z])|[(+\-*/^]))"
 
-_FIGURE_WORDS = ("circle", "arc", "sector", "shade", "radius", "radii")
+# Words that allow curved or shaded pieces, matched as whole words
+# ("bisector" is not "sector"; "semicircle" is a circle's arc).
+_FIGURE_WORDS: dict[str, str] = {
+    "circle": r"\b(?:semi)?circles?\b|\bcircular\b",
+    "arc": r"\barcs?\b|\bsemicircles?\b",
+    "sector": r"\bsectors?\b",
+    "shade": r"\bshad(?:e|es|ed|ing)\b",
+    "radius": r"\b(?:circum|in)?radius\b",
+    "radii": r"\bradii\b",
+}
+
+
+def figure_words(text: str) -> set[str]:
+    """Which of the words allowing circles, arcs, sectors and shading the
+    (cleaned) text uses, each as a whole word."""
+    return {w for w, pattern in _FIGURE_WORDS.items() if re.search(pattern, text, re.IGNORECASE)}
 
 _TRIANGLE_SHAPES = ("right", "isosceles", "equilateral")
 _QUAD_WORD = r"(?i:parallelogram|rectangle|square|rhombus|trapezoid|kite)"
@@ -210,6 +229,8 @@ class ProblemParts:
     # What the problem asks for ("Find m∠C", "What is AB?").
     target_angles: list[tuple[str, str, str] | str] = field(default_factory=list)
     target_segments: set[frozenset[str]] = field(default_factory=set)
+    # Measures and lengths the problem gives as algebra: (part, "2x + 5").
+    expressions: list[tuple[Any, str]] = field(default_factory=list)
 
 
 # Where the statement to prove starts.
@@ -243,8 +264,8 @@ def parse_problem(text: str, *, extra: str = "") -> ProblemParts:
     given, prove = _split_prove(t)
     out.numbers = _numbers(t)
     lower = t.lower()
-    out.words = {w for w in _FIGURE_WORDS if w in lower}
-    out.transversal = "transversal" in lower
+    out.words = figure_words(t)
+    out.transversal = re.search(r"\btransversals?\b", lower) is not None
     for source in (t, _clean(extra)):
         _collect_parts(source, out)
     _bare_request_parts(_clean(extra), out)
@@ -417,6 +438,12 @@ def _relations(t: str, parts: ProblemParts) -> list[_Relation]:
     for m in re.finditer(rf"({_ANGREF})\s*=\s*({_NUM}){_NOT_ALGEBRA}", t):
         ang = _angle_ref(m.group(1))
         add("measure", ang, float(m.group(2)), text=f"{_ang_txt(ang)} = {m.group(2)}°")
+    # A measure or length given as algebra ("m∠ABC = 2x + 5"): a label may show it.
+    for m in re.finditer(rf"(?P<ref>{_ANGREF}|{_SEG}|{_BARE2})\s*=\s*(?P<rhs>[^=,;]*?[a-z][^=,;]*?)(?=[,;.]|\s*$)", t):
+        ref, rhs = m.group("ref"), m.group("rhs")
+        if linear_expr(rhs) is not None:
+            pairs = _pairs_in(ref) if not ref.startswith("\\angle") else []
+            parts.expressions.append((pairs[0] if pairs else _angle_ref(ref), rhs.strip()))
     # Triangle congruence: checked as three pairs of equal sides.
     for m in re.finditer(rf"{_TRI}\s*\\cong\s*{_TRI}", t):
         a, b, c, d, e, f = m.groups()
@@ -504,10 +531,96 @@ def solved_expressions(rels: list[_Relation]) -> list[_Relation]:
     exprs: dict[Any, tuple[Any, float, float, str, str]] = {}
     for rel in rels:
         if rel.kind == "expr":
-            lin = _linear(str(rel.args[1]).replace("−", "-").replace("°", ""))
+            lin = linear_expr(rel.args[1])
             if lin:
                 exprs[_ang_key(rel.args[0])] = (rel.args[0], *lin, str(rel.args[1]))
     return _solve_measures(exprs, [r for r in rels if r.kind != "expr"])
+
+
+def linear_expr(expr: str) -> tuple[float, float, str] | None:
+    """A measure or length written as algebra ("2x + 5", "(3x)°") as
+    (a, b, var) for a·var + b; None when it isn't one variable to the
+    first power (then no drawing can be checked against it)."""
+    e = re.sub(r"[()°\s]|\^\s*\\circ|\\circ", "", str(expr).replace("−", "-"))
+    return _linear(e)
+
+
+def algebra_relation(rels: list[_Relation]) -> _Relation | None:
+    """Every measure and length the problem gives as algebra, held
+    together: one relation saying some value of each variable (and one
+    scale for the lengths) makes the drawing show them all. "m∠A = x°,
+    m∠B = (2x)°" is then checked as ∠B = 2·∠A even when nothing fixes x;
+    "AB = 2x, AC = 2x" as AB = AC. Plain lengths join the lengths, since
+    they share the scale."""
+    solved = {_ang_key(r.args[0]) for r in solved_expressions(rels)}
+    angles, lengths, said = [], [], []
+    for rel in rels:
+        if rel.kind == "lenexpr" and (lin := linear_expr(rel.args[1])):
+            lengths.append((rel.args[0], *lin))
+            said.append(rel.text)
+    length_vars = {var for _s, _a, _b, var in lengths}
+    for rel in rels:
+        # An angle its facts fix is checked as that measure; it joins only
+        # to give a length's variable its value.
+        if rel.kind == "expr" and (lin := linear_expr(rel.args[1])) and (
+            _ang_key(rel.args[0]) not in solved or lin[2] in length_vars
+        ):
+            angles.append((rel.args[0], *lin))
+            said.append(rel.text)
+    if not angles and not lengths:
+        return None
+    if lengths:
+        lengths += [(r.args[0], 0.0, float(r.args[1]), "") for r in rels if r.kind == "length"]
+    return _Relation("algebra", (tuple(angles), tuple(lengths)), ", ".join(said))
+
+
+def _algebra_holds(d: _Drawing, angles: tuple[Any, ...], lengths: tuple[Any, ...]) -> bool | None:
+    """Some value of each variable makes every angle given as algebra match
+    its drawn measure, and some scale (with those values) every length."""
+    drawn_ang = []
+    for ref, a, b, var in angles:
+        ang = d.resolve(ref)
+        if ang is None or not all(n in d.p for n in ang):
+            return None
+        drawn_ang.append((d.measure(ang), a, b, var))
+    values: dict[str, float] = {}
+    for var in {v for _m, _a, _b, v in drawn_ang}:
+        terms = [(m, a, b) for m, a, b, v in drawn_ang if v == var]
+        values[var] = sum(a * (m - b) for m, a, b in terms) / sum(a * a for _m, a, _b in terms)
+        if any(abs(a * values[var] + b - m) >= _TOL_ANG for m, a, b in terms):
+            return False
+    if not lengths:
+        return True
+    drawn_len = []
+    for (x, y), a, b, var in lengths:
+        if x not in d.p or y not in d.p:
+            return None
+        drawn_len.append((_dist(d.p[x], d.p[y]), a, b, var))
+    # drawn = scale·(a·var + b): linear in the scale and in scale·var for
+    # each variable the angles don't fix.
+    free = sorted({v for _l, a, _b, v in drawn_len if v and a and v not in values})
+    cols = {"": 0, **{v: i + 1 for i, v in enumerate(free)}}
+    rows = []
+    for length, a, b, var in drawn_len:
+        row = [0.0] * len(cols)
+        row[0] = b + (a * values[var] if var in values else 0.0)
+        if var in cols and var:
+            row[cols[var]] += a
+        rows.append((row, length))
+    # Unknowns no length uses (no plain number: the scale alone) drop out.
+    used = [j for j in range(len(cols)) if any(abs(r[j]) > 1e-12 for r, _l in rows)]
+    rows = [([r[j] for j in used], length) for r, length in rows]
+    n = len(used)
+    normal = [[sum(r[i] * r[j] for r, _l in rows) for j in range(n)] for i in range(n)]
+    rhs = [sum(r[i] * length for r, length in rows) for i in range(n)]
+    solved = _solve([({j: normal[i][j] for j in range(n)}, rhs[i]) for i in range(n)], n)
+    if len(solved) < n:
+        return None  # two variables the lengths can't tell apart
+    biggest = max(length for _r, length in rows)
+    if 0 in used and solved[used.index(0)] <= 1e-9 * biggest:
+        return False  # no scale: the plain numbers in the lengths vanish
+    fitted = [sum(r[j] * solved[j] for j in range(n)) for r, _l in rows]
+    return all(f > 0 and abs(f - length) <= _TOL_LEN * biggest for f, (_r, length) in zip(fitted, rows))
 
 
 def _solve_measures(
@@ -561,7 +674,9 @@ def _solve_measures(
     for key, (ang, _a, _b, var, text) in exprs.items():
         value = values.get(cols[("ang", key)])
         if value is not None:
-            out.append(_Relation("measure", (ang, value), f"{_ang_txt(ang)} = {text} = {value:g}°"))
+            out.append(_Relation(
+                "measure", (ang, value), f"{_ang_txt(ang)} = {text} = {value:g}°", family="solved",
+            ))
     return out
 
 
@@ -685,8 +800,10 @@ class _Drawing:
             + [("line", ln.through[0], ln.through[1]) for ln in fig.lines]
         )
         self.lines = {_line_key(ln.name): ln for ln in fig.lines if ln.name}
+        # In name order: the checker's messages (and so the retry prompt) must
+        # not depend on the order the model wrote its labels in.
         self.labels: dict[tuple[str, str, str], str] = {
-            _three(k): v for k, v in fig.angle_labels.items()
+            _three(k): v for k, v in sorted(fig.angle_labels.items())
         }
 
     def collinear(self, a: Point, b: Point, q: Point) -> bool:
@@ -695,6 +812,11 @@ class _Drawing:
             return False
         cross = (b[0] - a[0]) * (q[1] - a[1]) - (b[1] - a[1]) * (q[0] - a[0])
         return abs(cross) / d <= _TOL_COLLINEAR * self.scale
+
+    def same_line(self, s1: tuple[str, ...], s2: tuple[str, ...]) -> bool:
+        """The straight pieces through s1's two points and s2's lie on one line."""
+        a, b = self.p[s1[0]], self.p[s1[1]]
+        return self.collinear(a, b, self.p[s2[0]]) and self.collinear(a, b, self.p[s2[1]])
 
     @staticmethod
     def param(a: Point, b: Point, q: Point) -> float:
@@ -782,8 +904,11 @@ class _Drawing:
 
     def resolve(self, a: tuple[str, str, str] | str) -> tuple[str, str, str] | None:
         if isinstance(a, str):
+            # ∠1: the angle labelled "1" (or "∠1", "∠1 = 40°").
             for key, text in self.labels.items():
-                if text.strip() == a:
+                if text.strip() == a or re.sub(r"\s+", "", text.strip()) == f"∠{a}" or any(
+                    n.lstrip("∠") == a for n in _parse_label(text, {a}).names
+                ):
                     return key
             return None
         if a[0] == "":
@@ -845,7 +970,9 @@ def check_construction(
                 say("not_drawn", f"not drawn: {v}{x} (a side of ∠{a}{v}{b})")
     for name in sorted(parts.line_names - set(d.lines)):
         say("not_drawn", f"not drawn: line {name.replace('ell', 'ℓ')}")
-    labels = {re.sub(r"[^\w]", "", v) for v in fig.angle_labels.values()}
+    labels = {
+        n.lstrip("∠") for v in fig.angle_labels.values() for n in _parse_label(v, parts.numbered).names
+    }
     for n in sorted(parts.numbered - labels):
         say("unlabelled", f"∠{n} is not labelled")
     if parts.transversal and not parts.line_names - {
@@ -873,6 +1000,11 @@ def check_construction(
                     f"the statement to prove ({rel.text}) is marked on the figure; mark only the givens",
                 )
 
+    # A figure that collapses can make anything "true": two named points on
+    # one spot, a named triangle or polygon drawn flat.
+    for message in _degenerate(d, parts):
+        say("degenerate", message)
+
     # Every mark on the figure is true in the drawing.
     for message in _mark_issues(d):
         say("false_mark", message)
@@ -887,7 +1019,7 @@ def check_construction(
         say("extra", message)
 
     # Numbers on the figure: agree with the drawing, come from the problem.
-    for message in _label_issues(d, parts, final_answer if not is_step else None, problem_text):
+    for message in _label_issues(d, parts, final_answer if not is_step else None, problem_text, step_text):
         say("label", message)
 
     if base is not None:
@@ -915,7 +1047,10 @@ def _holds(rel: _Relation, d: _Drawing) -> bool | None:
                 l1, l2 = _dist(p[a], p[b]), _dist(p[c], p[e])
                 return abs(l1 - l2) <= _TOL_LEN * max(l1, l2)
             diff = _dir_diff(_direction(p[a], p[b]), _direction(p[c], p[e]))
-            return diff < _TOL_ANG if k == "par" else abs(diff - 90) < _TOL_ANG
+            if k == "par":
+                # Parallel means two lines: one drawn on top of the other is not it.
+                return diff < _TOL_ANG and not d.same_line((a, b), (c, e))
+            return abs(diff - 90) < _TOL_ANG
         if k == "eqang":
             a1, a2 = (d.resolve(x) for x in args)
             if a1 is None or a2 is None:
@@ -971,12 +1106,17 @@ def _holds(rel: _Relation, d: _Drawing) -> bool | None:
             return all(any(abs(_angle(x, v, y) - 180) < _TOL_ANG for y in arms2) for x in arms1)
         if k == "anglepair":
             return _angle_pair(d, args[0], d.resolve(args[1]), d.resolve(args[2]))
+        if k == "algebra":
+            return _algebra_holds(d, args[0], args[1])
         if k == "linepar":
             n1, n2 = args
             if n1 not in d.lines or n2 not in d.lines:
                 return None
             th1, th2 = d.lines[n1].through, d.lines[n2].through
-            return _dir_diff(_direction(p[th1[0]], p[th1[1]]), _direction(p[th2[0]], p[th2[1]])) < _TOL_ANG
+            return (
+                _dir_diff(_direction(p[th1[0]], p[th1[1]]), _direction(p[th2[0]], p[th2[1]])) < _TOL_ANG
+                and not d.same_line(tuple(th1), tuple(th2))
+            )
         if k == "oncircle":
             pts, center = args
             return any(all(n in p and _on_circle(d, c, n) for n in pts) for c in _circles(d, center))
@@ -1089,6 +1229,32 @@ def _holds(rel: _Relation, d: _Drawing) -> bool | None:
     except (KeyError, ValueError, TypeError, ZeroDivisionError):
         return None
     return None
+
+
+def _degenerate(d: _Drawing, parts: ProblemParts) -> list[str]:
+    """Named points drawn on one spot, and named triangles and polygons
+    drawn flat (no area, or three corners in a row)."""
+    out: list[str] = []
+    named = sorted(n for n in d.p if not is_hidden(n))
+    for i, a in enumerate(named):
+        for b in named[i + 1:]:
+            if _dist(d.p[a], d.p[b]) < _TOL_APART * d.scale:
+                out.append(f"points {a} and {b} are drawn on the same spot")
+    for poly in dict.fromkeys(parts.polygons):
+        if len(set(poly)) != len(poly) or not all(n in d.p for n in poly):
+            continue
+        q = [d.p[n] for n in poly]
+        what = ("triangle " if len(poly) == 3 else "") + "".join(poly)
+        area = abs(sum(q[i - 1][0] * q[i][1] - q[i][0] * q[i - 1][1] for i in range(len(q)))) / 2
+        if area < 1e-3 * d.scale * d.scale:
+            out.append(f"{what} is drawn flat (it has no area)")
+            continue
+        for i in range(len(q)):
+            turn = _angle(q[i - 1], q[i], q[(i + 1) % len(q)])
+            if math.isnan(turn) or turn < _TOL_CORNER or turn > 180 - _TOL_CORNER:
+                corners = ", ".join(poly[(i + j) % len(poly)] for j in (-1, 0, 1))
+                out.append(f"{what} is drawn with {corners} in a row, so {poly[i]} is no corner")
+    return out
 
 
 def _overlaps(d: _Drawing, parts: ProblemParts) -> list[str]:
@@ -1253,7 +1419,8 @@ def _marked(rel: _Relation, d: _Drawing) -> bool:
             if value == 90 and any(_same_angle(d, _three(r), ang, mod=180) for r in f.right_angles):
                 return True
             return any(
-                _plain_number(text) == value and _same_angle(d, key, ang) for key, text in d.labels.items()
+                value in _parse_label(text, set()).values and _same_angle(d, key, ang)
+                for key, text in d.labels.items()
             )
     except (KeyError, ValueError, TypeError, ZeroDivisionError):
         return False
@@ -1356,11 +1523,12 @@ def _mark_issues(d: _Drawing) -> list[str]:
     for group in f.tick_groups:
         lengths = [_dist(p[a], p[b]) for a, b in (_two(r) for r in group)]
         if max(lengths) - min(lengths) > _TOL_LEN * max(lengths):
-            out.append(f"the tick marks on {', '.join(group)} claim equal lengths, but they differ in the drawing")
+            shown = ", ".join(_show_seg(*_two(r)) for r in group)
+            out.append(f"the tick marks on {shown} claim equal lengths, but they differ in the drawing")
     for group in f.arc_groups:
         sizes = [d.measure(_three(r)) for r in group]
         if max(sizes) - min(sizes) > _TOL_ANG:
-            names = ", ".join("∠" + r for r in group)
+            names = ", ".join(_show_ang(_three(r)) for r in group)
             out.append(f"the arcs on {names} claim equal angles, but they differ in the drawing")
     for kind, refs in (
         ("label", list(f.angle_labels)), ("arc", [r for g in f.arc_groups for r in g]),
@@ -1371,20 +1539,25 @@ def _mark_issues(d: _Drawing) -> list[str]:
             for arm in (x, y):
                 if not d.arm_drawn(v, arm):
                     out.append(
-                        f"the {kind} on ∠{ref} sits on an angle whose side {v}{arm} isn't drawn".replace("_", "")
+                        f"the {kind} on {_show_ang((x, v, y))} sits on an angle whose side {_show_seg(v, arm)} "
+                        "isn't drawn"
                     )
     for ref in f.right_angles:
         drawn = d.measure(_three(ref))
         if abs(drawn - 90) > _TOL_ANG:
-            out.append(f"the right-angle mark on ∠{ref} is on an angle drawn as {drawn:.0f}°")
+            out.append(f"the right-angle mark on {_show_ang(_three(ref))} is on an angle drawn as {drawn:.0f}°")
     lines = {ln.name: ln for ln in f.lines if ln.name}
     for group in f.parallel_groups:
         dirs = []
         for ref in group:
             a, b = tuple(lines[ref].through) if ref in lines else _two(ref)
             dirs.append(_direction(p[a], p[b]))
-        if any(_dir_diff(dirs[0], x) > _TOL_ANG for x in dirs[1:]):
-            out.append(f"the parallel arrows on {', '.join(group)} are on pieces that aren't parallel in the drawing")
+        ends = [tuple(lines[r].through) if r in lines else _two(r) for r in group]
+        if any(_dir_diff(dirs[0], x) > _TOL_ANG for x in dirs[1:]) or any(
+            d.same_line(e1, e2) for i, e1 in enumerate(ends) for e2 in ends[i + 1:]
+        ):
+            shown = ", ".join(r if r in lines else _show_seg(*_two(r)) for r in group)
+            out.append(f"the parallel arrows on {shown} are on pieces that aren't parallel in the drawing")
     return out
 
 
@@ -1399,12 +1572,14 @@ def _extras(d: _Drawing, parts: ProblemParts, base: ConstructionFigure | None) -
     named += [("ray", a, b) for a, b in parts.rays]
     for a, v, b in parts.angles:
         named += [("ray", v, a), ("ray", v, b)]
-    # Arms of labelled or marked angles (∠1 placed by the figure) and the
-    # sides of right-angle boxes are accounted for by the angle itself.
-    marked_angles = [*d.labels, *(_three(r) for g in d.fig.arc_groups for r in g),
-                     *(_three(r) for r in d.fig.right_angles)]
-    for x, v, y in marked_angles:
-        named += [("ray", v, x), ("ray", v, y)]
+    # The arms of a numbered angle the problem names (∠1, placed by the
+    # figure) are accounted for by the angle itself. No other label or mark
+    # accounts for anything: a label "y" or an arc on an extra piece would
+    # otherwise make it count as named.
+    for key, text in d.labels.items():
+        if any(n.lstrip("∠") in parts.numbered for n in _parse_label(text, parts.numbered).names):
+            x, v, y = key
+            named += [("ray", v, x), ("ray", v, y)]
     if base is not None:
         bd = _Drawing(base)
         named += [(k, a, b) for k, a, b in bd.pieces if a in p and b in p]
@@ -1446,8 +1621,7 @@ def _extras(d: _Drawing, parts: ProblemParts, base: ConstructionFigure | None) -
             kept.append(pc)
         loose = kept
     out = [
-        f"extra {kind if kind != 'seg' else 'segment'} not in the problem: {a}{b}".replace("_", "")
-        for kind, a, b in loose
+        f"extra {kind if kind != 'seg' else 'segment'} not in the problem: {_show_seg(a, b)}" for kind, a, b in loose
     ]
     words = parts.words
     if d.fig.circles and "circle" not in words:
@@ -1530,15 +1704,83 @@ def _apart(d: _Drawing) -> list[tuple[str, str, str]]:
     return [pieces[i] for i in range(len(pieces)) if i not in biggest]
 
 
-def _label_numbers(text: str) -> list[float]:
-    return [float(n) for n in re.findall(_NUM, _clean(text))]
-
-
 def _plain_number(text: str) -> float | None:
     """'138°', '138', '12 cm' → the number; None for '2x+5', 'x', '√34'."""
-    unit = r"(?:°|\^\s*\\circ|\^\{\\circ\}|\\circ|deg|degrees|[a-z]{1,3})"
+    unit = (r"(?:°|\^\s*\\circ|\^\{\\circ\}|\\circ|deg|degrees|cm|mm|km|m|in|inch(?:es)?|ft|feet|foot|yd"
+            r"|units?|meters?)")
     m = re.fullmatch(rf"\s*\$?\s*({_NUM})\s*{unit}?\s*\$?\s*", text)
     return float(m.group(1)) if m else None
+
+
+@dataclass
+class _Label:
+    """A label read by its parts: "m∠C = 50°" names ∠C and shows 50;
+    "x = 50°" names x; "(2x + 5)°" is algebra; "∠1" (or a bare "1" on a
+    problem with numbered angles) is a name."""
+
+    names: list[str]
+    values: list[float]
+    exprs: list[str]
+
+    @property
+    def empty(self) -> bool:
+        return not (self.names or self.values or self.exprs)
+
+
+_LABEL_ANGLE = rf"∠\s*(?:{_PT}){{1,3}}|∠\s*\d+"
+_LABEL_SEG = rf"(?:{_PT}){{2}}"
+_LABEL_VAR = r"[a-z](?:_\{?\d+\}?)?"
+
+
+def _parse_label(text: str, numbered: Collection[str] = ()) -> _Label:
+    t = _clean(text).replace("$", " ")
+    t = re.sub(r"\\angle\s*", "∠", t)
+    t = re.sub(r"\\overline\s*\{([^{}]*)\}", r"\1", t)
+    t = re.sub(r"[{}]", "", t).strip().rstrip(".").strip()
+    out = _Label([], [], [])
+    sides = [x.strip() for x in t.split("=")]
+    for i, part in enumerate(sides):
+        if not part:
+            continue
+        last = i == len(sides) - 1
+        compact = re.sub(r"\s+", "", part)
+        if len(sides) == 1 and re.fullmatch(r"\d+", compact) and compact in numbered:
+            out.names.append(compact)  # a bare "1" names ∠1
+        elif (value := _plain_number(part)) is not None:
+            out.values.append(value)
+        elif re.fullmatch(rf"(?:{_LABEL_ANGLE}|{_LABEL_SEG})", compact) or (
+            not last and re.fullmatch(_LABEL_VAR, compact)
+        ):
+            out.names.append(compact)
+        else:
+            out.exprs.append(part)
+    return out
+
+
+def _same_algebra(a: str, b: str) -> bool:
+    """Two spellings of one expression: "(2x + 5)°" and "2x+5"."""
+    def norm(e: str) -> str:
+        e = re.sub(r"\^\s*\\circ|\\circ|[°()\s*{}$]", "", _clean(e)).replace("−", "-")
+        return e.lower()
+
+    la, lb = linear_expr(a), linear_expr(b)
+    if la is not None and lb is not None:
+        return la == lb
+    return norm(a) == norm(b)
+
+
+def _show_seg(a: str, b: str) -> str:
+    """A segment's name for a teacher: helper points are never named."""
+    named = [n for n in (a, b) if not is_hidden(n)]
+    if len(named) == 2:
+        return f"{a}{b}"
+    return f"from {named[0]} to an unnamed point" if named else "between two unnamed points"
+
+
+def _show_ang(key: tuple[str, str, str]) -> str:
+    if not any(is_hidden(n) for n in key):
+        return "∠" + "".join(key)
+    return f"an angle at {key[1]}" if not is_hidden(key[1]) else "an angle at an unnamed point"
 
 
 def _is_target_angle(d: _Drawing, parts: ProblemParts, key: tuple[str, str, str]) -> bool:
@@ -1549,50 +1791,180 @@ def _is_target_angle(d: _Drawing, parts: ProblemParts, key: tuple[str, str, str]
     return False
 
 
-def _label_issues(d: _Drawing, parts: ProblemParts, final_answer: str | None, problem_text: str) -> list[str]:
-    """`final_answer` is None for a step figure (steps may show results)."""
+def _given_measures(d: _Drawing, parts: ProblemParts, key: tuple[str, str, str]) -> set[float]:
+    """The measures the problem itself gives for the angle at `key` (not
+    ones solved from its numbers): stated measures, and 90° for an angle
+    between two lines it says are perpendicular."""
+    out: set[float] = set()
+
+    def walk(rel: _Relation) -> None:
+        if rel.kind == "any":
+            for alt in rel.args[0]:
+                for r in alt:
+                    walk(r)
+        elif rel.kind == "measure" and rel.family != "solved":
+            ang = d.resolve(rel.args[0])
+            if ang is not None and all(n in d.p for n in ang) and _same_angle(d, ang, key):
+                out.add(float(rel.args[1]))
+        elif rel.kind in ("perp", "lineperp"):
+            if rel.kind == "perp":
+                l1, l2 = rel.args
+            elif rel.args[0] in d.lines and rel.args[1] in d.lines:
+                l1, l2 = (tuple(d.lines[n].through) for n in rel.args)
+            else:
+                return
+            if not all(n in d.p for n in (*l1, *l2)):
+                return
+            x, v, y = key
+            on = [
+                {arm for arm in (x, y) if d.collinear(d.p[ln[0]], d.p[ln[1]], d.p[arm])}
+                for ln in (l1, l2) if d.collinear(d.p[ln[0]], d.p[ln[1]], d.p[v])
+            ]
+            if len(on) == 2 and ((x in on[0] and y in on[1]) or (y in on[0] and x in on[1])):
+                out.add(90.0)
+
+    for rel in parts.givens:
+        walk(rel)
+    return out
+
+
+def _problem_angles(parts: ProblemParts) -> list[tuple[str, str, str] | str]:
+    """Every angle the problem names: a label may name only these."""
+    out: list[Any] = [*parts.angles, *parts.target_angles]
+    where = {"eqang": (0, 1), "measure": (0,), "vertical": (0, 1), "anglepair": (1, 2), "anglesum": (0, 1),
+             "numbered": (0, 1)}
+
+    def walk(rel: _Relation) -> None:
+        if rel.kind == "any":
+            for alt in rel.args[0]:
+                for r in alt:
+                    walk(r)
+        elif rel.kind in where:
+            out.extend(rel.args[i] for i in where[rel.kind])
+        elif rel.kind == "bisang":
+            out.append(rel.args[1])
+        elif rel.kind == "algebra":
+            out.extend(term[0] for term in rel.args[0])
+
+    for rel in (*parts.givens, *parts.prove):
+        walk(rel)
+    return out
+
+
+def _given_lengths(parts: ProblemParts, side: frozenset[str]) -> set[float]:
+    out = {float(r.args[1]) for r in parts.givens if r.kind == "length" and frozenset(r.args[0]) == side}
+    # A length the problem gives for a side it doesn't name ("a width of 7").
+    return out | {float(r.args[0]) for r in parts.givens if r.kind == "lengthlabel"}
+
+
+def _label_issues(
+    d: _Drawing, parts: ProblemParts, final_answer: str | None, problem_text: str, step_text: str | None,
+) -> list[str]:
+    """Every label read by its parts and checked: a number against the
+    drawing, against what the problem asks for (a question's figure must
+    not print the answer), and against the problem, which must give THAT
+    value for THAT part; a name must be the part's own (∠1 where the
+    problem has ∠1, x on the angle it calls x); algebra must be the
+    problem's own for that part. A step figure may also show what its
+    step says. `final_answer` is None for a step figure."""
     out: list[str] = []
     answer_numbers = _numbers(_clean(final_answer or ""))
-    has_right = bool(re.search(r"\\perp|right|perpendicular|90", _clean(problem_text), re.IGNORECASE))
+    step_numbers = _numbers(_clean(step_text)) if step_text is not None else set()
+    # The problem's math, where its letters are names ("$b$"), not words ("a").
+    in_math = " ".join(re.findall(r"\$([^$]*)\$", problem_text))
 
-    def source_issue(label: str, number: float, measured_90: bool) -> str | None:
-        if number in parts.numbers or (number == 90 and (has_right or measured_90)):
+    def number_issue(label: str, where: str, value: float, given: set[float]) -> str | None:
+        if any(abs(value - g) <= 1e-6 * max(1.0, abs(g)) for g in given) or value in step_numbers:
             return None
-        shown = f"{number:g}"
-        if number in answer_numbers:
-            return f"the label {label!r} gives away the answer ({shown} is not in the problem)"
-        return f"the label {label!r} shows {shown}, which is not a number in the problem"
+        if value in answer_numbers:
+            return f"the label {label!r} on {where} gives away the answer"
+        return f"the label {label!r} on {where} shows {value:g}, which the problem doesn't give for {where}"
 
+    def exprs_for(match: Any) -> list[str]:
+        return [e for part, e in parts.expressions if match(part)]
+
+    variables = {lin[2] for _p, e in parts.expressions if (lin := linear_expr(e))}
+
+    def letter_ok(name: str, own: list[str]) -> bool:
+        """A letter is this part's own algebra ("x" where m∠A = x°), or a
+        name the problem gives a part it doesn't name by points ("the
+        missing leg b"): written in the problem, and no variable tied to
+        another part."""
+        if any(_same_algebra(name, e) for e in own):
+            return True
+        return bool(re.fullmatch(_LABEL_VAR, name)) and name not in variables and re.search(
+            rf"(?<![A-Za-z\\]){re.escape(name)}(?![A-Za-z])", in_math,
+        ) is not None
+
+    named_angles = _problem_angles(parts)
     for key, text in d.labels.items():
-        value = _plain_number(text)
-        # A bare whole number with no degree sign names the angle (∠1,
-        # ∠2, ...) when the problem numbers its angles, or is that number.
-        bare = value is not None and value.is_integer() and re.fullmatch(r"\s*\d+\s*", text) is not None
-        is_name = bare and text.strip() in parts.numbered
-        if is_name:
+        where = _show_ang(key)
+        lab = _parse_label(text, parts.numbered)
+        if lab.empty:
+            out.append(f"the label {text!r} on {where} is empty")
             continue
+
+        def this_angle(ref: Any, key: tuple[str, str, str] = key) -> bool:
+            ang = d.resolve(ref) if isinstance(ref, str) or (isinstance(ref, tuple) and len(ref) == 3) else None
+            return ang is not None and all(n in d.p for n in ang) and _same_angle(d, ang, key)
+
+        own = exprs_for(this_angle)
+        for name in lab.names:
+            number = re.fullmatch(r"∠?\s*(\d+)", name)
+            if number:
+                if number.group(1) not in parts.numbered:
+                    out.append(
+                        f"the label {text!r} on {where} names ∠{number.group(1)}, which the problem doesn't have",
+                    )
+            elif name.startswith("∠"):
+                if not this_angle(_angle_ref(r"\angle " + name[1:])):
+                    out.append(f"the label {text!r} on {where} names {name}, a different angle")
+                elif not any(this_angle(a) for a in named_angles):
+                    out.append(f"the label {text!r} on {where} names {name}, an angle the problem doesn't name")
+            elif not letter_ok(name, own):
+                out.append(f"the label {text!r} on {where} names {name}, which the problem doesn't call that angle")
+        for e in lab.exprs:
+            if not letter_ok(re.sub(r"\s+", "", e), own):
+                out.append(f"the label {text!r} on {where} shows {e}, which the problem doesn't give for {where}")
         drawn = d.measure(key)
-        if value is not None and final_answer is not None and _is_target_angle(d, parts, key):
-            out.append(f"the label {text!r} on ∠{''.join(key)} gives away the answer (the problem asks for it)")
-        if value is not None and not math.isnan(drawn) and abs(drawn - value) > _TOL_LABEL_ANG:
-            out.append(
-                f"the label {text!r} on ∠{''.join(key)} does not match the drawing (drawn as {drawn:.0f}°)",
-            )
-        for n in _label_numbers(text):
-            issue = source_issue(text, n, not math.isnan(drawn) and abs(drawn - 90) < _TOL_ANG)
+        for value in lab.values:
+            if final_answer is not None and _is_target_angle(d, parts, key):
+                out.append(f"the label {text!r} on {where} gives away the answer (the problem asks for it)")
+                continue
+            if not math.isnan(drawn) and abs(drawn - value) > _TOL_LABEL_ANG:
+                out.append(f"the label {text!r} on {where} does not match the drawing (drawn as {drawn:.0f}°)")
+            issue = number_issue(text, where, value, _given_measures(d, parts, key))
             if issue:
                 out.append(issue)
     lengths: list[tuple[str, float, float]] = []
-    for side, text in d.fig.side_labels.items():
+    for side, text in sorted(d.fig.side_labels.items()):
         a, b = _two(side)
-        named = re.fullmatch(r"\s*\$?\s*[A-Za-z]\s*=\s*(.+)", text)  # "c = 13"
-        value = _plain_number(named.group(1) if named else text)
-        if value is not None and value > 0:
-            lengths.append((f"{a}{b}", value, _dist(d.p[a], d.p[b])))
+        where = _show_seg(a, b)
+        lab = _parse_label(text)
+        if lab.empty:
+            out.append(f"the label {text!r} on {where} is empty")
+            continue
+        pair = frozenset((a, b))
+        own = exprs_for(lambda part, pair=pair: isinstance(part, tuple) and len(part) == 2 and frozenset(part) == pair)
+        given = _given_lengths(parts, frozenset((a, b)))
+        for name in lab.names:
+            if re.fullmatch(_LABEL_SEG, name):
+                if frozenset(split_points(name, 2)) != frozenset((a, b)):
+                    out.append(f"the label {text!r} on {where} names {name}, a different segment")
+                elif pair not in parts.segments | parts.mentioned | parts.target_segments:
+                    out.append(f"the label {text!r} on {where} names {name}, a segment the problem doesn't name")
+            elif not letter_ok(name, own):
+                out.append(f"the label {text!r} on {where} names {name}, which the problem doesn't call that side")
+        for e in lab.exprs:
+            if not letter_ok(re.sub(r"\s+", "", e), own):
+                out.append(f"the label {text!r} on {where} shows {e}, which the problem doesn't give for {where}")
+        for value in lab.values:
+            if value > 0:
+                lengths.append((where, value, _dist(d.p[a], d.p[b])))
             if final_answer is not None and frozenset((a, b)) in parts.target_segments:
-                out.append(f"the label {text!r} on {a}{b} gives away the answer (the problem asks for it)")
-        for n in _label_numbers(text):
-            issue = source_issue(text, n, False)
+                out.append(f"the label {text!r} on {where} gives away the answer (the problem asks for it)")
+                continue
+            issue = number_issue(text, where, value, given)
             if issue:
                 out.append(issue)
     for rel in parts.givens:
@@ -1612,16 +1984,16 @@ def _label_issues(d: _Drawing, parts: ProblemParts, final_answer: str | None, pr
 def _step_consistency(step: _Drawing, base: _Drawing) -> list[str]:
     out: list[str] = []
     span = max(base.scale, 1e-9)
-    for name, q in base.p.items():
+    for name, q in sorted(base.p.items()):
         if name in step.p and _dist(q, step.p[name]) > _TOL_MOVE * span:
             out.append(f"point {name} is not where the question's figure puts it")
     for kind, a, b in base.pieces:
         if a not in step.p or b not in step.p:
-            out.append(f"the step's figure leaves out {a}{b}, which the question's figure draws")
+            out.append(f"the step's figure leaves out {_show_seg(a, b)}, which the question's figure draws")
             continue
         kept = {"seg": step.seg_drawn, "ray": step.ray_drawn, "line": step.line_through}[kind](a, b)
         if not kept:
-            name = f"{a}{b}" if kind == "seg" else f"{kind} {a}{b}"
+            name = _show_seg(a, b) if kind == "seg" else f"{kind} {_show_seg(a, b)}"
             out.append(f"the step's figure leaves out {name}, which the question's figure draws")
     return out
 

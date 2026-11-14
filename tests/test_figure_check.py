@@ -368,7 +368,7 @@ def test_label_number_must_come_from_the_problem() -> None:
     problem = r"Find $m\angle ABC$."
     pts = {"A": (3, 3), "B": (0, 0), "C": (3, 0)}
     out = messages(problem, fig(points=pts, segments=["BA", "BC"], angle_labels={"ABC": "45°"}))
-    assert "the label '45°' shows 45, which is not a number in the problem" in out
+    assert "the label '45°' on ∠ABC shows 45, which the problem doesn't give for ∠ABC" in out
 
 
 def test_label_giving_away_the_answer() -> None:
@@ -376,7 +376,7 @@ def test_label_giving_away_the_answer() -> None:
     pts = {"A": (3, 3), "B": (0, 0), "C": (3, 0)}
     f = fig(points=pts, segments=["BA", "BC"], angle_labels={"ABC": "45°"})
     out = messages(problem, f, final_answer="$45°$")
-    assert "the label '45°' gives away the answer (45 is not in the problem)" in out
+    assert "the label '45°' on ∠ABC gives away the answer" in out
 
 
 def test_ninety_allowed_on_a_right_angle() -> None:
@@ -407,13 +407,23 @@ def test_lengths_given_in_text_count_without_labels() -> None:
 
 
 def test_named_length_label() -> None:
-    """'c = 13' is the length 13."""
+    """'c = 13' is the length 13, on a side the problem calls c without
+    naming its points (the reading's length of an unnamed side)."""
+    from api.core.geometry.facts import Fact, FigureFacts
+
     problem = "The hypotenuse has length $c = 13$ and a leg $a = 5$."
+    facts = FigureFacts(givens=[
+        Fact(kind="equal_length", value=13, quote="c = 13"), Fact(kind="equal_length", value=5, quote="a = 5"),
+    ])
     pts = {"A": (0, 0), "B": (5, 0), "C": (5, 12)}
     good = fig(points=pts, segments=["AB", "BC", "CA"], side_labels={"CA": "c = 13", "AB": "a = 5"})
-    assert "label" not in kinds(problem, good)
+    assert "label" not in kinds(problem, good, facts=facts)
     bad = fig(points=pts, segments=["AB", "BC", "CA"], side_labels={"AB": "c = 13", "BC": "a = 5"})
-    assert "label" in kinds(problem, bad)
+    assert "label" in kinds(problem, bad, facts=facts)
+    # A letter the problem doesn't use is no name for a side.
+    other = fig(points=pts, segments=["AB", "BC", "CA"], side_labels={"CA": "q = 13", "AB": "a = 5"})
+    assert "the label 'q = 13' on CA names q, which the problem doesn't call that side" in messages(
+        problem, other, facts=facts)
 
 
 def test_bare_integer_label_names_a_numbered_angle() -> None:
@@ -425,7 +435,7 @@ def test_bare_integer_label_names_a_numbered_angle() -> None:
     lines = [{"through": ["A", "B"]}, {"through": ["C", "D"]}]
     assert "label" not in kinds(problem, fig(points=pts, lines=lines, angle_labels={"AOC": "1", "BOD": "3"}))
     out = messages(problem, fig(points=pts, lines=lines, angle_labels={"AOC": "1", "BOD": "3", "COB": "2"}))
-    assert "the label '2' shows 2, which is not a number in the problem" in out
+    assert "the label '2' on ∠COB shows 2, which the problem doesn't give for ∠COB" in out
 
 
 # ── Step figures ───────────────────────────────────────────────────────

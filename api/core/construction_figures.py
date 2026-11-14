@@ -19,7 +19,7 @@ import re
 from typing import Any
 
 from api.core.geometry.dsl import ConstructionFigure, is_hidden, split_points
-from api.core.geometry.facts import FACTS_TOOL, FigureFacts, as_facts
+from api.core.geometry.facts import FACTS_TOOL, FigureFacts, as_facts, unnamed_requests
 from api.core.geometry.figure_check import givens_marked, parse_problem
 from api.core.llm_client import MODEL_REASON, call_claude_json
 from api.core.llm_schemas import FIGURE_REDRAW_SCHEMA
@@ -342,6 +342,14 @@ def figure_sentence(
     reading = as_facts(facts)
     # "The givens are marked" is said only from the agreed reading.
     tail = "; the givens are marked." if reading is not None and givens_marked(fig, problem_text, reading) else "."
+    # A part asked for by description can't be checked, so it isn't drawn:
+    # the teacher is told, never left to think it was.
+    unnamed = unnamed_requests(reading) if reading is not None else []
+    if unnamed:
+        tail += (
+            f" I couldn't add {_join([f'“{u}”' for u in unnamed])}: a part can be checked only when it is named "
+            "by its points, so please name it (for example, “altitude AD with D on BC”) and ask again."
+        )
     return f"{lead}{pts}{detail}{tail}"
 
 
@@ -393,12 +401,24 @@ def failure_sentence(issues: list[str], *, step: int | None = None) -> str:
 
 
 _FIGURE_TALK = re.compile(
-    r"\b(?:diagram|figure|drawing|drew|draw|drawn|sketch|picture|illustration"
-    r"|labell?ed|labels?|tick|marks?|marked|segments?|rays?|lines?|sides?|diagonals?|vertex|vertices"
-    r"|points?|angles?|triangles?|circles?|arcs?|radius|radii|chords?|tangents?"
-    r"|connect(?:s|ed|ing)?|join(?:s|ed|ing)?|includ(?:e|es|ed|ing)|show(?:s|n|ed|ing)?|added|extend(?:s|ed)?"
-    r"|split(?:s|ting)?|divid(?:e|es|ed|ing)|appears?)\b"
+    r"\b(?:diagram|figure|drawing|drew|draw|drawn|sketch(?:ed)?|picture|illustration|image|visual"
+    r"|labell?(?:ed|ing)?|labels?|ticks?|marks?|marked|marking|arrows?|box(?:es)?|shad(?:e|ed|es|ing)"
+    r"|segments?|rays?|lines?|sides?|diagonals?|vertex|vertices|points?|angles?|triangles?|polygons?"
+    r"|quadrilaterals?|squares?|rectangles?|circles?|arcs?|sectors?|radius|radii|diameters?|chords?|tangents?"
+    r"|altitudes?|medians?|perpendiculars?|heights?|bisectors?|base|hypotenuse|legs?|transversals?"
+    r"|parallel|midpoints?|foot|feet"
+    r"|connect(?:s|ed|ing)?|join(?:s|ed|ing)?|includ(?:e|es|ed|ing)|show(?:s|n|ed|ing)?|add(?:s|ed|ing)?"
+    r"|put(?:s|ting)?|plac(?:e|es|ed|ing)|drop(?:s|ped|ping)?|insert(?:s|ed|ing)?|construct(?:s|ed|ing)?"
+    r"|extend(?:s|ed)?|split(?:s|ting)?|divid(?:e|es|ed|ing)|appears?)\b"
     r"|[∠△⊥∥≅]|\\(?:angle|triangle|overline|overrightarrow|overleftrightarrow|perp|parallel|cong)\b",
+    re.IGNORECASE,
+)
+# What the model's own reply may still say beside code's figure sentence:
+# only what it changed in the problem's words, answer or steps.
+_ABOUT_TEXT = re.compile(
+    r"\b(?:questions?|problems?|word(?:s|ed|ing)?|rework(?:ed)?|reword(?:ed)?|rewr(?:ote|itten|ite)|phras\w*"
+    r"|text|answers?|solutions?|steps?|hints?|difficult\w*|easier|harder|typos?|spelling|grammar|choices?"
+    r"|distractors?|units?|title|instructions?)\b",
     re.IGNORECASE,
 )
 # A point or part named by capitals: "B", "BD", "A'B'" (not "I", not the
@@ -407,12 +427,15 @@ _NAMED_PART = re.compile(r"(?<![A-Za-z])(?!I\b)(?!A\s+[a-z])[A-Z][0-9]*'*(?:[A-Z
 
 
 def without_figure_talk(reply: str) -> str:
-    """The model's reply minus any sentence about a figure — code writes
-    that sentence from what was drawn. The model wrote its reply before
-    anything was drawn, so a sentence naming points, segments or angles, or
-    saying it connected / included / showed something, describes intent,
-    not the result: it goes."""
+    """The model's reply with nothing about a figure — code writes that
+    sentence from what was drawn. The model wrote its reply before anything
+    was drawn, so whatever it says about the picture is intent, not the
+    result. A sentence stays only when it is about the problem's words,
+    answer or steps (an allowlist) and names no figure part, no point, and
+    no drawing verb ("I've dropped the perpendicular", "I put in the
+    altitude" go)."""
     sentences = re.split(r"(?<=[.!?])\s+", reply.strip())
     return " ".join(
-        s for s in sentences if s and not _FIGURE_TALK.search(s) and not _NAMED_PART.search(s)
+        s for s in sentences
+        if s and _ABOUT_TEXT.search(s) and not _FIGURE_TALK.search(s) and not _NAMED_PART.search(s)
     ).strip()
