@@ -74,6 +74,9 @@ def test_a_longer_command_is_refused_not_read_as_a_symbol(label: str) -> None:
     ("$3 + 4$", "3 + 4"), ("$3+ 4$", "3 + 4"), ("$(3x+14)°$", "(3x+14)°"), ("$(3x + 14) °$", "(3x + 14)°"),
     ("$a_1 + a_2$", "a₁ + a₂"), ("$a_1 +a_2$", "a₁ + a₂"), ("$x = -5$", "x = -5"), ("$3 \\times 4$", "3×4"),
     ("$\\angle ABC \\cong \\angle DEF$", "∠ABC ≅ ∠DEF"), ("$m\\angle C = 50^{\\circ}$", "m∠C = 50°"),
+    # Review round 4 (#989): a sign after · or × is a sign, not a minus.
+    ("$3\\cdot -x$", "3·-x"), ("$2\\times -3$", "2×-3"), ("$(40 - 3 \\cdot -x)^\\circ$", "(40 - 3·-x)°"),
+    ("$3 \\cdot - x$", "3·-x"), ("$x = - 5$", "x = -5"), ("$- 5$", "-5"),
 ])
 def test_one_spacing_rule_for_every_label(label: str, shown: str) -> None:
     assert plain_label(label) == shown
