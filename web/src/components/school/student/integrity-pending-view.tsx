@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { schoolStudent } from "@/lib/api";
+import { schoolStudent, type IntegrityStateResponse, type StudentSubmission } from "@/lib/api";
 
 interface Props {
   submissionId: string;
@@ -21,8 +21,14 @@ interface Props {
    *                  parent routes to the chat (or wherever the new
    *                  state dictates).
    *
-   *  Phase is detected automatically off `extraction_confirmed_at`. */
-  onReady: () => void;
+   *  Phase is detected automatically off `extraction_confirmed_at`.
+   *
+   *  Hands over what the deciding poll read, so the parent can route
+   *  without downloading the submission again — null when that poll
+   *  couldn't read the submission. */
+  onReady: (
+    latest: { submission: StudentSubmission; integrity: IntegrityStateResponse } | null,
+  ) => void;
   /** Called when the pipeline has not finished within the timeout
    *  window. The parent should show an error with a refresh action. */
   onTimeout: () => void;
@@ -115,7 +121,7 @@ export function IntegrityPendingView({
         // headed to the teacher for manual grading and there's no
         // further pipeline to wait for.
         if (sub?.extraction_flagged_at != null) {
-          onReadyRef.current();
+          onReadyRef.current(sub ? { submission: sub, integrity: state } : null);
           return;
         }
 
@@ -136,7 +142,7 @@ export function IntegrityPendingView({
           // Pre-confirm: Vision is extracting. Done = extraction
           // lands on the submission row.
           if (sub?.extraction != null) {
-            onReadyRef.current();
+            onReadyRef.current(sub ? { submission: sub, integrity: state } : null);
             return;
           }
         } else {
@@ -144,7 +150,7 @@ export function IntegrityPendingView({
           // Done = state transitions out of "extracting" (to
           // "awaiting_student" / "in_progress" / a terminal).
           if (state.overall_status !== "extracting") {
-            onReadyRef.current();
+            onReadyRef.current(sub ? { submission: sub, integrity: state } : null);
             return;
           }
         }

@@ -13,6 +13,7 @@ import {
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { parseProblemFocus, withSelectedStudent } from "@/lib/review-deep-link";
+import { createDetailCache } from "@/lib/detail-cache";
 import { MathText, mathPlainText } from "@/components/shared/math-text";
 import { Modal } from "@/components/ui/modal";
 import {
@@ -429,18 +430,45 @@ function HomeworkSectionReview({
     );
     if (next) window.history.replaceState(null, "", next);
   }, [selectedStudentId, problemFocus]);
-  // Last-fetched detail, kept as-is across switches. Staleness for
-  // the current selection is detected at render via a submission_id
-  // comparison, avoiding a setState-in-effect on every switch. Not a
-  // multi-student cache: `detail` is a single slot, so A→B→A re-fetches
-  // A. Fetch/save errors are scoped to a submissionId so a failure on
-  // one student's grade doesn't render on another student's card.
+  // The open student's detail, kept as-is across switches. Staleness
+  // for the current selection is detected at render via a
+  // submission_id comparison, avoiding a setState-in-effect on every
+  // switch. Fetch/save errors are scoped to a submissionId so a failure
+  // on one student's grade doesn't render on another student's card.
   const [detail, setDetail] = useState<TeacherSubmissionDetail | null>(null);
   // Full integrity detail (overall verdict + reasoning + transcript)
-  // is a separate endpoint from submission detail. Single-slot cache
-  // keyed off submission_id, same staleness-by-derivation pattern as
+  // is a separate endpoint from submission detail. Single slot keyed
+  // off submission_id, same staleness-by-derivation pattern as
   // `detail`. Null on: HW has integrity disabled, or no check ran.
   const [integrity, setIntegrity] = useState<TeacherIntegrityDetail | null>(null);
+  // The last few students' fetched details, so clicking back to one
+  // (A → B → A) doesn't re-download their work. Each entry is pinned
+  // to the roster row object it was fetched under: every change made
+  // from this page replaces that row, so a changed submission is a
+  // miss and refetches — a cached grade can't outlive an edit. See
+  // lib/detail-cache. Integrity is pinned to the row's integrity
+  // overview instead, and cached only once the check has finished; one
+  // still running is refetched like before.
+  const [detailCache] = useState(() => createDetailCache<TeacherSubmissionDetail>());
+  const [integrityCache] = useState(() =>
+    createDetailCache<TeacherIntegrityDetail>({
+      keep: (d) => d.overall_status === "complete" || d.overall_status === "skipped_unreadable",
+    }),
+  );
+  // Belt and braces for edits that change the open detail without
+  // touching its row (an optimistic grade or feedback edit before the
+  // save lands): once the slot no longer holds the object that came
+  // from the server, that copy is no longer what the teacher last saw.
+  useEffect(() => {
+    if (detail && !detailCache.holds(detail.submission_id, detail)) {
+      detailCache.invalidate(detail.submission_id);
+    }
+  }, [detail, detailCache]);
+  useEffect(() => {
+    if (integrity && !integrityCache.holds(integrity.submission_id, integrity)) {
+      integrityCache.invalidate(integrity.submission_id);
+    }
+  }, [integrity, integrityCache]);
   const [fetchError, setFetchError] = useState<
     { forSubmissionId: string; message: string } | null
   >(null);
@@ -703,7 +731,8 @@ function HomeworkSectionReview({
         : null,
     [roster, selectedStudentId],
   );
-  const selectedSubmissionId = selectedEntry?.submission?.id ?? null;
+  const selectedRow = selectedEntry?.submission ?? null;
+  const selectedSubmissionId = selectedRow?.id ?? null;
 
   // Detail staleness is derived, not managed: a match on submission_id
   // means the single-slot `detail` belongs to the current selection.
@@ -723,14 +752,15 @@ function HomeworkSectionReview({
   const detailLoading =
     !!selectedSubmissionId && !detailIsCurrent && currentFetchError === null;
 
-  // Fetch only when we don't already have the current selection.
+  // Fetch only when we don't already have the current selection — from
+  // the cache when this row was fetched recently and hasn't changed.
   useEffect(() => {
-    if (!selectedSubmissionId) return;
-    if (detail?.submission_id === selectedSubmissionId) return;
+    if (!selectedRow) return;
+    if (detail?.submission_id === selectedRow.id) return;
     let cancelled = false;
-    const id = selectedSubmissionId;
-    teacher
-      .submissionDetail(id)
+    const id = selectedRow.id;
+    detailCache
+      .load(id, selectedRow, () => teacher.submissionDetail(id))
       .then((d) => {
         if (cancelled) return;
         setDetail(d);
@@ -749,19 +779,25 @@ function HomeworkSectionReview({
     return () => {
       cancelled = true;
     };
-  }, [selectedSubmissionId, detail?.submission_id]);
+  }, [selectedRow, detail?.submission_id, detailCache]);
 
   // Fetch the full integrity detail in parallel. Independent of
   // submissionDetail so a missing/404 integrity record (HW had the
   // check disabled, or the pipeline never ran) doesn't block the
   // grading UI — the banner just hides.
+  //
+  // Cached against the row's integrity overview rather than the whole
+  // row: a grade save replaces the row but says nothing new about the
+  // check, while a resolution or a poll's fresh read replaces the
+  // overview. Depending on the row would refetch a 404 on every save.
+  const selectedOverview = selectedRow?.integrity_overview ?? null;
   useEffect(() => {
     if (!selectedSubmissionId) return;
     if (integrity?.submission_id === selectedSubmissionId) return;
     let cancelled = false;
     const id = selectedSubmissionId;
-    teacher
-      .integrityDetail(id)
+    integrityCache
+      .load(id, selectedOverview, () => teacher.integrityDetail(id))
       .then((d) => {
         if (cancelled) return;
         setIntegrity(d);
@@ -775,7 +811,7 @@ function HomeworkSectionReview({
     return () => {
       cancelled = true;
     };
-  }, [selectedSubmissionId, integrity?.submission_id]);
+  }, [selectedSubmissionId, selectedOverview, integrity?.submission_id, integrityCache]);
 
   const pageTitle = useMemo(() => {
     if (!hwTitle && !sectionName) return "Reviewing…";
@@ -1550,15 +1586,20 @@ function HomeworkSectionReview({
           setDetail((cur) => (cur?.submission_id === d.submission_id ? d : cur));
         }
         // Row and pane update in the same render, so the header never
-        // flashes "Not graded yet" between the two.
-        setRoster((prev) =>
-          prev
-            ? prev.map((e) => {
-                const r = e.submission && fresh.get(e.submission.id);
-                return r ? { ...e, submission: r } : e;
-              })
-            : prev,
-        );
+        // flashes "Not graded yet" between the two. A row the server
+        // reports unchanged keeps its object: no re-render of a roster
+        // that hasn't moved, and its cached detail stays valid.
+        setRoster((prev) => {
+          if (!prev) return prev;
+          let changed = false;
+          const next = prev.map((e) => {
+            const r = e.submission && fresh.get(e.submission.id);
+            if (!r || !e.submission || sameRow(r, e.submission)) return e;
+            changed = true;
+            return { ...e, submission: r };
+          });
+          return changed ? next : prev;
+        });
         for (const r of settled) {
           if (r.grading_job_status === "failed" && r.final_score === null) {
             setAiGradeError({
@@ -1588,13 +1629,33 @@ function HomeworkSectionReview({
         return;
       }
       if (!cancelled) {
-        timer = setTimeout(tick, aiGradePollDelay(Date.now() - watchSinceRef.current));
+        timer = setTimeout(run, aiGradePollDelay(Date.now() - watchSinceRef.current));
       }
     };
-    timer = setTimeout(tick, aiGradePollDelay(0));
+    // Nobody is looking at a hidden tab, so don't spend requests on it:
+    // park the next look until the tab is visible again, then look at
+    // once. Still one request at a time — a parked poll has no timer
+    // and no tick in flight, and only the listener restarts it.
+    let parked = false;
+    const run = () => {
+      if (cancelled) return;
+      if (document.hidden) {
+        parked = true;
+        return;
+      }
+      void tick();
+    };
+    const onVisibility = () => {
+      if (document.hidden || !parked) return;
+      parked = false;
+      run();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    timer = setTimeout(run, aiGradePollDelay(0));
     return () => {
       cancelled = true;
       if (timer) clearTimeout(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [polling, assignmentId, pollKick]);
 
@@ -1786,6 +1847,8 @@ function HomeworkSectionReview({
   // a published grade.
   const setRequiresDrawing = useCallback(async (bankItemId: string, next: boolean) => {
     await teacher.updateBankItem(bankItemId, { requires_drawing: next });
+    // The flag is the question's, so every cached student carries it.
+    detailCache.clear();
     setDetail((d) =>
       d
         ? {
@@ -1796,7 +1859,7 @@ function HomeworkSectionReview({
           }
         : d,
     );
-  }, []);
+  }, [detailCache]);
 
   const handleRegrade = useCallback(
     async (submissionId: string) => {
@@ -2816,6 +2879,12 @@ function isAiGrading(
 // endpoint), so it backs off: quick while a single grade is likely to
 // land, slower once it's clearly a class-sized batch.
 const AI_GRADE_POLL_TIMEOUT_MS = 4 * 60 * 1000;
+// Whether a poll's fresh read of a row says anything the page doesn't
+// already have. Whole-row comparison on purpose: a list of "the fields
+// that matter" is a list someone forgets to extend.
+function sameRow(a: TeacherSubmissionRow, b: TeacherSubmissionRow): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
 function aiGradePollDelay(elapsedMs: number): number {
   if (elapsedMs < 20_000) return 3000;
   if (elapsedMs < 60_000) return 5000;
