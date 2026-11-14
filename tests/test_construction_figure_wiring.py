@@ -1,0 +1,645 @@
+"""Construction figures in the product: the one retry, step figures, what
+the teacher is told in the workshop chat, the missing-figure rule, and the
+prompts."""
+
+from __future__ import annotations
+
+from types import SimpleNamespace
+from typing import Any
+from unittest.mock import AsyncMock, patch
+
+import pytest
+from sqlalchemy import select
+
+import api.core.question_bank_generation as qbg
+from api.core import assignment_generation
+from api.core.construction_figures import failure_sentence, figure_sentence
+from api.core.geometry.facts import Fact, FigureFacts, Part, Target
+from api.core.question_bank_chat import _chat_system_prompt, _construction_reply
+from api.database import get_session_factory
+from api.models.course import Course
+from api.models.question_bank import QuestionBankItem
+
+PROBLEM = (
+    r"Given $\overline{AB} \parallel \overline{CD}$ and $\overline{AB} \cong \overline{CD}$. "
+    r"Prove $\overline{AD} \cong \overline{BC}$."
+)
+GOOD = {
+    "type": "geometry", "shape": "construction",
+    "points": {"A": [0, 0], "B": [4, 0], "C": [5, 3], "D": [1, 3]},
+    "segments": ["AB", "BC", "CD", "DA"],
+    "parallel_groups": [["AB", "DC"]], "tick_groups": [["AB", "DC"]],
+}
+BAD = {**GOOD, "points": {"A": [0, 0], "B": [4, 0], "C": [5, 3], "D": [0, 3]}}  # CD longer than AB
+# PROBLEM's agreed reading (what the two AI readings would return).
+READING = FigureFacts(
+    points=["A", "B", "C", "D"], segments=["AB", "CD", "AD", "BC"],
+    givens=[Fact(kind="parallel", items=["AB", "CD"]), Fact(kind="congruent_segments", items=["AB", "CD"])],
+    prove=[Fact(kind="congruent_segments", items=["AD", "BC"])],
+)
+READINGS: dict[str, FigureFacts] = {
+    PROBLEM + r" Prove $\triangle ABC \cong \triangle CDA$.": READING.model_copy(update={
+        "triangles": ["ABC", "CDA"],
+        "prove": [*READING.prove, Fact(kind="congruent_triangles", items=["ABC", "CDA"])],
+    }),
+    "Find $BD$ in quadrilateral $ABCD$.": FigureFacts(
+        points=["A", "B", "C", "D"], polygons=["ABCD"], find=[Target(kind="segment", item="BD")],
+        requested=[Part(kind="segment", item="BD")],
+    ),
+}
+
+
+@pytest.fixture(autouse=True)
+def _read_problems() -> Any:
+    """The AI reading is stubbed: these tests are about the wiring."""
+    async def read(text: str, **_kw: Any) -> tuple[FigureFacts, list[str]]:
+        return READINGS.get(text, READING), []
+
+    with patch.object(qbg, "read_figure_facts", AsyncMock(side_effect=read)) as m:
+        yield m
+
+
+# ── The one retry ──────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_failing_figure_gets_one_retry_with_the_checkers_errors() -> None:
+    redraw = AsyncMock(return_value=GOOD)
+    with patch.object(qbg, "redraw_figure", redraw):
+        spec, svg, issues, _ = await qbg._resolve_figure_with_retry(BAD, PROBLEM, mode="bank_chat", user_id=None)
+    assert spec == GOOD and svg and issues == []
+    redraw.assert_awaited_once()
+    sent_issues = redraw.await_args.args[2]
+    assert any("AB ≅ CD is not true" in m for m in sent_issues), sent_issues
+    assert redraw.await_args.kwargs["mode"] == "bank_chat"
+
+
+@pytest.mark.asyncio
+async def test_second_failure_saves_no_figure_and_says_why() -> None:
+    redraw = AsyncMock(return_value=BAD)
+    with patch.object(qbg, "redraw_figure", redraw):
+        spec, svg, issues, _ = await qbg._resolve_figure_with_retry(BAD, PROBLEM, mode="bank_chat", user_id=None)
+    assert (spec, svg) == (None, None)
+    assert any("AB ≅ CD is not true" in m for m in issues)
+    redraw.assert_awaited_once()  # one retry, never two
+
+
+@pytest.mark.asyncio
+async def test_passing_figure_and_old_shapes_get_no_retry(_read_problems: Any) -> None:
+    redraw = AsyncMock()
+    with patch.object(qbg, "redraw_figure", redraw):
+        _spec, svg, issues, _ = await qbg._resolve_figure_with_retry(GOOD, PROBLEM, mode="m", user_id=None)
+        assert svg and issues == []
+        bad_triangle = {"type": "geometry", "shape": "triangle", "vertices": ["A", "B", "C"],
+                        "side_lengths": {"AB": 1, "BC": 1, "CA": 5}}
+        await qbg._resolve_figure_with_retry(bad_triangle, "", mode="m", user_id=None)
+    # An old shape is not a construction: the problem isn't read for it.
+    assert _read_problems.await_count == 1
+    redraw.assert_not_awaited()
+
+
+def test_derived_marks_are_removed_from_a_question_figure() -> None:
+    problem = PROBLEM + r" Prove $\triangle ABC \cong \triangle CDA$."
+    with_arcs = {**GOOD, "segments": [*GOOD["segments"], "AC"], "arc_groups": [["BAC", "DCA"]]}
+    spec, svg, issues = qbg._check_figure(
+        with_arcs, problem, final_answer="", request="", step_text=None, base=None, facts=READINGS[problem],
+    )
+    assert issues == [] and svg
+    assert spec is not None and spec["arc_groups"] == []
+    assert spec["tick_groups"] == [["AB", "DC"]]
+
+
+# ── Step figures ───────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_step_figure_that_moves_a_point_is_retried_then_dropped() -> None:
+    moved = {**GOOD, "points": {**GOOD["points"], "D": [1.5, 3]}, "segments": [*GOOD["segments"], "AC"]}
+    kept = {**GOOD, "segments": [*GOOD["segments"], "AC"]}
+    steps = [{"title": "Draw AC", "description": "Draw the diagonal AC.", "figure_spec": moved}]
+
+    redraw = AsyncMock(return_value=kept)
+    with patch.object(qbg, "redraw_figure", redraw):
+        out, drops, _ = await qbg._render_step_figures_with_retry(
+            steps, question_text=PROBLEM, question_spec=GOOD, mode="m", user_id=None,
+        )
+    assert drops == {} and out[0]["figure_svg"]
+    assert any("point D is not where" in m for m in redraw.await_args.args[2])
+
+    redraw = AsyncMock(return_value=moved)
+    with patch.object(qbg, "redraw_figure", redraw):
+        out, drops, _ = await qbg._render_step_figures_with_retry(
+            steps, question_text=PROBLEM, question_spec=GOOD, mode="m", user_id=None,
+        )
+    assert "figure_svg" not in out[0] and out[0]["description"] == "Draw the diagonal AC."
+    assert any("point D is not where the question's figure puts it" in m for m in drops[1])
+
+
+@pytest.mark.asyncio
+async def test_step_figure_must_keep_the_questions_pieces() -> None:
+    fewer = {**GOOD, "segments": ["AB", "CD"], "tick_groups": [], "parallel_groups": []}
+    steps = [{"title": "s", "description": "Use the parallel sides.", "figure_spec": fewer}]
+    with patch.object(qbg, "redraw_figure", AsyncMock(return_value=None)):
+        _out, drops, _ = await qbg._render_step_figures_with_retry(
+            steps, question_text=PROBLEM, question_spec=GOOD, mode="m", user_id=None,
+        )
+    assert any("leaves out BC" in m for m in drops[1])
+
+
+# ── What the teacher is told ───────────────────────────────────────────
+
+
+def test_figure_sentence_is_written_from_what_was_drawn() -> None:
+    spec = {**GOOD, "segments": [*GOOD["segments"], "AC"]}
+    said = figure_sentence(spec, "can you provide the drawing?", updated=False, problem_text=PROBLEM, facts=READING)
+    assert said == (
+        "I've added a diagram with points A, B, C and D, with AC drawn; the givens are marked."
+    )
+    plain = {k: v for k, v in GOOD.items() if k not in ("tick_groups", "parallel_groups")}
+    assert figure_sentence(plain, "draw it", updated=True) == "I've updated the diagram with points A, B, C and D."
+
+
+def test_figure_sentence_names_the_parts_the_teacher_asked_for() -> None:
+    spec = {
+        "type": "geometry", "shape": "construction",
+        "points": {"W": [0, 3], "X": [0, 0], "M": [2, 0], "Y": [4, 0], "Z": [4, 3]},
+        "segments": ["WX", "XY", "YZ", "WM", "ZM"],
+    }
+    out = figure_sentence(spec, "include segments WM and ZM", updated=False)
+    assert out == "I've added a diagram with points W, X, M, Y and Z, with MW and MZ drawn."
+
+
+def test_failure_sentence() -> None:
+    assert failure_sentence(["the given AB ∥ CD is not true in the drawing"]) == (
+        "I couldn't draw a correct diagram: the given AB ∥ CD is not true in the drawing."
+    )
+    assert failure_sentence(["a", "b", "c", "d", "e"], step=2) == (
+        "I couldn't draw the diagram for step 2: a; b; c; d; and more."
+    )
+
+
+def _item(**kw: Any) -> Any:
+    return SimpleNamespace(**{"figure_spec": None, "figure_svg": None, "question": PROBLEM, **kw})
+
+
+def test_chat_reply_replaces_the_models_figure_talk() -> None:
+    proposal = {"figure_spec": GOOD, "figure_svg": "<svg/>", "figure_facts": READING.model_dump()}
+    out = _construction_reply(
+        "Sure! Here's the drawing with diagonal AC drawn.", proposal, _item(), "can you provide the drawing?",
+        PROBLEM, top_construction=True, top_issues=[], step_drops={},
+    )
+    # "Sure!" says nothing about the problem's words, answer or steps: only
+    # code's sentence is left.
+    assert out == "I've added a diagram with points A, B, C and D; the givens are marked."
+
+
+def test_chat_reply_when_the_figure_fails_and_nothing_else_changes() -> None:
+    out = _construction_reply(
+        "Here's the diagram.", None, _item(), "draw it", PROBLEM,
+        top_construction=True, top_issues=["the given AB ≅ CD is not true in the drawing"], step_drops={},
+    )
+    assert out == (
+        "I couldn't draw a correct diagram: the given AB ≅ CD is not true in the drawing. Nothing was changed."
+    )
+
+
+def test_chat_reply_never_claims_a_figure_that_wasnt_drawn() -> None:
+    out = _construction_reply(
+        "I've added a diagram showing the parallel lines. The answer is 12.", {"final_answer": "12"}, _item(),
+        "fix it", PROBLEM, top_construction=False, top_issues=[], step_drops={},
+    )
+    assert "added a diagram" not in out
+    assert out == "The answer is 12.\n\nNo diagram was added."
+
+
+def test_chat_reply_reports_a_dropped_step_figure() -> None:
+    proposal = {"solution_steps": [{"title": "s1"}, {"title": "s2"}]}
+    out = _construction_reply(
+        "I added a diagram to step 2. The steps are clearer now.", proposal, _item(), "add a step diagram",
+        PROBLEM, top_construction=False, top_issues=[],
+        step_drops={2: ["point D is not where the question's figure puts it"]},
+    )
+    # The model's "The steps are clearer now." is not shown: code says what
+    # changed, from the proposal.
+    assert out == (
+        "I rewrote the solution steps.\n\nI couldn't draw the diagram for step 2: point D is not where the "
+        "question's figure puts it. That step is shown without one."
+    )
+
+
+def test_chat_reply_flags_a_problem_that_points_at_a_missing_figure() -> None:
+    """Prod 985bff41: "In the figure below…" with no figure."""
+    question = r"In the figure below, $\overrightarrow{OA}$ and $\overrightarrow{OD}$ are opposite rays."
+    out = _construction_reply(
+        "I tidied the wording.", {"question": question}, _item(question=question), "tidy it",
+        question, top_construction=False, top_issues=[], step_drops={},
+    )
+    assert out.endswith("This problem refers to a figure, and it doesn't have one yet.")
+    with_figure = _construction_reply(
+        "I tidied the wording.", None, _item(question=question, figure_svg="<svg/>"), "tidy it",
+        question, top_construction=False, top_issues=[], step_drops={},
+    )
+    assert "refers to a figure" not in with_figure
+
+
+# ── Regenerate: a problem that points at a figure it can't have ────────
+
+
+@pytest.mark.asyncio
+async def test_regenerate_refuses_a_problem_pointing_at_a_missing_figure() -> None:
+    from tests.test_single_answer_practice import _world
+
+    w = await _world("homework")
+    async with get_session_factory()() as s:
+        item = QuestionBankItem(
+            course_id=w["course"], unit_id=w["unit"], originating_assignment_id=w["assignment"],
+            title="t", question="old", final_answer="1", status="approved", source="generated",
+        )
+        s.add(item)
+        await s.commit()
+        item_id = item.id
+    call = AsyncMock(return_value={
+        "title": "t", "question": r"In the figure below, find $m\angle ABC$.",
+        "solution_steps": [], "final_answer": "40°",
+    })
+    with patch("api.core.question_bank_generation.call_claude_json", call):
+        async with get_session_factory()() as s:
+            item = (await s.execute(select(QuestionBankItem).where(QuestionBankItem.id == item_id))).scalar_one()
+            course = (await s.execute(select(Course).where(Course.id == w["course"]))).scalar_one()
+            with pytest.raises(RuntimeError, match="refers to a figure that couldn't be drawn"):
+                await qbg.regenerate_one(s, item, course, instructions=None, user_id=w["teacher"])
+    async with get_session_factory()() as s:
+        item = (await s.execute(select(QuestionBankItem).where(QuestionBankItem.id == item_id))).scalar_one()
+        assert item.question == "old"
+
+
+# ── The prompts ────────────────────────────────────────────────────────
+
+
+def test_prompts_teach_the_construction_format() -> None:
+    chat = _chat_system_prompt("math professor")
+    assert '"shape": "construction"' in chat and "<<FIGURES>>" not in chat
+    assert '"shape": "construction"' in assignment_generation._build_question_generation_prompt("math")
+
+
+# ── The retry call itself ──────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_redraw_prompt_is_the_same_whatever_the_key_order() -> None:
+    """A recorded spec comes back from its cassette with sorted keys; the
+    retry's prompt must not change with key order, or a replay misses."""
+    from api.core import construction_figures
+
+    call = AsyncMock(return_value={"figure_spec": GOOD})
+    with patch.object(construction_figures, "call_claude_json", call):
+        await construction_figures.redraw_figure(PROBLEM, GOOD, ["x"], mode="m", user_id=None)
+        await construction_figures.redraw_figure(
+            PROBLEM, dict(reversed(list(GOOD.items()))), ["x"], mode="m", user_id=None,
+        )
+    first, second = (c.args[1] for c in call.await_args_list)
+    assert first == second
+
+
+@pytest.mark.asyncio
+async def test_redraw_uses_the_same_model_and_mode_with_room_to_work() -> None:
+    from api.core import construction_figures
+    from api.core.llm_client import MODEL_REASON
+
+    call = AsyncMock(return_value={"figure_spec": GOOD})
+    with patch.object(construction_figures, "call_claude_json", call):
+        out = await construction_figures.redraw_figure(PROBLEM, BAD, ["the given AB ≅ CD is not true"],
+                                                       mode="bank_chat", user_id=None)
+    assert out == GOOD
+    kwargs = call.await_args.kwargs
+    assert kwargs["mode"] == "bank_chat" and kwargs["model"] == MODEL_REASON
+    assert kwargs["thinking_budget"] >= 1024 and kwargs["max_tokens"] > kwargs["thinking_budget"]
+    assert "the given AB ≅ CD is not true" in call.await_args.args[1]
+
+
+# ── Review round 1 ─────────────────────────────────────────────────────
+#
+# Each test failed before the round-1 fix it names, and fails again with
+# that fix reverted.
+
+
+def test_round1_figure_talk_naming_parts_is_dropped() -> None:
+    """Finding 6a: the model writes before anything is drawn, so when the
+    proposal has a figure none of its words are shown (round 3 replaced the
+    word filter with a reply written by code)."""
+    proposal = {"figure_spec": GOOD, "figure_svg": "<svg/>", "figure_facts": READING.model_dump()}
+    for said in (
+        "I connected B to D and put angle 1 at E.",
+        "I've included the diagonal BD so students can see both triangles.",
+        "Now BD splits the square into two triangles, with the right angle at C shown.",
+        "The diagonal BD now appears too.",
+        "Now BD and AC cross at E.",
+        "I've included the diagonal so students can see both triangles.",
+        "I extended it past the top so it's easier to see.",
+    ):
+        out = _construction_reply(said + " I also tightened the wording.", proposal, _item(), "draw it", PROBLEM,
+                                  top_construction=True, top_issues=[], step_drops={})
+        assert out == "I've added a diagram with points A, B, C and D; the givens are marked.", said
+
+
+def test_round1_parts_the_teacher_asks_to_connect_must_be_drawn() -> None:
+    """Finding 6b: "connect B and D", "from B to D", "diagonal BD" are required."""
+    from api.core.geometry.figure_check import parse_problem
+
+    for request in ("Please connect B and D.", "connect B to D", "draw a segment from B to D", "with diagonal BD",
+                    "join points B and D"):
+        assert frozenset("BD") in parse_problem("", extra=request).segments, request
+    rect = {k: v for k, v in GOOD.items() if k not in ("tick_groups", "parallel_groups")}
+    text = "Find $BD$ in quadrilateral $ABCD$."
+    _spec, svg, issues = qbg._check_figure(rect, text, request="connect B and D", facts=READINGS[text])
+    assert svg is None and "not drawn: BD" in issues
+
+
+def test_round1_reply_never_claims_a_connection_it_didnt_draw() -> None:
+    """Finding 6c: with no figure in the proposal, "I connected B to D" is a
+    false claim."""
+    out = _construction_reply(
+        "Done — I connected B to D with the diagonal BD. The answer is 5.", {"final_answer": "5"}, _item(),
+        "connect B to D", PROBLEM, top_construction=False, top_issues=[], step_drops={},
+    )
+    assert out == "The answer is 5.\n\nNo diagram was added."
+
+
+def test_round1_givens_are_marked_only_when_all_are() -> None:
+    """Finding 7: one of two givens marked is not "the givens are marked"."""
+    half = {**GOOD, "tick_groups": []}
+    assert figure_sentence(half, "draw it", updated=False, problem_text=PROBLEM, facts=READING) == (
+        "I've added a diagram with points A, B, C and D."
+    )
+    said = figure_sentence(GOOD, "draw it", updated=False, problem_text=PROBLEM, facts=READING)
+    assert said.endswith("; the givens are marked.")
+
+
+@pytest.mark.parametrize(("name", "junk"), [
+    ("tick_groups", []), ("tick_groups", ["AB"]), ("tick_groups", ["BC", "CB"]),
+    ("arc_groups", []), ("arc_groups", ["ABC"]), ("arc_groups", ["ABC", "CBA"]),
+    ("parallel_groups", []), ("parallel_groups", ["BC"]),
+])
+def test_round1_empty_mark_group_is_dropped_not_a_crash(name: str, junk: list[str]) -> None:
+    """Finding 9: an empty group crashed the step checks with max([]). A
+    group that ties fewer than two parts claims nothing: it is dropped and
+    the figure is checked as usual (question and step alike); the DSL
+    rejects any that reach it (test_figure_check)."""
+    spec = {**GOOD, name: [*GOOD.get(name, []), junk]}
+    kept, svg, issues = qbg._check_figure(spec, PROBLEM, facts=READING)
+    assert svg and issues == [] and kept is not None and junk not in kept[name]
+    out = qbg._render_step_figures(
+        [{"title": "t", "description": "d", "figure_spec": spec, "figure_facts": READING.model_dump()}],
+        question_text=PROBLEM, question_spec=GOOD,
+    )
+    assert out[0]["figure_svg"]
+
+
+def test_round1_a_checker_crash_drops_the_figure_with_a_reason() -> None:
+    """Finding 9: any checker exception drops the figure, never passes it,
+    and never crashes the caller."""
+    def boom(*_a: Any, **_k: Any) -> Any:
+        raise RuntimeError("a checker bug")
+
+    for target in ("check_construction", "unbacked_marks"):
+        with patch.object(qbg, target, boom):
+            spec, svg, issues = qbg._check_figure(GOOD, PROBLEM, facts=READING)
+        assert (spec, svg) == (None, None) and issues == [qbg._CHECK_CRASHED], target
+
+
+@pytest.mark.asyncio
+async def test_round1_checker_crash_gets_no_pointless_retry() -> None:
+    """A redraw can't fix a checker crash: no second model call."""
+    redraw = AsyncMock(return_value=GOOD)
+    with patch.object(qbg, "redraw_figure", redraw), patch.object(qbg, "check_construction", side_effect=RuntimeError):
+        _s, svg, issues, _ = await qbg._resolve_figure_with_retry(GOOD, PROBLEM, mode="m", user_id=None)
+    assert svg is None and issues == [qbg._CHECK_CRASHED]
+    redraw.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_round1_problem_whose_figure_is_dropped_after_solving_is_left_out() -> None:
+    """Finding 8: the post-solve answer check dropped the figure of "In the
+    figure below …" and the problem shipped without it; now the
+    missing-figure rule runs again and leaves it out."""
+    import uuid
+
+    from api.core.auth import hash_password
+    from api.core.geometry.figure_check import FigureIssue
+    from api.models.assignment import Assignment
+    from api.models.question_bank import QuestionBankGenerationJob
+    from api.models.unit import Unit
+    from api.models.user import User
+
+    tag = uuid.uuid4().hex[:6]
+    async with get_session_factory()() as s:
+        teacher = User(
+            email=f"t_{tag}@t.com", password_hash=hash_password("x"), grade_level=12, role="teacher", name="T",
+        )
+        course = Course(name="Geometry", subject="math")
+        s.add_all([teacher, course])
+        await s.flush()
+        unit = Unit(course_id=course.id, name="Unit 3", position=0)
+        s.add(unit)
+        await s.flush()
+        hw = Assignment(course_id=course.id, unit_ids=[unit.id], teacher_id=teacher.id, title="Proofs",
+                        type="homework", status="draft")
+        s.add(hw)
+        await s.flush()
+        job = QuestionBankGenerationJob(course_id=course.id, unit_id=unit.id, originating_assignment_id=hw.id,
+                                        created_by_id=teacher.id, status="queued", requested_count=2)
+        s.add(job)
+        await s.commit()
+        job_id, course_id = job.id, course.id
+
+    with_figure = {"title": "f", "text": "In the figure below, " + PROBLEM, "difficulty": "easy", "figure_spec": GOOD}
+    plain = {"title": "p", "text": "What is 2 + 2?", "difficulty": "easy"}
+
+    def check(_fig: Any, _text: str, *, final_answer: str = "", **_kw: Any) -> list[FigureIssue]:
+        # Passes before solving; the answer, once known, is on the figure.
+        return [FigureIssue("label", "the label '4' gives away the answer")] if final_answer else []
+
+    with (
+        patch.object(qbg, "generate_questions", AsyncMock(return_value=[with_figure, plain])),
+        patch.object(qbg, "generate_solutions", AsyncMock(return_value=[
+            {"question_text": "f", "steps": [], "final_answer": "4"},
+            {"question_text": "p", "steps": [], "final_answer": "4"},
+        ])),
+        patch.object(qbg, "generate_distractors", AsyncMock(return_value=[])),
+        patch.object(qbg, "check_construction", check),
+    ):
+        async with get_session_factory()() as s:
+            job = (await s.execute(
+                select(QuestionBankGenerationJob).where(QuestionBankGenerationJob.id == job_id)
+            )).scalar_one()
+            await qbg._run_generation(s, job)
+    async with get_session_factory()() as s:
+        query = select(QuestionBankItem).where(QuestionBankItem.course_id == course_id)
+        items = (await s.execute(query)).scalars().all()
+    assert [i.question for i in items] == ["What is 2 + 2?"]
+
+
+# ── The agreed reading (two AI readings checked by code) ───────────────
+
+
+def test_a_construction_without_a_reading_is_never_drawn() -> None:
+    """No reading, nothing to check the figure against: no figure, a plain
+    reason (fail closed), however right the drawing is."""
+    spec, svg, issues = qbg._check_figure(GOOD, PROBLEM)
+    assert (spec, svg) == (None, None) and issues == [qbg._NOT_READ]
+    assert qbg._check_figure(GOOD, PROBLEM, facts={"givens": "junk"})[1] is None  # a stored reading that won't parse
+    assert qbg._check_figure(GOOD, PROBLEM, facts=READING)[1]
+
+
+@pytest.mark.asyncio
+async def test_an_untrusted_reading_means_no_figure_and_no_redraw(_read_problems: Any) -> None:
+    why = ["two readings of the problem disagree (AB ∥ CD in one only), so the figure can't be checked"]
+    _read_problems.side_effect = None
+    _read_problems.return_value = (None, why)
+    redraw = AsyncMock(return_value=GOOD)
+    with patch.object(qbg, "redraw_figure", redraw):
+        spec, svg, issues, reading = await qbg._resolve_figure_with_retry(GOOD, PROBLEM, mode="m", user_id=None)
+        out, drops, step_reading = await qbg._render_step_figures_with_retry(
+            [{"title": "t", "description": "d", "figure_spec": GOOD}], question_text=PROBLEM, question_spec=GOOD,
+            mode="m", user_id=None,
+        )
+    assert (spec, svg, reading, step_reading) == (None, None, None, None) and issues == why
+    assert "figure_svg" not in out[0] and drops == {1: why}
+    redraw.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_the_figure_is_checked_against_the_reading_and_returns_it(_read_problems: Any) -> None:
+    """The checker measures the drawing against the reading's facts, not the
+    wording: a reading that says AB ⊥ CD fails the parallelogram."""
+    spec, svg, issues, reading = await qbg._resolve_figure_with_retry(GOOD, PROBLEM, mode="m", user_id=None)
+    assert svg and issues == [] and reading == READING
+    perp = READING.model_copy(update={"givens": [Fact(kind="perpendicular", items=["AB", "CD"])]})
+    with patch.object(qbg, "redraw_figure", AsyncMock(return_value=None)):
+        _s, svg, issues, _r = await qbg._resolve_figure_with_retry(
+            GOOD, PROBLEM, mode="m", user_id=None, facts=perp,
+        )
+    assert svg is None and any("AB ⊥ CD is not true" in m for m in issues), issues
+    assert _read_problems.await_count == 1  # facts in hand: not read again
+
+
+@pytest.mark.asyncio
+async def test_the_retry_is_shown_the_facts() -> None:
+    from api.core import construction_figures
+
+    call = AsyncMock(return_value={"figure_spec": GOOD})
+    with patch.object(construction_figures, "call_claude_json", call):
+        await construction_figures.redraw_figure(PROBLEM, BAD, ["x"], mode="m", user_id=None, facts=READING)
+    sent = call.await_args.args[1]
+    assert "The facts the figure is checked against" in sent and '"congruent_segments"' in sent
+
+
+def test_givens_are_never_said_marked_without_a_reading() -> None:
+    assert figure_sentence(GOOD, "draw it", updated=False, problem_text=PROBLEM) == (
+        "I've added a diagram with points A, B, C and D."
+    )
+
+
+async def test_accept_stores_the_reading_and_undo_restores_it(client: Any, world: dict[str, Any]) -> None:
+    """The reading travels with the figure: saved on accept, put back (with
+    the figure) by Undo. An old proposal without one gets no figure."""
+    from sqlalchemy import text
+
+    from api.models.course import CourseTeacher
+
+    item_id = world["pending_sibling_id"]
+    hdr = {"Authorization": f"Bearer {world['teacher_token']}"}
+    async with get_session_factory()() as s:
+        course_id = (await s.execute(
+            text("SELECT course_id FROM assignments WHERE id=:id"), {"id": world["assignment_id"]},
+        )).scalar_one()
+        s.add(CourseTeacher(course_id=course_id, teacher_id=world["teacher_id"], role="owner"))
+        item = await s.get(QuestionBankItem, item_id)
+        assert item is not None
+        item.question = PROBLEM
+        item.chat_messages = [
+            {"role": "teacher", "text": "draw it"},
+            {"role": "ai", "text": "ok", "proposal": {"figure_spec": GOOD, "figure_facts": READING.model_dump()}},
+            {"role": "ai", "text": "ok", "proposal": {"figure_spec": GOOD}},
+        ]
+        await s.commit()
+
+    r = await client.post(f"/v1/teacher/question-bank/{item_id}/chat/accept", json={"message_index": 1}, headers=hdr)
+    assert r.status_code == 200, r.text
+    async with get_session_factory()() as s:
+        item = await s.get(QuestionBankItem, item_id)
+        assert item is not None and item.figure_svg and item.figure_facts == READING.model_dump()
+
+    r = await client.post(f"/v1/teacher/question-bank/{item_id}/revert", headers=hdr)
+    assert r.status_code == 200, r.text
+    async with get_session_factory()() as s:
+        item = await s.get(QuestionBankItem, item_id)
+        assert item is not None and item.figure_svg is None and item.figure_facts is None
+
+    # Re-accept the first (it comes back), then the old one without a reading.
+    async with get_session_factory()() as s:
+        item = await s.get(QuestionBankItem, item_id)
+        assert item is not None
+        item.chat_messages = [{**m, "accepted": False, "superseded": False} for m in item.chat_messages or []]
+        await s.commit()
+    await client.post(f"/v1/teacher/question-bank/{item_id}/chat/accept", json={"message_index": 1}, headers=hdr)
+    r = await client.post(f"/v1/teacher/question-bank/{item_id}/chat/accept", json={"message_index": 2}, headers=hdr)
+    assert r.status_code == 200, r.text
+    async with get_session_factory()() as s:
+        item = await s.get(QuestionBankItem, item_id)
+        assert item is not None and item.figure_svg is None and item.figure_facts is None
+        assert item.previous_figure_facts == READING.model_dump()  # Undo would bring it back
+
+
+def test_the_chat_is_shown_the_facts_the_figures_are_checked_against() -> None:
+    from api.core.question_bank_chat import _figure_context
+
+    with_facts = _figure_context(_item(figure_spec=GOOD, figure_facts=READING.model_dump(), chat_messages=[]))
+    assert "checked against" in with_facts and '"congruent_segments"' in with_facts
+    assert "checked against" not in _figure_context(_item(figure_spec=GOOD, figure_facts=None, chat_messages=[]))
+
+
+async def test_accept_checks_a_step_figure_against_the_steps_own_facts(client: Any, world: dict[str, Any]) -> None:
+    """Round 3 (p9): accept re-checks each step figure against the facts the
+    chat read for that step, stored on the step; a step without them keeps
+    no figure."""
+    from sqlalchemy import text
+
+    from api.models.course import CourseTeacher
+
+    item_id = world["pending_sibling_id"]
+    hdr = {"Authorization": f"Bearer {world['teacher_token']}"}
+    kept = {**GOOD, "segments": [*GOOD["segments"], "AC"]}
+    step = {"title": "Draw AC", "description": "Draw the diagonal AC.", "figure_spec": kept}
+    async with get_session_factory()() as s:
+        course_id = (await s.execute(
+            text("SELECT course_id FROM assignments WHERE id=:id"), {"id": world["assignment_id"]},
+        )).scalar_one()
+        s.add(CourseTeacher(course_id=course_id, teacher_id=world["teacher_id"], role="owner"))
+        item = await s.get(QuestionBankItem, item_id)
+        assert item is not None
+        item.question = PROBLEM
+        item.figure_spec, item.figure_facts = GOOD, READING.model_dump()
+        item.chat_messages = [
+            {"role": "teacher", "text": "add a step figure"},
+            {"role": "ai", "text": "ok", "proposal": {
+                "solution_steps": [{**step, "figure_facts": READING.model_dump()}]}},
+            {"role": "ai", "text": "ok", "proposal": {"solution_steps": [step]}},
+        ]
+        await s.commit()
+
+    r = await client.post(f"/v1/teacher/question-bank/{item_id}/chat/accept", json={"message_index": 1}, headers=hdr)
+    assert r.status_code == 200, r.text
+    async with get_session_factory()() as s:
+        item = await s.get(QuestionBankItem, item_id)
+        assert item is not None and item.solution_steps
+        first = item.solution_steps[0]
+        assert first.get("figure_svg") and first["figure_facts"] == READING.model_dump()
+        item.chat_messages = [{**m, "accepted": False, "superseded": False} for m in item.chat_messages or []]
+        await s.commit()
+    r = await client.post(f"/v1/teacher/question-bank/{item_id}/chat/accept", json={"message_index": 2}, headers=hdr)
+    assert r.status_code == 200, r.text
+    async with get_session_factory()() as s:
+        item = await s.get(QuestionBankItem, item_id)
+        assert item is not None and item.solution_steps
+        assert "figure_svg" not in item.solution_steps[0]

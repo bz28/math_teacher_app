@@ -388,6 +388,128 @@ _FIGURE_SCHEMA: dict[str, Any] = {
 }
 
 
+# Construction figure (api/core/geometry/dsl.py ConstructionFigure): named
+# points at exact coordinates plus what to draw and mark. Code draws it and
+# checks it against the problem (api/core/geometry/figure_check.py). The
+# generation, regenerate and workshop-chat schemas below take it in place of
+# the shape forms above (those still validate figures already stored).
+_POINT_PAIR = "Two point names run together, e.g. 'AC' or \"A'C'\"."
+_ANGLE_REF = "Three point names 'XVY': the angle at V between rays VX and VY."
+_ARC_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "center": {"type": "string"},
+        "endpoints": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 2},
+    },
+    "required": ["center", "endpoints"],
+}
+_CONSTRUCTION_FIGURE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "description": (
+        "A figure built from named points at exact coordinates. Code draws it "
+        "and checks it against the problem, so coordinates must make every "
+        "given (and the statement to prove) exactly true."
+    ),
+    "properties": {
+        "type": {"type": "string", "enum": ["geometry"]},
+        "shape": {"type": "string", "enum": ["construction"]},
+        "points": {
+            "type": "object",
+            "description": (
+                "Point name -> [x, y] (x right, y up). Use the problem's names. A "
+                "helper point needed only to place a line gets a name starting "
+                "with '_' then lowercase letters or digits (e.g. '_p1'); it is never drawn or labelled."
+            ),
+            "additionalProperties": {"type": "array", "items": {"type": "number"}, "minItems": 2, "maxItems": 2},
+        },
+        "segments": {"type": "array", "items": {"type": "string"}, "description": f"Segments to draw. {_POINT_PAIR}"},
+        "rays": {"type": "array", "items": {"type": "string"}, "description": "Rays: 'OA' = from O through A."},
+        "lines": {
+            "type": "array",
+            "description": "Full lines through two points; set `name` for a named line (p, q, t, ell_1).",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "through": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 2},
+                },
+                "required": ["through"],
+            },
+        },
+        "circles": {
+            "type": "array",
+            "description": "Circles by center and EITHER radius OR a point they pass through.",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "center": {"type": "string"},
+                    "radius": {"type": "number"},
+                    "through": {"type": "string"},
+                },
+                "required": ["center"],
+            },
+        },
+        "arcs": {
+            "type": "array",
+            "items": _ARC_SCHEMA,
+            "description": "Minor arcs of the circle about `center` between two points on it.",
+        },
+        "sectors": {"type": "array", "items": _ARC_SCHEMA, "description": "Minor sectors (outlined, lightly filled)."},
+        "shaded": {
+            "type": "array",
+            "description": "Lightly shaded regions: a polygon by its corner points, or a sector.",
+            "items": {
+                "type": "object",
+                "properties": {"polygon": {"type": "array", "items": {"type": "string"}}, "sector": _ARC_SCHEMA},
+            },
+        },
+        "tick_groups": {
+            "type": "array",
+            "items": {"type": "array", "items": {"type": "string"}, "minItems": 2},
+            "description": "Groups of congruent segments; the first group gets 1 tick, the second 2, ...",
+        },
+        "arc_groups": {
+            "type": "array",
+            "items": {"type": "array", "items": {"type": "string"}, "minItems": 2},
+            "description": f"Groups of congruent angles; first group 1 arc, second 2, ... {_ANGLE_REF}",
+        },
+        "right_angles": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": f"Right-angle boxes. {_ANGLE_REF}",
+        },
+        "parallel_groups": {
+            "type": "array",
+            "items": {"type": "array", "items": {"type": "string"}, "minItems": 2},
+            "description": "Groups of parallel segments (or line names); first group 1 arrow, second 2, ...",
+        },
+        "angle_labels": {
+            "type": "object",
+            "additionalProperties": {"type": "string"},
+            "description": f"Angle -> label text ('1', 'x', '40°'). Keys: {_ANGLE_REF}",
+        },
+        "side_labels": {
+            "type": "object",
+            "additionalProperties": {"type": "string"},
+            "description": f"Segment -> label text ('12', 'x'). Keys: {_POINT_PAIR}",
+        },
+    },
+    "required": ["type", "shape", "points", "segments"],
+}
+
+
+def _with_construction_figures(node: Any) -> Any:
+    """A copy of a tool schema with every figure_spec slot switched from
+    the shape forms to the construction form."""
+    if node is _FIGURE_SCHEMA:
+        return _CONSTRUCTION_FIGURE_SCHEMA
+    if isinstance(node, dict):
+        return {k: _with_construction_figures(v) for k, v in node.items()}
+    if isinstance(node, list):
+        return [_with_construction_figures(v) for v in node]
+    return node
+
+
 # ---------------------------------------------------------------------------
 # Practice
 # ---------------------------------------------------------------------------
@@ -1742,5 +1864,28 @@ DRAWING_CHECK_SCHEMA: ToolSchema = {
         },
         "required": ["in_view", "items"],
         "additionalProperties": False,
+    },
+}
+
+
+# The same schemas with construction figures (see _CONSTRUCTION_FIGURE_SCHEMA).
+# Learn-mode decomposition keeps the shape forms for now.
+GENERATE_QUESTIONS_CONSTRUCTION_SCHEMA: ToolSchema = _with_construction_figures(GENERATE_QUESTIONS_SCHEMA)
+BANK_CHAT_REPLY_CONSTRUCTION_SCHEMA: ToolSchema = _with_construction_figures(BANK_CHAT_REPLY_SCHEMA)
+REGENERATE_QA_CONSTRUCTION_SCHEMA: ToolSchema = _with_construction_figures(REGENERATE_QA_SCHEMA)
+BANK_CHAT_REPLY_CONSTRUCTION_SCHEMA["input_schema"]["properties"]["reply"]["description"] = (
+    "Conversational response to the teacher. Keep it short (1-3 sentences). "
+    "Don't describe a figure here: code writes the sentence about the figure "
+    "from what it actually drew."
+)
+
+# The one retry after the checker rejects a construction figure.
+FIGURE_REDRAW_SCHEMA: ToolSchema = {
+    "name": "return_figure",
+    "description": "Return the corrected figure.",
+    "input_schema": {
+        "type": "object",
+        "properties": {"figure_spec": _CONSTRUCTION_FIGURE_SCHEMA},
+        "required": ["figure_spec"],
     },
 }

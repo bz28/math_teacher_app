@@ -22,6 +22,7 @@ from pydantic import TypeAdapter
 from api.core.geometry.dsl import (
     CircleFigure,
     CircleLine,
+    ConstructionFigure,
     FigureSpec,
     FigureSpecError,
     PolygonFigure,
@@ -106,6 +107,11 @@ def render_figure(spec_dict: dict[str, Any]) -> str:
     if isinstance(spec, PolygonFigure):
         names, poly_coords = solve_polygon(spec)
         return _render_polygon(spec, names, poly_coords)
+    if isinstance(spec, ConstructionFigure):
+        # Local import: construction_render reuses this module's constants.
+        from api.core.geometry.construction_render import render_construction
+
+        return render_construction(spec)
     # Unreachable — discriminated union exhausts the shape variants,
     # but mypy doesn't know that without an explicit assert_never.
     raise FigureSpecError(f"unknown figure shape: {type(spec).__name__}")
