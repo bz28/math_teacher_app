@@ -89,12 +89,64 @@ def _step_text(step: dict[str, Any]) -> str:
     return f"{step.get('title') or ''}: {step.get('description') or ''}"
 
 
+def _step_statement(step: dict[str, Any]) -> str:
+    """The words of a step that state something about the figure: its
+    description, and its title too when the title names a point (a heading
+    such as "Altitude" or "Find the angle" names none and states nothing)."""
+    title = str(step.get("title") or "")
+    if re.search(r"(?<![A-Za-z\\])[A-Z](?![a-z])", title):
+        return _step_text(step)
+    return str(step.get("description") or "")
+
+
+_STEP_NOT_READ = "the step wasn't read for checking"
+
+
+async def read_step_facts(
+    steps: list[Any],
+    *,
+    question_text: str,
+    facts: Any,
+    mode: str,
+    user_id: str | None,
+    generation_job_id: str | None = None,
+) -> dict[int, list[str]]:
+    """Read each step that has a construction figure, by the question's own
+    rule (two readings checked by code), and put on the step, as
+    `figure_facts`, the facts its figure is checked against: the question's
+    reading `facts` plus what the step states. A step whose reading can't be
+    trusted gets none, so its figure fails closed. Returns, per 1-based step
+    number, why it has none."""
+    from api.core.geometry.facts import with_step
+
+    question = as_facts(facts)
+    drops: dict[int, list[str]] = {}
+    work = [(i, s) for i, s in enumerate((s for s in steps if isinstance(s, dict)), start=1)]
+    for _, s in work:
+        s.pop("figure_facts", None)  # only code writes it, from the readings below
+    todo = [(i, s) for i, s in work if _is_construction(s.get("figure_spec"))]
+    if question is None:
+        return {i: [_NOT_READ] for i, _ in todo}
+
+    async def read(i: int, step: dict[str, Any]) -> None:
+        reading, why = await read_figure_facts(
+            _step_statement(step), mode=mode, user_id=user_id, generation_job_id=generation_job_id,
+            step_of=question_text,
+        )
+        if reading is None:
+            drops[i] = [w.replace("the problem", "the step") for w in why]
+        else:
+            step["figure_facts"] = with_step(question, reading).model_dump()
+
+    await asyncio.gather(*(read(i, s) for i, s in todo))
+    return dict(sorted(drops.items()))
+
+
 def _render_step_figures(
     steps: list[Any],
     *,
     question_text: str = "",
     question_spec: Any = None,
-    facts: Any = None,
 ) -> list[dict[str, Any]]:
     """Render any per-step figure_spec into figure_svg in-place.
 
@@ -108,7 +160,9 @@ def _render_step_figures(
 
     A construction step figure is also checked (`_check_figure` with the
     step's text, against `question_text` and the question's figure
-    `question_spec`) and dropped when it fails.
+    `question_spec`) and dropped when it fails. It is checked against the
+    step's own `figure_facts` (`read_step_facts`); a step without them
+    can't be checked, so its figure is dropped.
     """
     out: list[dict[str, Any]] = []
     for step in steps:
@@ -118,7 +172,8 @@ def _render_step_figures(
         spec = step.get("figure_spec")
         if _is_construction(spec):
             _, svg, _ = _check_figure(
-                spec, question_text, step_text=_step_text(step), base=question_spec, facts=facts,
+                spec, question_text, step_text=_step_text(step), base=question_spec,
+                facts=step.get("figure_facts"),
             )
         else:
             svg = render_figure_or_none(spec, context="step figure_spec")
@@ -129,6 +184,7 @@ def _render_step_figures(
             # downstream reader never sees a spec without its svg.
             rendered.pop("figure_spec", None)
             rendered.pop("figure_svg", None)
+            rendered.pop("figure_facts", None)
         out.append(rendered)
     return out
 
@@ -388,25 +444,28 @@ async def _render_step_figures_with_retry(
             for i, s in enumerate(raw_steps):
                 if _is_construction(s.get("figure_spec")):
                     drops[i + 1] = why
-    out = _render_step_figures(steps, question_text=question_text, question_spec=question_spec, facts=reading)
+    if reading is not None:
+        drops.update(await read_step_facts(
+            raw_steps, question_text=question_text, facts=reading, mode=mode, user_id=user_id,
+        ))
+    out = _render_step_figures(steps, question_text=question_text, question_spec=question_spec)
     # _render_step_figures keeps every dict step, in order.
 
     async def fix(i: int, raw: dict[str, Any]) -> None:
         spec, svg, issues, _ = await _resolve_figure_with_retry(
             raw["figure_spec"], question_text, mode=mode, user_id=user_id,
-            step_text=_step_text(raw), base=question_spec, facts=reading,
+            step_text=_step_text(raw), base=question_spec, facts=raw["figure_facts"],
         )
         if svg:
-            out[i] = {**out[i], "figure_spec": spec, "figure_svg": svg}
+            out[i] = {**out[i], "figure_spec": spec, "figure_svg": svg, "figure_facts": raw["figure_facts"]}
         else:
             drops[i + 1] = issues
             logger.warning("step %d figure dropped after its retry: %s", i + 1, "; ".join(issues))
 
-    if reading is not None:
-        await asyncio.gather(*(
-            fix(i, raw) for i, raw in enumerate(raw_steps)
-            if _is_construction(raw.get("figure_spec")) and "figure_svg" not in out[i]
-        ))
+    await asyncio.gather(*(
+        fix(i, raw) for i, raw in enumerate(raw_steps)
+        if _is_construction(raw.get("figure_spec")) and raw.get("figure_facts") and "figure_svg" not in out[i]
+    ))
     return out, drops, reading
 
 
@@ -881,9 +940,12 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
             if issues and _missing_figure(q):
                 lost_figure.append("; ".join(issues))
         if isinstance(s.get("steps"), list):
+            await read_step_facts(
+                s["steps"], question_text=q.get("text") or "", facts=q.get("figure_facts"),
+                mode=LLMMode.GENERATE_QUESTIONS, user_id=str(job.created_by_id), generation_job_id=str(job.id),
+            )
             s["steps"] = _render_step_figures(
                 s["steps"], question_text=q.get("text") or "", question_spec=q.get("figure_spec"),
-                facts=q.get("figure_facts"),
             )
     if lost_figure:
         logger.warning(

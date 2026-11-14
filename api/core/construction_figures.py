@@ -232,12 +232,17 @@ async def read_figure_facts(
     mode: str,
     user_id: str | None,
     generation_job_id: str | None = None,
+    step_of: str | None = None,
 ) -> tuple[Any, list[str]]:
     """(the agreed facts, []) or (None, [why the reading can't be trusted]).
 
     Two independent readings (different prompts, same model); code then
     requires that they agree, that they account for every point and every
-    relation word in the text, and that each fact has a check."""
+    relation word in the text, and that each fact has a check.
+
+    With `step_of` (the question), `problem_text` is one step of its
+    solution, read by the same rule: what the step states about the figure,
+    quoted from the step. The question lends only its point names."""
     import asyncio
 
     from api.core.geometry.facts import (
@@ -249,10 +254,17 @@ async def read_figure_facts(
         impossible_measures,
         invented_points,
         merged,
+        standard_reading,
         unverifiable,
     )
 
     message = f"Problem:\n{problem_text}"
+    if step_of is not None:
+        message += (
+            "\n\nThis text is one step of the solution to the problem below. Read the step as the "
+            "problem: list what the step states about the figure, quoting the step's own words. The "
+            f"problem is shown only for its point names; take no facts from it.\nThe problem:\n{step_of}"
+        )
     if final_answer:
         message += (
             "\n\nFinal answer (shown only so you know what is asked; take no points, parts or facts "
@@ -270,7 +282,9 @@ async def read_figure_facts(
         logger.exception("figure facts reading failed")
         return None, ["the problem couldn't be read for checking"]
     a, b = grounded(a, f"{problem_text}\n{request}"), grounded(b, f"{problem_text}\n{request}")
-    made_up = invented_points(a, f"{problem_text}\n{request}") + invented_points(b, f"{problem_text}\n{request}")
+    a, b = standard_reading(a), standard_reading(b)
+    names = f"{problem_text}\n{request}\n{step_of or ''}"
+    made_up = invented_points(a, names) + invented_points(b, names)
     if made_up:
         # Names the problem never writes: a reading labelled an unnamed figure.
         logger.warning("figure facts: a reading named points the problem doesn't: %s", sorted(set(made_up)))
@@ -299,7 +313,8 @@ async def read_figure_facts(
 
 
 _IN_WORDS = (
-    "the problem describes its angles or shapes in words rather than naming them, so the figure can't be checked"
+    "this problem describes the figure in words without naming its points; add point names "
+    "(e.g. 'lines AB and CD meet at E') and I can draw it"
 )
 
 
@@ -399,43 +414,3 @@ def failure_sentence(issues: list[str], *, step: int | None = None) -> str:
     reasons = "; ".join(issues[:4]) + ("; and more" if len(issues) > 4 else "")
     return f"I couldn't draw {what}: {reasons}."
 
-
-_FIGURE_TALK = re.compile(
-    r"\b(?:diagram|figure|drawing|drew|draw|drawn|sketch(?:ed)?|picture|illustration|image|visual"
-    r"|labell?(?:ed|ing)?|labels?|ticks?|marks?|marked|marking|arrows?|box(?:es)?|shad(?:e|ed|es|ing)"
-    r"|segments?|rays?|lines?|sides?|diagonals?|vertex|vertices|points?|angles?|triangles?|polygons?"
-    r"|quadrilaterals?|squares?|rectangles?|circles?|arcs?|sectors?|radius|radii|diameters?|chords?|tangents?"
-    r"|altitudes?|medians?|perpendiculars?|heights?|bisectors?|base|hypotenuse|legs?|transversals?"
-    r"|parallel|midpoints?|foot|feet"
-    r"|connect(?:s|ed|ing)?|join(?:s|ed|ing)?|includ(?:e|es|ed|ing)|show(?:s|n|ed|ing)?|add(?:s|ed|ing)?"
-    r"|put(?:s|ting)?|plac(?:e|es|ed|ing)|drop(?:s|ped|ping)?|insert(?:s|ed|ing)?|construct(?:s|ed|ing)?"
-    r"|extend(?:s|ed)?|split(?:s|ting)?|divid(?:e|es|ed|ing)|appears?)\b"
-    r"|[∠△⊥∥≅]|\\(?:angle|triangle|overline|overrightarrow|overleftrightarrow|perp|parallel|cong)\b",
-    re.IGNORECASE,
-)
-# What the model's own reply may still say beside code's figure sentence:
-# only what it changed in the problem's words, answer or steps.
-_ABOUT_TEXT = re.compile(
-    r"\b(?:questions?|problems?|word(?:s|ed|ing)?|rework(?:ed)?|reword(?:ed)?|rewr(?:ote|itten|ite)|phras\w*"
-    r"|text|answers?|solutions?|steps?|hints?|difficult\w*|easier|harder|typos?|spelling|grammar|choices?"
-    r"|distractors?|units?|title|instructions?)\b",
-    re.IGNORECASE,
-)
-# A point or part named by capitals: "B", "BD", "A'B'" (not "I", not the
-# article "A").
-_NAMED_PART = re.compile(r"(?<![A-Za-z])(?!I\b)(?!A\s+[a-z])[A-Z][0-9]*'*(?:[A-Z][0-9]*'*)*(?![a-z])")
-
-
-def without_figure_talk(reply: str) -> str:
-    """The model's reply with nothing about a figure — code writes that
-    sentence from what was drawn. The model wrote its reply before anything
-    was drawn, so whatever it says about the picture is intent, not the
-    result. A sentence stays only when it is about the problem's words,
-    answer or steps (an allowlist) and names no figure part, no point, and
-    no drawing verb ("I've dropped the perpendicular", "I put in the
-    altitude" go)."""
-    sentences = re.split(r"(?<=[.!?])\s+", reply.strip())
-    return " ".join(
-        s for s in sentences
-        if s and _ABOUT_TEXT.search(s) and not _FIGURE_TALK.search(s) and not _NAMED_PART.search(s)
-    ).strip()

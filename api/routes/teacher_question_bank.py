@@ -1199,6 +1199,11 @@ async def accept_chat_proposal(
                 # render helper sees it.
                 if isinstance(s.get("figure_spec"), dict):
                     step["figure_spec"] = s["figure_spec"]
+                    # The facts the chat checked this step's figure against
+                    # (its reading of the step, written by code), so accept
+                    # checks it against the same.
+                    if isinstance(s.get("figure_facts"), dict):
+                        step["figure_facts"] = s["figure_facts"]
                 cleaned_steps.append(step)
             accepted_steps = cleaned_steps
     if proposal.get("final_answer") is not None:
@@ -1238,7 +1243,6 @@ async def accept_chat_proposal(
     if accepted_steps is not None:
         item.solution_steps = _render_step_figures(
             accepted_steps, question_text=item.question, question_spec=item.figure_spec,
-            facts=proposal.get("step_facts") or item.figure_facts,
         )
 
     # Build a NEW list with NEW dict copies for any modified message.
