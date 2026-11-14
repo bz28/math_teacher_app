@@ -496,16 +496,25 @@ def _figure_drop_reason(raw_spec: dict[str, Any], text: str) -> str:
     )
 
 
-# A problem that points at a figure: "in the figure below", "the right
-# triangle below". Deliberately not bare "above"/"below" — a word
-# problem's "300 feet above the ground" points at nothing — nor "the
-# graph" or bare "as shown": "use the graph paper to plot y = 2x" and
-# "as shown in the table" are complete without a drawing.
+# A problem that points at a figure, in any wording: "in the figure
+# below", "The figure shows", "Look at the diagram:", "In the given
+# figure", "as shown", "pictured", "the right triangle below", "Figure 2".
+# Erring wide only makes more problems need a figure (never a false pass).
+# Not bare "above"/"below" ("300 feet above the ground" points at
+# nothing), not "the graph" ("use the graph paper"), not "as shown in the
+# table", and not "the figure skater".
+_PICTURE_WORDS = "figure|diagram|picture|drawing|sketch|illustration"
+_PICTURE = rf"(?:{_PICTURE_WORDS})s?"
 _FIGURE_REFERENCE = re.compile(
-    r"\b(?:in|from|use|using|see|on|to|of|refer to|according to|based on) the (?:figure|diagram|drawing|picture)\b"
-    r"|\b(?:figure|diagram|drawing|picture|triangle|circle|graph|quadrilateral|polygon"
-    r"|rectangle|trapezoid|parallelogram)\s+(?:below|above|shown)\b"
-    r"|\b(?:shown|pictured|drawn) (?:below|above|here)\b",
+    rf"\b(?:the|this|that|these|each|following|given|accompanying|attached|adjacent)\s+{_PICTURE}\b"
+    r"(?!\s+skat)"
+    rf"|\b(?:{_PICTURE_WORDS}|triangle|circle|graph|quadrilateral|polygon|rectangle|trapezoid|parallelogram)s?"
+    r"\s+(?:below|above|shown|shows|here|at (?:the )?(?:right|left)|to the (?:right|left))\b"
+    r"|\b(?:shown|pictured|drawn|illustrated|depicted)\s+(?:below|above|here|at (?:the )?(?:right|left)"
+    r"|to the (?:right|left))\b"
+    r"|\b(?:as|is|are)\s+(?:shown|pictured|illustrated|depicted)\b(?!\s+in\s+(?:the|a|this)\s+(?:table|chart|list))"
+    r"|\bpictured\b"
+    r"|\b(?:fig\.|figure)\s*\d+\b",
     re.IGNORECASE,
 )
 
