@@ -237,6 +237,87 @@ async def test_a_graph_is_looked_for_before_a_table_of_values(checks: Checks) ->
     assert checks.calls[0]["bbox"] == BOX
 
 
+BOX2 = {"x0": 0.5, "y0": 0.5, "x1": 0.9, "y1": 0.9}
+
+
+async def test_every_located_drawing_is_judged_and_the_one_that_answers_is_kept(checks: Checks) -> None:
+    # A guide curve first, then the graph asked for: the second answers it.
+    checks.queue(_found("tight", "no", "yes"), _found("wide", "yes", "yes"))
+    visual = [_drawn(), {**_drawn(), "bbox": BOX2}]
+    r = await check_problem_drawing(_extraction(visual=visual), [[(_jpeg(), "image/jpeg")]], 1, PART)
+    assert [c["bbox"] for c in checks.calls] == [BOX, BOX2]
+    assert r is not None and (r.step, [i.verdict for i in r.items]) == ("wide", ["yes", "yes"])
+
+
+async def test_one_located_drawing_is_judged_once_as_before(checks: Checks) -> None:
+    checks.queue(_found("tight", "yes", "no"))
+    r = await check_problem_drawing(_extraction(visual=[_drawn()]), [[(_jpeg(), "image/jpeg")]], 1, PART)
+    assert len(checks.calls) == 1
+    assert r is not None and (r.step, [(i.verdict, i.seen) for i in r.items]) == ("tight", [("yes", "s"), ("no", "s")])
+
+
+async def test_no_located_drawing_in_view_hunts_the_other_pages(checks: Checks) -> None:
+    p1, p2, p3 = _jpeg((255, 255, 255)), _jpeg((0, 0, 0)), _jpeg((128, 128, 128))
+    checks.queue(_not_found(), _not_found(), _not_found())
+    visual = [_drawn(page=1), _drawn(page=2)]
+    pages = [[(p1, "image/jpeg")], [(p2, "image/jpeg")], [(p3, "image/jpeg")]]
+    r = await check_problem_drawing(_extraction(visual=visual), pages, 1, PART)
+    # Both located pages were looked at whole by their own checks, so the
+    # hunt only adds the page neither was on.
+    assert [(c["page"], c["bbox"]) for c in checks.calls] == [(p1, BOX), (p2, BOX), (p3, None)]
+    assert r is not None and r.note is None and [i.verdict for i in r.items] == ["unclear", "unclear"]
+
+
+async def test_the_answering_drawing_is_the_most_points_yes(checks: Checks) -> None:
+    # Item 1 is worth 2, item 2 worth 1: one "yes" on item 1 beats one on item 2.
+    checks.queue(_found("tight", "no", "yes"), _found("tight", "yes", "no"))
+    visual = [_drawn(), {**_drawn(), "bbox": BOX2}]
+    r = await check_problem_drawing(_extraction(visual=visual), [[(_jpeg(), "image/jpeg")]], 1, PART)
+    assert r is not None and r.items[0].verdict == "yes"
+
+
+async def test_on_a_tie_the_whole_drawing_then_the_later_is_kept(checks: Checks) -> None:
+    cut = DrawingCheck("wide", "cut_off", [ItemResult(1, "yes", "cut"), ItemResult(2, "yes", "cut")])
+    checks.queue(cut, _found("tight", "yes", "yes"))
+    visual = [_drawn(), {**_drawn(), "bbox": BOX2}]
+    r = await check_problem_drawing(_extraction(visual=visual), [[(_jpeg(), "image/jpeg")]], 1, PART)
+    assert r is not None and (r.in_view, r.step) == ("whole", "tight")
+
+    # A guide curve or a first try comes before the answer.
+    checks.queue(_found("tight", "yes", "yes"), _found("wide", "yes", "yes"))
+    r = await check_problem_drawing(_extraction(visual=visual), [[(_jpeg(), "image/jpeg")]], 1, PART)
+    assert r is not None and r.step == "wide"
+
+
+async def test_a_no_another_drawing_shows_or_cant_settle_is_unclear(checks: Checks) -> None:
+    three = GraphPart([ChecklistItem("a", 3), ChecklistItem("b", 1), ChecklistItem("c", 1)], 7)
+
+    def seen(*pairs: tuple[str, str]) -> DrawingCheck:
+        return DrawingCheck("tight", "whole", [ItemResult(n, v, s) for n, (v, s) in enumerate(pairs, 1)])  # type: ignore[arg-type]
+
+    best = seen(("yes", "a"), ("no", "b?"), ("no", ""))
+    other = seen(("no", ""), ("yes", "b"), ("no", ""))
+    checks.queue(other, best)
+    visual = [_drawn(), {**_drawn(), "bbox": BOX2}]
+    r = await check_problem_drawing(_extraction(visual=visual), [[(_jpeg(), "image/jpeg")]], 1, three)
+    assert r is not None and [i.verdict for i in r.items] == ["yes", "unclear", "no"]
+    assert r.items[1].seen == f"b? {graph_grading._OTHER_DRAWING} b"
+    # The other drawing's "yes" never becomes a "yes": only the answering
+    # drawing earns points.
+    cut = DrawingCheck("wide", "cut_off", [ItemResult(1, "unclear", ""), ItemResult(2, "unclear", "")])
+    checks.queue(_found("tight", "yes", "no"), cut)
+    r = await check_problem_drawing(_extraction(visual=visual), [[(_jpeg(), "image/jpeg")]], 1, PART)
+    assert r is not None and [i.verdict for i in r.items] == ["yes", "unclear"]
+
+
+async def test_a_table_is_judged_only_when_no_graph_is_in_view(checks: Checks) -> None:
+    table = {**_drawn(), "kind": "table", "bbox": BOX2}
+    checks.queue(_not_found(), _found("tight", "yes", "no"))
+    r = await check_problem_drawing(_extraction(visual=[table, _drawn()]), [[(_jpeg(), "image/jpeg")]], 1, PART)
+    assert [c["bbox"] for c in checks.calls] == [BOX, BOX2]
+    assert r is not None and [i.verdict for i in r.items] == ["yes", "no"]
+
+
 async def test_without_a_box_the_whole_page_the_work_is_on_is_looked_at_first(checks: Checks) -> None:
     p1, p2 = _jpeg((255, 255, 255)), _jpeg((0, 0, 0))
     checks.queue(_found("page", "yes", "yes"))
