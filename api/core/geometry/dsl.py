@@ -483,6 +483,28 @@ class PolygonFigure(BaseModel):
 # primes (A, B1, A'), or a hidden helper starting with "_" (_p1) — placed
 # for geometry, never drawn or labelled.
 _POINT_NAME = re.compile(r"_[a-z0-9]+|[A-Z][0-9]*'*")
+# A label is plain text in the drawing: math markup in it ("$(3x+14)°$",
+# "$x^\\circ$") would be printed as it is. The few symbols labels use are
+# turned into their characters; anything else in markup is refused.
+_LABEL_SYMBOLS = [
+    (re.compile(r"\^\s*\{?\s*\\circ\s*\}?|\\circ|\\degree"), "°"),
+    (re.compile(r"\\cdot"), "·"), (re.compile(r"\\times"), "×"), (re.compile(r"\\pi"), "π"),
+    (re.compile(r"\\angle\s*"), "∠"), (re.compile(r"\\triangle\s*"), "△"), (re.compile(r"\\cong"), "≅"),
+    (re.compile(r"\\sqrt\s*\{([^{}]*)\}"), r"√\1"), (re.compile(r"\\(?:left|right)\b"), ""),
+    (re.compile(r"\\[,;! ]"), " "),
+]
+
+
+def plain_label(text: str) -> str:
+    """`text` as the drawing shows it: no "$", TeX symbols as characters.
+    Raises ValueError for markup that can't be shown as plain text."""
+    out = text.replace("$", "")
+    for pattern, repl in _LABEL_SYMBOLS:
+        out = pattern.sub(repl, out)
+    out = " ".join(out.split())
+    if "\\" in out or "{" in out or "}" in out:
+        raise ValueError(f"the label {text!r} is math markup that can't be shown as plain text")
+    return out
 _MAX_POINTS = 40
 _MAX_PIECES = 60
 
@@ -602,6 +624,8 @@ class ConstructionFigure(BaseModel):
                 )
             if not (math.isfinite(x) and math.isfinite(y)):
                 raise ValueError(f"point {name} has a non-finite coordinate")
+        self.angle_labels = {k: plain_label(v) for k, v in self.angle_labels.items()}
+        self.side_labels = {k: plain_label(v) for k, v in self.side_labels.items()}
         pieces = len(self.segments) + len(self.rays) + len(self.lines) + len(self.circles)
         if pieces > _MAX_PIECES:
             raise ValueError(f"at most {_MAX_PIECES} segments, rays, lines and circles")
