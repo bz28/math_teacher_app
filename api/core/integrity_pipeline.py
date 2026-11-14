@@ -26,6 +26,7 @@ import json
 import logging
 import re
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, NamedTuple
 
@@ -40,7 +41,12 @@ from api.core.integrity_ai import (
     extract_student_work,
     run_agent_turn,
 )
-from api.core.llm_client import MODEL_HAIKU, LLMMode, call_claude_json
+from api.core.llm_client import (
+    MODEL_HAIKU,
+    LLMMode,
+    TextDeltaCallback,
+    call_claude_json,
+)
 from api.core.llm_schemas import (
     INTEGRITY_ANSWER_EQUIVALENCE_SCHEMA,
     INTEGRITY_ENGAGEMENT_VALUES,
@@ -1320,6 +1326,7 @@ async def process_student_turn(
     *,
     user_id: str | None = None,
     telemetry: dict[str, Any] | None = None,
+    on_reply_text: ReplyTextCallback | None = None,
 ) -> None:
     """Append a student turn, run the agent loop, and update in-place.
 
@@ -1330,6 +1337,14 @@ async def process_student_turn(
     payload (focus-blur events, paste events, typing cadence); it's
     persisted on the student turn row as-is and only surfaced to
     teachers — never to the student.
+
+    `on_reply_text(bubble, text)` streams agent text to the student as
+    the model writes it — but only text already certain to be shown
+    exactly as is (see _stream_reply_text). `bubble` is the loop
+    iteration, one per message. Everything else the turn shows (held
+    notes revealed, canned closing, nudge, recovery text, a variant
+    card) arrives only in the transcript the caller reads after the
+    commit, which stays the authoritative result.
 
     The agent loop:
       1. Call Claude with the current transcript.
@@ -1392,6 +1407,15 @@ async def process_student_turn(
         turns = await _load_turns(check.id, db)
         briefing = build_problems_briefing(problems)
         messages = _build_agent_messages(briefing, turns)
+        on_text = (
+            _stream_reply_text(loop_iter, on_reply_text)
+            if on_reply_text is not None
+            and not _narration_possible(
+                finish_rejected=finish_rejected, latest_shown=latest_shown,
+            )
+            and not _variant_card_pending(turns)
+            else None
+        )
 
         try:
             content_blocks = await run_agent_turn(
@@ -1406,6 +1430,7 @@ async def process_student_turn(
                     "student_turn": student_turn_count,
                     "loop_iter": loop_iter,
                 },
+                on_text=on_text,
             )
         except Exception:
             logger.exception(
@@ -1571,12 +1596,79 @@ def _is_post_rejection_narration(
       rejection must reach the student.
     """
     return (
-        finish_rejected
-        and latest_shown is not None
-        and "?" not in latest_shown
+        _narration_possible(
+            finish_rejected=finish_rejected, latest_shown=latest_shown,
+        )
         and bool(tool_uses)
         and "?" not in text_reply
     )
+
+
+def _narration_possible(
+    *, finish_rejected: bool, latest_shown: str | None,
+) -> bool:
+    """The half of _is_post_rejection_narration known before the model
+    writes a word. When it's False, the response's text is shown to the
+    student exactly as written whatever the rest of the response holds
+    — which is what lets that text stream (see _stream_reply_text)."""
+    return (
+        finish_rejected
+        and latest_shown is not None
+        and "?" not in latest_shown
+    )
+
+
+def _variant_card_pending(turns: list[IntegrityConversationTurn]) -> bool:
+    """True when the next agent message may render as the "Quick
+    practice" variant card: a generate_variant was accepted and no agent
+    message has shown since. Mirrors the route's
+    _student_facing_transcript, except a held note doesn't consume the
+    flag here (it may yet be revealed), so this errs toward True. Such a
+    message isn't streamed — it would arrive as a plain bubble and then
+    turn into the card."""
+    variant_use_ids = {
+        t.tool_use_id for t in turns
+        if t.role == ROLE_TOOL_CALL and t.tool_name == TOOL_GENERATE_VARIANT
+    }
+    pending = False
+    for t in turns:
+        if (
+            t.role == ROLE_TOOL_RESULT
+            and t.tool_use_id in variant_use_ids
+            and t.content.startswith("accepted:")
+        ):
+            pending = True
+        elif t.role == ROLE_AGENT:
+            pending = False
+    return pending
+
+
+# `(bubble, text_delta)` — see process_student_turn.
+ReplyTextCallback = Callable[[int, str], Awaitable[None]]
+
+
+def _stream_reply_text(
+    bubble: int, on_reply_text: ReplyTextCallback,
+) -> TextDeltaCallback:
+    """Forward a response's text deltas, restricted to exactly the text
+    _first_text_block will keep: the first text block that isn't
+    whitespace-only, with its leading whitespace dropped. (Trailing
+    whitespace still streams; the client trims it, as the stored
+    message does.)"""
+    chosen: int | None = None
+    pending: dict[int, str] = {}
+
+    async def on_text(index: int, delta: str) -> None:
+        nonlocal chosen
+        if chosen is None:
+            pending[index] = pending.get(index, "") + delta
+            if pending[index].strip():
+                chosen = index
+                await on_reply_text(bubble, pending[index].lstrip())
+        elif index == chosen:
+            await on_reply_text(bubble, delta)
+
+    return on_text
 
 
 def _reveal_notes_if_still_open(
