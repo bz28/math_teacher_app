@@ -636,9 +636,10 @@ def test_the_arms_of_a_named_angle_pair_are_drawn() -> None:
 async def test_the_reading_step_sets_circle_facts_aside(monkeypatch: pytest.MonkeyPatch) -> None:
     """Prod 6d780084, through the reading step: the readings agree once the
     made-up diameter is set aside, and the agreed facts carry the note."""
-    common = [Fact(kind="right_triangle", items=["ABC"], point="A"),
-              Fact(kind="right_triangle", items=["DBC"], point="D"),
-              Fact(kind="congruent_segments", items=["AB", "DB"])]
+    right = "with right angles at A and D respectively"
+    common = [Fact(kind="right_triangle", items=["ABC"], point="A", quote=right),
+              Fact(kind="right_triangle", items=["DBC"], point="D", quote=right),
+              Fact(kind="congruent_segments", items=["AB", "DB"], quote="AB = DB")]
     a = FigureFacts(points=list("ABCD"), triangles=["ABC", "DBC"], givens=common,
                     prove=[Fact(kind="congruent_triangles", items=["ABC", "DBC"])])
     b = a.model_copy(update={"givens": [*common, Fact(kind="diameter", items=["BC"])]})
