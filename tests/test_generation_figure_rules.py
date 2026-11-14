@@ -181,13 +181,18 @@ def test_the_replacement_and_variation_wording() -> None:
 
 
 @pytest.mark.parametrize(("text", "needs"), [
+    # Points in math markup or an explicit point form (how the generation
+    # prompt writes them).
     (r"In $\triangle ABC$, $m\angle A = 40°$. Find $m\angle C$.", True),
     ("In the figure below, find x.", True),
-    ("A ladder AB leans against wall BC, with its foot 5 ft from the wall.", True),
-    ("The floor plan ABCDEF is L-shaped; side AB is 12 ft. Find its area.", True),
-    ("Let ABCD be a rectangle with AB = 3. Find AC.", True),
-    ("Chord AB of circle O has length 8 and radius OA = 5.", True),
+    (r"$\triangle ABC$ has a right angle at $C$, $AB = 13$ and $BC = 5$. Find $AC$.", True),
+    (r"$ABCD$ is a rectangle. $AB = 3$. Find $AC$.", True),
+    (r"Square $ABCD$ has side 4.", True),
+    (r"Chord $\overline{AB}$ of circle $O$ has length 8.", True),
     ("Points A and B lie on circle O.", True),
+    (r"In $\triangle ABC$, $AB = AC$.", True),
+    (r"In $ABCD$, $AB = 5$. Find $CD$.", True),
+    (r"In $PQRS$, the diagonals bisect each other. Find $PR$ if $PT = 4$.", True),
     ("A(2, 3) and B(5, 7) are points. Find the distance AB.", False),  # coordinates
     ("Point P is on the parabola y = x^2. Find P.", False),  # a curve
     ("A rectangle has width 7 and length 9. Find its area.", False),  # shapes only
@@ -196,46 +201,44 @@ def test_the_replacement_and_variation_wording() -> None:
     ("Use SAS to prove the triangles congruent.", False),  # a postulate, not points
     (r"Let $A = \begin{pmatrix}1&2\\3&4\end{pmatrix}$. Find $AB$.", False),
     ("Events A and B are independent with P(A) = 0.3.", False),
+    (r"Events $A$ and $B$ are independent with $P(A) = 0.3$.", False),
     ("In the USA, 40% of people use GPS.", False),
-    # Review rounds 1 and 2 (#998): after any figure word an acronym is not a
-    # figure's name; a bare run of capitals names points only in math
-    # markup, when the problem uses its letters as points elsewhere, or when
-    # the problem says it is a figure.
+    # Review rounds 1 to 3 (#998): no guessing from a bare run of capitals,
+    # so an acronym is never taken for points.
     ("A taxi ride in DC costs $3 plus $2 per mile. How far can you go for $15?", False),
     ("In PEMDAS, which operation comes first?", False),
     ("In NYC, a slice of pizza costs $3.50. How many slices can you buy for $21?", False),
     ("Let NY be the number of tickets sold in New York.", False),
     ("In HL, which parts must be congruent?", False),
     ("Write the line through the points in EF form.", False),
-    (r"In $\triangle ABC$, $AB = AC$.", True),
-    ("Let ABCD be a square with side 4. Find AC.", True),
-    (r"In $ABCD$, $AB = 5$. Find $CD$.", True),
-    ("In PQRS, the diagonals bisect each other. Find PR if PT = 4.", True),
     ("The distance NYC to LA is 2800 miles. A plane flies at 560 mph. How long does it take?", False),
     ("Let NY be the number of points scored in New York.", False),
     ("In DC, a square plot of land costs $40 per square foot. How much is a plot with side 20 ft?", False),
     ("A cell phone plan AT costs $40 per month plus $0.10 per text.", False),
-    ("The floor plan ABCDEF is L-shaped; find its area.", False),  # a bare name used once: no evidence
-    ("ABCD is a square. Let ABCD be a square with side 4.", True),
-    ("Let PQRS be a rhombus with side 6. Find its perimeter.", True),  # it says PQRS is a figure
-    ("A ladder AB leans against a wall; ladder AB is 13 ft long.", False),  # the same run twice is no evidence
-    # Ben's rule: when the student is to draw it, the problem gets no figure.
+    ("The distance NYC to LA is 2800 miles. A plane flies at 560 mph. Which answer is NOT possible?", False),
+    ("Let NY be the number of tickets sold in New York and NJ the number in New Jersey. NY + NJ = 500.", False),
+    ("A cell phone plan AT costs $40 per month. Plan TM costs $35 per month plus $5 per GB.", False),
+    # Changed in round 3, on purpose: bare names with no markup no longer
+    # count (before, a shared letter or "Let … be a square" made them
+    # points). Such a problem gets no figure: at worst a missing figure.
+    ("A ladder AB leans against wall BC, with its foot 5 ft from the wall.", False),
+    ("In PQRS, the diagonals bisect each other. Find PR if PT = 4.", False),
+    ("Let PQRS be a rhombus with side 6. Find its perimeter.", False),
+    # Ben's rule: when the student is to draw it, the problem gets no figure
+    # (`requires_drawing`); an auxiliary line in a proof, "construct a
+    # proof" or "draw a conclusion" is not that.
     (r"Construct the perpendicular bisector of $\overline{AB}$ with a compass and straightedge.", False),
+    (r"Using only a compass and straightedge, construct the perpendicular bisector of $\overline{AB}$, "
+     r"where $AB = 8$ cm. Label the midpoint $M$.", False),
     (r"Sketch $\triangle ABC$ with $AB = 5$, then find its perimeter.", False),
+    (r"In $\triangle ABC$, $AB = AC$. Draw $\overline{AD}$ bisecting $\angle BAC$. Prove: $\angle B \cong \angle C$.",
+     True),
+    (r"Given $\overline{AB} \parallel \overline{CD}$. Construct a two-column proof that "
+     r"$\triangle ABM \cong \triangle DCM$.", True),
+    (r"$m\angle P = 40°$ and $m\angle Q = 50°$. Draw a conclusion about $\angle P$ and $\angle Q$.", True),
 ])
 def test_what_needs_a_figure(text: str, needs: bool) -> None:
     assert qbg._needs_figure({"text": text}) is needs
-
-
-@pytest.mark.parametrize("text", ["costs $40 per square foot", "25 square meters", "the points scored",
-                                  "the angle of elevation", "the angle of depression"])
-def test_a_unit_or_a_score_is_not_a_figure_noun(text: str) -> None:
-    assert not qbg._FIGURE_NOUN.search(text)
-
-
-@pytest.mark.parametrize("text", ["a square", "a square with side 4", "the points A and B", "an angle of 40°"])
-def test_a_figure_noun(text: str) -> None:
-    assert qbg._FIGURE_NOUN.search(text)
 
 
 def test_other_subjects_need_one_only_when_they_refer_to_it() -> None:

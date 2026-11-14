@@ -31,7 +31,7 @@ from api.core.document_vision import (
     build_vision_content,
     fetch_source_documents,
 )
-from api.core.drawing_requirement import combine_requires_drawing
+from api.core.drawing_requirement import combine_requires_drawing, requires_drawing
 from api.core.geometry import FigureSpecError, figure_point_names, render_figure, render_figure_or_none
 from api.core.geometry.dsl import ConstructionFigure, split_points
 from api.core.geometry.facts import _COORD, FigureFacts, as_facts
@@ -549,36 +549,6 @@ async def _draw_figures(
     await asyncio.gather(*(draw(q) for q in questions))
 
 
-# Points named as a run of capitals after a word that names a figure or a
-# part of one: "ladder AB", "wall BC", "floor plan ABCDEF", "chord AB",
-# "Let ABCD be", "In PQRS". Each letter once: SAS, ASA and CPCTC name
-# postulates, not points. A run of capitals is often an acronym after any
-# of these words ("a taxi ride in DC", "the distance NYC to LA", "a phone
-# plan AT"), so a bare run names points only with evidence; see
-# `_names_points`.
-_POINT_RUN = re.compile(
-    r"\b(?P<word>let|in|segments?|sides?|lines?|rays?|chords?|diameters?|radius|radii|diagonals?|altitudes?|"
-    r"medians?|bisectors?|tangents?|secants?|arcs?|triangles?|quadrilaterals?|polygons?|rectangles?|squares?|"
-    r"trapezoids?|parallelograms?|rhombus|kites?|pentagons?|hexagons?|octagons?|plan|lot|field|garden|room|"
-    r"wall|ladder|pole|tower|ramp|figure|region|distance|length)\s+(?P<markup>\$?)((?-i:(?:[A-Z]'*){2,8}))"
-    r"(?![A-Za-z0-9])",
-    re.IGNORECASE,
-)
-# Any other run of 2 to 8 capitals: "Find AC", "\\overline{BC}", "PT = 4".
-_CAPITAL_RUN = re.compile(r"(?<![A-Za-z])(?:[A-Z]'*){2,8}(?![A-Za-z])")
-# A figure noun, as in "Let ABCD be a square" / "ABCD is a rectangle". Not
-# its unit or score senses: "square foot", "points scored", "angle of
-# elevation".
-_FIGURE_NOUN = re.compile(
-    r"\b(?:points?(?!\s+(?:scored|earned|per|won|lost)\b)|segments?|sides?|lines?|rays?|chords?|diameters?|"
-    r"radius|radii|diagonals?|altitudes?|medians?|bisectors?|tangents?|secants?|arcs?|"
-    r"angles?(?!\s+of\s+(?:elevation|depression)\b)|vertex|vertices|triangles?|quadrilaterals?|polygons?|"
-    r"rectangles?|squares?(?!\s+(?:foot|feet|inch|inches|yards?|meters?|metres?|miles?|units?|kilometers?|"
-    r"centimeters?|mm|cm|m|km|ft|in|yd|mi)\b)|trapezoids?|parallelograms?|rhombus|kites?|pentagons?|hexagons?|"
-    r"octagons?|circles?|midpoints?)\b",
-    re.IGNORECASE,
-)
-_POSTULATE_LETTERS = {"SAS", "ASA", "AAS", "SSS", "HL", "CPCTC", "AA", "SSA", "CPCF", "LL", "LA", "HA"}
 # A problem on the coordinate plane or about a curve: the construction tool
 # can't draw grids or curves other than circles (CONSTRUCTION_FIGURE_RULES,
 # rule 6), so naming points there asks for no figure.
@@ -588,41 +558,19 @@ _COORDINATE_OR_CURVE = re.compile(
     re.IGNORECASE,
 )
 
-# The student is to draw it (Ben's rule: then the problem gets no figure).
-_STUDENT_DRAWS = re.compile(r"\b(?:construct|draw|sketch)\b", re.IGNORECASE)
-
-
 def _names_points(text: str) -> bool:
-    """The problem names points: "In △ABC", "point P", "ladder AB … wall BC".
-
-    A bare run of capitals after a figure word ("ladder AB", "In PQRS")
-    counts only with evidence that it names points: it is in math markup
-    ("In $ABCD$"), the problem uses its letters as points elsewhere
-    ("ladder AB … wall BC", "In PQRS … Find PR"), or
-    the problem says it is a figure ("Let ABCD be a square"). So "the
-    distance NYC to LA", "Let NY be the number of points scored" and "In
-    DC, a square plot" name none."""
+    """The problem names points in math markup or an explicit point form:
+    "$\\triangle ABC$", "$\\overline{AB}$", "$m\\angle A$", "point $P$",
+    "$ABCD$ is a rectangle", "circle $O$" (`_named_points`, and the
+    figure checker's own parse of the problem, which is what the figure is
+    checked against). No guessing from a bare run of capitals ("ladder AB",
+    "In PQRS", "the distance NYC to LA"): the generation prompt writes every
+    point name in math markup (FIGURE_PROBLEM_WORDING), and the guesses
+    mistook acronyms for points. At worst a problem with bare names gets no
+    figure (counted as missing), never a wrong one."""
     from api.core.geometry.facts import parse_problem_points
 
-    if _named_points(text) or parse_problem_points(text):
-        return True
-
-    def names(m: re.Match[str]) -> bool:
-        run = m[3].replace("'", "")
-        if len(set(run)) != len(run) or run in _POSTULATE_LETTERS:
-            return False
-        if m["markup"]:
-            return True
-        others = (
-            o[0].replace("'", "") for o in _CAPITAL_RUN.finditer(text)
-            if o.start() != m.start(3) and o[0].replace("'", "") not in (run, *_POSTULATE_LETTERS)
-        )
-        if any(set(run) & set(o) for o in others):
-            return True
-        return bool(re.match(rf"\s+(?:is|be)\s+an?\s+(?:[\w-]+\s+){{0,2}}?{_FIGURE_NOUN.pattern}",
-                             text[m.end():], re.IGNORECASE))
-
-    return any(map(names, _POINT_RUN.finditer(text)))
+    return bool(_named_points(text) or parse_problem_points(text))
 
 
 def _needs_figure(q: dict[str, Any], subject: str = "math") -> bool:
@@ -630,8 +578,9 @@ def _needs_figure(q: dict[str, Any], subject: str = "math") -> bool:
     with a checked figure when its text refers to a figure ("in the figure
     below"), or, in math, names points. A problem on the coordinate plane or
     about a curve (which the tool can't draw), one asking the student to
-    construct, draw or sketch the figure, and one naming only shapes ("a
-    rectangle 7 wide", which can't be read for checking) are left to the
+    draw or construct it (`requires_drawing`, Ben's rule: then no figure),
+    and one naming only shapes ("a rectangle 7 wide", which can't be read
+    for checking) are left to the
     generator's judgment, as is every problem in other subjects (a physics
     problem's "point A" is not a geometry figure)."""
     text = q.get("text") or ""
@@ -639,7 +588,7 @@ def _needs_figure(q: dict[str, Any], subject: str = "math") -> bool:
         return True
     return (
         subject == "math" and _names_points(text) and not _COORDINATE_OR_CURVE.search(text)
-        and not _STUDENT_DRAWS.search(text)
+        and not requires_drawing(text)
     )
 
 
