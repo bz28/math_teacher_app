@@ -609,7 +609,7 @@ async def test_writer_reads_values_off_the_worked_solution(monkeypatch: pytest.M
         "Sketch two periods of $g(x) = 3\\csc[6(x + 10°)] - 1$.", "U-up where sine is positive.", 10,
         solution_steps=steps,
     )
-    assert "Worked solution:\n1. Key points\n| 50° | -1 |" in reply.calls[0]
+    assert "Worked solution:\nKey points\n| 50° | -1 |" in reply.calls[0]
     # Values the solution gives aren't flagged; one nothing gives still is.
     assert [i.values_to_check for i in written.items] == [[], ["140"]]
 

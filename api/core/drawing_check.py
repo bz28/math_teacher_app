@@ -223,9 +223,11 @@ def _whole_points(value: Any) -> int:
 
 
 def _solution_text(steps: list[dict[str, Any]] | None) -> str:
+    """Unnumbered: a step number would count as a value the solution
+    gives (`values_not_given`)."""
     return "\n\n".join(
-        f"{i}. {s.get('title') or ''}\n{s.get('description') or ''}".strip()
-        for i, s in enumerate(steps or [], 1) if isinstance(s, dict)
+        f"{s.get('title') or ''}\n{s.get('description') or ''}".strip()
+        for s in steps or [] if isinstance(s, dict)
     ) or "(none)"
 
 

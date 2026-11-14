@@ -286,7 +286,8 @@ async def homework_checklists(db: AsyncSession, assignment: Assignment) -> dict[
 async def write_checklist(
     db: AsyncSession, item_id: uuid.UUID, *, user_id: str | None, replace_teacher_edit: bool = False,
 ) -> bool:
-    """Write `item_id`'s checklist from its question and answer key, and
+    """Write `item_id`'s checklist from its question, answer key and worked
+    solution, and
     commit. Returns True when one was saved.
 
     Writes only when there is no current checklist (none, or a stale
