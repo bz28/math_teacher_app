@@ -236,6 +236,7 @@ class ExtractionFidelityProbe(Probe):
             "api/core/integrity_ai.py",
             "api/core/llm_schemas.py",
             "api/core/image_utils.py",
+            "api/core/page_crop.py",
             "tests/harness/probes/extraction_fidelity.py",
         ]
 

@@ -31,6 +31,8 @@ dependencies = [
     "stripe==15.5.1",
     "pillow==12.3.0",  # EXIF-transpose + downscale student photos before vision (api/core/image_utils) — RUNTIME dep, imported at app startup
     "pypdfium2==5.14.0",  # render PDF pages to images so a drawing on a PDF upload can be cropped (api/core/image_utils) — RUNTIME dep
+    "opencv-python-headless==4.13.0.92",  # find the sheet of paper in a homework photo (api/core/page_crop) — RUNTIME dep
+    "numpy==2.3.5",  # opencv's arrays, used directly by api/core/page_crop — RUNTIME dep
 ]
 
 [tool.setuptools.packages.find]

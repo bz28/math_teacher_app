@@ -30,7 +30,7 @@ MIN_PAGE_LONG_EDGE = 400
 def image_long_edge(raw: bytes) -> int:
     """The long edge of an image in pixels. Reads the header only, and
     refuses an image past `MAX_UPLOAD_PIXELS` like every other open."""
-    with _open_bounded(raw) as img:
+    with open_bounded(raw) as img:
         return max(img.size)
 
 
@@ -122,7 +122,7 @@ MAX_UPLOAD_PIXELS = 50_000_000
 _ROTATED_JPEG_QUALITY = 85
 
 
-def _open_bounded(raw: bytes) -> Image.Image:
+def open_bounded(raw: bytes) -> Image.Image:
     """Open image bytes, refusing anything past `MAX_UPLOAD_PIXELS`
     before a single pixel is decoded (Image.open only reads the header)."""
     img = Image.open(io.BytesIO(raw))
@@ -155,7 +155,7 @@ def rotate_upload(data_base64: str, media_type: str, rotation: int) -> str:
         return rotate_pdf(data_base64, rotation)
     if not media_type.startswith("image/"):
         return data_base64
-    with _open_bounded(base64.b64decode(data_base64)) as opened:
+    with open_bounded(base64.b64decode(data_base64)) as opened:
         icc = opened.info.get("icc_profile")
         # PIL's rotate() is counter-clockwise; quarter turns are exact.
         img = ImageOps.exif_transpose(opened).rotate(-rotation, expand=True)
@@ -209,7 +209,7 @@ def page_looks_sideways(data_base64: str) -> bool:
     and flagged 1 upright page. Returns False for anything it can't read.
     """
     try:
-        with _open_bounded(base64.b64decode(data_base64)) as opened:
+        with open_bounded(base64.b64decode(data_base64)) as opened:
             # JPEGs decode straight at reduced scale — cheap however large
             # the upload. Other formats ignore this.
             opened.draft("L", (_ORIENTATION_EDGE * 2, _ORIENTATION_EDGE * 2))
@@ -221,6 +221,15 @@ def page_looks_sideways(data_base64: str) -> bool:
 
 def _image_looks_sideways(img: Image.Image) -> bool:
     """`page_looks_sideways` on an already-open, upright-as-stored image."""
+    ratio = line_ratio(img)
+    return ratio is not None and ratio < SIDEWAYS_LINE_RATIO
+
+
+def line_ratio(img: Image.Image) -> float | None:
+    """How strongly a page's ink bunches into rows rather than columns:
+    the measure behind `page_looks_sideways`. Upright writing scores well
+    above 1, a page on its side below `SIDEWAYS_LINE_RATIO`. None when the
+    page has no ink to measure."""
     from PIL import ImageChops, ImageFilter
 
     try:
@@ -237,11 +246,11 @@ def _image_looks_sideways(img: Image.Image) -> bool:
         rows = [float(v) for v in ink.resize((1, h), Image.Resampling.BOX).get_flattened_data()]  # type: ignore[arg-type]
         cols = [float(v) for v in ink.resize((w, 1), Image.Resampling.BOX).get_flattened_data()]  # type: ignore[arg-type]
     except Exception:
-        return False
+        return None
     col_spread = _profile_spread(cols)
     if col_spread <= 1e-6:
-        return False
-    return _profile_spread(rows) / col_spread < SIDEWAYS_LINE_RATIO
+        return None
+    return _profile_spread(rows) / col_spread
 
 
 def preprocess_image_for_vision(data_base64: str, media_type: str) -> str:

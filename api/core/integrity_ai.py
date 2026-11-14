@@ -46,6 +46,7 @@ from api.core.llm_schemas import (
     INTEGRITY_SUBMIT_VERDICT_SCHEMA,
     VISUAL_WORK_VERIFY_SCHEMA,
 )
+from api.core.page_crop import PAGES_CUT_TO_PAPER, crop_page_to_paper
 from api.models.assignment import Submission
 
 logger = logging.getLogger(__name__)
@@ -262,12 +263,19 @@ async def extract_student_work_from_pages(
     )
 
     content: list[dict[str, Any]] = []
+    # The pages as the reader saw them (photos cut to their paper), for
+    # the drawings' second look: its boxes are fractions of these.
+    seen_files: list[dict[str, Any]] = []
     for page_number, f in enumerate(files, start=1):
         raw = f.get("data", "")
         recorded_media = f.get("media_type", "image/jpeg")
         base64_data, media_type = _strip_data_url_prefix(raw, recorded_media)
-        # EXIF-orient + downscale phone photos before Vision sees them.
-        parts = [(preprocess_image_for_vision(base64_data, media_type), media_type)]
+        # A photo is cut to its sheet of paper and turned upright when
+        # that is certain (`crop_page_to_paper`, CPU work: off the loop),
+        # then EXIF-oriented and downscaled for Vision.
+        page = await asyncio.to_thread(crop_page_to_paper, base64_data, media_type)
+        seen_files.append({"data": page, "media_type": media_type})
+        parts = [(preprocess_image_for_vision(page, media_type), media_type)]
         if media_type == "application/pdf":
             # Sent as a document, a PDF page is rasterized by the API at a
             # fixed ~1.2 MP, so a photo printed to PDF reached the reader
@@ -344,11 +352,15 @@ async def extract_student_work_from_pages(
         submission_id=str(submission_id) if submission_id else None,
         call_metadata={"phase": "vision_extract"},
     )
+    # Its drawing boxes are fractions of the cut pages. A read stored
+    # before pages were cut has no mark: its boxes are fractions of the
+    # whole photo, and the graph check crops it that way.
+    result[PAGES_CUT_TO_PAPER] = True
     # Every drawing is RECORDED (a missed requires_drawing flag must be
     # recoverable by flipping it and regrading); only the ones the grader
     # will use get the zoomed second look.
     await verify_visual_work(
-        result, files, user_id=user_id,
+        result, seen_files, user_id=user_id,
         submission_id=str(submission_id) if submission_id else None,
         flagged_positions={
             p.get("position") for p in problems or []
@@ -388,6 +400,9 @@ async def verify_visual_work(
 ) -> None:
     """Second look at each drawing the grader will use: present, on a
     problem that requires a drawing (`flagged_positions`), not a table.
+
+    `files` are the pages exactly as the reader saw them (photos already
+    cut to their paper), because each bbox is a fraction of that page.
 
     The full-page pass is primed: it reads "y = 2x - 1, y = -x + 5" next to
     a sketch and reports two lines plotted when one is — even under a
