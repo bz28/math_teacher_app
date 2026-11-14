@@ -33,6 +33,11 @@ def configure_middleware(app: FastAPI) -> None:
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type"],
+        # The web app calls this API cross-origin with a bearer token, so
+        # each new URL costs a preflight round trip before the real
+        # request. Let the browser reuse a preflight for 2h (Chrome's
+        # cap; Starlette's default is 10 min).
+        max_age=7200,
     )
 
     # Gzip compression. SVG figure_svg + solution_steps JSON are both
