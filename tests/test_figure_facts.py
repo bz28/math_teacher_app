@@ -178,10 +178,12 @@ def test_every_fact_kind_with_a_check_is_in_the_table() -> None:
     """A kind added to the vocabulary must come with a pass and a fail case."""
     from typing import get_args
 
-    from api.core.geometry.facts import FactKind
+    from api.core.geometry.facts import CODE_KINDS, FactKind
 
     tested = {c[0].kind for c in CASES} | {"equal_length"}  # below: lengths are checked in proportion
-    assert set(get_args(FactKind)) - tested == {"other"}
+    assert set(get_args(FactKind)) - tested - set(CODE_KINDS) == {"other"}
+    # Code's own kinds (never read by a model) are checked in
+    # tests/test_figure_review_round3.py.
 
 
 def test_lengths_are_checked_in_proportion() -> None:
@@ -546,8 +548,8 @@ async def test_parts_described_in_words_give_that_reason(monkeypatch: pytest.Mon
     _stub_readings(monkeypatch, a, b)
     facts, why = await _why("The angle bisector of the acute angle at line m meets line n at point P.")
     assert facts is None
-    assert why == ["the problem describes its angles or shapes in words rather than naming them, "
-                   "so the figure can't be checked"]
+    assert why == ["this problem describes the figure in words without naming its points; add point names "
+                   "(e.g. 'lines AB and CD meet at E') and I can draw it"]
 
 
 @pytest.mark.asyncio
@@ -709,8 +711,8 @@ async def test_points_a_reading_made_up_mean_the_problem_is_unnamed(monkeypatch:
     _stub_readings(monkeypatch, r, r)
     facts, why = await _why(text)
     assert facts is None
-    assert why == ["the problem describes its angles or shapes in words rather than naming them, "
-                   "so the figure can't be checked"]
+    assert why == ["this problem describes the figure in words without naming its points; add point names "
+                   "(e.g. 'lines AB and CD meet at E') and I can draw it"]
 
 
 def test_an_altitude_is_accounted_for_by_its_own_perpendicular() -> None:

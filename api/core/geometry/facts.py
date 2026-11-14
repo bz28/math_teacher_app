@@ -35,8 +35,12 @@ FactKind = Literal[
     "on_circle", "tangent", "chord", "diameter", "radius", "central_angle", "inscribed_angle",
     "numbered_angle", "transversal",
     "alternate_interior", "alternate_exterior", "corresponding", "same_side_interior",
+    "interior_ray", "extension",
     "other",
 ]
+# Kinds code writes from a reading's own words (see standard_reading); the
+# readers' tool doesn't offer them.
+CODE_KINDS = ("interior_ray", "extension")
 # Two angles a transversal makes with two lines, by where they sit.
 PAIRS = ("alternate_interior", "alternate_exterior", "corresponding", "same_side_interior")
 CIRCLE_KINDS = ("on_circle", "tangent", "chord", "diameter", "radius", "central_angle", "inscribed_angle")
@@ -234,6 +238,13 @@ def _has_name(part: Canon) -> bool:
 
 def _named_parts(facts: FigureFacts) -> set[Canon]:
     out = {("segment", seg(x)) for x in facts.segments} | {("line", lin(x)) for x in facts.lines}
+    # A ray the problem names, or an arm of an angle it names (∠ABC: BA, BC).
+    out |= {("ray", r.strip()) for r in facts.rays}
+    for f in [*facts.givens, *facts.prove]:
+        for x in f.items:
+            n = split_names(x)
+            if len(n) == 3:
+                out |= {("ray", n[1] + n[0]), ("ray", n[1] + n[2])}
     out |= {("line", lin(x)) for x in facts.named_lines}
     out |= {("point", p.strip()) for p in facts.points}
     for poly in (*facts.triangles, *facts.polygons):
@@ -306,6 +317,22 @@ def merged(a: FigureFacts, b: FigureFacts) -> FigureFacts:
     })
 
 
+def with_step(question: FigureFacts, step: FigureFacts) -> FigureFacts:
+    """The facts a step figure is checked against: the question's, plus what
+    the step states (its givens, and what it shows, which holds from then
+    on). The question's own statement to prove and its targets stay."""
+    def union(x: list[Any], y: list[Any]) -> list[Any]:
+        return [*x, *(i for i in y if i not in x)]
+
+    names = ("points", "segments", "rays", "lines", "named_lines", "triangles", "polygons", "circles")
+    return question.model_copy(update={
+        **{k: union(getattr(question, k), getattr(step, k)) for k in names},
+        "givens": union(question.givens, [*step.givens, *step.prove]),
+        "requested": union(question.requested, step.requested),
+        "dropped": union(question.dropped, [f"step: {x}" for x in step.dropped]),
+    })
+
+
 def _closure(atoms_: set[Canon]) -> set[Canon]:
     """'≅' and '∥' are equivalences: a chain and its pairs say the same."""
     out = {a for a in atoms_ if not (isinstance(a, tuple) and a[0] in ("eqlen", "eqang", "par"))}
@@ -353,10 +380,25 @@ def _fact_atoms(f: Fact, facts: FigureFacts) -> set[Canon]:
         return {("eqlen", frozenset((seg(x), seg(y)))) for x, y in zip(it, it[1:])}
     if k == "congruent_angles":
         return {("eqang", frozenset((A(x), A(y)))) for x, y in zip(it, it[1:])}
+    if k == "equal_length" and len(it) >= 2:
+        # "DA = DC": the sides are equal (and each has the value, if one is given).
+        out_: set[Any] = {("eqlen", frozenset((seg(x), seg(y)))) for x, y in zip(it, it[1:])}
+        if f.value is not None or f.expr:
+            out_ |= {("length", seg(x), _num(f.value), _expr(f.expr)) for x in it}
+        return out_
     if k == "equal_length" and it:
         return {("length", seg(it[0]), _num(f.value), _expr(f.expr))}
+    if k == "interior_ray" and len(it) >= 2:
+        return {("interior", seg(it[0]), A(it[1]))}
+    if k == "extension" and it:
+        return {("extension", tuple(split_names(it[0])), f.point or "")}
     if k in ("angle_measure", "central_angle", "inscribed_angle") and it:
         extra = {(k, A(it[0]), f.circle or "")} if k != "angle_measure" else set()
+        n = split_names(it[0])
+        if k == "central_angle" and f.circle and len(n) == 3 and n[1] == f.circle.strip():
+            # ∠AOB in circle O: a circle is named by its centre, so the angle
+            # at O is central by its names alone; the measure is the fact.
+            extra = set()
         return ({measure(A(it[0]))} if f.value is not None or f.expr else set()) | extra
     if k == "right_angle" and it:
         return {("measure", A(it[0]), 90.0, None)}
@@ -524,8 +566,12 @@ _SIGNALS: list[tuple[str, tuple[str, ...], bool]] = [
                                                                       "collinear", "midpoint", "intersect"), False),
     (r"(?<![A-Za-z])[A-Z][0-9]*'*\s+(?:is|lies)\s+between\b", ("on_segment", "collinear", "midpoint"), False),
     (r"\bcollinear\b", ("collinear", "on_line", "on_segment"), False),
-    (r"\b(?:intersect(?:s|ing|ion|ions)?|meets?|meeting)\b", ("intersect", "on_segment", "on_line", "transversal"),
-     False),
+    # "meeting AB at M", "the bisectors meet at I": accounted for by a fact
+    # that puts that point on those parts.
+    (r"\b(?:intersect(?:s|ing|ion|ions)?|meets?|meeting)\b", ("intersect", "on_segment", "on_line", "transversal",
+                                                              "perpendicular", "bisects_segment", "bisects_angle",
+                                                              "midpoint"), False),
+    (r"\bincent(?:er|re)\b", ("bisects_angle",), False),
     # Where two angles sit is its own fact: a transversal alone doesn't say it.
     (rf"\balternate\s+interior\b{_NOT_A_THEOREM}", ("alternate_interior",), False),
     (rf"\balternate\s+exterior\b{_NOT_A_THEOREM}", ("alternate_exterior",), False),
@@ -533,13 +579,26 @@ _SIGNALS: list[tuple[str, tuple[str, ...], bool]] = [
     (rf"\b(?:same[-\s]side|consecutive)\s+interior\b{_NOT_A_THEOREM}", ("same_side_interior",), False),
     # An altitude is accounted for only by its own perpendicular (below).
     (r"\bmedians?\b|\bequidistant\b|\bconcentric\b|\bcircumscribed\b", (), False),
+    # Relations in words: "40 degrees", "∠A and ∠B are equal", "AB equals
+    # AC", "the same length", "∠B is twice ∠A".
+    (r"(?<![\w.])\d+(?:\.\d+)?\s*degrees?\b", (*_MEASURE_KINDS, "supplementary", "complementary", "linear_pair",
+                                                "perpendicular", "rectangle", "square", "right_triangle"), False),
+    (r"\bequals?\b|\bequal\s+to\b|\b(?:are|is)\s+equal\b",
+     (*_SEG_EQ_KINDS, "congruent_angles", "vertical_angles", "bisects_angle", *_MEASURE_KINDS), False),
+    (r"\bsame\s+(?:length|measure|size)\b", (*_SEG_EQ_KINDS, "congruent_angles", "bisects_angle"), False),
+    (r"\btwice\b|\b(?:two|three|four|five|\d+)\s+times\b|\bhalf\s+(?:of|as)\b",
+     ("angle_measure", "equal_length", "midpoint", "bisects_segment", "bisects_angle"), False),
+    # No fact kind says an angle is obtuse or acute: stated, it can't be checked.
+    (r"\b(?:is|are|be)\s+(?:an?\s+)?(?:obtuse|acute)\b", (), False),
 ]
 # A method, not a fact: "use the Alternate Interior Angles Theorem", "by SAS".
 _METHOD = re.compile(
     r"\b(?:use|using)\b[^.;:?\n]*|\bby\s+(?:the\s+)?(?:definition|theorem|postulate|property|converse|"
     r"SAS|ASA|AAS|SSS|HL|CPCTC|AA|SSA)\b[^.;:?\n]*|\b(?:theorem|postulate)\b"
     # A hint is a method too: "(Hint: first prove △QRT ≅ △SRT ...)".
-    r"|\(\s*\**\s*hint\b[^)]*\)?|\bhint\b\s*\**\s*:[^\n]*",
+    r"|\(\s*\**\s*hint\b[^)]*\)?|\bhint\b\s*\**\s*:[^\n]*"
+    # A question states nothing: "determine whether any side is perpendicular".
+    r"|\b(?:determine|decide|tell|check|state|explain|show)\s+whether\b[^.;?\n]*|\bwhether\b[^.;?\n]*",
     re.IGNORECASE,
 )
 _NOT_NAMES = {"I", "SAS", "ASA", "AAS", "SSS", "HL", "CPCTC", "AA", "SSA", "CPCF"}
@@ -573,6 +632,10 @@ def coverage_gaps(text: str, facts: FigureFacts) -> list[str]:
     gaps = [f"point {n}" for n in sorted(parse_problem(text).points - set(facts.points))]
     every = [*facts.givens, *facts.prove]
     methods = [m.span() for m in _METHOD.finditer(t)]
+    if facts.triangles or any(len(split_names(p)) == 3 for p in facts.polygons):
+        # A triangle's angles adding up to 180° is always true: no fact.
+        methods += [m.span() for m in _ANGLE_SUM.finditer(t) if _angle_sum_of_triangle(m.group(0), facts)]
+    questions = _question_spans(t)
 
     def names_in(s: str) -> set[str]:
         return _names(re.sub(r"\\[A-Za-z]+", " ", s)) | {
@@ -581,8 +644,10 @@ def coverage_gaps(text: str, facts: FigureFacts) -> list[str]:
         }
 
     for pattern, kinds, infix in _SIGNALS:
+        # Obtuse / acute in a question names what is asked ("find the acute angle").
+        skip = methods + questions if "obtuse" in pattern else methods
         found = [m for m in re.finditer(pattern, t, re.IGNORECASE)
-                 if not any(a <= m.start() < b for a, b in methods)]
+                 if not any(a <= m.start() < b for a, b in skip)]
         # Each occurrence: the names beside it, up to the next comma, "and",
         # clause end, or neighbouring occurrence of the same signal.
         wants: list[tuple[str, set[str], set[str]]] = []
@@ -609,7 +674,7 @@ def coverage_gaps(text: str, facts: FigureFacts) -> list[str]:
         def fits(f: Fact, near_l: set[str], near_r: set[str], word: str) -> bool:
             if f.kind not in kinds:
                 return False
-            if word.endswith("°"):  # "40°": a fact with that number
+            if re.search(r"°|degree", word):  # "40°", "40 degrees": a fact with that number
                 n = float(re.match(r"[\d.]+", word).group(0))  # type: ignore[union-attr]
                 said = {f.value} | {float(x) for x in re.findall(r"\d+(?:\.\d+)?", f.expr or "")}
                 if n not in said and not (n == 90 and f.kind in ("right_angle", "perpendicular", "rectangle",
@@ -659,7 +724,216 @@ def coverage_gaps(text: str, facts: FigureFacts) -> list[str]:
             f.kind == "perpendicular" and any(frozenset(split_names(x)) == side for x in f.items) for f in every
         ):
             gaps.append("“altitude”" + (f" (about {''.join(after.groups())})" if after else ""))
+    gaps += _clause_gaps(t, facts, methods, questions)
     return list(dict.fromkeys(gaps))
+
+
+# A clause that asks or instructs ("Find m∠C", "Write a two-column proof")
+# states nothing about the figure (proving is a statement, so not here).
+_QUESTION = re.compile(
+    r"\b(?:find|what|which|how|determine|calculate|compute|solve|identify|name|write|give|express|list|"
+    r"classify|round|leave|simplify|complete|fill|label|draw|sketch|construct|graph|plot|set\s+up|evaluate)\b",
+    re.IGNORECASE,
+)
+_CLAUSE_END = re.compile(r"[.;?!\n]|,|\b(?:and|if|where|when|so\s+that|such\s+that|given\s+that|then)\b",
+                         re.IGNORECASE)
+# Words that only name or point at the figure.
+_NAMING = re.compile(
+    r"\b(?:in|the|a|an|given|let|consider|below|above|shown|figure|diagram|triangles?|quadrilaterals?|polygons?|"
+    r"points?|segments?|lines?|rays?|angles?|sides?|vertices|vertex|with|of|for|has|have|is|are|be|this|that|as|"
+    r"prove|show|statements?|reasons?|all|share[sd]?|sharing|endpoints?|common)\b|\\triangle|\\angle|\\overline|\\overrightarrow|\\overleftrightarrow"
+    r"|[\s,.:;$(){}|*\-]",
+    re.IGNORECASE,
+)
+
+
+# "(1)", "(a)", "1." at the start of a list item, "Step 2": not numbers given.
+_LIST_MARK = r"\(\s*(?:\d+|[a-z]|[ivx]+)\s*\)|(?:(?<=\n)|^)\s*\d+[.)]\s|\bstep\s+\d+\b|\|\s*\d+\s*\|"
+
+
+def parse_problem_points(t: str) -> set[str]:
+    from api.core.geometry.figure_check import parse_problem
+
+    return parse_problem(t).points
+
+
+def _clauses(t: str) -> list[tuple[int, int]]:
+    """The text cut into clauses (spans): at sentence ends, commas, "and",
+    "if", "where" … but never inside brackets ("A(0, 0)")."""
+    out, start, depth = [], 0, 0
+    i = 0
+    while i < len(t):
+        ch = t[i]
+        if ch in "({[":
+            depth += 1
+        elif ch in ")}]":
+            depth = max(0, depth - 1)
+        elif depth == 0 and (m := _CLAUSE_END.match(t, i)) and (not m.group(0)[0].isalpha() or i == 0
+                                                                  or not t[i - 1].isalpha()):
+            out.append((start, i))
+            start = i = m.end()
+            continue
+        i += 1
+    out.append((start, len(t)))
+    trimmed = []
+    for a, b in out:
+        while a < b and t[a].isspace():
+            a += 1
+        while b > a and t[b - 1].isspace():
+            b -= 1
+        if a < b:
+            trimmed.append((a, b))
+    return trimmed
+
+
+def _question_spans(t: str) -> list[tuple[int, int]]:
+    """Clauses that ask or instruct: one with a question verb, and the ones
+    after it in the same sentence that it lists ("find k and the length
+    of YZ"), up to a condition ("… if AB = 5")."""
+    out: list[tuple[int, int]] = []
+    asking = False
+    prev_end = 0
+    for a, b in _clauses(t):
+        between = t[prev_end:a]
+        if re.search(r"[.;?!\n]", between):
+            asking = False  # a new sentence
+        if re.search(r"\b(?:if|where|when|so\s+that|such\s+that|given\s+that)\b", between, re.IGNORECASE):
+            asking = False  # a condition states something
+        clause = t[a:b]
+        if re.search(r"\b(?:prove|show\s+that|verify|justify|explain)\b", clause, re.IGNORECASE):
+            asking = False
+        elif _QUESTION.search(clause):
+            asking = True
+        if asking:
+            out.append((a, b))
+        prev_end = b
+    return out
+
+
+def _tokens(s: str) -> list[str]:
+    """Words, names and symbols, one spelling each, for finding a fact's
+    quote in the text however it is typeset."""
+    from api.core.geometry.figure_check import _clean
+
+    s = _clean(s)
+    for a, b in ((r"\angle", " angle "), (r"\triangle", " triangle "), (r"\parallel", " parallel "),
+                 (r"\perp", " perp "), (r"\cong", " cong "), (r"\sim", " sim "), (r"^\circ", " deg "),
+                 ("°", " deg "), ("=", " eq ")):
+        s = s.replace(a, b)
+    s = re.sub(r"\\[A-Za-z]+", " ", s)
+    return re.findall(r"[A-Za-z]+|\d+(?:\.\d+)?|[+\-<>]", s.lower())
+
+
+def _found_at(text_tokens: list[str], quote: list[str]) -> list[int]:
+    """Where a quote's tokens sit in the text: contiguous, else in order
+    within a short stretch (a quote may drop an "m" or a word)."""
+    n = len(quote)
+    if not n:
+        return []
+    for i in range(len(text_tokens) - n + 1):
+        if text_tokens[i:i + n] == quote:
+            return list(range(i, i + n))
+    for i in range(len(text_tokens)):
+        if text_tokens[i] != quote[0]:
+            continue
+        hit, j = [i], i + 1
+        for q in quote[1:]:
+            while j < len(text_tokens) and j <= i + 2 * n and text_tokens[j] != q:
+                j += 1
+            if j >= len(text_tokens) or j > i + 2 * n:
+                break
+            hit.append(j)
+            j += 1
+        if len(hit) == n:
+            return hit
+    return []
+
+
+def _clause_gaps(t: str, facts: FigureFacts, methods: list[tuple[int, int]],
+                 questions: list[tuple[int, int]]) -> list[str]:
+    """The structural rule: every clause that names a part or holds a
+    number is accounted for by a fact whose quote lies in it (or is a
+    question, an instruction or a method); a clause that only names the
+    figure ("In △ABC,") needs nothing. And every number the text gives is
+    a number of some fact (or a coordinate code reads)."""
+    from api.core.geometry.figure_check import _plain, _shading_statements, coordinates
+
+    clauses = _clauses(t)
+    # Tokens of the text, each with the clause it sits in.
+    text_tokens: list[str] = []
+    owner: list[int] = []
+    at = 0
+    for ci, (a, b) in enumerate(clauses):
+        between = _tokens(t[at:a])  # the "and" / "if" between clauses: no clause's
+        text_tokens += between
+        owner += [-1] * len(between)
+        toks = _tokens(t[a:b])
+        text_tokens += toks
+        owner += [ci] * len(toks)
+        at = b
+    accounted: set[int] = set()
+    every = [*facts.givens, *facts.prove]
+    for f in every:
+        for q in re.split(r"\s*…\s*|\.\.\.", f.quote or ""):
+            accounted |= {owner[i] for i in _found_at(text_tokens, _tokens(q))} - {-1}
+        if not (f.quote or "").strip():
+            # No quote to place it by: it sits in each shortest run of clauses
+            # (up to three: "AB and CD are parallel" splits at "and") that
+            # writes all of its points; the signal words still need its kind.
+            def written(x: str) -> set[str]:
+                return set(re.findall(r"[A-Z]|(?<=∠)\s*\d+", _plain(x).replace(" ", "")))
+
+            need = written(" ".join([*f.items, f.point or ""]).replace("∠", "")) | {
+                i for i in f.items if i.isdigit()}
+            for ci in range(len(clauses) if need else 0):
+                for cj in range(ci, min(ci + 3, len(clauses))):
+                    if need <= written(t[clauses[ci][0]:clauses[cj][1]]):
+                        accounted |= set(range(ci, cj + 1))
+                        break
+    skip = methods + questions
+
+    def inside(a: int, b: int) -> bool:
+        return any(x <= a and b <= y + 1 for x, y in skip)
+
+    gaps: list[str] = []
+    points = {p.strip() for p in facts.points} | set(parse_problem_points(t))
+    coord_nums = {v for xy in coordinates(t).values() for v in xy}
+    said_nums: set[float] = set(coord_nums)
+    for f in every:
+        if f.value is not None:
+            said_nums.add(round(float(f.value), 6))
+        for x in re.findall(r"\d+(?:\.\d+)?", " ".join([f.expr or "", *f.items, f.point or ""])):
+            said_nums.add(round(float(x), 6))
+    blanked = list(t)
+    for x, y in methods:
+        blanked[x:y] = " " * (y - x)
+    for ci, (a, b) in enumerate(clauses):
+        clause = "".join(blanked[a:b])  # a method inside the clause says nothing
+        if inside(a, b):
+            continue
+        body = re.sub(r"[A-Z]\s*\(\s*-?[\d.]+\s*,\s*-?[\d.]+\s*\)", " ", clause)  # coordinates: code's
+        for m in reversed(_shading_statements(body)):  # "△ABD is shaded": code's too
+            body = body[:m.start()] + " " + body[m.end():]
+        body = re.sub(_LIST_MARK, " ", body)
+        has_name = bool(_names(re.sub(r"\\[A-Za-z]+", " ", body)) & points)
+        has_number = bool(re.search(r"(?<![A-Za-z\d'])\d", re.sub(r"\\angle\s*\{?\s*\d+", " ", body)))
+        if not (has_name or has_number) or ci in accounted:
+            continue
+        rest = _NAMING.sub("", re.sub(r"(?<![A-Za-z\\])(?:[A-Z][0-9]*'*)+(?![a-z])|\\angle\s*\{?\s*\d+\s*\}?",
+                                      "", body))
+        if not rest:
+            continue  # only names the figure
+        gaps.append(f"“{_plain(clause).strip()}”")
+    # Every number the text gives is some fact's.
+    marks = [m.span() for m in re.finditer(_LIST_MARK, t)]
+    for m in re.finditer(r"(?<![A-Za-z\d.'_])(\d+(?:\.\d+)?)", t):
+        if inside(m.start(), m.end()) or any(a <= m.start() < b for a, b in marks):
+            continue
+        if re.search(r"\\angle\s*\{?\s*$", t[max(0, m.start() - 12):m.start()]):
+            continue  # ∠1 is a name
+        if round(float(m.group(1)), 6) not in said_nums:
+            gaps.append(f"the number {m.group(1)}")
+    return gaps
 
 
 def invented_points(facts: FigureFacts, text: str) -> list[str]:
@@ -721,6 +995,242 @@ def grounded(facts: FigureFacts, text: str) -> FigureFacts:
     if not notes:
         return facts
     return facts.model_copy(update={**out, "circles": [], "dropped": [*facts.dropped, *notes]})
+
+
+_SEG_W = r"(?:\\overline\s*)?\{?\s*([A-Z][0-9]*'*)\s*([A-Z][0-9]*'*)\s*\}?"
+_PT_W = r"(?:point\s+)?\{?\s*([A-Z][0-9]*'*)\s*\}?(?![A-Za-z])"
+# "side BC extended to point D", "extending side RP beyond P", "extend BM to E".
+_EXTENSIONS = [
+    re.compile(rf"(?:side\s+|segment\s+)?{_SEG_W}\s+(?:is\s+)?extended\s+(?:beyond|past|through)\s+{_PT_W}"
+               rf"(?:\s+to\s+{_PT_W})?", re.I),
+    re.compile(rf"extend(?:ing|s|ed)?\s+(?:side\s+|segment\s+)?{_SEG_W}\s+(?:beyond|past|through)\s+{_PT_W}"
+               rf"(?:\s+to\s+{_PT_W})?", re.I),
+    re.compile(rf"(?:side\s+|segment\s+)?{_SEG_W}\s+(?:is\s+)?extended\s+to\s+{_PT_W}", re.I),
+    re.compile(rf"extend(?:ing|s|ed)?\s+(?:side\s+|segment\s+)?{_SEG_W}\s+to\s+{_PT_W}", re.I),
+]
+_INTERIOR = re.compile(
+    r"(?:ray\s+)?(?:\\overrightarrow\s*)?\{?\s*([A-Z][0-9]*'*)\s*([A-Z][0-9]*'*)\s*\}?\s+(?:lies|is)\s+"
+    r"(?:in|on)\s+the\s+interior\s+of\s+∠\s*((?:[A-Z][0-9]*'*){3})", re.I)
+_DRAW = re.compile(rf"^\s*(?:and\s+)?(?:then\s+)?draw\s+(?:segment\s+|the\s+segment\s+)?{_SEG_W}\s*[.,;]?\s*$", re.I)
+_COORD = r"[A-Z][0-9]*'*\s*=?\s*\(\s*-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?\s*\)"
+# The angle sum of a triangle: always 180°, so it says nothing about the figure.
+_ANGLE_SUM = re.compile(
+    r"(?:m\s*)?(?:\\angle|∠)\s*\{?\s*([A-Z])\s*\}?\s*\+\s*(?:m\s*)?(?:\\angle|∠)\s*\{?\s*([A-Z])\s*\}?\s*\+\s*"
+    r"(?:m\s*)?(?:\\angle|∠)\s*\{?\s*([A-Z])\s*\}?\s*=\s*180|"
+    r"\b(?:the\s+)?(?:three\s+)?(?:interior\s+)?angles(?:\s+of\s+(?:the\s+|a\s+|any\s+)?(?:triangle|\\triangle\s*[A-Z]{3}))?"
+    r"\s+(?:sum|add(?:\s+up)?)\s+to\s+180", re.I)
+
+
+def _names_upper(m: re.Match[str]) -> bool:
+    """The names a case-blind pattern caught are capitals ("BC", not "de")."""
+    return all(g is None or g[:1].isupper() for g in m.groups())
+
+
+def _plain_quote(q: str) -> str:
+    """A quote as a teacher reads it (\\overline{AB} → AB, \\angle → ∠)."""
+    from api.core.geometry.figure_check import _clean, _plain
+
+    return re.sub(r"\s+", " ", _plain(_clean(q))).strip(" .,;:")
+
+
+def _norm_quote(q: str) -> str:
+    return _plain_quote(q).lower()
+
+
+def _angle_sum_of_triangle(quote: str, facts: FigureFacts) -> bool:
+    """The quote says a triangle's three angles add up to 180° (the
+    statement, not a value): ∠A + ∠B + ∠C = 180° for a named △ABC, or
+    "the three angles sum to 180°" when the problem has a triangle."""
+    from api.core.geometry.figure_check import _clean
+
+    m = _ANGLE_SUM.search(_clean(quote))
+    if not m:
+        return False
+    corners = {frozenset(split_names(t)) for t in facts.triangles} | {
+        frozenset(split_names(p)) for p in facts.polygons if len(split_names(p)) == 3}
+    if m.group(1):
+        return frozenset(m.group(1, 2, 3)) in corners
+    return bool(corners)
+
+
+def standard_reading(facts: FigureFacts) -> FigureFacts:
+    """What code reads out of a reading's own words before the two readings
+    are compared (both get the same treatment, so this can only make them
+    agree on what the words say):
+
+    - "side BC extended to point D", "extending RP beyond P": an extension
+      fact (D past C on line BC), whatever kind the reading gave it;
+    - "ray BD lies in the interior of ∠ABC": an interior-ray fact;
+    - "draw AD": the segment AD to draw, not a fact;
+    - "A(0, 0), B(4, 2)": nothing (code reads coordinates from the text);
+    - a triangle's angles adding up to 180°: nothing (always true);
+    - an "other" fact whose words another fact of the reading checks in
+      full ("PQ is the perpendicular bisector of AB" beside the
+      perpendicular and bisector facts quoting those words): nothing more;
+    - "△ABD is shaded": nothing (code reads shading from the text);
+    - a shape fact whose quote neither names the shape nor states any
+      relation ("Quadrilateral ABCD" read as a parallelogram): nothing;
+    - "∠BCA is at vertex C, inside △ABC": nothing (its name says as much);
+    - "∠AGH ≅ ∠GHD (alternate interior angles)": also the position fact.
+
+    Each fact taken out is noted in `dropped`."""
+    from api.core.geometry.figure_check import _clean, shaded_regions
+
+    segments = list(facts.segments)
+    notes: list[str] = []
+    out: dict[str, list[Fact]] = {"givens": [], "prove": []}
+    added_pairs: list[Fact] = []
+    for section in ("givens", "prove"):
+        for f in getattr(facts, section):
+            q = f.quote or ""
+            plain = _plain_quote(q)
+            ext = next((m for rx in _EXTENSIONS if (m := rx.search(plain)) and _names_upper(m)), None)
+            interior = m if (m := _INTERIOR.search(plain)) and _names_upper(m) else None
+            if ext and f.kind in ("other", "on_segment", "on_line", "collinear", "intersect"):
+                a, b, *rest = ext.groups()
+                past, to = (rest[0], rest[1]) if len(rest) == 2 else (None, rest[0])
+                start, end = (a, b) if past in (None, b) else (b, a)
+                if past is not None and past not in (a, b):
+                    out[section].append(f)
+                    continue
+                new = Fact(kind="extension", items=[start + end], point=to or None, quote=q)
+                if not any(x.kind == "extension" and x.items == new.items and x.point == new.point
+                           for x in out[section]):
+                    out[section].append(new)
+                continue
+            if interior and f.kind == "other":
+                ray, ang_ = interior.group(1) + interior.group(2), interior.group(3)
+                out[section].append(Fact(kind="interior_ray", items=[ray, ang_], quote=q))
+                continue
+            if f.kind == "other" and (m := _DRAW.match(plain)) and _names_upper(m):
+                pair = m.group(1) + m.group(2)
+                if not any(frozenset(split_names(x)) == frozenset(pair) for x in segments):
+                    segments.append(pair)
+                notes.append(f"read as a part to draw: “{q}”")
+                continue
+            if f.kind == "other" and re.search(_COORD, q) and not re.sub(
+                r"\b(?:and|vertices|vertex|at|has|have|with|points?|triangle|quadrilateral|polygon)\b|[\s,.;:$]",
+                "", re.sub(rf"{_COORD}|(?<![A-Za-z])[A-Z]{{2,}}(?![a-z])", "", q), flags=re.I,
+            ):
+                notes.append(f"read by code (coordinates): “{q}”")
+                continue
+            if f.kind == "other" and shaded_regions(_clean(q)) and not re.sub(
+                r"\b(?:is|are|shaded|shade|the|a|region|triangle|sector|and)\b|[\s,.;:$△]|\\triangle",
+                "", re.sub(r"(?<![A-Za-z])[A-Z]{3,}(?![a-z])", "", _plain_quote(q)), flags=re.I,
+            ):
+                notes.append(f"read by code (shading): “{q}”")
+                continue
+            if f.kind in _SHAPE_WORD and not re.search(_SHAPE_WORD[f.kind], plain, re.I) and not re.search(
+                    _RELATION_SAID, plain, re.I):
+                # "Quadrilateral ABCD" read as a parallelogram: the words name
+                # the figure and state nothing about it.
+                notes.append(f"set aside: {describe(f)} (its quote “{q}” doesn't say so)")
+                continue
+            if f.kind == "other" and _names_its_angle(_plain_quote(q)):
+                notes.append(f"set aside: “{q}” (it only says where the angle its name gives is)")
+                continue
+            if _angle_sum_of_triangle(q, facts) and f.value is None:
+                notes.append(f"set aside: “{q}” (a triangle's angles always add up to 180°)")
+                continue
+            out[section].append(f)
+    # An "other" fact another fact already checks in full.
+    for section in ("givens", "prove"):
+        kept = []
+        for f in out[section]:
+            nq = _norm_quote(f.quote or "")
+            covering = [g for g in out[section] if g.kind != "other" and nq and nq in _norm_quote(g.quote or "")]
+            if f.kind == "other" and covering and _said_by(f, covering, facts):
+                notes.append(f"set aside: “{f.quote}” (checked by {', '.join(describe(g) for g in covering)})")
+                continue
+            kept.append(f)
+        out[section] = kept
+    # "∠AGH ≅ ∠GHD (alternate interior angles)": where the angles sit.
+    for f in out["prove"] + out["givens"]:
+        if f.kind != "congruent_angles" or len(f.items) != 2:
+            continue
+        for pk in PAIRS:
+            paren = rf"\(\s*(?:as\s+|which\s+are\s+)?{_PAIR_RX[pk]}\s*(?:angles)?\s*\)"
+            if re.search(paren, f.quote, re.I) and not any(
+                g.kind == pk and set(g.items) == set(f.items) for g in out["givens"]
+            ):
+                added_pairs.append(Fact(kind=pk, items=list(f.items), quote=f.quote))
+    out["givens"] += added_pairs
+    if out == {"givens": facts.givens, "prove": facts.prove} and segments == facts.segments and not notes:
+        return facts
+    return facts.model_copy(update={**out, "segments": segments, "dropped": [*facts.dropped, *notes]})
+
+
+# A shape fact's quote names the shape.
+_SHAPE_WORD = {
+    "isosceles": r"\bisosceles\b", "equilateral": r"\bequilateral\b|\bequiangular\b",
+    "right_triangle": r"\bright\b|90|⊥|\\perp|\bperpendicular\b",
+    "parallelogram": r"\bparallelograms?\b", "rectangle": r"\brectangles?\b", "square": r"\bsquares?\b",
+    "rhombus": r"\brhomb(?:us|uses|i)\b", "trapezoid": r"\btrapez(?:oid|oids|ium)\b",
+    "isosceles_trapezoid": r"\bisosceles\b", "kite": r"\bkites?\b",
+}
+# Words or symbols by which a quote states a relation ("DA = DC" says
+# isosceles at D; "Quadrilateral ABCD" says nothing).
+_RELATION_SAID = (r"[=≅∥⊥∼≈]|\\(?:cong|parallel|perp|sim)\b|\b(?:parallel|perpendicular|congruent|equal|same|"
+                  r"bisect\w*|midpoint|degrees?|right|sides?|angles?)\b|°|\d")
+_PT1 = r"([A-Z][0-9]*'*)"
+_ANGLE_SAID = re.compile(
+    rf"^\s*∠\s*{_PT1}{_PT1}{_PT1}\s+is\s+at\s+(?:the\s+)?vertex\s+{_PT1}"
+    rf"(?:\s*,?\s*(?:inside|in)\s+△\s*{_PT1}{_PT1}{_PT1})?"
+    rf"(?:\s*,?\s*(?:and\s+)?between\s+(?:the\s+)?sides\s+{_PT1}{_PT1}\s+and\s+{_PT1}{_PT1})?\s*[.;]?\s*$")
+
+
+def _names_its_angle(quote: str) -> bool:
+    """"∠BCA is at vertex C, inside △ABC, between sides BC and AC": only
+    where the angle its own name puts is (its vertex, its triangle, its
+    sides), so it states nothing more."""
+    m = _ANGLE_SAID.match(quote)
+    if not m:
+        return False
+    x, v, y, at, *rest = m.groups()
+    tri, sides = rest[:3], rest[3:]
+    if at != v:
+        return False
+    if tri[0] is not None and set(tri) != {x, v, y}:
+        return False
+    if sides[0] is not None and {frozenset(sides[:2]), frozenset(sides[2:])} != {
+            frozenset((v, x)), frozenset((v, y))}:
+        return False
+    return True
+
+
+# Words that carry no relation of their own in a fact's quote.
+_FILLER = re.compile(
+    r"\b(?:a|an|the|is|are|of|at|from|all|two|three|both|each|and|point|points|vertex|vertices|line|lines|"
+    r"segment|segments|ray|rays|angle|angles|side|sides|with|to|in|that|which|its|their|given|let|prove)\b"
+    r"|[↔→\s,.;:$()]", re.I)
+
+
+def _said_by(f: Fact, covering: list[Fact], facts: FigureFacts) -> bool:
+    """Every word of an "other" fact's quote is said by the checked facts
+    quoting the same words: its names are theirs, and once the names, the
+    filler words, and each relation word those facts' kinds account for
+    are taken out, nothing is left ("↔PQ is the perpendicular bisector of
+    AB" beside "PQ ⊥ AB" and "PQ bisects AB"). "A secant passes through A
+    and B on the circle" beside "A, B lie on the circle" keeps "secant
+    passes", so it stays (and can't be checked)."""
+    names = set().union(*(_fact_names(g) for g in covering))
+    if not _names(_plain_quote(f.quote)) <= names | {line_key(x) for x in names}:
+        return False
+    rest = _plain_quote(f.quote)
+    kinds = {g.kind for g in covering}
+    for pattern, signal_kinds, _infix in _SIGNALS:
+        if kinds & set(signal_kinds):
+            rest = re.sub(pattern, " ", rest, flags=re.I)
+    rest = re.sub(r"(?<![A-Za-z])(?:[A-Z][0-9]*'*)+(?![a-z])", " ", rest)
+    return not _FILLER.sub("", rest)
+
+
+_PAIR_RX = {
+    "alternate_interior": r"alternate\s+interior",
+    "alternate_exterior": r"alternate\s+exterior",
+    "corresponding": r"corresponding",
+    "same_side_interior": r"(?:same[-\s]side|consecutive|co-?)\s*interior",
+}
 
 
 def described_in_words(facts: FigureFacts) -> list[str]:
@@ -805,10 +1315,15 @@ def describe(f: Fact) -> str:
     }
     if k in joined:
         return joined[k].join(it)
+    amount = _num_txt(f.value) if f.value is not None else f.expr or ""
     said: dict[str, str] = {
         "congruent_angles": " ≅ ".join(_a(x) for x in it),
-        "equal_length": f"{first} = {_num_txt(f.value) if f.value is not None else f.expr or ''}" if first
-        else f"a side of length {_num_txt(f.value)}",
+        "equal_length": (
+            " = ".join([*it, *([amount] if amount else [])])
+            if len(it) >= 2 else
+            f"{first} = {_num_txt(f.value) if f.value is not None else f.expr or ''}" if first
+            else f"a side of length {_num_txt(f.value)}"
+        ),
         "angle_measure": f"m{_a(first)} = {measure}",
         "right_angle": f"{_a(first)} is a right angle",
         "midpoint": f"{p} is the midpoint of {first}",
@@ -837,6 +1352,9 @@ def describe(f: Fact) -> str:
         "inscribed_angle": f"{_a(first)} is inscribed in {on}{size}",
         "numbered_angle": f"{_a(first)} is {_a(rest)}",
         "transversal": f"{first or 'a transversal'} crosses {rest}",
+        "interior_ray": f"ray {first} lies inside {_a(rest)}",
+        "extension": (f"{first} is extended beyond {split_names(first)[-1] if split_names(first) else ''}"
+                      + (f" to {p}" if p else "")),
         **{
             pk: (f"{' and '.join(_a(x) for x in it)} are {_pair_words(pk)} angles"
                  if len(it) >= 2 else f"which angles are {_pair_words(pk)}")
@@ -909,10 +1427,30 @@ def to_relations(f: Fact, facts: FigureFacts) -> list[Any]:
         return [R("eqlen", pair(x), pair(y)) for x, y in zip(it, it[1:])]
     if k == "congruent_angles" and len(it) >= 2:
         return [R("eqang", angle(x), angle(y)) for x, y in zip(it, it[1:])]
+    if k == "equal_length" and len(it) >= 2:
+        # "DA = DC": two sides equal; with a value or algebra, each has it.
+        rels = [R("eqlen", pair(x), pair(y)) for x, y in zip(it, it[1:])]
+        if f.value is not None:
+            rels += [R("length", pair(x), float(f.value)) for x in it]
+        elif f.expr:
+            rels += [R("lenexpr", pair(x), algebra(f.expr)) for x in it]
+        return rels
     if k == "equal_length" and it:
         if f.value is not None:
             return [R("length", pair(it[0]), float(f.value))]
         return [R("lenexpr", pair(it[0]), algebra(f.expr))] if f.expr else []
+    if k == "interior_ray" and len(it) >= 2:
+        v, end = pair(it[0])
+        whole = angle(it[1])
+        if isinstance(whole, str):
+            raise ValueError(it[1])
+        x, vertex, y = whole
+        if vertex != v or not x:
+            raise ValueError(it[1])
+        return [R("interior", v, end, (x, y))]
+    if k == "extension" and it:
+        start, end = pair(it[0])
+        return [R("beyond", start, end, f.point or "")]
     if k == "equal_length" and f.value is not None:
         # A side the problem doesn't name ("a width of 7 inches"): the
         # figure shows it by a side labelled with that length.
@@ -1066,7 +1604,9 @@ FACTS_TOOL: dict[str, Any] = {
                     "items": {
                         "type": "object",
                         "properties": {
-                            "kind": {"type": "string", "enum": list(FactKind.__args__)},  # type: ignore[attr-defined]
+                            "kind": {"type": "string", "enum": [
+                                k for k in FactKind.__args__ if k not in CODE_KINDS  # type: ignore[attr-defined]
+                            ]},
                             "items": _ITEMS,
                             "point": {"type": ["string", "null"]},
                             "value": {"type": ["number", "null"]},
@@ -1115,7 +1655,9 @@ def to_parts(facts: FigureFacts, text: str, extra: str = "") -> Any:
         _numbers,
         _rel_points,
         algebra_relation,
+        coordinate_relations,
         figure_words,
+        shaded_regions,
         solved_expressions,
     )
 
@@ -1123,6 +1665,10 @@ def to_parts(facts: FigureFacts, text: str, extra: str = "") -> Any:
     t = _clean(text)
     out.numbers = _numbers(t)
     out.words = figure_words(t)
+    out.shaded = shaded_regions(t)
+    # The reading's circles, and any a circle fact names.
+    named = [f.circle for f in [*facts.givens, *facts.prove] if f.circle is not None]
+    out.circles = [*facts.circles, *dict.fromkeys(c for c in named if c not in facts.circles)]
 
     def two(s: str) -> tuple[str, str] | None:
         n = split_names(s)
@@ -1153,6 +1699,8 @@ def to_parts(facts: FigureFacts, text: str, extra: str = "") -> Any:
         return [r for f in fs for r in to_relations(f, facts)]
 
     out.givens, out.prove = rels(facts.givens), rels(facts.prove)
+    # Coordinates are read by code from the text, never from a reading.
+    out.givens += coordinate_relations(t)
     # Measures given as algebra: the ones the facts fix become plain
     # measures; all of them are held together by one relation.
     every = out.givens + out.prove
