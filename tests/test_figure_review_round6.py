@@ -360,3 +360,247 @@ def test_a_method_accounts_only_for_its_own_name(text: str) -> None:
 ])
 def test_a_methods_name_is_accounted_for(text: str) -> None:
     assert coverage_gaps(text, METHOD_FACTS) == [], text
+
+
+# ── 8. Exact rules for words that need more than one fact ────────────
+# (Coordinator, 2026-11-14: instruction wording only as whole phrases;
+# "each", "both", "respectively", "one … the other" and the group-E words by
+# exact rules, each checked against the reading.)
+
+ISO = [F("isosceles", ["ABC"], point="A", quote="isosceles △ABC, AB = AC")]
+
+
+def iso_facts(*givens: Fact, find: list[Target] | None = None) -> FigureFacts:
+    return FigureFacts(points=list("ABC"), triangles=["ABC"], givens=[*ISO, *givens],
+                       find=find or [Target(kind="other", item="x")])
+
+
+EACH = r"In isosceles $\triangle ABC$, $AB = AC$. Each base angle measures $(5x - 3)^\circ$. Find $x$."
+
+
+def test_each_base_angle_needs_a_fact_on_both_base_angles() -> None:
+    q = "Each base angle measures (5x − 3)°"
+    both = iso_facts(F("angle_measure", ["B"], expr="5x-3", quote=q), F("angle_measure", ["C"], expr="5x-3", quote=q))
+    assert coverage_gaps(EACH, both) == []
+    one = iso_facts(F("angle_measure", ["B"], expr="5x-3", quote=q))
+    assert coverage_gaps(EACH, one) != []
+    apex = iso_facts(F("angle_measure", ["B"], expr="5x-3", quote=q), F("angle_measure", ["A"], expr="5x-3", quote=q))
+    assert coverage_gaps(EACH, apex) != []
+    differ = iso_facts(F("angle_measure", ["B"], expr="5x-3", quote=q), F("angle_measure", ["C"], expr="5x+3", quote=q))
+    assert coverage_gaps(EACH, differ) != []
+
+
+def test_the_base_angles_named_after_satisfy_are_the_base_angles() -> None:
+    text = (r"In isosceles $\triangle ABC$, $AB = AC$. The base angles satisfy $m\angle B = (5y - 8)^\circ$ and "
+            r"$m\angle C = (3y + 14)^\circ$. Find $y$.")
+    givens = [F("angle_measure", ["B"], expr="5y-8", quote="m∠B = (5y - 8)°"),
+              F("angle_measure", ["C"], expr="3y+14", quote="m∠C = (3y + 14)°")]
+    assert coverage_gaps(text, iso_facts(*givens, find=[Target(kind="other", item="y")])) == []
+    wrong = text.replace(r"m\angle C", r"m\angle A")
+    givens_a = [givens[0], F("angle_measure", ["A"], expr="3y+14", quote="m∠A = (3y + 14)°")]
+    assert any("base" in g for g in coverage_gaps(wrong, iso_facts(*givens_a, find=[Target(kind="other", item="y")])))
+
+
+def test_the_vertex_angle_unnamed_is_the_apex() -> None:
+    text = r"In isosceles $\triangle ABC$, $AB = AC$. The vertex angle measures $40^\circ$. Find $x$."
+    q = "The vertex angle measures 40°"
+    assert coverage_gaps(text, iso_facts(F("angle_measure", ["A"], value=40, quote=q))) == []
+    assert coverage_gaps(text, iso_facts(F("angle_measure", ["B"], value=40, quote=q)))
+
+
+def test_one_acute_angle_and_the_other_are_the_two_acute_angles() -> None:
+    text = (r"In right $\triangle ABC$ with the right angle at $C$, one acute angle measures $(3x + 4)^\circ$ and the "
+            r"other measures $(6x - 13)^\circ$. Find $x$.")
+    right = F("right_triangle", ["ABC"], point="C", quote="right △ABC with the right angle at C")
+
+    def facts(v1: str, v2: str) -> FigureFacts:
+        return FigureFacts(points=list("ABC"), triangles=["ABC"], find=[Target(kind="other", item="x")], givens=[
+            right, F("angle_measure", [v1], expr="3x+4", quote="one acute angle measures (3x + 4)°"),
+            F("angle_measure", [v2], expr="6x-13", quote="the other measures (6x - 13)°")])
+    assert coverage_gaps(text, facts("A", "B")) == [] and coverage_gaps(text, facts("B", "A")) == []
+    assert coverage_gaps(text, facts("A", "C")) != []  # ∠C is the right angle
+    assert coverage_gaps(text, facts("A", "A")) != []
+
+
+def test_parts_that_share_an_endpoint_or_a_side() -> None:
+    text = (r"$\overrightarrow{OA}$, $\overrightarrow{OB}$, and $\overrightarrow{OC}$ all share endpoint $O$. "
+            r"$m\angle AOB = 40^\circ$.")
+    measure = F("angle_measure", ["AOB"], value=40, quote="m∠AOB = 40°")
+    facts = FigureFacts(points=list("OABC"), rays=["OA", "OB", "OC"], givens=[measure])
+    assert coverage_gaps(text, facts) == []
+    assert coverage_gaps(text.replace(r"\overrightarrow{OC}", r"\overrightarrow{CO}"),
+                         facts.model_copy(update={"rays": ["OA", "OB", "CO"]})) != []
+    text = r"$\triangle ABC$ and $\triangle ABD$ share side $\overline{AB}$, and $AB = 5$."
+    tris = FigureFacts(points=list("ABCD"), triangles=["ABC", "ABD"],
+                       givens=[F("equal_length", ["AB"], value=5, quote="AB = 5")])
+    assert coverage_gaps(text, tris) == []
+    assert coverage_gaps(text.replace("share side $\\overline{AB}$", "share side $\\overline{CD}$"), tris) != []
+
+
+def test_a_ray_that_intersects_a_side_at_its_own_point() -> None:
+    text = r"In $\triangle PQR$, ray $QS$ bisects $\angle PQR$ and intersects $\overline{PR}$ at point $S$."
+    givens = [F("bisects_angle", ["QS", "PQR"], quote="ray QS bisects ∠PQR"),
+              F("on_segment", ["PR"], point="S", quote="intersects PR at point S")]
+    facts = FigureFacts(points=list("PQRS"), triangles=["PQR"], rays=["QS"], givens=givens)
+    assert coverage_gaps(text, facts) == []
+    assert coverage_gaps(text, facts.model_copy(update={"givens": givens[:1]})) != []  # S on PR: no fact
+    other = r"In $\triangle PQR$, ray $QT$ bisects $\angle PQR$ and intersects $\overline{PR}$ at point $S$."
+    assert coverage_gaps(other, facts.model_copy(update={
+        "points": list("PQRST"), "rays": ["QT"],
+        "givens": [F("bisects_angle", ["QT", "PQR"], quote="ray QT bisects ∠PQR"), givens[1]]})) != []
+
+
+def test_an_exterior_angle_needs_its_extension() -> None:
+    ext = F("extension", ["RP"], quote="extending side RP beyond P")
+    text = (r"In $\triangle PQR$, an exterior angle is formed at vertex $P$ by extending side $\overline{RP}$ beyond "
+            r"$P$. Find the measure of the exterior angle at $P$.")
+    facts = FigureFacts(points=list("PQR"), triangles=["PQR"], givens=[ext])
+    assert coverage_gaps(text, facts) == []
+    assert coverage_gaps(text, facts.model_copy(update={"givens": [F("extension", ["PR"],
+                                                                     quote="extending side RP beyond P")]})) != []
+    at_q = text.replace("vertex $P$", "vertex $Q$")  # no stated extension makes an exterior angle at Q
+    assert coverage_gaps(at_q, facts) != []
+    beyond_r = text.replace("beyond $P$", "beyond $R$")  # the other direction: RP read the wrong way
+    assert coverage_gaps(beyond_r, facts.model_copy(update={"givens": [F("extension", ["RP"],
+                                                                         quote="extending side RP beyond R")]})) != []
+    text = r"In $\triangle ABC$, side $\overline{BC}$ is extended to point $D$. Find the exterior angle $\angle ACD$."
+    facts = FigureFacts(points=list("ABCD"), triangles=["ABC"], find=[Target(kind="angle", item="ACD")],
+                        givens=[F("extension", ["BC"], point="D", quote="side BC is extended to point D")])
+    assert coverage_gaps(text, facts) == []
+    assert coverage_gaps(text.replace("ACD", "ABD"), facts.model_copy(update={
+        "find": [Target(kind="angle", item="ABD")]})) != []
+
+
+def test_each_and_both_in_a_target_and_an_arc_on_the_circle() -> None:
+    base = FigureFacts(points=list("ABC"), triangles=["ABC"], givens=[F("angle_measure", ["A"], value=40,
+                                                                       quote="m∠A = 40°")])
+    for text in (r"In $\triangle ABC$, $m\angle A = 40^\circ$. Find the measure of each angle.",
+                 r"In $\triangle ABC$, $m\angle A = 40^\circ$. Find both angle measures."):
+        assert coverage_gaps(text, base) == [], text
+    acute = r"In $\triangle ABC$, $m\angle A = 40^\circ$. Find the measure of each acute angle."
+    assert any("acute" in g for g in coverage_gaps(acute, base))  # no right angle is stated
+    text = r"Points $A$ and $B$ lie on circle $O$, and $m\angle AOB = 90^\circ$. Find the length of arc $AB$."
+    on = F("on_circle", ["A", "B"], circle="O", quote="Points A and B lie on circle O")
+    facts = FigureFacts(points=list("ABO"), circles=["O"], givens=[on, F("central_angle", ["AOB"], circle="O", value=90,
+                                                                        quote="m∠AOB = 90°")])
+    assert coverage_gaps(text, facts) == []
+    assert coverage_gaps(text.replace("arc $AB$", "arc $AC$"), facts.model_copy(update={"points": list("ABCO")}))
+
+
+def test_respectively_matches_the_points_to_the_lines_in_order() -> None:
+    text = (r"$\overleftrightarrow{AB} \parallel \overleftrightarrow{CD}$, with transversal "
+            r"$\overleftrightarrow{EF}$ cutting both lines at points $G$ and $H$ respectively.")
+    q = "cutting both lines at points G and H respectively"
+    givens = [F("parallel", ["AB", "CD"], quote="↔AB ∥ ↔CD"),  # the model's arrows: the wrapper
+              F("transversal", ["EF", "AB", "CD"], quote="transversal ↔EF cutting both lines"),
+              F("intersect", ["EF", "AB"], point="G", quote=q), F("intersect", ["EF", "CD"], point="H", quote=q)]
+    facts = FigureFacts(points=list("ABCDEFGH"), lines=["AB", "CD", "EF"], givens=givens)
+    assert coverage_gaps(text, facts) == []
+    swapped = [*givens[:2], F("intersect", ["EF", "AB"], point="H", quote=q), F("intersect", ["EF", "CD"], point="G",
+                                                                                 quote=q)]
+    assert coverage_gaps(text, facts.model_copy(update={"givens": swapped})) != []
+
+
+def test_legs_with_their_lengths_and_an_altitude_drawn_to_the_hypotenuse() -> None:
+    text = (r"In right triangle $ABC$ with the right angle at $C$, the legs measure $AC = 9$ and $BC = 40$. "
+            r"Altitude $\overline{CD}$ is drawn to hypotenuse $\overline{AB}$.")
+    givens = [F("right_triangle", ["ABC"], point="C", quote="right triangle ABC with the right angle at C"),
+              F("equal_length", ["AC"], value=9, quote="AC = 9"), F("equal_length", ["BC"], value=40, quote="BC = 40"),
+              F("perpendicular", ["CD", "AB"], point="D", quote="Altitude CD is drawn to hypotenuse AB")]
+    facts = FigureFacts(points=list("ABCD"), triangles=["ABC"], givens=givens)
+    assert coverage_gaps(text, facts) == []
+    no_alt = text.replace("Altitude", "Segment")
+    assert any("drawn" in g for g in coverage_gaps(no_alt, facts.model_copy(update={"givens": [
+        *givens[:3], F("perpendicular", ["CD", "AB"], point="D", quote="Segment CD is drawn to hypotenuse AB")]})))
+
+
+@pytest.mark.parametrize("text", [
+    "Write a complete two-column proof.", "Write a two-column proof.", "Write a complete proof.",
+    "Clearly state each statement and its corresponding reason.", "State the theorem you used.",
+    "State which theorem you used.", "Leave answers in simplest radical form.",
+    "Express each answer in simplest radical form.",
+    "You may use the definition of angle bisector, the definition of perpendicular lines, AAS or ASA congruence, "
+    "and CPCTC.",
+    "You may use the Parallel Postulate, the Corresponding Angles Postulate, and properties of supplementary angles.",
+    "Write a two-column proof using triangle congruence (SSS or SAS) and CPCTC.",
+    "Set up and solve a proportion using the similarity ratio.",
+])
+def test_an_instruction_phrase_is_accounted_for_whole(text: str) -> None:
+    facts = FigureFacts(points=list("AB"), segments=["AB"], givens=[F("equal_length", ["AB"], value=5, quote="AB = 5")])
+    assert coverage_gaps(rf"$AB = 5$. {text}", facts) == [], text
+
+
+@pytest.mark.parametrize("text, word", [
+    ("Write a statement.", "statement"), ("The proof is complete.", "proof"),
+    ("Set up the triangle.", "Set up"), ("State that AB is the longest side.", "longest"),
+])
+def test_instruction_words_alone_are_not_inert(text: str, word: str) -> None:
+    facts = FigureFacts(points=list("AB"), segments=["AB"], givens=[F("equal_length", ["AB"], value=5, quote="AB = 5")])
+    assert any(word in g for g in coverage_gaps(rf"$AB = 5$. {text}", facts)), text
+
+
+@pytest.mark.asyncio
+async def test_an_other_fact_one_reading_has_is_no_disagreement(monkeypatch: pytest.MonkeyPatch) -> None:
+    """"other" facts account for nothing and have no check, so the pipeline
+    sets them aside before comparing the readings; their words still need
+    a checked fact or an exact rule."""
+    import api.core.construction_figures as cf
+
+    text = r"In $\triangle ABC$, $AB = 5$, and $\triangle ABC$ is drawn below."
+    b = FigureFacts(points=list("ABC"), triangles=["ABC"], givens=[F("equal_length", ["AB"], value=5, quote="AB = 5")])
+    a = b.model_copy(update={"givens": [*b.givens, F("other", ["ABC"], quote="△ABC is drawn below")]})
+
+    async def read_once(system: str, *args: Any, **kwargs: Any) -> FigureFacts:
+        return a if system == cf._FACTS_SYSTEM_A else b
+
+    monkeypatch.setattr(cf, "_read_once", read_once)
+    facts, why = await cf.read_figure_facts(text, mode="t", user_id=None)
+    assert why == ["the reading of the problem missed “drawn”, so the figure can't be checked"]
+    facts, why = await cf.read_figure_facts(r"In $\triangle ABC$, $AB = 5$.", mode="t", user_id=None)
+    assert why == [] and facts is not None
+
+
+def test_one_base_angle_read_alone_names_no_angle() -> None:
+    """"One base angle measures 50°" is true of both base angles (they are
+    equal); read as one of them only, which one is the reading's choice."""
+    text = r"In isosceles $\triangle ABC$, $AB = AC$. One base angle measures $50^\circ$. Find $x$."
+    q = "One base angle measures 50°"
+    assert coverage_gaps(text, iso_facts(F("angle_measure", ["B"], value=50, quote=q)))
+    assert coverage_gaps(text, iso_facts(F("angle_measure", ["B"], value=50, quote=q),
+                                         F("angle_measure", ["C"], value=50, quote=q))) == []
+
+
+def test_one_acute_angle_needs_the_other_said_of_the_other() -> None:
+    text = (r"In right $\triangle ABC$ with the right angle at $C$, one acute angle measures $(3x + 4)^\circ$ and "
+            r"$m\angle B = 50^\circ$. Find $x$.")
+    facts = FigureFacts(points=list("ABC"), triangles=["ABC"], find=[Target(kind="other", item="x")], givens=[
+        F("right_triangle", ["ABC"], point="C", quote="right △ABC with the right angle at C"),
+        F("angle_measure", ["A"], expr="3x+4", quote="one acute angle measures (3x + 4)°"),
+        F("angle_measure", ["B"], value=50, quote="m∠B = 50°")])
+    assert any("one" in g for g in coverage_gaps(text, facts))
+
+
+def test_share_side_only_for_listed_triangles() -> None:
+    text = r"$\triangle ABC$ and $\triangle ABD$ share side $\overline{AB}$, and $AB = 5$."
+    tris = FigureFacts(points=list("ABCD"), triangles=["ABC"],
+                       givens=[F("equal_length", ["AB"], value=5, quote="AB = 5")])
+    assert coverage_gaps(text, tris) != []
+
+
+def test_an_altitude_goes_to_the_side_opposite_its_vertex() -> None:
+    text = r"In $\triangle ABC$, altitude $\overline{AD}$ is perpendicular to $\overline{BC}$."
+    facts = FigureFacts(points=list("ABCD"), triangles=["ABC"],
+                        givens=[F("perpendicular", ["AD", "BC"], point="D", quote="AD is perpendicular to BC")])
+    assert coverage_gaps(text, facts) == []
+    wrong = text.replace("BC}$.", "AB}$.")
+    assert coverage_gaps(wrong, facts.model_copy(update={"givens": [
+        F("perpendicular", ["AD", "AB"], point="D", quote="AD is perpendicular to AB")]})) == ["“altitude”"]
+
+
+def test_using_your_value_of_accounts_for_the_unknown_only_when_it_is_asked() -> None:
+    text = r"$AB = 5$. Using your value of $y$, find $y$."
+    facts = FigureFacts(points=list("AB"), segments=["AB"], find=[Target(kind="other", item="y")],
+                        givens=[F("equal_length", ["AB"], value=5, quote="AB = 5")])
+    assert coverage_gaps(text, facts) == []
+    text = r"$AB = 5$. Using your value of $y$, find $AB$."
+    assert coverage_gaps(text, facts.model_copy(update={"find": [Target(kind="segment", item="AB")]})) == ["“y”"]

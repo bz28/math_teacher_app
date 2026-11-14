@@ -139,10 +139,10 @@ def test_an_acute_angle_of_a_right_triangle_is_its_fact() -> None:
     facts = FigureFacts(points=list("ABC"), triangles=["ABC"], givens=[
         right, F("angle_measure", ["A"], expr="3x+4", quote="one acute angle measures (3x + 4)°"),
         F("angle_measure", ["B"], expr="6x-13", quote="the other measures (6x - 13)°")])
-    # Review round 6: "one acute angle", "the other", "each acute angle" are
-    # words no fact verifies (the measure facts don't check "acute"), so this
-    # wording is now declined.
-    assert any("acute" in g for g in coverage_gaps(text, facts))
+    # Review round 6: "one acute angle … the other" is accounted for by its
+    # exact rule (the two facts are on the two acute angles of the stated
+    # right triangle), and "each acute angle" in the target asks for both.
+    assert coverage_gaps(text, facts) == []
     # "∠C is acute" (no "angle" after the word) is not stated by a right triangle.
     text = r"In right $\triangle ABC$, $\angle C$ is acute."
     said = F("right_triangle", ["ABC"], point="A", quote=r"In right △ABC, ∠C is acute")
@@ -444,7 +444,17 @@ def test_the_other_clauses_of_a_spanning_quote_need_their_own_facts(text: str, g
     fact's points); round 5 declines them: "H respectively" and "meeting AB
     at point M" have no fact of their own."""
     pts = sorted({c for g in givens for x in [*g.items, g.point or ""] for c in x if c.isupper()})
-    assert coverage_gaps(text, FigureFacts(points=pts, givens=givens)) != []
+    gaps = coverage_gaps(text, FigureFacts(points=pts, givens=givens))
+    if "respectively" in text:
+        # Review round 6: "both lines at points G and H respectively" has an
+        # exact rule: G is on the first line and the transversal, H on the
+        # second, each by its own fact.
+        assert gaps == []
+        swapped = [*givens[:2], F("intersect", ["EF", "AB"], point="H", quote=givens[2].quote),
+                   F("intersect", ["EF", "CD"], point="G", quote=givens[3].quote)]
+        assert coverage_gaps(text, FigureFacts(points=pts, givens=swapped)) != []
+    else:
+        assert gaps != []
 
 
 def test_a_list_of_names_is_one_clause() -> None:

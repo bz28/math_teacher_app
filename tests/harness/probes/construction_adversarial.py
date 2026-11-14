@@ -36,6 +36,7 @@ _TRAP = {"A": [0, 0], "B": [6, 0], "C": [5, 3], "D": [1, 3]}  # one pair of para
 _SIDES = ["AB", "BC", "CD", "DA"]
 _TRI = ["AB", "BC", "CA"]
 _CIRCLE = [{"center": "O", "through": "A"}]
+_EF_LINES = [{"through": ["A", "B"]}, {"through": ["C", "D"]}, {"through": ["E", "F"]}]
 _P1 = {"A": [0, 0], "B": [8, 0], "C": [0, 3], "D": [8, 3], "E": [2, -1], "F": [6, 4], "X": [2.8, 0], "Y": [5.2, 3]}
 _GIVEN_T = (r"Given: $\overline{AB} \parallel \overline{CD}$ and transversal $\overline{EF}$ meets them at "
             r"$X$ and $Y$. ")
@@ -536,7 +537,9 @@ CASES: list[dict[str, Any]] = [
     # Review round 6: coverage is an allowlist. A word that says something
     # about the figure needs a fact that verifies it; a fact's quote must
     # name the part the fact is about.
-    {"id": "r6-vertex-angle", "expect_declined": True,
+    # Drawn by the exact "vertex angle" rule when the reading puts 40° on the
+    # apex; the wrong figure puts it on a base angle.
+    {"id": "r6-vertex-angle",
      "text": r"In isosceles $\triangle ABC$ with $AB = AC$, the vertex angle measures $40^\circ$. Find $m\angle B$.",
      "good": _fig({"A": [2, 5.495], "B": [0, 0], "C": [4, 0]}, segments=_TRI, tick_groups=[["AB", "CA"]],
                   angle_labels={"BAC": "40°"}),
@@ -580,6 +583,57 @@ CASES: list[dict[str, Any]] = [
                   side_labels={"AB": "10", "BC": "6"}),
      "bad": _fig({"C": [0, 0], "B": [6, 0], "A": [1, 8.66]}, segments=_TRI, side_labels={"AB": "10", "BC": "6"}),
      "why": "no right angle at C, so AB is no hypotenuse"},
+    # Decisions stage: the exact rules for words that need more than one fact.
+    {"id": "r7-each-base",
+     "text": r"In isosceles $\triangle ABC$ with $AB = AC$, each base angle measures $70^\circ$. Find $m\angle A$.",
+     "good": _fig({"A": [2, 5.495], "B": [0, 0], "C": [4, 0]}, segments=_TRI, tick_groups=[["AB", "CA"]],
+                  angle_labels={"ABC": "70°", "ACB": "70°"}),
+     "bad": _fig({"A": [2, 1.453], "B": [0, 0], "C": [4, 0]}, segments=_TRI, tick_groups=[["AB", "CA"]],
+                 angle_labels={"ABC": "70°", "ACB": "70°"}),
+     "why": "the base angles are 36°, labelled 70°"},
+    {"id": "r7-arc-target",
+     "text": r"Points $A$ and $B$ lie on circle $O$, and $m\angle AOB = 90^\circ$. Find the length of arc $AB$.",
+     "good": _fig({"O": [0, 0], "A": [3, 0], "B": [0, 3]}, segments=["OA", "OB"], circles=_CIRCLE,
+                  angle_labels={"AOB": "90°"}),
+     "bad": _fig({"O": [0, 0], "A": [3, 0], "B": [0, 2]}, segments=["OA", "OB"], circles=_CIRCLE,
+                 angle_labels={"AOB": "90°"}),
+     "why": "B is inside the circle, not on it"},
+    {"id": "r7-intersects",
+     "text": r"In $\triangle PQR$, ray $QS$ bisects $\angle PQR$ and intersects $\overline{PR}$ at point $S$.",
+     "good": _fig({"Q": [0, 0], "R": [6, 0], "P": [0, 6], "S": [3, 3]}, segments=["PQ", "QR", "RP"], rays=["QS"],
+                  arc_groups=[["PQS", "SQR"]]),
+     "bad": _fig({"Q": [0, 0], "R": [6, 0], "P": [0, 6], "S": [2, 4]}, segments=["PQ", "QR", "RP"], rays=["QS"],
+                 arc_groups=[["PQS", "SQR"]]),
+     "why": "QS does not bisect ∠PQR (27° and 63°)"},
+    {"id": "r7-share-endpoint",
+     "text": r"$\overrightarrow{OA}$, $\overrightarrow{OB}$, and $\overrightarrow{OC}$ all share endpoint $O$, "
+             r"$m\angle AOB = 40^\circ$, and $m\angle BOC = 50^\circ$. Find $m\angle AOC$.",
+     "good": _fig({"O": [0, 0], "A": [5, 0], "B": [3.830, 3.214], "C": [0, 5]}, rays=["OA", "OB", "OC"],
+                  angle_labels={"AOB": "40°", "BOC": "50°"}),
+     "bad": _fig({"O": [0, 0], "A": [5, 0], "B": [3.830, 3.214], "C": [0, 5]}, rays=["AO", "OB", "OC"],
+                 angle_labels={"AOB": "40°", "BOC": "50°"}),
+     "why": "ray AO starts at A, not at O"},
+    {"id": "r7-exterior-measure",
+     "text": r"In $\triangle ABC$, side $\overline{BC}$ is extended to point $D$, and the exterior angle "
+             r"$\angle ACD$ measures $120^\circ$. Find $m\angle ACB$.",
+     "good": _fig({"A": [3, 3.464], "B": [0, 0], "C": [5, 0], "D": [8, 0]}, segments=["AB", "BC", "CA", "CD"],
+                  angle_labels={"ACD": "120°"}),
+     "bad": _fig({"A": [3, 3.464], "B": [0, 0], "C": [5, 0], "D": [-3, 0]}, segments=["AB", "BC", "CA", "BD"],
+                 angle_labels={"ACD": "120°"}),
+     "why": "D is behind B, so ∠ACD is 60°, not an exterior angle"},
+    {"id": "r7-respectively",
+     "text": r"$\overleftrightarrow{AB} \parallel \overleftrightarrow{CD}$, and transversal "
+             r"$\overleftrightarrow{EF}$ cuts both lines at points $G$ and $H$ respectively. "
+             r"If $m\angle BGF = 65^\circ$, find $m\angle DHF$.",
+     "good": _fig({"A": [0, 0], "B": [6, 0], "C": [0, 3], "D": [6, 3], "E": [1.3, -1.5], "F": [4.1, 4.5],
+                   "G": [2, 0], "H": [3.4, 3]}, lines=_EF_LINES,
+                  parallel_groups=[["AB", "CD"]],
+                  angle_labels={"BGF": "65°"}),
+     "bad": _fig({"A": [0, 0], "B": [6, 0], "C": [0, 3], "D": [6, 3], "E": [1.3, -1.5], "F": [4.1, 4.5],
+                  "G": [3.4, 3], "H": [2, 0]}, lines=_EF_LINES,
+                  parallel_groups=[["AB", "CD"]],
+                 angle_labels={"BGF": "65°"}),
+     "why": "G is on CD and H on AB: the other way round"},
 ]
 
 
@@ -592,13 +646,13 @@ ROUND6_DECLINED: dict[str, str] = {
     "prove-prove": "“meets them at X and Y”: “them” and “meets” are no fact's",
     "prove-show": "“them”", "prove-explain": "“them”", "prove-lowercase": "“them”",
     "prove-perp-marked": "“diagonals”",
-    "r3-extension": "“exterior” in the target",
-    "r3-arc-centre": "“arc AB” in the target",
-    "r3-shading": "“share side AB”",
     "r4-scalene": "“longest” in the target",
     "r4-unnamed-right": "“right”, “legs”, “hypotenuse” name no part",
     "r5-which": "“which”, “opposite”",
     "r5-major-arc": "“major arc ACB” in the target",
+    # After the readings were re-recorded with the round-6 prompt:
+    "par-and-equal": "the two readings disagree on whether ABCD is a trapezoid",
+    "r5-two-right-angles": "the reading quoted “right angles at C”, which isn't the problem's words",
 }
 
 

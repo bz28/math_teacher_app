@@ -422,8 +422,9 @@ def test_a_hint_states_no_fact() -> None:
     # Review round 6: a hint is read like the rest of the text. Its claim
     # (△QRT ≅ △SRT) is a statement no fact reads, so it is a gap: skipping a
     # hint could pass a figure that breaks it ("Hint: the triangle is
-    # isosceles"). Only its method ("using AAS") is accounted for.
-    assert coverage_gaps(text, facts) == ["“Hint”", "“First”", "“≅”"]
+    # isosceles"). Only its label, its method ("using AAS") and the exact
+    # instruction "first prove that" are accounted for.
+    assert coverage_gaps(text, facts) == ["“≅”"]
 
 
 def test_a_chain_is_one_fact_for_each_link() -> None:

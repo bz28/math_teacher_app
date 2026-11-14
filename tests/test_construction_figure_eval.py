@@ -43,13 +43,13 @@ KNOWN_WRONG_PASSED = {"77195d48-step1"}
 # RP", more than the extension fact says), 9d6733ba ("meeting AB at point M"
 # has no fact of its own) and 0511d648 ("… at points G and H respectively").
 # Review round 6 (coverage is an allowlist: every word is accounted for by a
-# verified fact, a target, or a short inert list) declines 36 more: most for
-# instruction wording ("Write a complete two-column proof", "Leave answers in
-# simplest radical form", "State the theorem you used", "Using the given
-# information"), the rest for words no fact verifies ("each base angle",
-# "arc BC", "them", "both"). Which wording words join the inert list is
-# Ben's decision (PR description, "Review round 6").
-DRAWN_FLOOR = 4
+# verified fact, a target, an exact rule, an exact instruction phrase, or a
+# short inert list), with the readings re-recorded under the round-6 prompt:
+# 29 drawn, all right. Lost against round 5: "where" / "while" (2f44f46d,
+# dee52ce7, 18ce1004: reference words stay off the list), readings that
+# disagree (7d8e403c, bac5ea12, 2d8021e3, dd7ab4c1-step), and wordings no
+# fact verifies (d5a862d3, 430894a4, 6c5008f2, 95c727b2).
+DRAWN_FLOOR = 29
 
 
 @pytest.mark.asyncio
@@ -71,6 +71,7 @@ async def test_construction_figure_eval_meets_the_bar(monkeypatch: pytest.Monkey
     # Every reading was either trusted or declined with its reason.
     assert summary["readings_agreed"] + summary["readings_disagreed"] + summary["coverage_gaps"] \
         + summary["unverifiable"] + summary["described_in_words"] + summary["impossible_numbers"] \
+        + summary["unreadable"] \
         >= summary["readings"], summary
     assert summary["not_looked_at"] == 0
     judged_wrong = {k for r in results for k, spec in cf.drawn_figures(r) if cf.verdict(k, spec).startswith("wrong")}
