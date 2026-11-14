@@ -21,7 +21,7 @@ from PIL import Image
 from sqlalchemy import text
 
 from api.database import get_session_factory
-from tests.conftest import PAGE_PNG
+from tests.conftest import PAGE_PNG, stored_pages
 
 # Magic-byte prefixes for tests that need PDF or JPEG payloads.
 _JPEG_HEADER = b"\xff\xd8\xff\xe0\x00\x10JFIF"
@@ -132,13 +132,14 @@ async def test_submit_stores_each_page_the_way_the_student_turned_it(
             text("SELECT files FROM submissions WHERE id=:id"),
             {"id": r.json()["submission_id"]},
         )).scalar_one()
-    turned = Image.open(io.BytesIO(base64.b64decode(files[0]["data"])))
+    pages = await stored_pages(files)
+    turned = Image.open(io.BytesIO(base64.b64decode(pages[0])))
     assert turned.size == (400, 800)
-    assert files[1]["data"] == wide
-    assert files[2]["data"] == TINY_PDF
+    assert pages[1] == wide
+    assert pages[2] == TINY_PDF
     from api.core.image_utils import pdf_pages_as_images
 
-    [page] = pdf_pages_as_images(files[3]["data"])
+    [page] = pdf_pages_as_images(pages[3])
     page_img = Image.open(io.BytesIO(base64.b64decode(page)))
     assert page_img.width < page_img.height
 

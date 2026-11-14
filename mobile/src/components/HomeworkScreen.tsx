@@ -713,7 +713,7 @@ function SubmittedStatus({
                     </View>
                   ) : (
                     <Image
-                      source={{ uri: `data:${f.media_type};base64,${f.data}` }}
+                      source={{ uri: f.url }}
                       style={styles.galleryImage}
                     />
                   )}

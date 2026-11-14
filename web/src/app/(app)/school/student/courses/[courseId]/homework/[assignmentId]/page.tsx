@@ -27,6 +27,7 @@ import { ExtractionFlaggedTerminalView } from "@/components/school/student/extra
 import { IntegrityPendingView } from "@/components/school/student/integrity-pending-view";
 import { AssignmentTimeline } from "@/components/school/student/assignment-timeline";
 import { routeSubmittedHomework, type HomeworkMode } from "@/lib/homework-route";
+import { PHOTO_URLS_EXPIRED } from "@/lib/submission-photos";
 
 export default function HomeworkPage() {
   const { courseId, assignmentId } = useParams<{ courseId: string; assignmentId: string }>();
@@ -124,6 +125,26 @@ export default function HomeworkPage() {
     // on every unrelated state change. Route only re-runs on route
     // change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignmentId]);
+
+  // A photo's presigned URL ran out (the page sat open past the hour):
+  // sign fresh ones. Only the photos are swapped — re-routing would throw
+  // away whatever the student is doing on the confirm screen.
+  useEffect(() => {
+    if (!assignmentId) return;
+    const refresh = () => {
+      schoolStudent
+        .getMySubmission(assignmentId)
+        .then((sub) => {
+          setSubmission((cur) => (cur ? { ...cur, files: sub.files } : cur));
+          setMode((cur) =>
+            cur?.kind === "integrity_confirm" ? { ...cur, files: sub.files ?? [] } : cur,
+          );
+        })
+        .catch(() => {});
+    };
+    window.addEventListener(PHOTO_URLS_EXPIRED, refresh);
+    return () => window.removeEventListener(PHOTO_URLS_EXPIRED, refresh);
   }, [assignmentId]);
 
   if (error) {

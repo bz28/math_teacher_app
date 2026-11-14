@@ -18,6 +18,7 @@ from api.routes.admin_audit_logs import router as admin_audit_logs_router
 from api.routes.auth import router as auth_router
 from api.routes.billing import router as billing_router
 from api.routes.contact import router as contact_router
+from api.routes.dev_photos import router as dev_photos_router
 from api.routes.grading_drain import router as grading_drain_router
 from api.routes.health import router as health_router
 from api.routes.image import router as image_router
@@ -67,6 +68,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if settings.bypass_subscription and settings.app_env != "development":
         raise RuntimeError("BYPASS_SUBSCRIPTION=true is not allowed outside development")
 
+    from api.core import photo_store
+
+    if photo_store.configured():
+        # Built here, not on the first request: creating a boto3 client
+        # loads its service model (~100 ms of blocking work).
+        photo_store.backend()
+    else:
+        # Not fatal: the app still serves everything else, and photos
+        # still stored inline still load. But no student can turn work in
+        # (503) until PHOTO_BUCKET and its credentials are set.
+        logger.error("PHOTO_BUCKET is unset: homework uploads will be refused until it is configured")
+
     from api.database import get_engine
 
     engine = get_engine()
@@ -106,6 +119,7 @@ async def entitlement_error_handler(request: Request, exc: EntitlementError) -> 
 
 
 app.include_router(health_router, prefix="/v1")
+app.include_router(dev_photos_router, prefix="/v1")
 app.include_router(auth_router, prefix="/v1")
 app.include_router(session_router, prefix="/v1")
 app.include_router(practice_router, prefix="/v1")

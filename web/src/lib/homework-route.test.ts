@@ -10,7 +10,7 @@ const READING = {
   final_answers: [{ problem_position: 1, answer_latex: "2" }],
   confidence: 0.93,
 } as unknown as StudentSubmission["extraction"];
-const FILES = [{ data: "x", media_type: "image/png" }] as StudentSubmission["files"];
+const FILES = [{ url: "https://bucket.test/p.png", media_type: "image/png" }] as StudentSubmission["files"];
 
 function sub(over: Partial<StudentSubmission>): StudentSubmission {
   return {

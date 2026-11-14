@@ -55,6 +55,7 @@ import {
 } from "@/lib/api";
 import { GraphCheckReview, openGraphItems } from "@/components/school/teacher/_pieces/graph-check-review";
 import { effectiveRubric, rubricChanged, rubricFields } from "@/lib/rubric";
+import { PHOTO_URLS_EXPIRED, onPhotoError } from "@/lib/submission-photos";
 import { deductionPoints, earnedPoints, formatPoints } from "@/lib/points";
 
 type GradeStatus = GradeBreakdownEntry["score_status"];
@@ -750,6 +751,26 @@ function HomeworkSectionReview({
       cancelled = true;
     };
   }, [selectedSubmissionId, detail?.submission_id]);
+
+  // A photo's presigned URL ran out (the tab sat open past the hour):
+  // sign fresh ones. Only `files` is replaced — the rest of `detail`
+  // can hold the teacher's unsaved edits.
+  useEffect(() => {
+    if (!selectedSubmissionId) return;
+    const id = selectedSubmissionId;
+    const refresh = () => {
+      teacher
+        .submissionDetail(id)
+        .then((d) =>
+          setDetail((cur) =>
+            cur?.submission_id === d.submission_id ? { ...cur, files: d.files } : cur,
+          ),
+        )
+        .catch(() => {});
+    };
+    window.addEventListener(PHOTO_URLS_EXPIRED, refresh);
+    return () => window.removeEventListener(PHOTO_URLS_EXPIRED, refresh);
+  }, [selectedSubmissionId]);
 
   // Fetch the full integrity detail in parallel. Independent of
   // submissionDetail so a missing/404 integrity record (HW had the
@@ -3900,6 +3921,23 @@ function SubmissionDetailPanel({
       originalsState?.key === `${detail.submission_id}:${n}` ? originalsState.status : null,
     [originalsState, detail.submission_id],
   );
+  // Their URLs expire like the live photos': re-sign the loaded attempt
+  // in place, so an open gallery keeps showing it instead of closing.
+  const originalsKey = originals?.key;
+  useEffect(() => {
+    if (!originalsKey) return;
+    const [sid, n] = originalsKey.split(":");
+    const refresh = () => {
+      teacher
+        .attemptFiles(sid, Number(n))
+        .then(({ files }) =>
+          setOriginals((cur) => (cur?.key === originalsKey ? { key: originalsKey, files } : cur)),
+        )
+        .catch(() => {});
+    };
+    window.addEventListener(PHOTO_URLS_EXPIRED, refresh);
+    return () => window.removeEventListener(PHOTO_URLS_EXPIRED, refresh);
+  }, [originalsKey]);
   // A retake replaced this turn-in's first photos: the newest attempt.
   // Every attempt before it came before a reopen — the earlier turn-ins,
   // and any photos a retake replaced on one of them.
@@ -7420,7 +7458,6 @@ function StudentWorkThumbButton({
   const [openAt, setOpenAt] = useState<number | null>(null);
   const first = files[0];
   if (!first) return null;
-  const firstSrc = `data:${first.media_type};base64,${first.data}`;
   const firstIsPdf = first.media_type === "application/pdf";
   return (
     <>
@@ -7437,7 +7474,13 @@ function StudentWorkThumbButton({
             </span>
           ) : (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={firstSrc} alt="" className="h-full w-full object-cover" />
+            <img
+              src={first.url}
+              alt=""
+              decoding="async"
+              onError={() => onPhotoError(first)}
+              className="h-full w-full object-cover"
+            />
           )}
         </span>
         <span>
@@ -7517,12 +7560,11 @@ function PinnedWorkRail({
         <div className="max-h-[calc(100vh-7rem)] overflow-y-auto bg-[color:var(--color-surface-alt-2)]/40 p-2">
           <div className="flex flex-col gap-2">
             {files!.map((f, i) => {
-              const src = `data:${f.media_type};base64,${f.data}`;
               if (f.media_type === "application/pdf") {
                 return (
                   <PdfView
                     key={i}
-                    data={f.data}
+                    url={f.url}
                     className="h-[420px] w-full rounded-[--radius-sm] border border-border-light bg-white"
                   />
                 );
@@ -7537,8 +7579,11 @@ function PinnedWorkRail({
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={src}
+                    src={f.url}
                     alt={`Student handwritten submission, page ${i + 1}`}
+                    loading={i === 0 ? undefined : "lazy"}
+                    decoding="async"
+                    onError={() => onPhotoError(f)}
                     className="w-full object-contain"
                   />
                 </button>

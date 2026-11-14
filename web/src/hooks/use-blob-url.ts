@@ -122,3 +122,21 @@ async function createObjectUrlFor(
     return null;
   }
 }
+
+/**
+ * A URL that works as an `<a target="_blank">` href. A student photo is
+ * served as a presigned https URL, which already does; a page the photo
+ * backfill hasn't moved yet arrives as a `data:` URL, which top-level
+ * navigation refuses, so that one is turned into a `blob:` handle.
+ * INLINE: the `data:` branch goes once the backfill has run.
+ */
+export function useOpenableUrl(url: string): string {
+  const inline = url.startsWith("data:");
+  const semi = inline ? url.indexOf(";") : -1;
+  const comma = inline ? url.indexOf(",") : -1;
+  const blob = useBlobUrl(
+    inline && comma > 0 ? url.slice(comma + 1) : null,
+    inline && semi > 5 ? url.slice(5, semi) : "application/octet-stream",
+  );
+  return blob ?? url;
+}

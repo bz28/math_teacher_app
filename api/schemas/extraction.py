@@ -12,10 +12,11 @@ The shapes mirror the ACTUAL producers:
     Vision tool schema that constrains `extract_student_work`'s output,
     plus the pass-through slicers/overlays (`_slice_extraction_for_problem`,
     `apply_extraction_edits`) which preserve the top-level shape.
-  - files: the `{data, media_type}` dicts written at submit time
-    (school_student_practice.py). `filename` is never set by the backend
-    today, but the confirm/submitted screens read it defensively
-    (`file.filename ?? "Page N"`), so it stays an Optional contract field.
+  - files: `photo_store.page_out` — a presigned URL per page (the bytes
+    live in the photo bucket, see api/core/photo_store.py). `filename` is
+    never set by the backend today, but the confirm/submitted screens read
+    it defensively (`file.filename ?? "Page N"`), so it stays an Optional
+    contract field.
 
 `extra="allow"` on the container models is defense-in-depth: the extraction
 blob flows through `{**extraction, ...}` spreads in the slicer/overlay, so
@@ -108,13 +109,22 @@ class ExtractionOut(BaseModel):
 
 
 class SubmissionFileOut(BaseModel):
-    """One file the student turned in. `data` is raw base64 (no `data:`
-    prefix); `media_type` is image/jpeg, image/png, or application/pdf."""
+    """One file the student turned in, as `photo_store.page_out` serves
+    it: a URL to load it from — never the bytes. `media_type` is
+    image/jpeg, image/png, or application/pdf."""
 
-    model_config = ConfigDict(extra="allow")
-
-    data: str
+    # A short-lived presigned URL to the photo bucket. (A `data:` URL for
+    # a row the backfill hasn't moved yet; removed with that branch.)
+    url: str
     media_type: str
+    # Stable across responses, unlike `url` (re-signed every time): the
+    # web client keys its URL cache on it, so reopening a page reuses the
+    # URL it already loaded and the browser cache serves it. Null for a
+    # not-yet-moved row.
+    id: str | None = None
+    # Seconds `url` works for from when the response was sent. Null when
+    # it doesn't expire (a data: URL).
+    expires_in: int | None = None
     # Never populated by the backend today; kept Optional so the confirm/
     # submitted screens can read it (falling back to "Page N") without
     # the three clients drifting on whether the field exists.

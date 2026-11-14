@@ -15,6 +15,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import undefer
 
+from api.core import photo_store
 from api.core.answer_units import units_not_in_work
 from api.core.audit_log import record_activity
 from api.core.class_rubric import MAX_CLASS_RULES
@@ -77,6 +78,7 @@ from api.models.section_enrollment import SectionEnrollment
 from api.models.unit import Unit
 from api.models.user import User
 from api.routes.teacher_courses import flagged_case, get_teacher_course
+from api.schemas.extraction import SubmissionFileOut
 from api.services.bank import (
     hydrate_assignment_content,
     problem_ids_in_content,
@@ -1175,8 +1177,10 @@ async def delete_assignment(
             detail="Unpublish before deleting",
         )
     # Drafts can't have locked any bank items, so no recompute needed.
+    pages = await photo_store.pages_of_submissions(db, Submission.assignment_id == assignment_id)
     await db.delete(a)
     await db.commit()
+    await photo_store.delete_pages(pages)
     return {"status": "ok"}
 
 
@@ -2962,10 +2966,10 @@ class TeacherSubmissionDetail(BaseModel):
     late_penalty_percent: float = 0.0
     late_penalty: float = 0.0
     late_penalty_waived: bool = False
-    # List of {data, media_type} the student submitted — multi-page
-    # support landed in PR 3. Null only on rows pre-dating the
+    # The pages the student submitted, as presigned URLs to the photo
+    # bucket (`photo_store.page_out`). Null only on rows pre-dating the
     # multi-file column.
-    files: list[dict[str, str]] | None
+    files: list[SubmissionFileOut] | None
     problems: list[TeacherSubmissionDetailProblem]
     # Extracted lines that belong to no problem on this assignment. The
     # grader receives these as context, so the review page has to be able
@@ -3034,7 +3038,7 @@ class TeacherSubmissionDetail(BaseModel):
 
 
 class TeacherAttemptFiles(BaseModel):
-    files: list[dict[str, str]]
+    files: list[SubmissionFileOut]
 
 
 @router.get("/submissions/{submission_id}/attempts/{number}/files")
@@ -3062,7 +3066,7 @@ async def get_attempt_files(
     )).one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="No such attempt")
-    return TeacherAttemptFiles(files=row[0] or [])
+    return TeacherAttemptFiles(files=photo_store.pages_out(row[0] or []) or [])
 
 
 @router.get("/submissions/{submission_id}")
@@ -3577,7 +3581,7 @@ async def get_submission_detail(
         submitted_at=sub.submitted_at,
         is_late=sub.is_late,
         **lateness_out(assignment, sub, await effective_due_at(db, assignment, sub.student_id), grade),
-        files=sub.files,
+        files=photo_store.pages_out(sub.files),
         problems=problems,
         other_work=other_work,
         other_drawings=other_drawings,
