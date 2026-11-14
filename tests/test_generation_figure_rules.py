@@ -171,7 +171,12 @@ async def test_the_generate_call_gets_the_long_timeout() -> None:
 
 
 def test_the_replacement_and_variation_wording() -> None:
-    assert "names points or refers to a figure must include a figure_spec" in qbg._REPLACEMENT_RULE
+    """Review round 5 (#998): the replacement asks for a figure by the
+    when-to-draw rule (in its system prompt), not for every problem that
+    names points."""
+    assert "Follow the when-to-draw rule" in qbg._REPLACEMENT_RULE
+    assert "names points" not in qbg._REPLACEMENT_RULE
+    assert assignment_generation.WHEN_TO_DRAW in assignment_generation._build_question_generation_prompt("math")
     import inspect
 
     src = inspect.getsource(qbg._run_generation)
@@ -255,7 +260,7 @@ async def test_a_named_point_problem_whose_figure_cant_be_checked_is_replaced_th
     with caplog.at_level("WARNING"):
         out, gen = await _generate([[plain, _q(PROBLEM, TRIANGLE)], [_q(PROBLEM, TRIANGLE)], [no_figure]], _untrusted)
     assert gen.await_count == 3 and gen.await_args_list[1].kwargs["count"] == 1
-    assert "names points or refers to a figure" in gen.await_args_list[1].kwargs["extra_instructions"]
+    assert "Follow the when-to-draw rule" in gen.await_args_list[1].kwargs["extra_instructions"]
     assert gen.await_args_list[2].kwargs["count"] == 1
     assert "need no figure" in gen.await_args_list[2].kwargs["extra_instructions"]
     assert [q["text"] for q in out] == [plain["text"], no_figure["text"]]
@@ -308,9 +313,16 @@ async def _passes(spec: Any, _text: str, **_kw: Any) -> tuple[Any, str | None, l
 @pytest.mark.parametrize(("text", "shown"), [
     # The student constructs it: a drafted figure is dropped (Ben's rule).
     (r"Using only a compass and straightedge, construct the perpendicular bisector of $\overline{AB}$.", False),
-    # An auxiliary line in a proof is not the student's drawing: kept.
+    # An auxiliary line in a proof is not the student's drawing: kept
+    # (review round 5 of #998: the usual wordings).
     (r"In $\triangle ABC$, $AB = AC$. Draw $\overline{AD}$ bisecting $\angle BAC$. "
      r"Prove: $\angle B \cong \angle C$.", True),
+    (r"In $\triangle ABC$, $AB = AC$. Draw the median $\overline{AD}$. Prove $\angle B \cong \angle C$.", True),
+    (r"$ABCD$ is a parallelogram. Draw diagonal $\overline{AC}$. Prove $\triangle ABC \cong \triangle CDA$.", True),
+    (r"In $\triangle ABC$, $AB = AC$. Draw segment $AD$ to the midpoint $D$ of $\overline{BC}$. "
+     r"Prove $\angle BAD \cong \angle CAD$.", True),
+    (r"In $\triangle ABC$, $AB = AC$. Construct the angle bisector of $\angle A$, meeting $\overline{BC}$ at $D$. "
+     r"Prove $\triangle ABD \cong \triangle ACD$.", True),
 ])
 async def test_a_figure_for_a_problem_the_student_draws_is_dropped(text: str, shown: bool) -> None:
     gen = AsyncMock(return_value=[_q(text, TRIANGLE), _q("Solve x + 1 = 2.")])
@@ -590,6 +602,10 @@ async def test_regenerate_refuses_a_new_version_whose_figure_fails(question: str
             course = (await s.execute(select(Course).where(Course.id == w["course"]))).scalar_one()
             with pytest.raises(RuntimeError, match=refused):
                 await qbg.regenerate_one(s, item, course, instructions=None, user_id=w["teacher"])
+    # Review round 5 (#998): the regenerate prompt carries the when-to-draw
+    # rule, not "a problem that names points needs a figure".
+    system = call.call_args.args[0]
+    assert assignment_generation.WHEN_TO_DRAW in system and "names points" not in system
     async with get_session_factory()() as s:
         item = (await s.execute(select(QuestionBankItem).where(QuestionBankItem.id == item_id))).scalar_one()
         assert item.question == "old"

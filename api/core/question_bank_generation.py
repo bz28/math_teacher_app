@@ -22,7 +22,12 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.assignment_generation import FIGURE_PROBLEM_WORDING, generate_questions, generate_solutions
+from api.core.assignment_generation import (
+    FIGURE_PROBLEM_WORDING,
+    WHEN_TO_DRAW,
+    generate_questions,
+    generate_solutions,
+)
 from api.core.construction_figures import CONSTRUCTION_FIGURE_RULES, read_figure_facts, redraw_figure
 from api.core.document_vision import (
     MAX_TOTAL_SOURCE_B64_BYTES,
@@ -31,7 +36,7 @@ from api.core.document_vision import (
     build_vision_content,
     fetch_source_documents,
 )
-from api.core.drawing_requirement import combine_requires_drawing, requires_drawing
+from api.core.drawing_requirement import _IS_PROOF, combine_requires_drawing, requires_drawing
 from api.core.geometry import FigureSpecError, figure_point_names, render_figure, render_figure_or_none
 from api.core.geometry.dsl import ConstructionFigure, split_points
 from api.core.geometry.facts import FigureFacts, as_facts
@@ -555,9 +560,13 @@ async def _draw_figures(
 def _drop_unwanted_figure(q: dict[str, Any], job_id: str | None = None) -> None:
     """Ben's rule: when the student is to draw or construct it
     (`requires_drawing`), the problem gets no figure. A figure the AI
-    drafted for such a problem is dropped before it is drawn. The safe
-    direction: a wrong call here costs a missing figure, never a wrong one."""
-    if q.get("figure_spec") and requires_drawing(q.get("text") or ""):
+    drafted for such a problem is dropped before it is drawn, unless the
+    problem is a proof: there "Draw the median $\\overline{AD}$" or
+    "Construct the angle bisector" adds a line to the figure, it is not the
+    student's drawing. The safe direction: a wrong call here costs a
+    missing figure, never a wrong one."""
+    text = q.get("text") or ""
+    if q.get("figure_spec") and requires_drawing(text) and not _IS_PROOF.search(text):
         logger.info("Job %s: the student draws this one, so its figure is dropped: %.80s", job_id, q.get("text"))
         q["figure_spec"] = None
 
@@ -769,9 +778,9 @@ def _empty_result_message(docs_selected: int, docs_used: int) -> str:
 
 
 _REPLACEMENT_RULE = (
-    "Every problem must be complete on its own. A problem that names points or refers to a "
-    "figure must include a figure_spec that draws exactly those points, and every number on "
-    "the figure must also be in the problem text."
+    "Every problem must be complete on its own. Follow the when-to-draw rule; a problem that "
+    "gets a figure, or refers to one, must include a figure_spec that draws exactly the points "
+    "it names, and every number on the figure must be in the text."
 )
 # The last try for a slot whose figure couldn't be checked twice: a problem
 # on the same topic that needs no figure, so the set keeps its size.
@@ -1321,9 +1330,10 @@ async def regenerate_one(
     cfg = get_config(course.subject)
     system_prompt = _REGENERATE_SYSTEM_TEMPLATE.format(professor_role=cfg["professor_role"])
     system_prompt += (
-        "\nInclude a figure_spec when the problem needs a diagram (a geometry problem "
-        "that names points, segments, angles, lines or circles, or text that refers to "
-        "a figure); omit it otherwise.\n\n" + FIGURE_PROBLEM_WORDING + "\n" + CONSTRUCTION_FIGURE_RULES + "\n"
+        "\n" + WHEN_TO_DRAW + "\nFollow the when-to-draw rule; a problem that gets a figure, or refers to "
+        "one, must include a figure_spec that draws exactly the points it names, and every number on the "
+        "figure must be in the text. Omit the figure_spec otherwise.\n\n"
+        + FIGURE_PROBLEM_WORDING + "\n" + CONSTRUCTION_FIGURE_RULES + "\n"
     )
     qa_schema = REGENERATE_QA_CONSTRUCTION_SCHEMA
 

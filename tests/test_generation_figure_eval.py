@@ -21,7 +21,7 @@ import pytest
 
 from tests.harness.probes import generation_figures as gf
 
-# Figures drawn in the recorded run (set 1: 5, set 2: 3, set 3: 0). A
+# Figures drawn in the recorded run (set 1: 3, set 2: 5, set 3: 0). A
 # change that draws fewer fails here.
 DRAWN_FLOOR = 8
 # Problems that should have a figure by Ben's rule but got none: each is
@@ -29,18 +29,18 @@ DRAWN_FLOOR = 8
 # its figure couldn't be checked). A target to bring down (a text auditor
 # PR may let story layouts keep their words); a change that misses more
 # fails here.
-KNOWN_MISSING = {"set1-p3", "set1-p8", "set2-p6", "set2-p8"}
-# Step figures: the solver emitted 24 (counted from its own output) and
+KNOWN_MISSING = {"set1-p3", "set1-p6", "set1-p8", "set2-p8"}
+# Step figures: the solver emitted 23 (counted from its own output) and
 # none is shown yet. Each fails its reading: the step's words are an
 # explanation ("We use the Midpoint Theorem…"), so the reading misses
 # words, or the two readings disagree. Pinned so a change that emits fewer,
 # or drops one without a reason, fails here; a step figure shown must then
 # pass the step bars (by eye, consistent, its negative rejected).
-STEP_FIGURES_EMITTED = 24
+STEP_FIGURES_EMITTED = 23
 KNOWN_STEP_DROPS = {
     *(f"set1-p1-step{i}" for i in range(1, 6)), "set1-p2-step1", "set1-p2-step2",
-    *(f"set1-p{p}-step{i}" for p in (5, 6, 7) for i in range(1, 4)),
-    "set2-p1-step1", "set2-p1-step2", *(f"set2-p{p}-step{i}" for p in (3, 5) for i in range(1, 4)),
+    *(f"set1-p5-step{i}" for i in range(1, 5)), "set2-p1-step1", "set2-p1-step2", "set2-p4-step1",
+    *(f"set2-p{p}-step{i}" for p in (3, 5, 7) for i in range(1, 4)),
 }
 
 
@@ -81,3 +81,21 @@ async def test_the_eval_fails_without_the_checker(monkeypatch: pytest.MonkeyPatc
     monkeypatch.setattr(qbg, "unbacked_marks", lambda *a, **k: {})
     s = gf.summarize(results)
     assert len(s["negatives_passed"]) == s["question_figures"] >= DRAWN_FLOOR, s
+
+
+@pytest.mark.asyncio
+async def test_the_rule_bar_fails_when_a_failed_figure_ships(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Review round 5 (#998): with the replacement filter broken, problems
+    whose drafted figure failed its check ship, and rule_broken names them
+    (before, the probe dropped the AI's choice, so the bar could not fail)."""
+    import api.core.question_bank_generation as qbg
+
+    monkeypatch.setenv("HARNESS_LLM_MODE", "replay")
+    real = qbg._lacks_figure
+    monkeypatch.setattr(qbg, "_lacks_figure", lambda q: False)
+    results = await gf.run_all(["set1"])
+    monkeypatch.setattr(qbg, "_lacks_figure", real)
+    broken = set(gf.summarize(results)["rule_broken"])
+    # Including problems that don't say "the figure": only the AI's choice
+    # (figure_wanted) shows they wanted one.
+    assert {p["key"] for p in results if p["key"] in broken and not qbg._FIGURE_REFERENCE.search(p["text"])}

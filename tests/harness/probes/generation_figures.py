@@ -85,12 +85,14 @@ def count_of(name: str) -> int:
 BY_EYE: dict[str, tuple[str, str]] = {
     "set1-p1": ("cadc98edaf93", "right"),  # M on AC and BD, each half ticked
     "set1-p2": ("c7e0c0288895", "right"),  # P, Q, R on circle O; inscribed ∠QPR = 37° labeled; radii OQ, OR
-    "set1-p5": ("3361ded9636e", "right"),  # AB ∥ CD arrows, E the midpoint of BC ticked, ∠ABE ≅ ∠DCE arcs
-    "set1-p6": ("9720b7877131", "right"),  # A, B, C, D on circle O; ∠AOB = 124°, ∠ACD = 31° labeled; ∠AOD 62° drawn
-    "set1-p7": ("b4d80fecd623", "right"),  # right angles at D and C marked, AD ≅ BC ticked, shared AB
+    "set1-p5": ("8426f4e6b10c", "right"),  # AB ∥ CD arrows, E the midpoint of BC ticked
     "set2-p1": ("a498817f5848", "right"),  # AB ∥ CD, transversal EF with G past F; ∠AEG = 112° as drawn
     "set2-p3": ("b055008a90f7", "right"),  # right angle at C; AB = 17, AC = 8 labeled, in proportion
-    "set2-p5": ("5237fe49f692", "right"),  # right angle at C; AB = 15, BC = 9 labeled, AC drawn 12
+    # AB ∥ CD cut by PQ at E, F; ∠BEF and ∠DFE both 50° at x = 12. Its labels were written
+    # "$(3x+14)°$": shown as plain text since #989's label fix.
+    "set2-p4": ("82f926ad1496", "right"),
+    "set2-p5": ("bf30773bbe8f", "right"),  # JK ∥ LM cut by NP; ∠KGN = 67° as drawn
+    "set2-p7": ("81db88718466", "right"),  # right angle at C; AB = 20, BC = 12 labeled, AC drawn 16
 }
 
 # Per problem (by the fingerprint of its text), whether a figure should be
@@ -103,16 +105,16 @@ EXPECTED: dict[str, str] = {
     "4d009383ce43": "figure",  # p2: inscribed and central angles (MUST)
     "df3b2e3390c3": "figure",  # p3: a ladder against a wall (SHOULD); written as a story, no points
     "f49005c8cf74": "optional",  # p4: △PQR ≅ △XYZ, solve for x from matching sides (algebra)
-    "bf39fc064dfe": "figure",  # p5: parallel lines and a midpoint, a proof (MUST)
-    "4c1df32a2548": "figure",  # p6: central and inscribed angles (MUST)
-    "89d2f779ca14": "figure",  # p7: two right triangles on a shared side, a proof (MUST)
-    "459859cb76da": "figure",  # p8: a wire from a post to the ground (SHOULD); a story, no points
+    "4d7eb5d09cc9": "figure",  # p5: parallel lines and a midpoint, a proof (MUST)
+    "3b955a73a7bf": "figure",  # p6: a chord and a tangent in a circular garden (MUST); a story, no points
+    "0716423830b5": "optional",  # p7: congruent triangles by AAS, solve for x (algebra)
+    "19b663157fee": "figure",  # p8: the angle between a chord and a tangent (MUST); no points
     # set 2
     "ad8560639f80": "figure",  # p1: parallel lines and a transversal (MUST)
-    "e5511552fced": "optional", "6cd0d1f8c203": "optional",  # p3, p5: a right triangle by its formula
-    "ae3590ba66ef": "optional", "03057dcd1072": "optional", "5e6634df362b": "optional",  # p2, p4, p7: angle sums
-    "2afb65b3ba64": "figure",  # p6: a transversal and co-interior angles (MUST); no points
-    "9d29a5fd239e": "figure",  # p8: a floor plan (SHOULD); a story, no points
+    "8ebcd1c24cce": "figure", "3b3cc497fc0f": "figure",  # p4, p5: parallel lines and a transversal (MUST)
+    "e5511552fced": "optional", "746d6de49463": "optional",  # p3, p7: a right triangle by its formula
+    "ae3590ba66ef": "optional", "93d21c4d1ace": "optional",  # p2, p6: angle sums
+    "00b4d635f44c": "figure",  # p8: a floor plan (SHOULD); a story, no points
     # set 3: Ben's NO-figure cases
     "06652fefc9fc": "none",  # p1: the student constructs the perpendicular bisector
     "fe7fcabbe857": "none",  # p2: a percent problem, no shape
@@ -126,12 +128,12 @@ EXPECTED: dict[str, str] = {
 NEGATIVES: dict[str, dict[str, Any]] = {
     "set1-p1": {"move": {"M": [2.5, 2]}},  # M no longer the midpoint of AC or BD
     "set1-p2": {"move": {"P": [4, 1]}},  # P off circle O
-    "set1-p5": {"move": {"E": [4, 2.5]}},  # E off BC, no longer its midpoint
-    "set1-p6": {"move": {"D": [2, 5]}},  # D off circle O
-    "set1-p7": {"move": {"C": [5, -1]}},  # no right angle at C, BC no longer ≅ AD
+    "set1-p5": {"move": {"E": [4.5, 2.5]}},  # E off BC, no longer its midpoint
     "set2-p1": {"move": {"C": [0, 1]}},  # line CD no longer ∥ AB
     "set2-p3": {"move": {"B": [0, 10]}},  # AB = 17, AC = 8 out of proportion
-    "set2-p5": {"move": {"A": [0, 4]}},  # AB = 15, BC = 9 out of proportion
+    "set2-p4": {"move": {"C": [8, 3]}},  # line CD no longer ∥ AB
+    "set2-p5": {"move": {"M": [8, 3]}},  # line LM no longer ∥ JK
+    "set2-p7": {"move": {"A": [0, 8]}},  # AB = 20, BC = 12 out of proportion
 }
 
 
@@ -194,6 +196,8 @@ async def run_set(name: str, only: list[int] | None = None) -> list[dict[str, An
             "final_answer": sol.get("final_answer") or "",
             "figure_spec": q.get("figure_spec") if q.get("figure_svg") else None,
             "figure_svg": q.get("figure_svg"), "figure_facts": q.get("figure_facts"),
+            # The AI's own choice (it drafted a figure), for the rule_broken bar.
+            "figure_wanted": bool(q.get("figure_wanted")),
             "steps": [
                 {"step": n, "text": f"{st.get('title', '')}: {st.get('description', '')}",
                  "spec": st.get("figure_spec"), "svg": st.get("figure_svg"), "facts": st.get("figure_facts"),
