@@ -300,7 +300,7 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def main() -> None:
-    from tests.harness.budget import spending_cap
+    from tests.harness.budget import ledger_from_env, spending_cap
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--only", nargs="*")
@@ -308,7 +308,8 @@ def main() -> None:
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
     cases = [c for c in CASES if not args.only or c["id"] in args.only]
-    with spending_cap("adversarial", cap_usd=args.cap) as spend:
+    ledger, total = ledger_from_env()
+    with spending_cap("adversarial", cap_usd=args.cap, ledger=ledger, total_usd=total) as spend:
         results = asyncio.run(run_all(cases))
     for r in results:
         print(f"{r['id']:<22} reading={'ok' if not r['reading'] else r['reading']} "

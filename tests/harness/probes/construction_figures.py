@@ -64,6 +64,14 @@ SETS: dict[str, list[str]] = {
                  "b1768f86", "099d8962", "29be9c15", "6d780084", "7ef5c01b", "7450aa6e", "2f44f46d"],
     "rest": ["31f9bf18", "d5a862d3"],
     "steps": ["dd7ab4c1-step", "7ef5c01b-step"],
+    # Problems that are not triangle or parallel-line proofs (read 2026-11-13):
+    # circles, angle pairs and angle algebra, exterior angles, a coordinate
+    # quadrilateral, other triangle constructions. Prod's bank has no area or
+    # shaded-region problems.
+    "breadth": ["5abb34ee", "3170f139", "ab8b7fbc", "81574070", "0c7cae1a", "75d6c789", "1c5107aa", "9488adfe",
+                "0f6b22c4", "61be26f8", "354df559", "9c2dc3c8", "9c35c230", "6c5008f2", "dba1e5fb", "779c31b5",
+                "a5ec9d41", "df891226", "922733e1", "430894a4", "809a530c", "986bb01d", "97b3010d", "ab10c024",
+                "08e3224d"],
 }
 
 # By-eye verdict per case, after looking at every rendered figure:
@@ -119,6 +127,13 @@ BY_EYE: dict[str, tuple[str, str]] = {
     "7ef5c01b-step-step4": ("ed6d9dc38966", "right"),  # vertical angles at M
     # Looked at 2026-11-12 after angle pairs, circle grounding and prove marks removed.
     "2f44f46d": ("9171372e18da", "right"),  # DE ∥ BC, D on AB, E on AC; ∠ADE ≅ ∠ABC not marked
+    # Breadth set, looked at 2026-11-13.
+    "ab8b7fbc": ("61672020f442", "right"),  # inscribed ∠BAC 38°, central ∠BOC unlabelled (the answer)
+    "9488adfe": ("1378d832cc0d", "right"),  # QS bisects ∠PQR (45° each at x = 7), halves labelled
+    "809a530c": ("0dd6b6c1eece", "right"),  # midsegment MN: M, N midpoints (ticks), MN half of YZ
+    "986bb01d": ("e669bbd3ec63", "right"),  # ray QS bisects ∠PQR; PS:SR = 12:18 to scale
+    # (cosmetic: PR's "25" sits just right of S, by the ray)
+    "97b3010d": ("c98d12c35871", "right"),  # right angle at Q, altitude QS ⊥ PR, PS 4 and SR 9 to scale
 }
 
 # A known-wrong version of each case's figure (a point moved so a given is
@@ -140,6 +155,11 @@ NEGATIVES: dict[str, dict[str, Any]] = {
     "7ef5c01b": {"move": {"M": [4.5, 1]}},  # M not the midpoint of BC
     "7450aa6e": {"move": {"F": [6.5, 3.5]}},  # AC ≠ DF
     "2f44f46d": {"move": {"E": [5.303, 5]}},  # DE ∦ BC
+    "ab8b7fbc": {"move": {"A": [0, -3]}},  # A off the circle: ∠BAC not inscribed
+    "9488adfe": {"move": {"S": [1, 5]}},  # QS no longer bisects ∠PQR
+    "809a530c": {"move": {"N": [7, 1.75]}},  # N on XZ but not its midpoint
+    "986bb01d": {"move": {"S": [12, 0]}},  # QS no longer bisects ∠PQR
+    "97b3010d": {"move": {"S": [5, 0]}},  # QS not ⊥ PR
     "12c77989": {"move": {"F": [5.4, 4]}},  # ∠D ≠ ∠A
     "e87bd653": {"move": {"F": [8.5, 0]}},  # BC ≠ EF
     "099d8962": {"move": {"Z": [0.553, 5]}},  # ∠X ≇ ∠Z
@@ -467,14 +487,15 @@ def main() -> None:
     parser.add_argument("--set", choices=sorted(SETS), help="one recording set, under its spending cap")
     parser.add_argument("--cap", type=float, default=5.0, help="the set's spending cap in $")
     args = parser.parse_args()
-    from tests.harness.budget import spending_cap
+    from tests.harness.budget import ledger_from_env, spending_cap
 
     cases = load_cases()
     if args.set:
         cases = [c for c in cases if c["id"] in SETS[args.set]]
     if args.only:
         cases = [c for c in cases if c["id"] in args.only]
-    with spending_cap(args.set or "all", cap_usd=args.cap) as spend:
+    ledger, total = ledger_from_env()
+    with spending_cap(args.set or "all", cap_usd=args.cap, ledger=ledger, total_usd=total) as spend:
         results, redraws = asyncio.run(run_all(cases))
     cost = spend.row(problems=len(cases))
     print("COST", json.dumps(cost))

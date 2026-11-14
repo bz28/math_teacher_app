@@ -247,6 +247,7 @@ async def read_figure_facts(
         first_difference,
         grounded,
         impossible_measures,
+        invented_points,
         merged,
         unverifiable,
     )
@@ -269,6 +270,11 @@ async def read_figure_facts(
         logger.exception("figure facts reading failed")
         return None, ["the problem couldn't be read for checking"]
     a, b = grounded(a, f"{problem_text}\n{request}"), grounded(b, f"{problem_text}\n{request}")
+    made_up = invented_points(a, f"{problem_text}\n{request}") + invented_points(b, f"{problem_text}\n{request}")
+    if made_up:
+        # Names the problem never writes: a reading labelled an unnamed figure.
+        logger.warning("figure facts: a reading named points the problem doesn't: %s", sorted(set(made_up)))
+        return None, [_IN_WORDS]
     if described_in_words(a) and described_in_words(b):
         return None, [_IN_WORDS]
     differ = disagreements(a, b)

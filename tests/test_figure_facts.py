@@ -683,3 +683,44 @@ def test_on_says_no_more_than_midpoint_and_a_part_is_congruent_to_itself() -> No
             *base.givens, Fact(kind="congruent_segments", items=same)]})) == [], same
     assert disagreements(base, base.model_copy(update={"givens": [
         *base.givens, Fact(kind="congruent_segments", items=["AC", "BD"])]}))
+
+
+# ── Breadth set (prod problems that are not triangle or parallel proofs) ─
+
+
+@pytest.mark.asyncio
+async def test_points_a_reading_made_up_mean_the_problem_is_unnamed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Prod 779c31b5: 'An exterior angle of a triangle measures (11x − 4)°'
+    names no points; both readings made up A, B, C, D and agreed on a wrong
+    fact (the exterior angle as ∠CBD, a straight angle)."""
+    from api.core.geometry.facts import invented_points
+
+    text = ("An exterior angle of a triangle measures (11x - 4)°. The two non-adjacent interior angles "
+            "measure (4x + 9)° and (5x + 3)°. Find the value of x.")
+    r = FigureFacts(points=list("ABCD"), givens=[Fact(kind="opposite_rays", items=["BC", "BD"]),
+                                                 Fact(kind="angle_measure", items=["CBD"], expr="11x - 4")])
+    assert invented_points(r, text) == ["A", "B", "C", "D"]
+    assert invented_points(r, r"In $\triangle ABC$, $\overrightarrow{BD}$ is opposite $\overrightarrow{BC}$.") == []
+    primed = FigureFacts(points=["A", "B", "C", "A'", "B'", "C'"])
+    assert invented_points(primed, r"Given: $\triangle ABC \cong \triangle A^{\prime}B^{\prime}C^{\prime}$.") == []
+    _stub_readings(monkeypatch, r, r)
+    facts, why = await _why(text)
+    assert facts is None
+    assert why == ["the problem describes its angles or shapes in words rather than naming them, "
+                   "so the figure can't be checked"]
+
+
+def test_an_altitude_is_accounted_for_by_its_own_perpendicular() -> None:
+    """Prod 97b3010d: 'altitude QS is drawn to hypotenuse PR' was always a
+    gap, though the readings state QS ⊥ PR. Only a perpendicular naming QS
+    accounts for it."""
+    text = ("In right triangle PQR with the right angle at Q, altitude $\\overline{QS}$ is drawn to hypotenuse "
+            "$\\overline{PR}$. If PS = 4 and SR = 9, find QS.")
+    base = [Fact(kind="right_triangle", items=["PQR"], point="Q"), Fact(kind="on_segment", items=["PR"], point="S")]
+    with_alt = FigureFacts(points=list("PQRS"), givens=[*base, Fact(kind="perpendicular", items=["QS", "PR"])])
+    other_perp = FigureFacts(points=list("PQRS"), givens=[*base, Fact(kind="perpendicular", items=["PQ", "QR"])])
+    assert not [g for g in coverage_gaps(text, with_alt) if "altitude" in g]
+    assert [g for g in coverage_gaps(text, other_perp) if "altitude" in g]
+    # An altitude with no name has nothing to check against.
+    assert [g for g in coverage_gaps("Draw an altitude of the triangle ABC.", FigureFacts(points=list("ABC")))
+            if "altitude" in g]

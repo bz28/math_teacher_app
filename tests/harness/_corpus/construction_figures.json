@@ -1,5 +1,5 @@
 {
- "about": "Construction-figure eval: geometry problems from prod where a teacher asked the workshop chat for a drawing, or whose text points at a figure (Nov 2026). Problem text, solution and answer only; no student data. The two -step cases ask for a step diagram too.",
+ "about": "Construction-figure eval: geometry problems from prod where a teacher asked the workshop chat for a drawing, or whose text points at a figure (Nov 2026). Problem text, solution and answer only; no student data. The two -step cases ask for a step diagram too. The breadth set (Nov 13) adds 25 prod problems that are not triangle or parallel-line proofs: circles, angle pairs, exterior angles, a coordinate quadrilateral and other triangle constructions.",
  "cases": [
   {
    "id": "985bff41",
@@ -591,6 +591,1154 @@
    ],
    "final_answer": "$\\triangle ABM \\cong \\triangle DCM$ by **ASA**, using:\n1. $\\angle ABM = \\angle DCM$ (alternate interior angles, $\\overline{AB} \\parallel \\overline{CD}$)\n2. $BM = MC$ (definition of midpoint)\n3. $\\angle AMB = \\angle DMC$ (vertical angles)",
    "request": "can you add the diagram, and a diagram on the step where you show the vertical angles?"
+  },
+  {
+   "id": "5abb34ee",
+   "source": "prod question_bank_items 5abb34ee (breadth set: no chat on this item; the eval's standard request)",
+   "question": "A circle has radius $r = 8$ cm. A central angle of $\\dfrac{3\\pi}{4}$ radians intercepts an arc. Find (a) the length of the arc and (b) the area of the sector formed by this central angle.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "We have a circle with radius $r = 8$ cm and a **central angle** $\\theta = \\dfrac{3\\pi}{4}$ radians that cuts out a \"pizza slice\" (sector) and a curved edge (arc).\n\nThe key insight: when angles are in **radians**, both formulas become beautifully direct — arc length and sector area are just short multiplications away. No degree-to-radian conversions needed.\n\n- **Arc length formula:** $s = r\\theta$\n- **Sector area formula:** $A = \\dfrac{1}{2}r^2\\theta$"
+    },
+    {
+     "title": "Find Arc Length",
+     "description": "Plug $r = 8$ and $\\theta = \\dfrac{3\\pi}{4}$ directly into $s = r\\theta$:\n\n$$s = 8 \\cdot \\frac{3\\pi}{4} = \\frac{24\\pi}{4} = 6\\pi \\text{ cm}$$\n\nThink of it this way: the full circumference would be $2\\pi r = 16\\pi$ cm. Our angle $\\dfrac{3\\pi}{4}$ is $\\dfrac{3}{8}$ of a full $2\\pi$ rotation, so the arc is $\\dfrac{3}{8} \\times 16\\pi = 6\\pi$ — same answer, confirming our formula works perfectly."
+    },
+    {
+     "title": "Find Sector Area",
+     "description": "Plug $r = 8$ and $\\theta = \\dfrac{3\\pi}{4}$ into $A = \\dfrac{1}{2}r^2\\theta$:\n\n$$A = \\frac{1}{2} \\cdot 8^2 \\cdot \\frac{3\\pi}{4} = \\frac{1}{2} \\cdot 64 \\cdot \\frac{3\\pi}{4} = 32 \\cdot \\frac{3\\pi}{4} = \\frac{96\\pi}{4} = 24\\pi \\text{ cm}^2$$\n\nSanity check: the full circle's area is $\\pi r^2 = 64\\pi$ cm². Our sector is $\\dfrac{3}{8}$ of the full circle, so $\\dfrac{3}{8} \\times 64\\pi = 24\\pi$ ✓"
+    }
+   ],
+   "final_answer": "**(a)** Arc length: $s = 6\\pi \\approx 18.85 \\text{ cm}$\n\n**(b)** Sector area: $A = 24\\pi \\approx 75.40 \\text{ cm}^2$",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "3170f139",
+   "source": "prod question_bank_items 3170f139 (breadth set: no chat on this item; the eval's standard request)",
+   "question": "A circle has a radius of $8$ inches. A central angle of $\\dfrac{3\\pi}{4}$ radians intercepts an arc. Find the exact arc length $s$.",
+   "solution_steps": [
+    {
+     "title": "Understand the Problem",
+     "description": "We have a circle with radius $r = 8$ inches and a **central angle** of $\\theta = \\dfrac{3\\pi}{4}$ radians. A central angle is an angle whose vertex sits at the center of the circle — the two sides of this angle \"cut out\" a piece of the circumference called an **arc**.\n\nThe key insight: arc length is just a **fraction of the full circumference**. The full circumference is $2\\pi r$, and the central angle $\\theta$ (in radians) tells us exactly what fraction of the full circle ($2\\pi$) we're looking at. That gives the clean formula:\n$$s = r\\theta$$\nThis works *only* when $\\theta$ is in **radians** — which it already is here."
+    },
+    {
+     "title": "Apply the Formula",
+     "description": "Plug $r = 8$ and $\\theta = \\dfrac{3\\pi}{4}$ directly into $s = r\\theta$:\n$$s = 8 \\times \\frac{3\\pi}{4}$$\nMultiply the numbers: $8 \\div 4 = 2$, so\n$$s = 2 \\times 3\\pi = 6\\pi$$"
+    }
+   ],
+   "final_answer": "$s = 6\\pi$ inches",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "ab8b7fbc",
+   "source": "prod question_bank_items ab8b7fbc (breadth set: no chat on this item; the eval's standard request)",
+   "question": "In circle $O$, inscribed angle $\\angle BAC = 38°$. Find the measure of arc $BC$. Then find the measure of the central angle $\\angle BOC$.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "We have a circle with center $O$, and three points $A$, $B$, $C$ on the circumference. \n\n**Inscribed angle** $\\angle BAC = 38°$ is formed by two chords ($AB$ and $AC$) that meet *on* the circle at point $A$, and it **intercepts arc $BC$** (the arc that the angle \"opens toward,\" not containing $A$).\n\n**Central angle** $\\angle BOC$ is formed by two radii ($OB$ and $OC$) meeting at the *center* $O$, and it intercepts the same arc $BC$.\n\nThe key relationship to use: the **Inscribed Angle Theorem** — an inscribed angle is always exactly **half** the central angle that intercepts the same arc. Equivalently, an inscribed angle equals **half** the intercepted arc."
+    },
+    {
+     "title": "Find Arc BC",
+     "description": "The **Inscribed Angle Theorem** states:\n$$\\text{Inscribed Angle} = \\frac{1}{2} \\times \\text{Intercepted Arc}$$\n\nRearranging to find the arc:\n$$\\text{Arc } BC = 2 \\times \\angle BAC$$\n$$\\text{Arc } BC = 2 \\times 38° = 76°$$"
+    },
+    {
+     "title": "Find Central Angle ∠BOC",
+     "description": "A **central angle always equals its intercepted arc** — this is actually the *definition* of arc measure. Since $\\angle BOC$ and arc $BC$ intercept the same arc:\n$$\\angle BOC = \\text{Arc } BC = 76°$$\n\nNotice this also confirms the inscribed angle theorem: $\\angle BAC = \\frac{1}{2} \\angle BOC$, i.e., $38° = \\frac{1}{2}(76°)$ ✓"
+    }
+   ],
+   "final_answer": "$\\text{Arc } BC = 76°$ and $\\angle BOC = 76°$",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "81574070",
+   "source": "prod question_bank_items 81574070 (breadth set: no chat on this item; the eval's standard request)",
+   "question": "From external point $P$, a tangent touches circle $O$ at point $T$, and a secant passes through points $A$ and $B$ on the circle. The intercepted arcs measure $\\overset{\\frown}{AT} = 168°$ and $\\overset{\\frown}{BT} = 62°$. Find $m\\angle P$.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "We have an **external point** $P$ with two lines reaching a circle:\n- A **tangent** line touching the circle at $T$\n- A **secant** line crossing the circle at two points $A$ (far) and $B$ (near)\n\nThe three points $T$, $A$, $B$ divide the circle into three arcs:\n$$\\overset{\\frown}{AT} = 168°, \\quad \\overset{\\frown}{BT} = 62°, \\quad \\overset{\\frown}{AB} = 360° - 168° - 62° = 130°$$\n\nThe key formula for any angle formed **outside** a circle is:\n$$\\angle P = \\frac{1}{2}(\\text{far arc} - \\text{near arc})$$\nwhere the **far arc** is the one cut off between the two far endpoints ($T$ and $A$), and the **near arc** is between the two near endpoints ($T$ and $B$).",
+     "figure_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-3.5120 -3.5120 8.2686 7.0240\" preserveAspectRatio=\"xMidYMid meet\" role=\"img\" aria-label=\"Geometry figure\"><g transform=\"scale(1,-1)\"><circle cx=\"0\" cy=\"0\" r=\"2.5000\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"0.04\"/><line x1=\"-1.1350\" y1=\"-2.2275\" x2=\"2.4359\" y2=\"0.5624\" stroke=\"currentColor\" stroke-width=\"0.04\"/><line x1=\"3.7446\" y1=\"1.5848\" x2=\"0.6470\" y2=\"2.4148\" stroke=\"currentColor\" stroke-width=\"0.04\"/><line x1=\"3.7446\" y1=\"1.5848\" x2=\"-1.1350\" y2=\"-2.2275\" stroke=\"currentColor\" stroke-width=\"0.04\"/><circle cx=\"0\" cy=\"0\" r=\"0.0375\" fill=\"currentColor\"/><circle cx=\"0.6470\" cy=\"2.4148\" r=\"0.0375\" fill=\"currentColor\"/><circle cx=\"-1.1350\" cy=\"-2.2275\" r=\"0.0375\" fill=\"currentColor\"/><circle cx=\"2.4359\" cy=\"0.5624\" r=\"0.0375\" fill=\"currentColor\"/><circle cx=\"3.7446\" cy=\"1.5848\" r=\"0.0375\" fill=\"currentColor\"/></g><text x=\"0.0000\" y=\"0.0000\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\" dx=\"0.1500\" dy=\"0.2500\">O</text><text x=\"0.7040\" y=\"-2.6273\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">T</text><text x=\"-1.2349\" y=\"2.4235\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">A</text><text x=\"2.6503\" y=\"-0.6119\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">B</text><text x=\"3.9472\" y=\"-1.6706\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">P</text><text x=\"0.7859\" y=\"1.0059\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">secant</text></svg>",
+     "figure_spec": {
+      "type": "geometry",
+      "shape": "circle",
+      "radius": 3,
+      "show_center": true,
+      "center_label": "O",
+      "points": {
+       "T": 75,
+       "A": 243,
+       "B": 13
+      },
+      "chords": [
+       "AB"
+      ],
+      "chord_labels": {
+       "AB": "secant"
+      },
+      "external_points": {
+       "P": {
+        "line1": {
+         "tangent_at": "T"
+        },
+        "line2": {
+         "secant_through": [
+          "B",
+          "A"
+         ]
+        }
+       }
+      }
+     }
+    },
+    {
+     "title": "Identify Far vs. Near Arc",
+     "description": "Since $B$ is the **near** intersection (closer to $P$) and $A$ is the **far** intersection (farther from $P$):\n\n- **Far arc**: $\\overset{\\frown}{AT} = 168°$ — the arc stretching between the two endpoints that are farther from $P$\n- **Near arc**: $\\overset{\\frown}{BT} = 62°$ — the arc stretching between the two endpoints that are closer to $P$\n\nThink of it this way: the angle at $P$ is \"squeezed\" between these two arcs — the bigger arc opens it up, and the smaller arc closes it back down, so we take their difference."
+    },
+    {
+     "title": "Apply the External Angle Formula",
+     "description": "Plug the far and near arcs into the formula:\n$$\\angle P = \\frac{1}{2}\\bigl(\\overset{\\frown}{AT} - \\overset{\\frown}{BT}\\bigr) = \\frac{1}{2}(168° - 62°) = \\frac{1}{2}(106°) = 53°$$"
+    }
+   ],
+   "final_answer": "$m\\angle P = 53°$",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "0c7cae1a",
+   "source": "prod question_bank_items 0c7cae1a (breadth set: no chat on this item; the eval's standard request)",
+   "question": "Two lines intersect forming two pairs of vertical angles. One angle has measure $3x + 20$ and its vertical angle has measure $5x - 8$. Find the measures of all four angles formed at the intersection.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "When two lines cross, they form **4 angles** at the intersection. These angles come in two pairs of **vertical angles** — angles that sit directly across from each other (not next to each other). The key facts to use:\n\n- **Vertical angles are always equal.**\n- **Adjacent angles are supplementary** (they sit side-by-side and form a straight line, so they add up to $180°$).\n\nSince $3x + 20$ and $5x - 8$ are vertical angles, set them equal to find $x$."
+    },
+    {
+     "title": "Solve for x",
+     "description": "Set the vertical angles equal and solve:\n$$3x + 20 = 5x - 8$$\n\nSubtract $3x$ from both sides:\n$$20 = 2x - 8$$\n\nAdd $8$ to both sides:\n$$28 = 2x$$\n\nDivide by $2$:\n$$x = 14$$"
+    },
+    {
+     "title": "Find the First Pair",
+     "description": "Substitute $x = 14$ into either expression — both must give the same angle since they're vertical:\n$$3(14) + 20 = 42 + 20 = 62°$$\n$$5(14) - 8 = 70 - 8 = 62°\\checkmark$$\n\nSo the **first pair of vertical angles** each measures $62°$."
+    },
+    {
+     "title": "Find the Second Pair",
+     "description": "The adjacent angle forms a straight line with $62°$, so it's supplementary:\n$$180° - 62° = 118°$$\n\nThe **second pair of vertical angles** each measures $118°$.\n\nQuick check — all four angles should sum to $360°$:\n$$62° + 118° + 62° + 118° = 360°\\checkmark$$"
+    }
+   ],
+   "final_answer": "$x = 14$, giving four angles: $62°,\\ 118°,\\ 62°,\\ 118°$",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "75d6c789",
+   "source": "prod question_bank_items 75d6c789 (breadth set: no chat on this item; the eval's standard request)",
+   "question": "Two angles are supplementary. The measure of the larger angle is $15°$ more than four times the measure of the smaller angle. Find the measure of each angle.",
+   "solution_steps": [
+    {
+     "title": "Understand the Problem",
+     "description": "We have two angles that are **supplementary**, meaning they add up to $180°$.\n\nWe're told the larger angle is $15°$ more than **four times** the smaller angle.\n\nThe key insight: since both angles are expressed in terms of the smaller one, we only need **one variable**. Let the smaller angle be $x$, which makes the larger angle $4x + 15$. Then we just use the supplementary rule to build one equation and solve."
+    },
+    {
+     "title": "Build the Equation",
+     "description": "Since the two angles are supplementary:\n$$x + (4x + 15) = 180$$\n\nCombining like terms on the left:\n$$5x + 15 = 180$$"
+    },
+    {
+     "title": "Solve for x",
+     "description": "Subtract $15$ from both sides:\n$$5x = 165$$\n\nDivide both sides by $5$:\n$$x = 33$$\n\nSo the **smaller angle** is $33°$."
+    },
+    {
+     "title": "Find the Larger Angle",
+     "description": "Substitute $x = 33$ into the expression for the larger angle:\n$$4(33) + 15 = 132 + 15 = 147$$\n\nSo the **larger angle** is $147°$.\n\n**Quick check:** $33° + 147° = 180°$ ✓ and $147° = 4(33°) + 15°$ ✓"
+    }
+   ],
+   "final_answer": "$\\text{Smaller angle} = 33°, \\quad \\text{Larger angle} = 147°$",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "1c5107aa",
+   "source": "prod question_bank_items 1c5107aa (breadth set: no chat on this item; the eval's standard request)",
+   "question": "Ray $\\overrightarrow{BD}$ lies in the interior of $\\angle ABC$. If $m\\angle ABD = 4x + 6$, $m\\angle DBC = 2x + 14$, and $m\\angle ABC = 74°$, find $x$ and both angle measures.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "Ray $\\overrightarrow{BD}$ sits **inside** $\\angle ABC$, splitting it into two smaller angles: $\\angle ABD$ and $\\angle DBC$. This means the two smaller angles must **add up exactly** to the whole angle — a property called the **Angle Addition Postulate**:\n\n$$m\\angle ABD + m\\angle DBC = m\\angle ABC$$\n\nWe're given:\n- $m\\angle ABD = 4x + 6$\n- $m\\angle DBC = 2x + 14$\n- $m\\angle ABC = 74°$\n\nSubstituting these expressions into the equation gives us one equation with one unknown $x$ — easy to solve!",
+     "figure_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-0.6160 -5.4949 6.2320 6.1109\" preserveAspectRatio=\"xMidYMid meet\" role=\"img\" aria-label=\"Geometry figure\"><g transform=\"scale(1,-1)\"><polygon points=\"0.0000,0.0000 5.0000,0.0000 3.9062,4.8789\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"0.04\" stroke-linejoin=\"round\"/></g><text x=\"-0.1929\" y=\"0.1057\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">A</text><text x=\"5.1717\" y=\"0.1375\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">B</text><text x=\"3.9672\" y=\"-5.0903\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">C</text><text x=\"0.2701\" y=\"-0.1480\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\"></text><text x=\"4.7596\" y=\"-0.1925\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">74°</text><text x=\"3.8209\" y=\"-4.5830\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\"></text></svg>",
+     "figure_spec": {
+      "type": "geometry",
+      "shape": "triangle",
+      "vertices": [
+       "A",
+       "B",
+       "C"
+      ],
+      "side_lengths": {
+       "AB": 4,
+       "BC": 4,
+       "AC": 5
+      },
+      "vertex_labels": {
+       "A": "A",
+       "B": "B",
+       "C": "C"
+      },
+      "angle_labels": {
+       "A": "",
+       "B": "74°",
+       "C": ""
+      }
+     }
+    },
+    {
+     "title": "Set Up the Equation",
+     "description": "Plug each expression into the Angle Addition Postulate:\n\n$$(4x + 6) + (2x + 14) = 74$$\n\nCombine the like terms on the left side:\n\n$$6x + 20 = 74$$",
+     "figure_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-0.7480 -4.4141 6.4960 5.1621\" preserveAspectRatio=\"xMidYMid meet\" role=\"img\" aria-label=\"Geometry figure\"><g transform=\"scale(1,-1)\"><polygon points=\"0.0000,0.0000 5.0000,0.0000 3.4000,3.6661\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"0.04\" stroke-linejoin=\"round\"/></g><text x=\"-0.2016\" y=\"0.0880\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">A</text><text x=\"5.1923\" y=\"0.1068\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">B</text><text x=\"3.4525\" y=\"-3.8797\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">D</text><text x=\"0.2823\" y=\"-0.1232\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\"></text><text x=\"4.7307\" y=\"-0.1496\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">4x+6</text><text x=\"3.3266\" y=\"-3.3669\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\"></text></svg>",
+     "figure_spec": {
+      "type": "geometry",
+      "shape": "triangle",
+      "vertices": [
+       "A",
+       "B",
+       "D"
+      ],
+      "side_lengths": {
+       "AB": 4,
+       "BD": 3.2,
+       "AD": 4
+      },
+      "vertex_labels": {
+       "A": "A",
+       "B": "B",
+       "D": "D"
+      },
+      "angle_labels": {
+       "A": "",
+       "B": "4x+6",
+       "D": ""
+      }
+     }
+    },
+    {
+     "title": "Solve for x",
+     "description": "Subtract $20$ from both sides:\n\n$$6x = 54$$\n\nDivide both sides by $6$:\n\n$$x = 9$$"
+    },
+    {
+     "title": "Find Each Angle",
+     "description": "Substitute $x = 9$ back into each expression:\n\n$$m\\angle ABD = 4(9) + 6 = 36 + 6 = 42°$$\n\n$$m\\angle DBC = 2(9) + 14 = 18 + 14 = 32°$$\n\n**Quick check:** $42° + 32° = 74°$ ✓ — matches $m\\angle ABC$."
+    }
+   ],
+   "final_answer": "$x = 9, \\quad m\\angle ABD = 42°, \\quad m\\angle DBC = 32°$",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "9488adfe",
+   "source": "prod question_bank_items 9488adfe (breadth set: no chat on this item; the eval's standard request)",
+   "question": "$\\overrightarrow{QS}$ bisects $\\angle PQR$. If $m\\angle PQS = 7x - 4$ and $m\\angle SQR = 4x + 17$, find $m\\angle PQR$.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "A **bisector** cuts an angle into two **equal** halves. Since $\\overrightarrow{QS}$ bisects $\\angle PQR$, the two smaller angles it creates must be equal:\n$$m\\angle PQS = m\\angle SQR$$\nThis single equation is everything we need — plug in the expressions and solve for $x$."
+    },
+    {
+     "title": "Set the Halves Equal",
+     "description": "Since the bisector makes two equal angles, set the two expressions equal and solve for $x$:\n$$7x - 4 = 4x + 17$$\n$$3x = 21$$\n$$x = 7$$"
+    },
+    {
+     "title": "Find m∠PQR",
+     "description": "Now substitute $x = 7$ into either half-angle expression (both give the same result):\n$$m\\angle PQS = 7(7) - 4 = 49 - 4 = 45°$$\nSince $\\overrightarrow{QS}$ cuts $\\angle PQR$ into **two equal halves**, the full angle is simply double one half:\n$$m\\angle PQR = 2 \\times 45° = 90°$$"
+    }
+   ],
+   "final_answer": "$m\\angle PQR = 90°$",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "0f6b22c4",
+   "source": "prod question_bank_items 0f6b22c4 (breadth set: no chat on this item; the eval's standard request)",
+   "question": "Two parallel lines are cut by a transversal. One angle measures $(3x + 12)°$ and its corresponding angle measures $(5x - 8)°$. Find the value of $x$.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "Two parallel lines are cut by a transversal, creating pairs of **corresponding angles** — angles that sit in the same position at each intersection. The key property: **corresponding angles are always equal** when lines are parallel.\n\nWe're given:\n- Angle 1: $(3x + 12)°$\n- Angle 2: $(5x - 8)°$\n\nSince these are corresponding angles, we simply set them equal to each other and solve for $x$.",
+     "figure_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-1.5400 -2.1650 8.0800 3.7050\" preserveAspectRatio=\"xMidYMid meet\" role=\"img\" aria-label=\"Geometry figure\"><g transform=\"scale(1,-1)\"><polygon points=\"0.0000,0.6250 5.0000,0.6250 5.0000,0.0000 0.0000,0.0000\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"0.04\" stroke-linejoin=\"round\"/></g><text x=\"-0.2183\" y=\"-0.6523\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">A</text><text x=\"5.2183\" y=\"-0.6523\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">B</text><text x=\"5.2183\" y=\"0.0273\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">C</text><text x=\"-0.2183\" y=\"0.0273\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">D</text><text x=\"2.5000\" y=\"-0.8450\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">(3x + 12)°</text><text x=\"2.5000\" y=\"0.2200\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">(5x − 8)°</text></svg>",
+     "figure_spec": {
+      "type": "geometry",
+      "shape": "polygon",
+      "vertex_positions": [
+       [
+        0,
+        0.5
+       ],
+       [
+        4,
+        0.5
+       ],
+       [
+        4,
+        0
+       ],
+       [
+        0,
+        0
+       ]
+      ],
+      "vertex_names": [
+       "A",
+       "B",
+       "C",
+       "D"
+      ],
+      "side_labels": {
+       "AB": "(3x + 12)°",
+       "DC": "(5x − 8)°"
+      }
+     }
+    },
+    {
+     "title": "Set Angles Equal",
+     "description": "Corresponding angles between parallel lines are congruent, so:\n$$3x + 12 = 5x - 8$$"
+    },
+    {
+     "title": "Solve for x",
+     "description": "Subtract $3x$ from both sides to collect the variable terms on one side:\n$$12 = 2x - 8$$\n\nAdd $8$ to both sides:\n$$20 = 2x$$\n\nDivide both sides by $2$:\n$$x = 10$$"
+    },
+    {
+     "title": "Verify the Answer",
+     "description": "Substitute $x = 10$ back into both angle expressions to confirm they're equal:\n\n- Angle 1: $3(10) + 12 = 30 + 12 = 42°$\n- Angle 2: $5(10) - 8 = 50 - 8 = 42°$\n\nBoth angles equal $42°$ ✓"
+    }
+   ],
+   "final_answer": "$x = 10$",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "61be26f8",
+   "source": "prod question_bank_items 61be26f8 (breadth set: no chat on this item; the eval's standard request)",
+   "question": "Two parallel lines are cut by a transversal forming a pair of co-interior (same-side interior) angles measuring $(4x - 15)°$ and $(2x + 9)°$. Find $x$ and then determine the measure of each angle.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "Two parallel lines cut by a transversal create **co-interior angles** (also called same-side interior or consecutive interior angles) — these are the two angles that sit **between** the parallel lines and on the **same side** of the transversal.\n\nThe key property: **co-interior angles always add up to $180°$** (they are supplementary). Think of it like this — the transversal leans to one side, \"squishing\" one angle and \"opening\" the other, but they always balance out to a straight line.\n\nSo the plan is simple: set the sum of the two expressions equal to $180°$ and solve for $x$.",
+     "figure_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-0.6000 -0.6625 6.2000 1.2625\" preserveAspectRatio=\"xMidYMid meet\" role=\"img\" aria-label=\"Geometry figure\"><g transform=\"scale(1,-1)\"><polygon points=\"0.0000,0.0000 5.0000,0.0000 5.0000,0.0625 0.0000,0.0625\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"0.04\" stroke-linejoin=\"round\"/></g><text x=\"-0.2200\" y=\"0.0027\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">A</text><text x=\"5.2200\" y=\"0.0027\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">B</text><text x=\"5.2200\" y=\"-0.0652\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">C</text><text x=\"-0.2200\" y=\"-0.0652\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">D</text></svg>",
+     "figure_spec": {
+      "type": "geometry",
+      "shape": "polygon",
+      "vertex_positions": [
+       [
+        0,
+        0
+       ],
+       [
+        4,
+        0
+       ],
+       [
+        4,
+        0.05
+       ],
+       [
+        0,
+        0.05
+       ]
+      ],
+      "vertex_names": [
+       "A",
+       "B",
+       "C",
+       "D"
+      ]
+     }
+    },
+    {
+     "title": "Set Up the Equation",
+     "description": "Since co-interior angles are supplementary:\n$$( 4x - 15)° + (2x + 9)° = 180°$$\nCombine like terms on the left:\n$$6x - 6 = 180$$"
+    },
+    {
+     "title": "Solve for $x$",
+     "description": "Add $6$ to both sides:\n$$6x = 186$$\nDivide both sides by $6$:\n$$x = 31$$"
+    },
+    {
+     "title": "Find Each Angle",
+     "description": "Substitute $x = 31$ back into each expression:\n\n**Angle 1:** $4(31) - 15 = 124 - 15 = 109°$\n\n**Angle 2:** $2(31) + 9 = 62 + 9 = 71°$\n\n**Verify:** $109° + 71° = 180°$ ✓ — they are indeed supplementary, confirming our answer."
+    }
+   ],
+   "final_answer": "$x = 31$, with the two co-interior angles measuring $\\mathbf{109°}$ and $\\mathbf{71°}$.",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "354df559",
+   "source": "prod question_bank_items 354df559 (breadth set: no chat on this item; the eval's standard request)",
+   "question": "Two lines $\\ell_1$ and $\\ell_2$ are cut by a transversal. The transversal forms an angle of $3x + 15$ degrees with $\\ell_1$ and an angle of $5x - 9$ degrees with $\\ell_2$ at the corresponding positions. \n\n(a) Find the value of $x$ that makes $\\ell_1 \\parallel \\ell_2$. \n\n(b) State the theorem or postulate that justifies your answer.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "A **transversal** is a line that crosses two other lines. When it does, it creates pairs of **corresponding angles** — angles that sit in the same position at each intersection (e.g., both above-left of their respective lines).\n\nThe key geometric fact: two lines are **parallel if and only if their corresponding angles are equal**.\n\nSo to find $x$ that makes $\\ell_1 \\parallel \\ell_2$, we simply set the two angle expressions **equal** to each other and solve.",
+     "figure_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-1.6720 -6.5509 8.3440 8.2229\" preserveAspectRatio=\"xMidYMid meet\" role=\"img\" aria-label=\"Geometry figure\"><g transform=\"scale(1,-1)\"><polygon points=\"0.0000,0.0000 5.0000,0.0000 1.0938,4.8789\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"0.04\" stroke-linejoin=\"round\"/></g><text x=\"-0.1717\" y=\"0.1375\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">ℓ₁</text><text x=\"5.1929\" y=\"0.1057\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">transversal</text><text x=\"1.0328\" y=\"-5.0903\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">ℓ₂</text><text x=\"2.5000\" y=\"0.2200\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">3x + 15°</text><text x=\"3.2186\" y=\"-2.5770\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\"></text><text x=\"0.3322\" y=\"-2.4876\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">5x − 9°</text></svg>",
+     "figure_spec": {
+      "type": "geometry",
+      "shape": "triangle",
+      "vertices": [
+       "A",
+       "B",
+       "C"
+      ],
+      "side_lengths": {
+       "AB": 4,
+       "BC": 5,
+       "AC": 4
+      },
+      "side_labels": {
+       "AB": "3x + 15°",
+       "BC": "",
+       "AC": "5x − 9°"
+      },
+      "vertex_labels": {
+       "A": "ℓ₁",
+       "B": "transversal",
+       "C": "ℓ₂"
+      }
+     }
+    },
+    {
+     "title": "Set Angles Equal",
+     "description": "For $\\ell_1 \\parallel \\ell_2$, the corresponding angles must be congruent:\n$$3x + 15 = 5x - 9$$"
+    },
+    {
+     "title": "Solve for x",
+     "description": "Bring the $x$-terms to one side and constants to the other:\n$$15 + 9 = 5x - 3x$$\n$$24 = 2x$$\n$$x = 12$$"
+    },
+    {
+     "title": "Verify the Angles",
+     "description": "Substituting $x = 12$ back into each expression confirms they're equal:\n\n$\\ell_1$ angle: $3(12) + 15 = 36 + 15 = \\mathbf{51°}$\n\n$\\ell_2$ angle: $5(12) - 9 = 60 - 9 = \\mathbf{51°}$ ✓\n\nBoth angles measure $51°$, confirming $\\ell_1 \\parallel \\ell_2$."
+    },
+    {
+     "title": "State the Justification",
+     "description": "This is justified by the **Corresponding Angles Converse Postulate**:\n\n> *If two lines are cut by a transversal so that the corresponding angles are congruent, then the lines are parallel.*\n\nSince both angles equal $51°$, the postulate guarantees $\\ell_1 \\parallel \\ell_2$."
+    }
+   ],
+   "final_answer": "**(a)** $x = 12$ (both corresponding angles $= 51°$)\n\n**(b)** Corresponding Angles **Converse** Postulate: if two lines are cut by a transversal and the corresponding angles are congruent, then the lines are parallel.",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "9c2dc3c8",
+   "source": "prod question_bank_items 9c2dc3c8 (breadth set: no chat on this item; the eval's standard request)",
+   "question": "Two parallel lines are cut by a transversal. One pair of co-interior angles measures $(5x + 2y)°$ and $(3x - y + 40)°$, and a pair of corresponding angles gives the additional condition that the first angle equals $(7x - 10)°$. Set up and solve the system of equations to find $x$ and $y$.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "Two parallel lines cut by a transversal create special angle pairs with known relationships:\n\n- **Co-interior angles** (also called same-side interior angles) sit between the parallel lines, on the same side of the transversal. They are **supplementary** — they add up to $180°$.\n- **Corresponding angles** sit in the same position at each intersection. They are **equal**.\n\nWe have three angle expressions:\n- Angle 1: $(5x + 2y)°$\n- Angle 2: $(3x - y + 40)°$\n- Corresponding match for Angle 1: $(7x - 10)°$\n\nThis gives us **two independent equations** — exactly enough to solve for two unknowns $x$ and $y$.",
+     "figure_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-0.6000 -5.6000 5.4526 6.2000\" preserveAspectRatio=\"xMidYMid meet\" role=\"img\" aria-label=\"Geometry figure\"><g transform=\"scale(1,-1)\"><polygon points=\"0.0000,0.0000 4.2526,0.0000 3.2320,5.0000\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"0.04\" stroke-linejoin=\"round\"/></g><text x=\"-0.1829\" y=\"0.1222\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">A</text><text x=\"4.4122\" y=\"0.1514\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">B</text><text x=\"3.2795\" y=\"-5.2148\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">C</text></svg>",
+     "figure_spec": {
+      "type": "geometry",
+      "shape": "triangle",
+      "vertices": [
+       "A",
+       "B",
+       "C"
+      ],
+      "side_lengths": {
+       "AB": 5,
+       "BC": 6,
+       "AC": 7
+      }
+     }
+    },
+    {
+     "title": "Equation 1: Corresponding Angles",
+     "description": "Since corresponding angles are **equal**, Angle 1 and its corresponding angle give:\n$$5x + 2y = 7x - 10$$\n\nRearrange by moving all terms to one side:\n$$5x + 2y - 7x + 10 = 0$$\n$$-2x + 2y = -10$$\n\nDivide every term by $-2$ to simplify:\n$$\\boxed{x - y = 5} \\quad \\text{...(Equation 1)}$$"
+    },
+    {
+     "title": "Equation 2: Co-Interior Angles",
+     "description": "Since co-interior angles are **supplementary**, Angle 1 and Angle 2 must sum to $180°$:\n$$(5x + 2y) + (3x - y + 40) = 180$$\n\nCombine like terms on the left:\n$$8x + y + 40 = 180$$\n\nSubtract $40$ from both sides:\n$$\\boxed{8x + y = 140} \\quad \\text{...(Equation 2)}$$"
+    },
+    {
+     "title": "Solve the System",
+     "description": "We have:\n$$x - y = 5 \\quad (1)$$\n$$8x + y = 140 \\quad (2)$$\n\n**Add the two equations** directly — the $y$ terms cancel perfectly:\n$$(x - y) + (8x + y) = 5 + 140$$\n$$9x = 145$$\n$$x = \\frac{145}{9}$$\n\nSubstitute back into Equation 1 to find $y$:\n$$\\frac{145}{9} - y = 5$$\n$$y = \\frac{145}{9} - \\frac{45}{9} = \\frac{100}{9}$$"
+    },
+    {
+     "title": "Verify Both Conditions",
+     "description": "**Check corresponding angles are equal:**\n$$5x + 2y = 5\\left(\\frac{145}{9}\\right) + 2\\left(\\frac{100}{9}\\right) = \\frac{725 + 200}{9} = \\frac{925}{9}°$$\n$$7x - 10 = 7\\left(\\frac{145}{9}\\right) - 10 = \\frac{1015}{9} - \\frac{90}{9} = \\frac{925}{9}° \\checkmark$$\n\n**Check co-interior angles are supplementary:**\n$$3x - y + 40 = \\frac{435}{9} - \\frac{100}{9} + \\frac{360}{9} = \\frac{695}{9}°$$\n$$\\frac{925}{9} + \\frac{695}{9} = \\frac{1620}{9} = 180° \\checkmark$$\n\nBoth conditions are satisfied."
+    }
+   ],
+   "final_answer": "$x = \\dfrac{145}{9}, \\quad y = \\dfrac{100}{9}$",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "9c35c230",
+   "source": "prod question_bank_items 9c35c230 (breadth set: no chat on this item; the eval's standard request)",
+   "question": "Lines $a \\parallel b$ are cut by two transversals, forming a triangle between them. The two base angles of the triangle (one on line $a$, one on line $b$) measure $(4x + 9)°$ and $(6x - 11)°$, and the interior angle of the triangle at the apex (between the two transversals) measures $(2x + 18)°$. Find $x$ and all three angle measures. Then verify that the angles sum to $180°$.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "Two parallel lines $a$ and $b$ are cut by two transversals that meet between the lines, forming a triangle. The three **interior angles** of that triangle are:\n- $(4x + 9)°$ at the base vertex on line $a$\n- $(6x - 11)°$ at the base vertex on line $b$\n- $(2x + 18)°$ at the apex (where the transversals cross)\n\nNo matter what the parallel lines are doing outside the triangle, the three angles *inside* any triangle always add to $180°$. That one fact is all we need."
+    },
+    {
+     "title": "Set Up the Equation",
+     "description": "The **Triangle Angle Sum Theorem** states:\n$$\\text{(angle 1)} + \\text{(angle 2)} + \\text{(angle 3)} = 180°$$\n\nSubstituting the three expressions:\n$$(4x + 9) + (6x - 11) + (2x + 18) = 180$$"
+    },
+    {
+     "title": "Combine Like Terms",
+     "description": "Group the $x$-terms and the constants separately:\n\n**$x$-terms:** $4x + 6x + 2x = 12x$\n\n**Constants:** $9 - 11 + 18 = 16$\n\nThe equation simplifies to:\n$$12x + 16 = 180$$"
+    },
+    {
+     "title": "Solve for x",
+     "description": "Subtract $16$ from both sides:\n$$12x = 164$$\n\nDivide both sides by $12$:\n$$x = \\frac{164}{12} = \\frac{41}{3}$$"
+    },
+    {
+     "title": "Find Each Angle",
+     "description": "Substitute $x = \\dfrac{41}{3}$ into each expression:\n\n**Angle at $A$ (line $a$):**\n$$4\\left(\\frac{41}{3}\\right) + 9 = \\frac{164}{3} + \\frac{27}{3} = \\frac{191}{3} \\approx 63.\\overline{6}°$$\n\n**Angle at $B$ (line $b$):**\n$$6\\left(\\frac{41}{3}\\right) - 11 = \\frac{246}{3} - \\frac{33}{3} = \\frac{213}{3} = 71°$$\n\n**Apex angle at $C$:**\n$$2\\left(\\frac{41}{3}\\right) + 18 = \\frac{82}{3} + \\frac{54}{3} = \\frac{136}{3} \\approx 45.\\overline{3}°$$"
+    },
+    {
+     "title": "Verify the Sum",
+     "description": "Add all three angles — every fraction shares the denominator $3$, so this is clean:\n$$\\frac{191}{3} + \\frac{213}{3} + \\frac{136}{3} = \\frac{191 + 213 + 136}{3} = \\frac{540}{3} = 180° \\checkmark$$"
+    }
+   ],
+   "final_answer": "$x = \\dfrac{41}{3}$, giving angles $\\dfrac{191}{3}°,\\ 71°,\\ \\dfrac{136}{3}°$, which sum to $180°$.",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "6c5008f2",
+   "source": "prod question_bank_items 6c5008f2 (breadth set: no chat on this item; the eval's standard request)",
+   "question": "Quadrilateral $ABCD$ has vertices $A(0,0)$, $B(4,2)$, $C(6,6)$, and $D(2,4)$. Using slopes, prove that $ABCD$ is a parallelogram by showing both pairs of opposite sides are parallel. Then determine whether any side is perpendicular to an adjacent side.",
+   "solution_steps": [
+    {
+     "title": "Understand the Problem",
+     "description": "We have four vertices forming quadrilateral $ABCD$: $A(0,0)$, $B(4,2)$, $C(6,6)$, $D(2,4)$.\n\nA **parallelogram** has two key properties:\n1. Opposite sides are **parallel** (equal slopes)\n2. Opposite sides are **equal in length** (we'll use slopes here)\n\nFor **perpendicularity**, two lines with slopes $m_1$ and $m_2$ are perpendicular when $m_1 \\cdot m_2 = -1$.\n\nThe four sides to check are $AB$, $BC$, $CD$, and $DA$. The opposite pairs are $AB \\parallel CD$ and $BC \\parallel DA$.",
+     "figure_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-0.6000 -5.6000 6.2000 6.2000\" preserveAspectRatio=\"xMidYMid meet\" role=\"img\" aria-label=\"Geometry figure\"><g transform=\"scale(1,-1)\"><polygon points=\"0.0000,0.0000 3.3333,1.6667 5.0000,5.0000 1.6667,3.3333\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"0.04\" stroke-linejoin=\"round\"/></g><text x=\"-0.1556\" y=\"0.1556\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">A</text><text x=\"3.4889\" y=\"-1.5111\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">B</text><text x=\"5.1556\" y=\"-5.1556\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">C</text><text x=\"1.5111\" y=\"-3.4889\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">D</text><text x=\"1.7651\" y=\"-0.6366\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">AB</text><text x=\"4.3634\" y=\"-3.2349\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">BC</text><text x=\"3.2349\" y=\"-4.3634\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">CD</text><text x=\"0.6366\" y=\"-1.7651\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">DA</text></svg>",
+     "figure_spec": {
+      "type": "geometry",
+      "shape": "polygon",
+      "vertex_positions": [
+       [
+        0,
+        0
+       ],
+       [
+        4,
+        2
+       ],
+       [
+        6,
+        6
+       ],
+       [
+        2,
+        4
+       ]
+      ],
+      "vertex_names": [
+       "A",
+       "B",
+       "C",
+       "D"
+      ],
+      "side_labels": {
+       "AB": "AB",
+       "BC": "BC",
+       "CD": "CD",
+       "DA": "DA"
+      }
+     }
+    },
+    {
+     "title": "Slope of AB and CD",
+     "description": "The **slope formula** is $m = \\dfrac{y_2 - y_1}{x_2 - x_1}$.\n\n**Side $AB$** from $A(0,0)$ to $B(4,2)$:\n$$m_{AB} = \\frac{2-0}{4-0} = \\frac{2}{4} = \\frac{1}{2}$$\n\n**Side $CD$** from $C(6,6)$ to $D(2,4)$:\n$$m_{CD} = \\frac{4-6}{2-6} = \\frac{-2}{-4} = \\frac{1}{2}$$\n\nSince $m_{AB} = m_{CD} = \\dfrac{1}{2}$, sides $AB$ and $CD$ are **parallel**."
+    },
+    {
+     "title": "Slope of BC and DA",
+     "description": "**Side $BC$** from $B(4,2)$ to $C(6,6)$:\n$$m_{BC} = \\frac{6-2}{6-4} = \\frac{4}{2} = 2$$\n\n**Side $DA$** from $D(2,4)$ to $A(0,0)$:\n$$m_{DA} = \\frac{0-4}{0-2} = \\frac{-4}{-2} = 2$$\n\nSince $m_{BC} = m_{DA} = 2$, sides $BC$ and $DA$ are **parallel**."
+    },
+    {
+     "title": "Conclude: It's a Parallelogram",
+     "description": "Both pairs of opposite sides are parallel:\n$$AB \\parallel CD \\quad (\\text{slope } \\tfrac{1}{2}) \\qquad BC \\parallel DA \\quad (\\text{slope } 2)$$\n\nBy definition, a quadrilateral with **two pairs of parallel opposite sides** is a **parallelogram**. $\\blacksquare$"
+    },
+    {
+     "title": "Check for Perpendicularity",
+     "description": "Adjacent sides would be perpendicular only if the **product of their slopes equals $-1$**. Check any adjacent pair — all adjacencies involve one side with slope $\\dfrac{1}{2}$ and one with slope $2$:\n$$m_{AB} \\cdot m_{BC} = \\frac{1}{2} \\times 2 = 1 \\neq -1$$\n\nThe product is $1$, not $-1$, so **no adjacent sides are perpendicular**. This means $ABCD$ is a parallelogram but **not** a rectangle.\n\n> **Intuition:** Slopes $\\dfrac{1}{2}$ and $2$ are reciprocals of each other — they'd be perpendicular only if one were *negative*, i.e., $-\\dfrac{1}{2}$ and $2$."
+    }
+   ],
+   "final_answer": "$ABCD$ is a **parallelogram** because:\n$$m_{AB} = m_{CD} = \\frac{1}{2} \\implies AB \\parallel CD$$\n$$m_{BC} = m_{DA} = 2 \\implies BC \\parallel DA$$\n\nNo side is perpendicular to an adjacent side, since $\\dfrac{1}{2} \\times 2 = 1 \\neq -1$.",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "dba1e5fb",
+   "source": "prod question_bank_items dba1e5fb (breadth set: no chat on this item; the eval's standard request)",
+   "question": "In $\\triangle ABC$, the exterior angle at vertex $C$ measures $(8x + 4)°$. The two non-adjacent interior angles measure $(3x + 9)°$ and $(4x - 1)°$. Find $x$ and the measure of the exterior angle.",
+   "solution_steps": [
+    {
+     "title": "Understand the Problem",
+     "description": "We have a triangle with an **exterior angle** at vertex $C$ equal to $(8x+4)°$, and the two **non-adjacent interior angles** (at vertices $A$ and $B$) equal $(3x+9)°$ and $(4x-1)°$.\n\nThe key fact that makes this problem easy: the **Exterior Angle Theorem** states that an exterior angle of a triangle equals the **sum** of the two non-adjacent interior angles. So instead of working with all three interior angles, we can write one clean equation directly.",
+     "figure_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-2.7280 -6.1477 10.4560 8.8757\" preserveAspectRatio=\"xMidYMid meet\" role=\"img\" aria-label=\"Geometry figure\"><g transform=\"scale(1,-1)\"><polygon points=\"0.0000,0.0000 5.0000,0.0000 2.9250,3.4197\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"0.04\" stroke-linejoin=\"round\"/></g><text x=\"-0.2020\" y=\"0.0872\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">A</text><text x=\"5.1981\" y=\"0.0957\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">B</text><text x=\"2.9521\" y=\"-3.6380\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">C</text><text x=\"0.2828\" y=\"-0.1220\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">(3x + 9)°</text><text x=\"4.7227\" y=\"-0.1340\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">(4x − 1)°</text><text x=\"2.8870\" y=\"-3.1141\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">exterior: (8x + 4)°</text></svg>",
+     "figure_spec": {
+      "type": "geometry",
+      "shape": "triangle",
+      "vertices": [
+       "A",
+       "B",
+       "C"
+      ],
+      "side_lengths": {
+       "AB": 5,
+       "BC": 4,
+       "AC": 4.5
+      },
+      "angle_labels": {
+       "A": "(3x + 9)°",
+       "B": "(4x − 1)°",
+       "C": "exterior: (8x + 4)°"
+      }
+     }
+    },
+    {
+     "title": "Set Up the Equation",
+     "description": "By the **Exterior Angle Theorem**:\n$$\\text{exterior angle} = \\text{sum of two non-adjacent interior angles}$$\n$$8x + 4 = (3x + 9) + (4x - 1)$$\n\nCombine like terms on the right:\n$$8x + 4 = 7x + 8$$"
+    },
+    {
+     "title": "Solve for x",
+     "description": "Subtract $7x$ from both sides:\n$$x + 4 = 8$$\n\nSubtract $4$ from both sides:\n$$x = 4$$"
+    },
+    {
+     "title": "Find the Exterior Angle",
+     "description": "Substitute $x = 4$ into the exterior angle expression:\n$$8(4) + 4 = 32 + 4 = 36°$$\n\n**Quick check** — the two interior angles should also sum to $36°$:\n- $(3(4) + 9)° = 21°$\n- $(4(4) - 1)° = 15°$\n- $21° + 15° = 36°$ ✓"
+    }
+   ],
+   "final_answer": "$x = 4$ and the exterior angle $= \\mathbf{36°}$",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "779c31b5",
+   "source": "prod question_bank_items 779c31b5 (breadth set: no chat on this item; the eval's standard request)",
+   "question": "An exterior angle of a triangle measures $(11x - 4)°$. The two non-adjacent interior angles measure $(4x + 9)°$ and $(5x + 3)°$. Find the value of $x$ and the measure of all three interior angles and the exterior angle.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "We have a triangle where one **exterior angle** and two **non-adjacent interior angles** are given.\n\nThe key insight here is the **Exterior Angle Theorem**: an exterior angle of a triangle equals the **sum of the two non-adjacent (remote) interior angles**.\n\nThis means we can set up one clean equation and skip needing to find the third interior angle first.\n\n**Given:**\n- Exterior angle: $(11x - 4)°$\n- Remote interior angle 1: $(4x + 9)°$\n- Remote interior angle 2: $(5x + 3)°$",
+     "figure_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-1.1440 -6.1440 7.1404 7.2880\" preserveAspectRatio=\"xMidYMid meet\" role=\"img\" aria-label=\"Geometry figure\"><g transform=\"scale(1,-1)\"><polygon points=\"0.0000,0.0000 4.8524,0.0000 1.8682,5.0000\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"0.04\" stroke-linejoin=\"round\"/></g><text x=\"-0.1765\" y=\"0.1313\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">A</text><text x=\"5.0378\" y=\"0.1183\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">B</text><text x=\"1.8438\" y=\"-5.2186\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">C</text><text x=\"0.2471\" y=\"-0.1838\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">4x + 9°</text><text x=\"1.9023\" y=\"-4.6939\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">5x + 3°</text></svg>",
+     "figure_spec": {
+      "type": "geometry",
+      "shape": "triangle",
+      "vertices": [
+       "A",
+       "B",
+       "C"
+      ],
+      "angle_labels": {
+       "A": "4x + 9°",
+       "C": "5x + 3°"
+      },
+      "side_lengths": {
+       "AB": 5,
+       "BC": 6,
+       "AC": 5.5
+      }
+     }
+    },
+    {
+     "title": "Apply Exterior Angle Theorem",
+     "description": "Setting the exterior angle equal to the sum of the two remote interior angles:\n\n$$11x - 4 = (4x + 9) + (5x + 3)$$\n\nCombine like terms on the right side:\n\n$$11x - 4 = 9x + 12$$"
+    },
+    {
+     "title": "Solve for x",
+     "description": "Subtract $9x$ from both sides:\n\n$$2x - 4 = 12$$\n\nAdd $4$ to both sides:\n\n$$2x = 16$$\n\nDivide by $2$:\n\n$$x = 8$$"
+    },
+    {
+     "title": "Find All Angle Measures",
+     "description": "Substitute $x = 8$ into each expression:\n\n**Remote interior angle 1:** $4(8) + 9 = 32 + 9 = 41°$\n\n**Remote interior angle 2:** $5(8) + 3 = 40 + 3 = 43°$\n\n**Exterior angle:** $11(8) - 4 = 88 - 4 = 84°$\n\n**Third interior angle** (supplementary to the exterior angle):\n$$180° - 84° = 96°$$"
+    },
+    {
+     "title": "Verify the Solution",
+     "description": "Two checks to confirm:\n\n**Check 1 — Exterior Angle Theorem:** The exterior angle must equal the sum of the two remote interior angles:\n$$41° + 43° = 84°\\ ✓$$\n\n**Check 2 — Triangle Angle Sum:** All three interior angles must sum to $180°$:\n$$41° + 43° + 96° = 180°\\ ✓$$"
+    }
+   ],
+   "final_answer": "$x = 8$\n\n**Interior angles:** $41°,\\ 43°,\\ 96°$\n\n**Exterior angle:** $84°$",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "a5ec9d41",
+   "source": "prod question_bank_items a5ec9d41 (breadth set: no chat on this item; the eval's standard request)",
+   "question": "An exterior angle of a triangle measures $(8x + 5)°$. The two non-adjacent interior angles measure $(3x + 12)°$ and $(4x - 7)°$. Write and solve an equation to find $x$.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "We have a triangle with an **exterior angle** of $(8x + 5)°$ and two **non-adjacent interior angles** (also called **remote interior angles**) of $(3x + 12)°$ and $(4x - 7)°$.\n\nThe key tool here is the **Exterior Angle Theorem**: an exterior angle of a triangle equals the **sum** of the two remote interior angles. This works because the exterior angle and the two remote interior angles together account for the full straight-line relationship at that vertex — no need to touch the third angle at all.",
+     "figure_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-1.5400 -6.5400 7.3326 8.0800\" preserveAspectRatio=\"xMidYMid meet\" role=\"img\" aria-label=\"Geometry figure\"><g transform=\"scale(1,-1)\"><polygon points=\"0.0000,0.0000 4.2526,0.0000 1.0206,5.0000\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"0.04\" stroke-linejoin=\"round\"/></g><text x=\"-0.1596\" y=\"0.1514\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">A</text><text x=\"4.4355\" y=\"0.1222\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">B</text><text x=\"0.9731\" y=\"-5.2148\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">C</text><text x=\"0.2235\" y=\"-0.2119\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">(3x + 12)°</text><text x=\"3.9965\" y=\"-0.1711\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">(4x − 7)°</text><text x=\"1.0871\" y=\"-4.6993\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">(8x + 5)°</text></svg>",
+     "figure_spec": {
+      "type": "geometry",
+      "shape": "triangle",
+      "vertices": [
+       "A",
+       "B",
+       "C"
+      ],
+      "side_lengths": {
+       "AB": 5,
+       "BC": 7,
+       "AC": 6
+      },
+      "angle_labels": {
+       "A": "(3x + 12)°",
+       "B": "(4x − 7)°",
+       "C": "(8x + 5)°"
+      }
+     }
+    },
+    {
+     "title": "Set Up the Equation",
+     "description": "By the **Exterior Angle Theorem**:\n$$\\text{exterior angle} = \\text{sum of remote interior angles}$$\n$$8x + 5 = (3x + 12) + (4x - 7)$$"
+    },
+    {
+     "title": "Simplify the Right Side",
+     "description": "Combine like terms on the right:\n$$(3x + 12) + (4x - 7) = 7x + 5$$\nSo the equation becomes:\n$$8x + 5 = 7x + 5$$"
+    },
+    {
+     "title": "Solve for x",
+     "description": "Subtract $7x$ from both sides:\n$$8x - 7x + 5 = 5$$\n$$x + 5 = 5$$\nSubtract $5$ from both sides:\n$$x = 0$$"
+    },
+    {
+     "title": "Verify the Answer",
+     "description": "Plug $x = 0$ back into each angle to confirm:\n- Remote angle 1: $3(0) + 12 = 12°$\n- Remote angle 2: $4(0) - 7 = -7°$\n\nWait — a $-7°$ angle is **not valid** in a real triangle. This means the problem is algebraically consistent (the equation is satisfied), but the value $x = 0$ produces a degenerate case. The equation **is** correctly set up and solved; the angles are defined purely by the expressions given in the problem, and the algebra yields $x = 0$ as the unique solution."
+    }
+   ],
+   "final_answer": "$x = 0$",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "df891226",
+   "source": "prod question_bank_items df891226 (breadth set: no chat on this item; the eval's standard request)",
+   "question": "In $\\triangle PQR$, the interior angles satisfy $m\\angle P = (3x + 10)°$, $m\\angle Q = (2x - 5)°$, and $\\angle R$ is a right angle. An exterior angle is formed at vertex $P$ by extending side $\\overline{RP}$ beyond $P$.\n\n(a) Use the Triangle Sum Theorem to find the value of $x$.\n\n(b) Find $m\\angle P$ and $m\\angle Q$.\n\n(c) Find the measure of the exterior angle at $P$.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "We have $\\triangle PQR$ with three interior angles:\n$$m\\angle P = (3x+10)°, \\quad m\\angle Q = (2x-5)°, \\quad m\\angle R = 90°$$\n\nThe **Triangle Sum Theorem** tells us every triangle's interior angles add to exactly $180°$. Since we have three expressions whose sum must equal $180°$, we can build one equation and solve for $x$. Once $x$ is known, the angle measures fall out directly — and the **Exterior Angle Theorem** (an exterior angle equals the sum of the two *non-adjacent* interior angles) gives us part (c) instantly without extra arithmetic.",
+     "figure_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-6.5400 -6.5390 8.0800 8.0790\" preserveAspectRatio=\"xMidYMid meet\" role=\"img\" aria-label=\"Geometry figure\"><g transform=\"scale(1,-1)\"><polygon points=\"-0.0000,0.0000 -4.9000,4.9990 -5.0000,-0.0000\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"0.04\" stroke-linejoin=\"round\"/><polyline points=\"-4.7500,-0.0000 -4.7450,0.2499 -4.9950,0.2499\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"0.04\" stroke-linejoin=\"round\"/></g><text x=\"0.1964\" y=\"0.0992\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">P</text><text x=\"-4.9952\" y=\"-5.1973\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">Q</text><text x=\"-5.1571\" y=\"0.1540\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">R</text><text x=\"-0.2749\" y=\"-0.1388\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">(3x + 10)°</text><text x=\"-4.7667\" y=\"-4.7213\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">(2x − 5)°</text><text x=\"-4.7800\" y=\"-0.2156\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">90°</text></svg>",
+     "figure_spec": {
+      "type": "geometry",
+      "shape": "triangle",
+      "vertices": [
+       "P",
+       "Q",
+       "R"
+      ],
+      "side_lengths": {
+       "PQ": 7,
+       "QR": 5,
+       "PR": 5
+      },
+      "right_angle_at": [
+       "R"
+      ],
+      "angle_labels": {
+       "P": "(3x + 10)°",
+       "Q": "(2x − 5)°",
+       "R": "90°"
+      }
+     }
+    },
+    {
+     "title": "Apply Triangle Sum Theorem",
+     "description": "Set the three angle expressions equal to $180°$:\n$$\\underbrace{(3x+10)}_{\\angle P} + \\underbrace{(2x-5)}_{\\angle Q} + \\underbrace{90}_{\\angle R} = 180$$\n\nCombine like terms on the left:\n$$5x + 95 = 180$$\n\nSubtract $95$ from both sides:\n$$5x = 85$$\n\nDivide both sides by $5$:\n$$\\boxed{x = 17}$$"
+    },
+    {
+     "title": "Find ∠P and ∠Q",
+     "description": "Substitute $x = 17$ into each expression:\n\n$$m\\angle P = 3(17) + 10 = 51 + 10 = \\boxed{61°}$$\n$$m\\angle Q = 2(17) - 5 = 34 - 5 = \\boxed{29°}$$\n\n**Quick check:** $61 + 29 + 90 = 180°$ ✓"
+    },
+    {
+     "title": "Find the Exterior Angle at P",
+     "description": "The **Exterior Angle Theorem** states:\n$$\\text{exterior angle} = \\text{sum of the two non-adjacent interior angles}$$\n\nThe exterior angle at $P$ is non-adjacent to $\\angle Q$ and $\\angle R$, so:\n$$\\text{exterior} \\angle P = m\\angle Q + m\\angle R = 29° + 90° = \\boxed{119°}$$\n\nThis makes sense because the exterior angle and the interior angle $P$ are a **linear pair** — they must sum to $180°$, and indeed $61° + 119° = 180°$ ✓"
+    }
+   ],
+   "final_answer": "**(a)** $x = 17$\n\n**(b)** $m\\angle P = 61°,\\quad m\\angle Q = 29°$\n\n**(c)** Exterior angle at $P = 119°$",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "922733e1",
+   "source": "prod question_bank_items 922733e1 (breadth set: no chat on this item; the eval's standard request)",
+   "question": "The three interior angles of a triangle measure $(3x + 10)°$, $(2x - 5)°$, and $(x + 15)°$. Find the value of $x$ and the measure of each angle.",
+   "solution_steps": [
+    {
+     "title": "Understand the Problem",
+     "description": "We have a triangle with three unknown angles expressed in terms of $x$: $(3x+10)°$, $(2x-5)°$, and $(x+15)°$.\n\nThe key fact: **the three interior angles of any triangle always sum to exactly $180°$**. This single rule turns the problem into a simple one-variable equation — just set the sum equal to $180$ and solve."
+    },
+    {
+     "title": "Set Up the Equation",
+     "description": "Add all three angles and set the sum equal to $180°$:\n$$(3x + 10) + (2x - 5) + (x + 15) = 180$$"
+    },
+    {
+     "title": "Combine Like Terms",
+     "description": "Group the $x$-terms and the constants separately:\n$$\\underbrace{3x + 2x + x}_{6x} + \\underbrace{10 - 5 + 15}_{20} = 180$$\n$$6x + 20 = 180$$"
+    },
+    {
+     "title": "Solve for x",
+     "description": "Subtract $20$ from both sides, then divide by $6$:\n$$6x = 160$$\n$$x = \\frac{160}{6} \\approx 26.\\overline{6}$$\n\nWait — let's recheck the constants: $10 + (-5) + 15 = 20$. ✓\n\n$$6x = 180 - 20 = 160 \\implies x = \\frac{160}{6} = \\frac{80}{3} \\approx 26.67$$"
+    },
+    {
+     "title": "Find Each Angle",
+     "description": "Substitute $x = \\dfrac{80}{3}$ into each expression:\n\n**Angle A:** $3\\left(\\dfrac{80}{3}\\right) + 10 = 80 + 10 = 90°$\n\n**Angle B:** $2\\left(\\dfrac{80}{3}\\right) - 5 = \\dfrac{160}{3} - 5 = \\dfrac{160-15}{3} = \\dfrac{145}{3} \\approx 48.33°$\n\n**Angle C:** $\\dfrac{80}{3} + 15 = \\dfrac{80+45}{3} = \\dfrac{125}{3} \\approx 41.67°$"
+    },
+    {
+     "title": "Verify the Answer",
+     "description": "Confirm the three angles sum to $180°$:\n$$90° + \\frac{145}{3}° + \\frac{125}{3}° = 90° + \\frac{270}{3}° = 90° + 90° = 180° \\checkmark$$"
+    }
+   ],
+   "final_answer": "$x = \\dfrac{80}{3} \\approx 26.67$\n\nThe three angles are:\n- $(3x+10)° = \\mathbf{90°}$\n- $(2x-5)° = \\dfrac{145}{3}° \\approx \\mathbf{48.33°}$\n- $(x+15)° = \\dfrac{125}{3}° \\approx \\mathbf{41.67°}$",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "430894a4",
+   "source": "prod question_bank_items 430894a4 (breadth set: no chat on this item; the eval's standard request)",
+   "question": "In $\\triangle ABC$, the angle bisectors from all three vertices meet at the incenter $I$. If $\\angle BAC = 72°$ and $\\angle ABC = 58°$, find $\\angle BIC$. (Hint: use the relationship between the incenter angle and the triangle's angles.)",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "We have $\\triangle ABC$ with its **incenter** $I$ — the point where all three angle bisectors meet. We're given $\\angle BAC = 72°$ and $\\angle ABC = 58°$, and we need to find $\\angle BIC$, the angle at $I$ inside $\\triangle BIC$.\n\nThe key insight: since $I$ lies on the angle bisectors, it cuts $\\angle ABC$ and $\\angle BCA$ each exactly in half. So the angles of the smaller $\\triangle BIC$ are half the original triangle's angles — which lets us use the triangle angle-sum rule to find $\\angle BIC$ without any guessing."
+    },
+    {
+     "title": "Find the Missing Angle",
+     "description": "The three angles of any triangle sum to $180°$.\n\n$$\\angle BCA = 180° - \\angle BAC - \\angle ABC = 180° - 72° - 58° = 50°$$"
+    },
+    {
+     "title": "Halve the Angles at B and C",
+     "description": "Because $I$ is the incenter, $BI$ bisects $\\angle ABC$ and $CI$ bisects $\\angle BCA$:\n\n$$\\angle IBC = \\frac{\\angle ABC}{2} = \\frac{58°}{2} = 29°$$\n\n$$\\angle ICB = \\frac{\\angle BCA}{2} = \\frac{50°}{2} = 25°$$\n\nThese are two of the three angles inside $\\triangle BIC$."
+    },
+    {
+     "title": "Apply Angle Sum in △BIC",
+     "description": "Inside $\\triangle BIC$, the three angles must sum to $180°$:\n\n$$\\angle BIC = 180° - \\angle IBC - \\angle ICB = 180° - 29° - 25° = 126°$$\n\n**Quick-check with the incenter formula:** There's a elegant shortcut — $\\angle BIC = 90° + \\dfrac{\\angle BAC}{2} = 90° + 36° = 126°$ ✓\n\nThis formula works because the $90°$ comes from the two half-angles at $B$ and $C$ always leaving exactly $90° + \\frac{A}{2}$ at $I$, no matter what triangle you have."
+    }
+   ],
+   "final_answer": "$\\angle BIC = 126°$",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "809a530c",
+   "source": "prod question_bank_items 809a530c (breadth set: no chat on this item; the eval's standard request)",
+   "question": "In $\\triangle XYZ$, $M$ is the midpoint of $\\overline{XY}$ and $N$ is the midpoint of $\\overline{XZ}$. If $MN = 3k - 2$ and $YZ = 8k - 12$, find the value of $k$ and the length of $\\overline{YZ}$.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "We have $\\triangle XYZ$ where $M$ is the midpoint of $\\overline{XY}$ and $N$ is the midpoint of $\\overline{XZ}$. This means $\\overline{MN}$ is a **midsegment** of the triangle — a segment connecting the midpoints of two sides.\n\nThe key insight: the **Triangle Midsegment Theorem** tells us that a midsegment is always exactly **half the length** of the third (parallel) side. Here, $\\overline{MN}$ is parallel to $\\overline{YZ}$, so:\n$$MN = \\frac{1}{2} \\cdot YZ$$\nThis single relationship turns the whole problem into one equation with one unknown.",
+     "figure_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-1.3943 -6.1440 6.7102 7.2880\" preserveAspectRatio=\"xMidYMid meet\" role=\"img\" aria-label=\"Geometry figure\"><g transform=\"scale(1,-1)\"><polygon points=\"0.0000,0.0000 4.1719,0.0000 -0.2503,5.0000\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"0.04\" stroke-linejoin=\"round\"/></g><text x=\"-0.1358\" y=\"0.1731\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">X</text><text x=\"4.3620\" y=\"0.1106\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">Y</text><text x=\"-0.3434\" y=\"-5.1993\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">Z</text><text x=\"2.1256\" y=\"-2.6458\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">8k − 12</text></svg>",
+     "figure_spec": {
+      "type": "geometry",
+      "shape": "triangle",
+      "vertices": [
+       "X",
+       "Y",
+       "Z"
+      ],
+      "side_lengths": {
+       "XY": 5,
+       "XZ": 6,
+       "YZ": 8
+      },
+      "side_labels": {
+       "YZ": "8k − 12"
+      },
+      "vertex_labels": {
+       "X": "X",
+       "Y": "Y",
+       "Z": "Z"
+      }
+     }
+    },
+    {
+     "title": "Mark the Midsegment",
+     "description": "$M$ is the midpoint of $\\overline{XY}$ and $N$ is the midpoint of $\\overline{XZ}$, so segment $\\overline{MN}$ cuts across the triangle parallel to $\\overline{YZ}$.\n\nBy the **Triangle Midsegment Theorem**:\n$$MN = \\frac{1}{2} \\cdot YZ$$\nSubstituting the given expressions:\n$$3k - 2 = \\frac{1}{2}(8k - 12)$$",
+     "figure_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-1.3943 -6.1440 6.7102 7.2880\" preserveAspectRatio=\"xMidYMid meet\" role=\"img\" aria-label=\"Geometry figure\"><g transform=\"scale(1,-1)\"><polygon points=\"0.0000,0.0000 4.1719,0.0000 -0.2503,5.0000\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"0.04\" stroke-linejoin=\"round\"/></g><text x=\"-0.1358\" y=\"0.1731\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">X</text><text x=\"4.3620\" y=\"0.1106\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">Y</text><text x=\"-0.3434\" y=\"-5.1993\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">Z</text><text x=\"2.1256\" y=\"-2.6458\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">8k − 12</text></svg>",
+     "figure_spec": {
+      "type": "geometry",
+      "shape": "triangle",
+      "vertices": [
+       "X",
+       "Y",
+       "Z"
+      ],
+      "side_lengths": {
+       "XY": 5,
+       "XZ": 6,
+       "YZ": 8
+      },
+      "side_labels": {
+       "YZ": "8k − 12"
+      },
+      "vertex_labels": {
+       "X": "X",
+       "Y": "Y",
+       "Z": "Z"
+      }
+     }
+    },
+    {
+     "title": "Solve for k",
+     "description": "Multiply both sides by $2$ to clear the fraction:\n$$2(3k - 2) = 8k - 12$$\n$$6k - 4 = 8k - 12$$\n\nSubtract $6k$ from both sides:\n$$-4 = 2k - 12$$\n\nAdd $12$ to both sides:\n$$8 = 2k$$\n$$k = 4$$"
+    },
+    {
+     "title": "Find the Length of YZ",
+     "description": "Substitute $k = 4$ into the expression for $YZ$:\n$$YZ = 8(4) - 12 = 32 - 12 = 20$$\n\nWe can verify using $MN$: $MN = 3(4) - 2 = 10$, and indeed $10 = \\frac{1}{2}(20)$. ✓"
+    }
+   ],
+   "final_answer": "$k = 4$ and $YZ = 20$",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "986bb01d",
+   "source": "prod question_bank_items 986bb01d (breadth set: no chat on this item; the eval's standard request)",
+   "question": "In $\\triangle PQR$, ray $QS$ bisects $\\angle PQR$ and intersects $\\overline{PR}$ at point $S$. If $PQ = 12$, $QR = 18$, and $PR = 25$, find $PS$ and $SR$.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "We have $\\triangle PQR$ with an **angle bisector** from vertex $Q$ hitting side $\\overline{PR}$ at point $S$. We know three side lengths: $PQ = 12$, $QR = 18$, $PR = 25$, and we need to find $PS$ and $SR$.\n\nThe key tool here is the **Angle Bisector Theorem**: when a ray bisects an angle of a triangle and hits the opposite side, it splits that side into two segments whose lengths are in the **same ratio as the two sides of the triangle that form the angle**.\n\n$$\\frac{PS}{SR} = \\frac{PQ}{QR}$$\n\nThis works because the bisector creates proportional triangles — the closer the bisector is to a longer side, the bigger the segment it cuts on the opposite side.",
+     "figure_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-0.6000 -5.1220 6.2000 5.7220\" preserveAspectRatio=\"xMidYMid meet\" role=\"img\" aria-label=\"Geometry figure\"><g transform=\"scale(1,-1)\"><polygon points=\"0.0000,0.0000 3.2360,0.0000 5.0000,4.5220\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"0.04\" stroke-linejoin=\"round\"/></g><text x=\"-0.1928\" y=\"0.1059\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">P</text><text x=\"3.3040\" y=\"0.2092\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">Q</text><text x=\"5.1318\" y=\"-4.6982\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">R</text><text x=\"1.6180\" y=\"0.2200\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">12</text><text x=\"4.3229\" y=\"-2.1811\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">18</text><text x=\"2.3524\" y=\"-2.4242\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">25</text></svg>",
+     "figure_spec": {
+      "type": "geometry",
+      "shape": "triangle",
+      "vertices": [
+       "P",
+       "Q",
+       "R"
+      ],
+      "side_lengths": {
+       "PQ": 12,
+       "QR": 18,
+       "PR": 25
+      },
+      "side_labels": {
+       "PQ": "12",
+       "QR": "18",
+       "PR": "25"
+      }
+     }
+    },
+    {
+     "title": "Set Up the Ratio",
+     "description": "Plug the known side lengths into the Angle Bisector Theorem:\n\n$$\\frac{PS}{SR} = \\frac{PQ}{QR} = \\frac{12}{18} = \\frac{2}{3}$$\n\nThis tells us $PS$ and $SR$ are in the ratio $2:3$, meaning for every 2 units of $PS$, there are 3 units of $SR$."
+    },
+    {
+     "title": "Express Segments with One Variable",
+     "description": "Since $PS : SR = 2 : 3$, write:\n\n$$PS = 2k \\quad \\text{and} \\quad SR = 3k$$\n\nfor some positive number $k$. These two pieces together must equal the full length of $\\overline{PR}$:\n\n$$2k + 3k = 25$$\n\n$$5k = 25 \\implies k = 5$$"
+    },
+    {
+     "title": "Solve for PS and SR",
+     "description": "Substitute $k = 5$ back:\n\n$$PS = 2k = 2(5) = 10$$\n$$SR = 3k = 3(5) = 15$$\n\n**Quick check:** $PS + SR = 10 + 15 = 25$ ✓ and the ratio $\\frac{10}{15} = \\frac{2}{3} = \\frac{12}{18}$ ✓",
+     "figure_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-0.6000 -5.1220 6.2000 5.7220\" preserveAspectRatio=\"xMidYMid meet\" role=\"img\" aria-label=\"Geometry figure\"><g transform=\"scale(1,-1)\"><polygon points=\"0.0000,0.0000 3.2360,0.0000 5.0000,4.5220\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"0.04\" stroke-linejoin=\"round\"/></g><text x=\"-0.1928\" y=\"0.1059\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">P</text><text x=\"3.3040\" y=\"0.2092\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">Q</text><text x=\"5.1318\" y=\"-4.6982\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">R</text><text x=\"1.6180\" y=\"0.2200\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">12</text><text x=\"4.3229\" y=\"-2.1811\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">18</text><text x=\"2.3524\" y=\"-2.4242\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">25</text></svg>",
+     "figure_spec": {
+      "type": "geometry",
+      "shape": "triangle",
+      "vertices": [
+       "P",
+       "Q",
+       "R"
+      ],
+      "side_lengths": {
+       "PQ": 12,
+       "QR": 18,
+       "PR": 25
+      },
+      "side_labels": {
+       "PQ": "12",
+       "QR": "18",
+       "PR": "25"
+      }
+     }
+    }
+   ],
+   "final_answer": "$PS = 10$ and $SR = 15$",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "97b3010d",
+   "source": "prod question_bank_items 97b3010d (breadth set: no chat on this item; the eval's standard request)",
+   "question": "In right triangle $PQR$ with the right angle at $Q$, altitude $\\overline{QS}$ is drawn to hypotenuse $\\overline{PR}$. If $PS = 4$ and $SR = 9$, find $QS$, $PQ$, and $QR$. Leave answers in simplest radical form.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "We have right triangle $PQR$ with the right angle at $Q$. An altitude $\\overline{QS}$ is dropped from $Q$ to the hypotenuse $\\overline{PR}$, splitting it into two segments: $PS = 4$ and $SR = 9$.\n\nWhen an altitude is drawn from the right angle to the hypotenuse, it creates **three similar triangles**: $\\triangle PQR \\sim \\triangle PQS \\sim \\triangle QSR$. This similarity is the engine for everything — it tells us that each unknown side is the **geometric mean** of two known segments.\n\n**Key relationships to use:**\n- $QS^2 = PS \\cdot SR$ (altitude = geometric mean of the two hypotenuse segments)\n- $PQ^2 = PS \\cdot PR$ (leg = geometric mean of its adjacent segment and the full hypotenuse)\n- $QR^2 = SR \\cdot PR$ (same idea for the other leg)"
+    },
+    {
+     "title": "Find the Full Hypotenuse",
+     "description": "$PR$ is simply the sum of its two parts:\n$$PR = PS + SR = 4 + 9 = 13$$"
+    },
+    {
+     "title": "Solve for $QS$",
+     "description": "By the **geometric mean (altitude) theorem**, the altitude to the hypotenuse is the geometric mean of the two segments it creates:\n$$QS^2 = PS \\cdot SR = 4 \\cdot 9 = 36$$\n$$QS = \\sqrt{36} = 6$$"
+    },
+    {
+     "title": "Solve for $PQ$",
+     "description": "By the **geometric mean (leg) theorem**, leg $PQ$ is the geometric mean of the full hypotenuse $PR$ and the segment of the hypotenuse **adjacent** to it, $PS$:\n$$PQ^2 = PS \\cdot PR = 4 \\cdot 13 = 52$$\n$$PQ = \\sqrt{52} = \\sqrt{4 \\cdot 13} = 2\\sqrt{13}$$"
+    },
+    {
+     "title": "Solve for $QR$",
+     "description": "By the same theorem, leg $QR$ is the geometric mean of the full hypotenuse $PR$ and the segment adjacent to it, $SR$:\n$$QR^2 = SR \\cdot PR = 9 \\cdot 13 = 117$$\n$$QR = \\sqrt{117} = \\sqrt{9 \\cdot 13} = 3\\sqrt{13}$$\n\n**Quick sanity check** — the Pythagorean theorem on $\\triangle PQR$:\n$$PQ^2 + QR^2 = 52 + 117 = 169 = 13^2 = PR^2 \\checkmark$$"
+    }
+   ],
+   "final_answer": "$QS = 6, \\quad PQ = 2\\sqrt{13}, \\quad QR = 3\\sqrt{13}$",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "ab10c024",
+   "source": "prod question_bank_items ab10c024 (breadth set: no chat on this item; the eval's standard request)",
+   "question": "In isosceles $\\triangle ABC$, $AB = AC$. The vertex angle at $A$ measures $(4x + 6)°$ and each base angle measures $(5x - 3)°$. Find $x$, then find the measure of each angle. Verify that the three angles sum to $180°$.",
+   "solution_steps": [
+    {
+     "title": "Understand the Setup",
+     "description": "We have isosceles $\\triangle ABC$ with $AB = AC$, which means the two **base angles** (at $B$ and $C$) are always equal. We're given:\n\n- Vertex angle at $A$: $(4x + 6)°$\n- Each base angle at $B$ and $C$: $(5x - 3)°$\n\nThe key tool here is the **Triangle Angle Sum**: every triangle's interior angles add to $180°$. Since we have all three angles expressed in terms of $x$, we simply set their sum equal to $180°$ and solve.",
+     "figure_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-1.4080 -6.2080 7.8160 7.6160\" preserveAspectRatio=\"xMidYMid meet\" role=\"img\" aria-label=\"Geometry figure\"><g transform=\"scale(1,-1)\"><polygon points=\"0.0000,0.0000 5.0000,0.0000 1.4000,4.8000\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"0.04\" stroke-linejoin=\"round\"/></g><text x=\"-0.1760\" y=\"0.1320\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">A</text><text x=\"5.1921\" y=\"0.1072\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">B</text><text x=\"1.3509\" y=\"-5.0144\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">C</text><text x=\"0.2464\" y=\"-0.1848\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">(4x + 6)°</text><text x=\"4.7311\" y=\"-0.1501\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">(5x − 3)°</text><text x=\"1.4688\" y=\"-4.4998\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">(5x − 3)°</text></svg>",
+     "figure_spec": {
+      "type": "geometry",
+      "shape": "triangle",
+      "vertices": [
+       "A",
+       "B",
+       "C"
+      ],
+      "side_lengths": {
+       "AB": 5,
+       "AC": 5,
+       "BC": 6
+      },
+      "angle_labels": {
+       "A": "(4x + 6)°",
+       "B": "(5x − 3)°",
+       "C": "(5x − 3)°"
+      }
+     }
+    },
+    {
+     "title": "Set Up the Equation",
+     "description": "Adding all three angles and setting the sum equal to $180°$:\n$$\n(4x + 6) + (5x - 3) + (5x - 3) = 180\n$$\nGrouping like terms on the left:\n$$\n(4x + 5x + 5x) + (6 - 3 - 3) = 180\n$$\n$$\n14x + 0 = 180\n$$\nNotice the constants cancel perfectly — a clean signal we're on the right track."
+    },
+    {
+     "title": "Solve for $x$",
+     "description": "Dividing both sides by $14$:\n$$\nx = \\frac{180}{14} = \\frac{90}{7}\n$$"
+    },
+    {
+     "title": "Find Each Angle",
+     "description": "Substitute $x = \\dfrac{90}{7}$ into each expression:\n\n**Vertex angle at $A$:**\n$$4\\left(\\frac{90}{7}\\right) + 6 = \\frac{360}{7} + \\frac{42}{7} = \\frac{402}{7} \\approx 57.43°$$\n\n**Each base angle at $B$ and $C$:**\n$$5\\left(\\frac{90}{7}\\right) - 3 = \\frac{450}{7} - \\frac{21}{7} = \\frac{429}{7} \\approx 61.29°$$"
+    },
+    {
+     "title": "Verify the Angle Sum",
+     "description": "Adding all three angles:\n$$\\frac{402}{7} + \\frac{429}{7} + \\frac{429}{7} = \\frac{402 + 429 + 429}{7} = \\frac{1260}{7} = 180°\\checkmark$$\n\nThe three angles sum exactly to $180°$, confirming our solution is correct."
+    }
+   ],
+   "final_answer": "$x = \\dfrac{90}{7}$\n\n$$\\angle A = \\frac{402}{7}° \\approx 57.43°, \\quad \\angle B = \\angle C = \\frac{429}{7}° \\approx 61.29°$$\n\n$$\\frac{402}{7} + \\frac{429}{7} + \\frac{429}{7} = \\frac{1260}{7} = 180° \\ \\checkmark$$",
+   "request": "can you provide the drawing?"
+  },
+  {
+   "id": "08e3224d",
+   "source": "prod question_bank_items 08e3224d (breadth set: no chat on this item; the eval's standard request)",
+   "question": "Triangle $ABC$ has vertices $A(0, 0)$, $B(6, 0)$, and $C(3, 4)$. Find the exact perimeter of $\\triangle ABC$.",
+   "solution_steps": [
+    {
+     "title": "Understand the Problem",
+     "description": "We have three points in the coordinate plane and need the **perimeter** — the total distance around the triangle. That means finding the length of each of the three sides using the **distance formula** between two points:\n$$d = \\sqrt{(x_2 - x_1)^2 + (y_2 - y_1)^2}$$\nThis is just the Pythagorean theorem in disguise: the horizontal and vertical gaps form the legs, and the side length is the hypotenuse. A key habit: always simplify inside the square root fully before deciding whether it's a perfect square.",
+     "figure_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-1.0120 -4.3453 7.0240 5.3573\" preserveAspectRatio=\"xMidYMid meet\" role=\"img\" aria-label=\"Geometry figure\"><g transform=\"scale(1,-1)\"><polygon points=\"0.0000,0.0000 5.0000,0.0000 2.5000,3.3333\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"0.04\" stroke-linejoin=\"round\"/></g><text x=\"-0.2010\" y=\"0.0894\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">A(0,0)</text><text x=\"5.2010\" y=\"0.0894\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">B(6,0)</text><text x=\"2.5000\" y=\"-3.5533\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">C(3,4)</text></svg>",
+     "figure_spec": {
+      "type": "geometry",
+      "shape": "triangle",
+      "vertices": [
+       "A",
+       "B",
+       "C"
+      ],
+      "vertex_labels": {
+       "A": "A(0,0)",
+       "B": "B(6,0)",
+       "C": "C(3,4)"
+      },
+      "side_lengths": {
+       "AB": 6,
+       "BC": 5,
+       "AC": 5
+      }
+     }
+    },
+    {
+     "title": "Find Side AB",
+     "description": "$A$ and $B$ share the same $y$-coordinate ($y = 0$), so they lie on the same horizontal line. The distance is simply the difference in $x$-values:\n$$AB = |6 - 0| = 6$$",
+     "figure_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-1.0120 -4.3453 7.0240 5.3573\" preserveAspectRatio=\"xMidYMid meet\" role=\"img\" aria-label=\"Geometry figure\"><g transform=\"scale(1,-1)\"><polygon points=\"0.0000,0.0000 5.0000,0.0000 2.5000,3.3333\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"0.04\" stroke-linejoin=\"round\"/></g><text x=\"-0.2010\" y=\"0.0894\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">A(0,0)</text><text x=\"5.2010\" y=\"0.0894\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">B(6,0)</text><text x=\"2.5000\" y=\"-3.5533\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">C(3,4)</text><text x=\"2.5000\" y=\"0.2200\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">6</text></svg>",
+     "figure_spec": {
+      "type": "geometry",
+      "shape": "triangle",
+      "vertices": [
+       "A",
+       "B",
+       "C"
+      ],
+      "vertex_labels": {
+       "A": "A(0,0)",
+       "B": "B(6,0)",
+       "C": "C(3,4)"
+      },
+      "side_lengths": {
+       "AB": 6,
+       "BC": 5,
+       "AC": 5
+      },
+      "side_labels": {
+       "AB": "6"
+      }
+     }
+    },
+    {
+     "title": "Find Side AC",
+     "description": "Apply the distance formula from $A(0, 0)$ to $C(3, 4)$:\n$$AC = \\sqrt{(3-0)^2 + (4-0)^2} = \\sqrt{9 + 16} = \\sqrt{25} = 5$$\nRecognize $9 + 16 = 25$ as a perfect square — this is the classic **3-4-5 right triangle**.",
+     "figure_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-1.0120 -4.3453 7.0240 5.3573\" preserveAspectRatio=\"xMidYMid meet\" role=\"img\" aria-label=\"Geometry figure\"><g transform=\"scale(1,-1)\"><polygon points=\"0.0000,0.0000 5.0000,0.0000 2.5000,3.3333\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"0.04\" stroke-linejoin=\"round\"/></g><text x=\"-0.2010\" y=\"0.0894\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">A(0,0)</text><text x=\"5.2010\" y=\"0.0894\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">B(6,0)</text><text x=\"2.5000\" y=\"-3.5533\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">C(3,4)</text><text x=\"2.5000\" y=\"0.2200\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">6</text><text x=\"1.0740\" y=\"-1.7987\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">5</text></svg>",
+     "figure_spec": {
+      "type": "geometry",
+      "shape": "triangle",
+      "vertices": [
+       "A",
+       "B",
+       "C"
+      ],
+      "vertex_labels": {
+       "A": "A(0,0)",
+       "B": "B(6,0)",
+       "C": "C(3,4)"
+      },
+      "side_lengths": {
+       "AB": 6,
+       "BC": 5,
+       "AC": 5
+      },
+      "side_labels": {
+       "AB": "6",
+       "AC": "5"
+      }
+     }
+    },
+    {
+     "title": "Find Side BC",
+     "description": "Apply the distance formula from $B(6, 0)$ to $C(3, 4)$:\n$$BC = \\sqrt{(3-6)^2 + (4-0)^2} = \\sqrt{(-3)^2 + 4^2} = \\sqrt{9 + 16} = \\sqrt{25} = 5$$\nThe differences are $-3$ and $4$, but squaring removes the negative — we get another **3-4-5** triangle. This reveals that $\\triangle ABC$ is **isosceles** ($AC = BC = 5$).",
+     "figure_svg": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"-1.0120 -4.3453 7.0240 5.3573\" preserveAspectRatio=\"xMidYMid meet\" role=\"img\" aria-label=\"Geometry figure\"><g transform=\"scale(1,-1)\"><polygon points=\"0.0000,0.0000 5.0000,0.0000 2.5000,3.3333\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"0.04\" stroke-linejoin=\"round\"/></g><text x=\"-0.2010\" y=\"0.0894\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">A(0,0)</text><text x=\"5.2010\" y=\"0.0894\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">B(6,0)</text><text x=\"2.5000\" y=\"-3.5533\" font-family=\"system-ui, sans-serif\" font-size=\"0.2800\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">C(3,4)</text><text x=\"2.5000\" y=\"0.2200\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">6</text><text x=\"1.0740\" y=\"-1.7987\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">5</text><text x=\"3.9260\" y=\"-1.7987\" font-family=\"system-ui, sans-serif\" font-size=\"0.2200\" text-anchor=\"middle\" dominant-baseline=\"middle\" fill=\"currentColor\">5</text></svg>",
+     "figure_spec": {
+      "type": "geometry",
+      "shape": "triangle",
+      "vertices": [
+       "A",
+       "B",
+       "C"
+      ],
+      "vertex_labels": {
+       "A": "A(0,0)",
+       "B": "B(6,0)",
+       "C": "C(3,4)"
+      },
+      "side_lengths": {
+       "AB": 6,
+       "BC": 5,
+       "AC": 5
+      },
+      "side_labels": {
+       "AB": "6",
+       "AC": "5",
+       "BC": "5"
+      }
+     }
+    },
+    {
+     "title": "Sum the Three Sides",
+     "description": "Add all three side lengths to get the perimeter:\n$$P = AB + AC + BC = 6 + 5 + 5 = 16$$"
+    }
+   ],
+   "final_answer": "$P = 6 + 5 + 5 = 16$",
+   "request": "can you provide the drawing?"
   }
  ]
 }

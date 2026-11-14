@@ -515,7 +515,8 @@ _SIGNALS: list[tuple[str, tuple[str, ...]]] = [
     (rf"\balternate\s+exterior\b{_NOT_A_THEOREM}", ("alternate_exterior",)),
     (rf"\bcorresponding\s+angles\b{_NOT_A_THEOREM}", ("corresponding",)),
     (rf"\b(?:same[-\s]side|consecutive)\s+interior\b{_NOT_A_THEOREM}", ("same_side_interior",)),
-    (r"\baltitudes?\b|\bmedians?\b|\bequidistant\b|\bconcentric\b|\bcircumscribed\b", ()),
+    # An altitude is accounted for only by its own perpendicular (below).
+    (r"\bmedians?\b|\bequidistant\b|\bconcentric\b|\bcircumscribed\b", ()),
 ]
 # A method, not a fact: "use the Alternate Interior Angles Theorem", "by SAS".
 _METHOD = re.compile(
@@ -570,7 +571,31 @@ def coverage_gaps(text: str, facts: FigureFacts) -> list[str]:
             if not ok:
                 word = m.group(0).strip()
                 gaps.append(f"“{word}”" + (f" (about {', '.join(sorted(near))})" if near else ""))
+    # "altitude QS": a perpendicular fact that names QS itself.
+    for m in re.finditer(r"\baltitudes?\b", t, re.IGNORECASE):
+        if any(a <= m.start() < b for a, b in methods):
+            continue
+        after = re.match(r"\s*(?:\\overline\s*)?\{?\s*([A-Z]'?)\s*([A-Z]'?)(?![A-Za-z])", t[m.end():])
+        side = frozenset(after.groups()) if after else None
+        if side is None or not any(
+            f.kind == "perpendicular" and any(frozenset(split_names(x)) == side for x in f.items) for f in every
+        ):
+            gaps.append("“altitude”" + (f" (about {''.join(after.groups())})" if after else ""))
     return list(dict.fromkeys(gaps))
+
+
+def invented_points(facts: FigureFacts, text: str) -> list[str]:
+    """Points a reading names that the problem (or the teacher's message)
+    never writes: the reading made them up for an unnamed figure."""
+    from api.core.geometry.figure_check import _clean
+
+    def prime(x: str) -> str:
+        return x.replace("′", "'")
+
+    written: set[str] = set()
+    for run in re.findall(r"(?<![A-Za-z\\])((?:[A-Z](?:'|′)*)+)(?![a-z])", prime(_clean(text)) + "\n" + prime(text)):
+        written |= {prime(n) for n in split_names(run)} | set(re.findall(r"[A-Z]'*", run))
+    return sorted(p.strip() for p in facts.points if split_names(p) and prime(p.strip()) not in written)
 
 
 # ── Verifiers: each fact as relations the drawing is measured against ─

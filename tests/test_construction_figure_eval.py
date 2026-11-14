@@ -37,7 +37,7 @@ KNOWN_WRONG_PASSED = {"77195d48-step1"}
 # figures; checked against the agreed reading, 15 are drawn and right, and
 # the rest are honest declines (the two readings disagreed, or the figure
 # failed its check twice). A change that draws fewer fails here.
-DRAWN_FLOOR = 15
+DRAWN_FLOOR = 20  # 15 of the first 24 (21 should get one), 5 of the 25 breadth problems
 
 
 @pytest.mark.asyncio
@@ -99,7 +99,7 @@ async def test_the_eval_fails_without_the_checker(monkeypatch: pytest.MonkeyPatc
     untouched = {r["id"] for r in results if any(why for why in r["readings"]) or not r["readings"]}
     # Every case the checker decides fails without it.
     assert {r["id"] for r in results} - untouched <= failing, failing
-    assert len(failing) > 0.6 * len(results), failing
+    assert len(failing) >= DRAWN_FLOOR, failing
 
 
 def test_the_claim_pattern_catches_claims_about_parts() -> None:

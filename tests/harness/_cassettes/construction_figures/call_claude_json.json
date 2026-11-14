@@ -88,6 +88,82 @@
       ]
     }
   },
+  "0a83b02d6860edb56a641b63615e4ed1": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nTwo lines $\\ell_1$ and $\\ell_2$ are cut by a transversal. The transversal forms an angle of $3x + 15$ degre",
+      "recorded_at": 1794613948.7654378
+    },
+    "response": {
+      "find": [
+        {
+          "item": "value of x that makes \u21131 \u2225 \u21132",
+          "kind": "other"
+        },
+        {
+          "item": "theorem or postulate that justifies your answer",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "",
+            "\u21131",
+            "\u21132"
+          ],
+          "kind": "transversal",
+          "quote": "Two lines \u21131 and \u21132 are cut by a transversal."
+        },
+        {
+          "expr": "3x + 15",
+          "items": [],
+          "kind": "angle_measure",
+          "quote": "The transversal forms an angle of 3x + 15 degrees with \u21131"
+        },
+        {
+          "expr": "5x - 9",
+          "items": [],
+          "kind": "angle_measure",
+          "quote": "an angle of 5x - 9 degrees with \u21132 at the corresponding positions"
+        },
+        {
+          "items": [],
+          "kind": "corresponding",
+          "quote": "an angle of 5x - 9 degrees with \u21132 at the corresponding positions"
+        }
+      ],
+      "named_lines": [
+        "\u21131",
+        "\u21132"
+      ],
+      "points": [
+        "\u21131",
+        "\u21132"
+      ],
+      "prove": [
+        {
+          "items": [
+            "\u21131",
+            "\u21132"
+          ],
+          "kind": "parallel",
+          "quote": "Find the value of x that makes \u21131 \u2225 \u21132."
+        }
+      ],
+      "requested": [
+        {
+          "item": "\u21131",
+          "kind": "line"
+        },
+        {
+          "item": "\u21132",
+          "kind": "line"
+        }
+      ]
+    }
+  },
   "101027b73d8beb00f6c2f239e1f49eac": {
     "meta": {
       "mode": "bank_chat",
@@ -228,6 +304,114 @@
         "WXV",
         "YZV"
       ]
+    }
+  },
+  "104e593ac3ea75fcd5954d7c90ab8a47": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nQuadrilateral $ABCD$ has vertices $A(0,0)$, $B(4,2)$, $C(6,6)$, and $D(2,4)$. Using slopes, prove that $ABC",
+      "recorded_at": 1794613955.757072
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "determine whether any side is perpendicular to an adjacent side",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "expr": "(0,0)",
+          "items": [
+            "A"
+          ],
+          "kind": "other",
+          "quote": "vertices A(0,0)"
+        },
+        {
+          "expr": "(4,2)",
+          "items": [
+            "B"
+          ],
+          "kind": "other",
+          "quote": "B(4,2)"
+        },
+        {
+          "expr": "(6,6)",
+          "items": [
+            "C"
+          ],
+          "kind": "other",
+          "quote": "C(6,6)"
+        },
+        {
+          "expr": "(2,4)",
+          "items": [
+            "D"
+          ],
+          "kind": "other",
+          "quote": "D(2,4)"
+        },
+        {
+          "items": [
+            "ABCD"
+          ],
+          "kind": "parallelogram",
+          "quote": "Quadrilateral ABCD"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [
+        "ABCD"
+      ],
+      "prove": [
+        {
+          "items": [
+            "ABCD"
+          ],
+          "kind": "parallelogram",
+          "quote": "prove that ABCD is a parallelogram by showing both pairs of opposite sides are parallel"
+        },
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "showing both pairs of opposite sides are parallel"
+        },
+        {
+          "items": [
+            "BC",
+            "DA"
+          ],
+          "kind": "parallel",
+          "quote": "showing both pairs of opposite sides are parallel"
+        }
+      ],
+      "rays": [],
+      "requested": [
+        {
+          "item": "ABCD",
+          "kind": "polygon"
+        }
+      ],
+      "segments": [
+        "AB",
+        "BC",
+        "CD",
+        "DA"
+      ],
+      "triangles": []
     }
   },
   "11551ada86b852b58c2838fbaa08dda1": {
@@ -373,6 +557,264 @@
       }
     }
   },
+  "128a57e0ea8c601c4fa0fa11bc179334": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nTwo lines $\\ell_1$ and $\\ell_2$ are cut ",
+      "recorded_at": 1794613942.36263
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "angle_labels": {
+            "T2PB": "3x + 15\u00b0",
+            "T2QD": "5x - 9\u00b0"
+          },
+          "lines": [
+            {
+              "name": "ell_1",
+              "through": [
+                "A",
+                "B"
+              ]
+            },
+            {
+              "name": "ell_2",
+              "through": [
+                "C",
+                "D"
+              ]
+            },
+            {
+              "through": [
+                "T1",
+                "T2"
+              ]
+            }
+          ],
+          "parallel_groups": [
+            [
+              "ell_1",
+              "ell_2"
+            ]
+          ],
+          "points": {
+            "A": [
+              1,
+              2
+            ],
+            "B": [
+              9,
+              2
+            ],
+            "C": [
+              1,
+              6
+            ],
+            "D": [
+              9,
+              6
+            ],
+            "P": [
+              3.5,
+              2
+            ],
+            "Q": [
+              5.5,
+              6
+            ],
+            "T1": [
+              3,
+              0
+            ],
+            "T2": [
+              7,
+              8
+            ]
+          },
+          "shape": "construction",
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": null
+      },
+      "reply": "Here's a diagram showing the two parallel lines cut by a transversal, with the corresponding angle expressions labeled at each intersection."
+    }
+  },
+  "13bbd6c1f294fc9a692fcff24d972a17": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nRay $\\overrightarrow{BD}$ lies in the interior of $\\angle ABC$. If $m\\angle ABD = 4x + 6$, $m\\angle DBC = 2",
+      "recorded_at": 1794613941.2360818
+    },
+    "response": {
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        },
+        {
+          "item": "ABD",
+          "kind": "angle"
+        },
+        {
+          "item": "DBC",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "BD"
+          ],
+          "kind": "other",
+          "quote": "Ray BD lies in the interior of \u2220ABC"
+        },
+        {
+          "expr": "4x + 6",
+          "items": [
+            "ABD"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220ABD = 4x + 6"
+        },
+        {
+          "expr": "2x + 14",
+          "items": [
+            "DBC"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220DBC = 2x + 14"
+        },
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220ABC = 74\u00b0",
+          "value": 74
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "rays": [
+        "BD",
+        "BA",
+        "BC"
+      ],
+      "requested": [
+        {
+          "item": "BD",
+          "kind": "ray"
+        },
+        {
+          "item": "BA",
+          "kind": "ray"
+        },
+        {
+          "item": "BC",
+          "kind": "ray"
+        },
+        {
+          "item": "ABC",
+          "kind": "angle"
+        },
+        {
+          "item": "ABD",
+          "kind": "angle"
+        },
+        {
+          "item": "DBC",
+          "kind": "angle"
+        }
+      ]
+    }
+  },
+  "1525999e19eb8ca469f90e123f9cd491": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle XYZ$, $M$ is the midpoint of $\\overline{XY}$ and $N$ is the midpoint of $\\overline{XZ}$. If $",
+      "recorded_at": 1794613970.235491
+    },
+    "response": {
+      "find": [
+        {
+          "item": "value of k",
+          "kind": "other"
+        },
+        {
+          "item": "YZ",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "XY"
+          ],
+          "kind": "midpoint",
+          "point": "M",
+          "quote": "M is the midpoint of XY"
+        },
+        {
+          "items": [
+            "XZ"
+          ],
+          "kind": "midpoint",
+          "point": "N",
+          "quote": "N is the midpoint of XZ"
+        },
+        {
+          "expr": "3k - 2",
+          "items": [
+            "MN"
+          ],
+          "kind": "equal_length",
+          "quote": "MN = 3k - 2"
+        },
+        {
+          "expr": "8k - 12",
+          "items": [
+            "YZ"
+          ],
+          "kind": "equal_length",
+          "quote": "YZ = 8k - 12"
+        }
+      ],
+      "points": [
+        "X",
+        "Y",
+        "Z",
+        "M",
+        "N"
+      ],
+      "prove": [],
+      "requested": [
+        {
+          "item": "XYZ",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "XY",
+        "XZ",
+        "MN",
+        "YZ"
+      ],
+      "triangles": [
+        "XYZ"
+      ]
+    }
+  },
   "169c80d90769a183cadd81109d7df048": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -486,6 +928,222 @@
       "reply": "Here's a right triangle figure with the given labels \u2014 the right angle is at vertex B, with legs a = 5 and b = 12, and hypotenuse c = 13."
     }
   },
+  "1ac57388e0b69d312e90e387a383ea96": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn right triangle $PQR$ with the right angle at $Q$, altitude $\\overline{QS}$ is drawn to hypotenuse $\\over",
+      "recorded_at": 1794613978.9335492
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "QS",
+          "kind": "segment"
+        },
+        {
+          "item": "PQ",
+          "kind": "segment"
+        },
+        {
+          "item": "QR",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "PQR"
+          ],
+          "kind": "right_triangle",
+          "point": "Q",
+          "quote": "right triangle PQR with the right angle at Q"
+        },
+        {
+          "items": [
+            "PR"
+          ],
+          "kind": "on_segment",
+          "point": "S",
+          "quote": "altitude QS is drawn to hypotenuse PR"
+        },
+        {
+          "items": [
+            "QS",
+            "PR"
+          ],
+          "kind": "perpendicular",
+          "point": "S",
+          "quote": "altitude QS is drawn to hypotenuse PR"
+        },
+        {
+          "items": [
+            "PS"
+          ],
+          "kind": "equal_length",
+          "quote": "PS = 4",
+          "value": 4
+        },
+        {
+          "items": [
+            "SR"
+          ],
+          "kind": "equal_length",
+          "quote": "SR = 9",
+          "value": 9
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "P",
+        "Q",
+        "R",
+        "S"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [
+        {
+          "item": "PQR",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "QS",
+        "PR",
+        "PS",
+        "SR",
+        "PQ",
+        "QR"
+      ],
+      "triangles": [
+        "PQR"
+      ]
+    }
+  },
+  "1c5fa46fafeccbc8edb096cb3958ccad": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nIn $\\triangle PQR$, ray $QS$ bisects $\\a",
+      "recorded_at": 1794613971.118304
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "arc_groups": [
+            [
+              "PQS",
+              "SQR"
+            ]
+          ],
+          "points": {
+            "P": [
+              0,
+              0
+            ],
+            "Q": [
+              7.2,
+              9.6
+            ],
+            "R": [
+              25,
+              0
+            ],
+            "S": [
+              10,
+              0
+            ]
+          },
+          "segments": [
+            "PQ",
+            "QR",
+            "PR",
+            "QS"
+          ],
+          "shape": "construction",
+          "side_labels": {
+            "PQ": "12",
+            "PR": "25",
+            "QR": "18"
+          },
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": null
+      },
+      "reply": "Here's the figure for the question \u2014 triangle PQR with the angle bisector from Q to point S on PR, with the given side lengths labeled."
+    }
+  },
+  "1d238c000a1d64670825f500c7330e1b": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nTwo parallel lines are cut by a transversal. One angle measures $(3x + 12)\u00b0$ and its corresponding angle me",
+      "recorded_at": 1794613942.46804
+    },
+    "response": {
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "items": [],
+          "kind": "parallel",
+          "quote": "Two parallel lines are cut by a transversal."
+        },
+        {
+          "items": [
+            "",
+            "",
+            ""
+          ],
+          "kind": "transversal",
+          "quote": "Two parallel lines are cut by a transversal."
+        },
+        {
+          "expr": "3x + 12",
+          "items": [],
+          "kind": "angle_measure",
+          "quote": "One angle measures (3x + 12)\u00b0"
+        },
+        {
+          "expr": "5x - 8",
+          "items": [],
+          "kind": "angle_measure",
+          "quote": "its corresponding angle measures (5x - 8)\u00b0"
+        },
+        {
+          "items": [],
+          "kind": "corresponding",
+          "quote": "its corresponding angle measures (5x - 8)\u00b0"
+        }
+      ],
+      "points": [],
+      "prove": [],
+      "requested": [
+        {
+          "item": "parallel line 1",
+          "kind": "line"
+        },
+        {
+          "item": "parallel line 2",
+          "kind": "line"
+        },
+        {
+          "item": "transversal",
+          "kind": "line"
+        }
+      ]
+    }
+  },
   "2538c559f1156c8564d9d7733ab05294": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -578,6 +1236,69 @@
           "kind": "point"
         }
       ]
+    }
+  },
+  "25d810e542772f3ddace506c10f1b190": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nTwo lines intersect forming two pairs of",
+      "recorded_at": 1794613926.64693
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "angle_labels": {
+            "APD": "62\u00b0",
+            "BPC": "62\u00b0",
+            "CPA": "118\u00b0",
+            "DPB": "118\u00b0"
+          },
+          "lines": [
+            {
+              "through": [
+                "A",
+                "B"
+              ]
+            },
+            {
+              "through": [
+                "C",
+                "D"
+              ]
+            }
+          ],
+          "points": {
+            "A": [
+              -4,
+              0
+            ],
+            "B": [
+              4,
+              0
+            ],
+            "C": [
+              -2.571,
+              4
+            ],
+            "D": [
+              2.571,
+              -4
+            ],
+            "P": [
+              0,
+              0
+            ]
+          },
+          "segments": [
+            "AB",
+            "CD"
+          ],
+          "shape": "construction",
+          "type": "geometry"
+        }
+      },
+      "reply": "Here's a figure showing the two intersecting lines with the four angles labeled \u2014 the vertical pair of 62\u00b0 and the supplementary pair of 118\u00b0."
     }
   },
   "25fb07b82c4c551f4817eadaa6c60f12": {
@@ -899,6 +1620,49 @@
       "triangles": []
     }
   },
+  "2ab2642869142c5ef629caf22fec7917": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nAn exterior angle of a triangle measures $(11x - 4)\u00b0$. The two non-adjacent interior angles measure $(4x + ",
+      "recorded_at": 1794614031.877832
+    },
+    "response": {
+      "figure_spec": {
+        "angle_labels": {
+          "ACB": "(5x + 3)\u00b0",
+          "CAB": "(4x + 9)\u00b0",
+          "CBD": "(11x \u2212 4)\u00b0"
+        },
+        "points": {
+          "A": [
+            6.652,
+            6.202
+          ],
+          "B": [
+            6.0,
+            0.0
+          ],
+          "C": [
+            0.0,
+            0.0
+          ],
+          "D": [
+            9.0,
+            0.0
+          ]
+        },
+        "segments": [
+          "AB",
+          "BC",
+          "CA",
+          "BD"
+        ],
+        "shape": "construction",
+        "type": "geometry"
+      }
+    }
+  },
   "2b04f899ee6f8460f0a6cf8dcbbb31c6": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -1104,6 +1868,59 @@
       "reply": "Here's a figure for this problem. I've placed T at the top, Q and S symmetrically at the bottom, and R on the vertical axis between them so that the two given angle congruences (\u2220QRT \u2245 \u2220SRT and \u2220RQT \u2245 \u2220RST) are exactly satisfied, with RT shared by both triangles."
     }
   },
+  "33396f24e3a6881df98a776f14fece4d": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn $\\triangle PQR$, ray $QS$ bisects $\\angle PQR$ and intersects $\\overline{PR}$ at point $S$. If $PQ = 12$",
+      "recorded_at": 1794614007.387383
+    },
+    "response": {
+      "figure_spec": {
+        "arc_groups": [
+          [
+            "PQS",
+            "SQR"
+          ]
+        ],
+        "points": {
+          "P": [
+            0.0,
+            0.0
+          ],
+          "Q": [
+            8.9,
+            8.049
+          ],
+          "R": [
+            25.0,
+            0.0
+          ],
+          "S": [
+            10.0,
+            0.0
+          ]
+        },
+        "rays": [
+          "QS"
+        ],
+        "segments": [
+          "PQ",
+          "QR",
+          "PS",
+          "SR",
+          "QS"
+        ],
+        "shape": "construction",
+        "side_labels": {
+          "PQ": "12",
+          "PS": "25",
+          "QR": "18"
+        },
+        "type": "geometry"
+      }
+    }
+  },
   "344687a944bd5c808904042822f088c2": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -1176,6 +1993,102 @@
         "ABC",
         "CDA"
       ]
+    }
+  },
+  "352e9b98e7fa04155a7e966219a8d229": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nTwo angles are supplementary. The measure of the larger angle is $15\u00b0$ more than four times the measure of ",
+      "recorded_at": 1794613931.0967932
+    },
+    "response": {
+      "find": [
+        {
+          "item": "smaller angle",
+          "kind": "angle"
+        },
+        {
+          "item": "larger angle",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [],
+          "kind": "supplementary",
+          "quote": "Two angles are supplementary."
+        },
+        {
+          "expr": "larger = 4 \u00b7 smaller + 15",
+          "items": [],
+          "kind": "other",
+          "quote": "The measure of the larger angle is 15\u00b0 more than four times the measure of the smaller angle."
+        }
+      ],
+      "points": [],
+      "prove": [],
+      "requested": [
+        {
+          "item": "smaller angle",
+          "kind": "angle"
+        },
+        {
+          "item": "larger angle",
+          "kind": "angle"
+        }
+      ]
+    }
+  },
+  "355218aa04d0bf93aa9d170b4c20829f": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nIn $\\triangle ABC$, the exterior angle a",
+      "recorded_at": 1794613953.6241732
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "angle_labels": {
+            "ABC": "(4x \u2212 1)\u00b0",
+            "BAC": "(3x + 9)\u00b0",
+            "BCD": "(8x + 4)\u00b0"
+          },
+          "arc_groups": [],
+          "points": {
+            "A": [
+              0,
+              0
+            ],
+            "B": [
+              6,
+              0
+            ],
+            "C": [
+              4,
+              3
+            ],
+            "D": [
+              7.5,
+              3
+            ]
+          },
+          "rays": [],
+          "segments": [
+            "AB",
+            "BC",
+            "CA",
+            "CD"
+          ],
+          "shape": "construction",
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": null
+      },
+      "reply": "Here's a diagram for the problem showing triangle ABC with the exterior angle at C and the two non-adjacent interior angles at A and B labeled with their expressions."
     }
   },
   "3871b5ad7de127b86d6e19ec14cee256": {
@@ -1318,6 +2231,146 @@
       ]
     }
   },
+  "40b392c08a45a9cda85a442162c09a41": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nTwo parallel lines are cut by a transver",
+      "recorded_at": 1794613938.378262
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "angle_labels": {
+            "QDC": "(2x + 9)\u00b0",
+            "_t1PB": "(4x - 15)\u00b0"
+          },
+          "lines": [
+            {
+              "name": "",
+              "through": [
+                "A",
+                "B"
+              ]
+            },
+            {
+              "name": "",
+              "through": [
+                "C",
+                "D"
+              ]
+            },
+            {
+              "name": "",
+              "through": [
+                "_t1",
+                "_t2"
+              ]
+            }
+          ],
+          "parallel_groups": [
+            [
+              "AB",
+              "CD"
+            ]
+          ],
+          "points": {
+            "A": [
+              0,
+              4
+            ],
+            "B": [
+              8,
+              4
+            ],
+            "C": [
+              0,
+              0
+            ],
+            "D": [
+              8,
+              0
+            ],
+            "P": [
+              2,
+              4
+            ],
+            "Q": [
+              5,
+              0
+            ],
+            "_t1": [
+              1.0,
+              6.0
+            ],
+            "_t2": [
+              6.0,
+              -2.0
+            ]
+          },
+          "segments": [],
+          "shape": "construction",
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": null
+      },
+      "reply": "Here's a figure showing two parallel lines cut by a transversal, with the two co-interior angles labeled by their expressions."
+    }
+  },
+  "41bc082636119597855d67685d52d9bf": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nRay $\\overrightarrow{BD}$ lies in the in",
+      "recorded_at": 1794613935.602103
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "angle_labels": {
+            "ABD": "4x + 6",
+            "DBC": "2x + 14"
+          },
+          "points": {
+            "A": [
+              -4.0,
+              3.0
+            ],
+            "B": [
+              0,
+              0
+            ],
+            "C": [
+              5.0,
+              0.0
+            ],
+            "D": [
+              3.624,
+              2.556
+            ],
+            "_d": [
+              3.624,
+              2.556
+            ]
+          },
+          "rays": [
+            "BA",
+            "BC",
+            "BD"
+          ],
+          "segments": [],
+          "shape": "construction",
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": null
+      },
+      "reply": "Here's a figure showing ray BD in the interior of \u2220ABC, with BD splitting the angle into the two labeled parts."
+    }
+  },
   "45c7faf57b6486b46219c4b79e6f729b": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -1424,6 +2477,150 @@
       ]
     }
   },
+  "47a3b63683b31fbbbfd98a78072a4c42": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn circle $O$, inscribed angle $\\angle BAC = 38\u00b0$. Find the measure of arc $BC$. Then find the measure of t",
+      "recorded_at": 1794613958.54269
+    },
+    "response": {
+      "figure_spec": {
+        "angle_labels": {
+          "BAC": "38\u00b0"
+        },
+        "arcs": [
+          {
+            "center": "O",
+            "endpoints": [
+              "B",
+              "C"
+            ]
+          }
+        ],
+        "circles": [
+          {
+            "center": "O",
+            "radius": 4
+          }
+        ],
+        "points": {
+          "A": [
+            0.0,
+            -4.0
+          ],
+          "B": [
+            -2.463,
+            3.152
+          ],
+          "C": [
+            2.463,
+            3.152
+          ],
+          "O": [
+            0,
+            0
+          ]
+        },
+        "segments": [
+          "OB",
+          "OC",
+          "AB",
+          "AC"
+        ],
+        "shape": "construction",
+        "type": "geometry"
+      }
+    }
+  },
+  "487c64fe83ffaf2ba09ca1cbdc07192d": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nTwo parallel lines are cut by a transver",
+      "recorded_at": 1794613947.280051
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "angle_labels": {
+            "FQD": "(3x \u2212 y + 40)\u00b0",
+            "PEA": "(5x + 2y)\u00b0",
+            "PEB": "(7x \u2212 10)\u00b0"
+          },
+          "lines": [
+            {
+              "name": "p",
+              "through": [
+                "A",
+                "B"
+              ]
+            },
+            {
+              "name": "q",
+              "through": [
+                "C",
+                "D"
+              ]
+            },
+            {
+              "through": [
+                "P",
+                "Q"
+              ]
+            }
+          ],
+          "parallel_groups": [
+            [
+              "p",
+              "q"
+            ]
+          ],
+          "points": {
+            "A": [
+              0,
+              6
+            ],
+            "B": [
+              10,
+              6
+            ],
+            "C": [
+              0,
+              2
+            ],
+            "D": [
+              10,
+              2
+            ],
+            "E": [
+              3.667,
+              6
+            ],
+            "F": [
+              5.333,
+              2
+            ],
+            "P": [
+              3,
+              8
+            ],
+            "Q": [
+              7,
+              0
+            ]
+          },
+          "segments": [],
+          "shape": "construction",
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": null
+      },
+      "reply": "Here's a figure showing two parallel lines cut by a transversal, with the three angle expressions labeled at their correct positions."
+    }
+  },
   "48dd5ff75591b8a9f0dcb291cbe518fa": {
     "meta": {
       "mode": "decompose",
@@ -1492,6 +2689,55 @@
       ]
     }
   },
+  "4b47393dab1f72b65e4c2391a6238b32": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nAn exterior angle of a triangle measures",
+      "recorded_at": 1794613959.120539
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "angle_labels": {
+            "ACB": "(5x + 3)\u00b0",
+            "CAB": "4x + 9)\u00b0",
+            "CBD": "(11x - 4)\u00b0"
+          },
+          "points": {
+            "A": [
+              0,
+              0
+            ],
+            "B": [
+              6,
+              0
+            ],
+            "C": [
+              2.0,
+              3.5
+            ],
+            "D": [
+              9,
+              0
+            ]
+          },
+          "segments": [
+            "AB",
+            "BC",
+            "CA",
+            "BD"
+          ],
+          "shape": "construction",
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": null
+      },
+      "reply": "Here's a diagram for the problem showing the triangle with the exterior angle and the two remote interior angles labeled with their expressions."
+    }
+  },
   "4b93dbb34b23340e8cad97e37123ee19": {
     "meta": {
       "mode": "bank_chat",
@@ -1556,6 +2802,177 @@
         }
       },
       "reply": "Here's the figure with the two similar triangles, marking the equal angle pairs and the known side lengths."
+    }
+  },
+  "5384c5e0fdd4a17046e369ac079bd794": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nTriangle $ABC$ has vertices $A(0, 0)$, $B(6, 0)$, and $C(3, 4)$. Find the exact perimeter of $\\triangle ABC",
+      "recorded_at": 1794613977.2574248
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "exact perimeter of \u25b3ABC",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "expr": "(0, 0)",
+          "items": [
+            "A"
+          ],
+          "kind": "other",
+          "quote": "Triangle ABC has vertices A(0, 0)"
+        },
+        {
+          "expr": "(6, 0)",
+          "items": [
+            "B"
+          ],
+          "kind": "other",
+          "quote": "B(6, 0)"
+        },
+        {
+          "expr": "(3, 4)",
+          "items": [
+            "C"
+          ],
+          "kind": "other",
+          "quote": "and C(3, 4)"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [
+        {
+          "item": "ABC",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "5395e6b16233b872d5da4b81411878f0": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nQuadrilateral $ABCD$ has vertices $A(0,0)$, $B(4,2)$, $C(6,6)$, and $D(2,4)$. Using slopes, prove that $ABC",
+      "recorded_at": 1794613955.905927
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "determine whether any side is perpendicular to an adjacent side",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABCD"
+          ],
+          "kind": "parallelogram",
+          "quote": "Quadrilateral ABCD"
+        },
+        {
+          "expr": "(0,0)",
+          "items": [
+            "A"
+          ],
+          "kind": "other",
+          "quote": "vertices A(0,0)"
+        },
+        {
+          "expr": "(4,2)",
+          "items": [
+            "B"
+          ],
+          "kind": "other",
+          "quote": "B(4,2)"
+        },
+        {
+          "expr": "(6,6)",
+          "items": [
+            "C"
+          ],
+          "kind": "other",
+          "quote": "C(6,6)"
+        },
+        {
+          "expr": "(2,4)",
+          "items": [
+            "D"
+          ],
+          "kind": "other",
+          "quote": "D(2,4)"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [
+        "ABCD"
+      ],
+      "prove": [
+        {
+          "items": [
+            "ABCD"
+          ],
+          "kind": "parallelogram",
+          "quote": "prove that ABCD is a parallelogram by showing both pairs of opposite sides are parallel"
+        },
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "showing both pairs of opposite sides are parallel"
+        },
+        {
+          "items": [
+            "BC",
+            "DA"
+          ],
+          "kind": "parallel",
+          "quote": "showing both pairs of opposite sides are parallel"
+        }
+      ],
+      "rays": [],
+      "requested": [
+        {
+          "item": "ABCD",
+          "kind": "polygon"
+        }
+      ],
+      "segments": [
+        "AB",
+        "BC",
+        "CD",
+        "DA"
+      ],
+      "triangles": []
     }
   },
   "54e59d8d3b548b6cc1221baa4a1d4c32": {
@@ -2033,6 +3450,70 @@
       "reply": "Here's the figure showing two intersecting lines with the four angles labeled \u2014 \u22201 and \u22203 are marked as vertical angles (opposite each other at the intersection)."
     }
   },
+  "67562a9504dbcc53d21da378502d13de": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nIn circle $O$, inscribed angle $\\angle B",
+      "recorded_at": 1794613927.627994
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "angle_labels": {
+            "BAC": "38\u00b0",
+            "BOC": "76\u00b0"
+          },
+          "arc_groups": [],
+          "arcs": [
+            {
+              "center": "O",
+              "endpoints": [
+                "B",
+                "C"
+              ]
+            }
+          ],
+          "circles": [
+            {
+              "center": "O",
+              "radius": 3.7
+            }
+          ],
+          "points": {
+            "A": [
+              0.0,
+              -3.7
+            ],
+            "B": [
+              -2.985,
+              2.195
+            ],
+            "C": [
+              3.42,
+              1.504
+            ],
+            "O": [
+              0,
+              0
+            ]
+          },
+          "segments": [
+            "AB",
+            "AC",
+            "OB",
+            "OC"
+          ],
+          "shape": "construction",
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": null
+      },
+      "reply": "Here's the circle diagram with center O, inscribed angle \u2220BAC = 38\u00b0, and the central angle \u2220BOC both intercepting arc BC."
+    }
+  },
   "6883c562c812c7bfd25f9971a570c0f6": {
     "meta": {
       "mode": "bank_chat",
@@ -2166,6 +3647,58 @@
       "reply": "I've added the main diagram to the question and a matching diagram to the vertical angles step (Step 4) with the vertical angle pair highlighted using arc marks."
     }
   },
+  "6888e1a0b30cfd58804c8ae6b3866b75": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nTwo angles are supplementary. The measure of the larger angle is $15\u00b0$ more than four times the measure of ",
+      "recorded_at": 1794613932.45567
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "smaller angle",
+          "kind": "angle"
+        },
+        {
+          "item": "larger angle",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [],
+          "kind": "supplementary",
+          "quote": "Two angles are supplementary."
+        },
+        {
+          "expr": "4x + 15",
+          "items": [],
+          "kind": "angle_measure",
+          "quote": "The measure of the larger angle is 15\u00b0 more than four times the measure of the smaller angle."
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [
+        {
+          "item": "smaller angle",
+          "kind": "angle"
+        },
+        {
+          "item": "larger angle",
+          "kind": "angle"
+        }
+      ],
+      "segments": [],
+      "triangles": []
+    }
+  },
   "68c01b978c5999a1b0fb8cb9ef7b02e1": {
     "meta": {
       "mode": "bank_chat",
@@ -2176,6 +3709,95 @@
     "response": {
       "proposal": null,
       "reply": "I'd love to add a figure, but I need the leg lengths (or other given measurements) for the triangle to place the points correctly. Could you share the values \u2014 for example, \"legs of length 3 and 4\" or similar?"
+    }
+  },
+  "696b899fe84496b9ffec8f9aab925d5b": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle PQR$, ray $QS$ bisects $\\angle PQR$ and intersects $\\overline{PR}$ at point $S$. If $PQ = 12$",
+      "recorded_at": 1794613976.442473
+    },
+    "response": {
+      "find": [
+        {
+          "item": "PS",
+          "kind": "segment"
+        },
+        {
+          "item": "SR",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "QS",
+            "PQR"
+          ],
+          "kind": "bisects_angle",
+          "quote": "ray QS bisects \u2220PQR"
+        },
+        {
+          "items": [
+            "PR"
+          ],
+          "kind": "on_segment",
+          "point": "S",
+          "quote": "intersects PR at point S"
+        },
+        {
+          "items": [
+            "PQ"
+          ],
+          "kind": "equal_length",
+          "quote": "PQ = 12",
+          "value": 12
+        },
+        {
+          "items": [
+            "QR"
+          ],
+          "kind": "equal_length",
+          "quote": "QR = 18",
+          "value": 18
+        },
+        {
+          "items": [
+            "PR"
+          ],
+          "kind": "equal_length",
+          "quote": "PR = 25",
+          "value": 25
+        }
+      ],
+      "points": [
+        "P",
+        "Q",
+        "R",
+        "S"
+      ],
+      "prove": [],
+      "rays": [
+        "QS"
+      ],
+      "requested": [
+        {
+          "item": "PQR",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "PQ",
+        "QR",
+        "PR",
+        "PS",
+        "SR",
+        "QS"
+      ],
+      "triangles": [
+        "PQR"
+      ]
     }
   },
   "6c1f70cb4b0f6aa948b2eb5449e2655e": {
@@ -2360,6 +3982,71 @@
         "solution_steps": null
       },
       "reply": "Here's the figure with all segments including WM and ZM drawn in. M is placed exactly at the midpoint of XY, WX \u22a5 XY, and ZY \u22a5 XY, with WX = ZY as given."
+    }
+  },
+  "6e4cd7b4328a7ab2d024be8cb9dcf93e": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn circle $O$, inscribed angle $\\angle BAC = 38\u00b0$. Find the measure of arc $BC$. Then find the measure of t",
+      "recorded_at": 1794613932.0361652
+    },
+    "response": {
+      "circles": [
+        "O"
+      ],
+      "find": [
+        {
+          "item": "measure of arc BC",
+          "kind": "other"
+        },
+        {
+          "item": "BOC",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "circle": "O",
+          "items": [
+            "A",
+            "B",
+            "C"
+          ],
+          "kind": "on_circle",
+          "quote": "In circle O, inscribed angle \u2220BAC = 38\u00b0"
+        },
+        {
+          "circle": "O",
+          "items": [
+            "BAC"
+          ],
+          "kind": "inscribed_angle",
+          "quote": "inscribed angle \u2220BAC = 38\u00b0",
+          "value": 38
+        },
+        {
+          "circle": "O",
+          "items": [
+            "BOC"
+          ],
+          "kind": "central_angle",
+          "quote": "the central angle \u2220BOC"
+        }
+      ],
+      "points": [
+        "O",
+        "A",
+        "B",
+        "C"
+      ],
+      "prove": [],
+      "requested": [
+        {
+          "item": "O",
+          "kind": "circle"
+        }
+      ]
     }
   },
   "6fe2269b12f13a1b221cf4c8e8c5cb47": {
@@ -2570,6 +4257,105 @@
         "ABC",
         "DEF"
       ]
+    }
+  },
+  "72f9a21ec4258508e8cb38a0516fbe00": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nTwo parallel lines are cut by a transversal. One pair of co-interior angles measures $(5x + 2y)\u00b0$ and $(3x ",
+      "recorded_at": 1794613954.916241
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "x and y",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "",
+            ""
+          ],
+          "kind": "parallel",
+          "quote": "Two parallel lines are cut by a transversal."
+        },
+        {
+          "items": [
+            "",
+            "",
+            ""
+          ],
+          "kind": "transversal",
+          "quote": "Two parallel lines are cut by a transversal."
+        },
+        {
+          "expr": null,
+          "items": [
+            "",
+            ""
+          ],
+          "kind": "same_side_interior",
+          "quote": "One pair of co-interior angles measures (5x + 2y)\u00b0 and (3x - y + 40)\u00b0"
+        },
+        {
+          "expr": "5x + 2y",
+          "items": [
+            ""
+          ],
+          "kind": "angle_measure",
+          "quote": "One pair of co-interior angles measures (5x + 2y)\u00b0 and (3x - y + 40)\u00b0"
+        },
+        {
+          "expr": "3x - y + 40",
+          "items": [
+            ""
+          ],
+          "kind": "angle_measure",
+          "quote": "One pair of co-interior angles measures (5x + 2y)\u00b0 and (3x - y + 40)\u00b0"
+        },
+        {
+          "items": [
+            "",
+            ""
+          ],
+          "kind": "corresponding",
+          "quote": "a pair of corresponding angles gives the additional condition that the first angle equals (7x - 10)\u00b0"
+        },
+        {
+          "expr": "7x - 10",
+          "items": [
+            ""
+          ],
+          "kind": "angle_measure",
+          "quote": "a pair of corresponding angles gives the additional condition that the first angle equals (7x - 10)\u00b0"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [
+        {
+          "item": "parallel line 1",
+          "kind": "line"
+        },
+        {
+          "item": "parallel line 2",
+          "kind": "line"
+        },
+        {
+          "item": "transversal",
+          "kind": "line"
+        }
+      ],
+      "segments": [],
+      "triangles": []
     }
   },
   "73efbf695bdb17869bb12789271c6741": {
@@ -2810,6 +4596,469 @@
       ]
     }
   },
+  "7857c489a2aaadd78f0f754fdd8f9fcb": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nTriangle $ABC$ has vertices $A(0, 0)$, $",
+      "recorded_at": 1794613972.858329
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "points": {
+            "A": [
+              0,
+              0
+            ],
+            "B": [
+              6,
+              0
+            ],
+            "C": [
+              3,
+              4
+            ]
+          },
+          "segments": [
+            "AB",
+            "AC",
+            "BC"
+          ],
+          "shape": "construction",
+          "side_labels": {
+            "AB": "6",
+            "AC": "5",
+            "BC": "5"
+          },
+          "tick_groups": [
+            [
+              "AC",
+              "BC"
+            ]
+          ],
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": null
+      },
+      "reply": "Here's the triangle drawn with all three vertices and sides labeled to match the problem."
+    }
+  },
+  "79bb5bf0622d88affe2a8ff22325ce72": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nFrom external point $P$, a tangent touches circle $O$ at point $T$, and a secant passes through points $A$ ",
+      "recorded_at": 1794613936.460824
+    },
+    "response": {
+      "circles": [
+        "O"
+      ],
+      "find": [
+        {
+          "item": "P",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "circle": "O",
+          "items": [
+            "PT"
+          ],
+          "kind": "tangent",
+          "point": "T",
+          "quote": "a tangent touches circle O at point T"
+        },
+        {
+          "expr": "P is external to circle O",
+          "items": [
+            "P"
+          ],
+          "kind": "other",
+          "quote": "From external point P"
+        },
+        {
+          "expr": "secant from P through A and B",
+          "items": [
+            "PA",
+            "PB"
+          ],
+          "kind": "other",
+          "quote": "a secant passes through points A and B on the circle"
+        },
+        {
+          "circle": "O",
+          "items": [
+            "A",
+            "B",
+            "T"
+          ],
+          "kind": "on_circle",
+          "quote": "a secant passes through points A and B on the circle \u2026 a tangent touches circle O at point T"
+        },
+        {
+          "expr": "arc AT = 168\u00b0",
+          "items": [
+            "AT"
+          ],
+          "kind": "other",
+          "quote": "the intercepted arcs measure arc AT = 168\u00b0"
+        },
+        {
+          "expr": "arc BT = 62\u00b0",
+          "items": [
+            "BT"
+          ],
+          "kind": "other",
+          "quote": "the intercepted arcs measure arc BT = 62\u00b0"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "P",
+        "O",
+        "T",
+        "A",
+        "B"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [
+        {
+          "item": "O",
+          "kind": "circle"
+        },
+        {
+          "item": "P",
+          "kind": "point"
+        },
+        {
+          "item": "T",
+          "kind": "point"
+        },
+        {
+          "item": "A",
+          "kind": "point"
+        },
+        {
+          "item": "B",
+          "kind": "point"
+        },
+        {
+          "item": "PT",
+          "kind": "segment"
+        },
+        {
+          "item": "PB",
+          "kind": "segment"
+        }
+      ],
+      "segments": [
+        "PT",
+        "PA",
+        "PB"
+      ],
+      "triangles": []
+    }
+  },
+  "7a1a9f44e59a614ca29201fcd126a5e8": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nA circle has a radius of $8$ inches. A c",
+      "recorded_at": 1794613927.062784
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "angle_labels": {
+            "AOB": "3\u03c0/4"
+          },
+          "arc_groups": [],
+          "arcs": [
+            {
+              "center": "O",
+              "endpoints": [
+                "A",
+                "B"
+              ]
+            }
+          ],
+          "circles": [
+            {
+              "center": "O",
+              "radius": 8
+            }
+          ],
+          "points": {
+            "A": [
+              8,
+              0
+            ],
+            "B": [
+              -5.657,
+              5.657
+            ],
+            "O": [
+              0,
+              0
+            ]
+          },
+          "segments": [
+            "OA",
+            "OB"
+          ],
+          "shape": "construction",
+          "side_labels": {
+            "OA": "8 in"
+          },
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": null
+      },
+      "reply": "Here's a figure showing the circle with radius 8, the central angle of 3\u03c0/4 radians, and the intercepted arc marked."
+    }
+  },
+  "7b97d6eabc72bc7e63d1fc35d1c0e6a6": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nTwo parallel lines are cut by a transversal forming a pair of co-interior (same-side interior) angles measu",
+      "recorded_at": 1794613945.222264
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        },
+        {
+          "item": "each co-interior angle",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "",
+            ""
+          ],
+          "kind": "parallel",
+          "quote": "Two parallel lines are cut by a transversal"
+        },
+        {
+          "items": [
+            "",
+            "",
+            ""
+          ],
+          "kind": "transversal",
+          "quote": "Two parallel lines are cut by a transversal"
+        },
+        {
+          "items": [],
+          "kind": "same_side_interior",
+          "quote": "forming a pair of co-interior (same-side interior) angles"
+        },
+        {
+          "expr": "4x - 15",
+          "items": [],
+          "kind": "angle_measure",
+          "quote": "co-interior (same-side interior) angles measuring (4x - 15)\u00b0"
+        },
+        {
+          "expr": "2x + 9",
+          "items": [],
+          "kind": "angle_measure",
+          "quote": "and (2x + 9)\u00b0"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [
+        {
+          "item": "two parallel lines cut by a transversal",
+          "kind": "line"
+        }
+      ],
+      "segments": [],
+      "triangles": []
+    }
+  },
+  "7c67c62e0547a3f13bdfc0152069aa9d": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nTwo parallel lines are cut by a transversal. One angle measures $(3x + 12)\u00b0$ and its corresponding angle me",
+      "recorded_at": 1794613942.835626
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "",
+            ""
+          ],
+          "kind": "parallel",
+          "quote": "Two parallel lines are cut by a transversal."
+        },
+        {
+          "items": [
+            "",
+            "",
+            ""
+          ],
+          "kind": "transversal",
+          "quote": "Two parallel lines are cut by a transversal."
+        },
+        {
+          "expr": "3x + 12",
+          "items": [],
+          "kind": "angle_measure",
+          "quote": "One angle measures (3x + 12)\u00b0"
+        },
+        {
+          "items": [],
+          "kind": "corresponding",
+          "quote": "its corresponding angle measures (5x - 8)\u00b0"
+        },
+        {
+          "expr": "5x - 8",
+          "items": [],
+          "kind": "angle_measure",
+          "quote": "its corresponding angle measures (5x - 8)\u00b0"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [
+        {
+          "item": "drawing",
+          "kind": "line"
+        }
+      ],
+      "segments": [],
+      "triangles": []
+    }
+  },
+  "7d5ca7a1d6f33e3e5f3df6d3979d6ddc": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn isosceles $\\triangle ABC$, $AB = AC$. The vertex angle at $A$ measures $(4x + 6)\u00b0$ and each base angle m",
+      "recorded_at": 1794613979.974844
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        },
+        {
+          "item": "BAC",
+          "kind": "angle"
+        },
+        {
+          "item": "ABC",
+          "kind": "angle"
+        },
+        {
+          "item": "ACB",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "isosceles",
+          "point": "A",
+          "quote": "isosceles \u25b3ABC, AB = AC"
+        },
+        {
+          "items": [
+            "AB",
+            "AC"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB = AC"
+        },
+        {
+          "expr": "4x + 6",
+          "items": [
+            "BAC"
+          ],
+          "kind": "angle_measure",
+          "quote": "The vertex angle at A measures (4x + 6)\u00b0"
+        },
+        {
+          "expr": "5x - 3",
+          "items": [
+            "ABC"
+          ],
+          "kind": "angle_measure",
+          "quote": "each base angle measures (5x \u2212 3)\u00b0"
+        },
+        {
+          "expr": "5x - 3",
+          "items": [
+            "ACB"
+          ],
+          "kind": "angle_measure",
+          "quote": "each base angle measures (5x \u2212 3)\u00b0"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [
+        {
+          "item": "ABC",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "AB",
+        "AC"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
   "7f7e403410bd37d1c37e0c72f28d2f79": {
     "meta": {
       "mode": "bank_chat",
@@ -2939,6 +5188,142 @@
       ]
     }
   },
+  "81b08fdffb24cf76700b5a5fbf07dd06": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nQuadrilateral $ABCD$ has vertices $A(0,0",
+      "recorded_at": 1794613949.0099719
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "parallel_groups": [
+            [
+              "AB",
+              "CD"
+            ],
+            [
+              "BC",
+              "DA"
+            ]
+          ],
+          "points": {
+            "A": [
+              0,
+              0
+            ],
+            "B": [
+              4,
+              2
+            ],
+            "C": [
+              6,
+              6
+            ],
+            "D": [
+              2,
+              4
+            ]
+          },
+          "segments": [
+            "AB",
+            "BC",
+            "CD",
+            "DA"
+          ],
+          "shape": "construction",
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": null
+      },
+      "reply": "Here's the figure for the quadrilateral ABCD with the four sides drawn and parallel pairs marked."
+    }
+  },
+  "82588a76809b5dc2a550c3b474297d57": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nAn exterior angle of a triangle measures $(11x - 4)\u00b0$. The two non-adjacent interior angles measure $(4x + ",
+      "recorded_at": 1794613964.9042182
+    },
+    "response": {
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        },
+        {
+          "item": "A",
+          "kind": "angle"
+        },
+        {
+          "item": "C",
+          "kind": "angle"
+        },
+        {
+          "item": "ABC",
+          "kind": "angle"
+        },
+        {
+          "item": "CBD",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "expr": "11x - 4",
+          "items": [
+            "CBD"
+          ],
+          "kind": "angle_measure",
+          "quote": "An exterior angle of a triangle measures (11x - 4)\u00b0"
+        },
+        {
+          "expr": "4x + 9",
+          "items": [
+            "A"
+          ],
+          "kind": "angle_measure",
+          "quote": "The two non-adjacent interior angles measure (4x + 9)\u00b0 and (5x + 3)\u00b0"
+        },
+        {
+          "expr": "5x + 3",
+          "items": [
+            "C"
+          ],
+          "kind": "angle_measure",
+          "quote": "The two non-adjacent interior angles measure (4x + 9)\u00b0 and (5x + 3)\u00b0"
+        },
+        {
+          "items": [
+            "BC",
+            "BD"
+          ],
+          "kind": "opposite_rays",
+          "quote": "An exterior angle of a triangle measures (11x - 4)\u00b0"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "requested": [
+        {
+          "item": "ABC",
+          "kind": "triangle"
+        }
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
   "89883483e5e2fbebdd35594c025fc24e": {
     "meta": {
       "mode": "bank_chat",
@@ -2994,6 +5379,88 @@
         "solution_steps": null
       },
       "reply": "Here's the diagram for the problem \u2014 parallelogram ABCD with diagonal AC drawn as the transversal, showing the parallel sides and the congruent sides BC and DA."
+    }
+  },
+  "8ac5379e220255f77fbfbcdee85062e5": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nLines $a \\parallel b$ are cut by two tra",
+      "recorded_at": 1794613948.4835851
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "angle_labels": {
+            "ABC": "(6x \u2212 11)\u00b0",
+            "ACB": "(2x + 18)\u00b0",
+            "CAB": "(4x + 9)\u00b0"
+          },
+          "lines": [
+            {
+              "name": "a",
+              "through": [
+                "_a1",
+                "_a2"
+              ]
+            },
+            {
+              "name": "b",
+              "through": [
+                "_b1",
+                "_b2"
+              ]
+            }
+          ],
+          "parallel_groups": [
+            [
+              "a",
+              "b"
+            ]
+          ],
+          "points": {
+            "A": [
+              2.0,
+              0.0
+            ],
+            "B": [
+              6.0,
+              0.0
+            ],
+            "C": [
+              4.0,
+              3.0
+            ],
+            "_a1": [
+              0.0,
+              0.0
+            ],
+            "_a2": [
+              8.0,
+              0.0
+            ],
+            "_b1": [
+              0.5,
+              3.0
+            ],
+            "_b2": [
+              8.0,
+              3.0
+            ]
+          },
+          "segments": [
+            "AC",
+            "BC",
+            "AB"
+          ],
+          "shape": "construction",
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": null
+      },
+      "reply": "Here's a figure showing the two parallel lines cut by two transversals forming a triangle, with the three angle expressions labeled at each vertex."
     }
   },
   "8b93650124cf8263be22cb717cfd1e94": {
@@ -3079,6 +5546,140 @@
         "solution_steps": null
       },
       "reply": "Here's a figure with parallel lines p and q cut by a transversal, with the two alternate interior angles labeled."
+    }
+  },
+  "8f266dc0294c0b4581574c076a1c6a67": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nAn exterior angle of a triangle measures",
+      "recorded_at": 1794613960.308009
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "angle_labels": {
+            "ACB": "4x \u2212 7\u00b0",
+            "CAB": "3x + 12\u00b0",
+            "DBC": "8x + 5\u00b0"
+          },
+          "points": {
+            "A": [
+              0,
+              0
+            ],
+            "B": [
+              6,
+              0
+            ],
+            "C": [
+              2,
+              3.5
+            ],
+            "D": [
+              8.5,
+              0
+            ]
+          },
+          "segments": [
+            "AB",
+            "BC",
+            "CA",
+            "BD"
+          ],
+          "shape": "construction",
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": null
+      },
+      "reply": "Here's a triangle figure showing the exterior angle and the two remote interior angles, with the angle expressions labeled as given in the problem."
+    }
+  },
+  "8f493553432b8e20c34b8a847948da7e": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, the angle bisectors from all three vertices meet at the incenter $I$. If $\\angle BAC = ",
+      "recorded_at": 1794613968.773012
+    },
+    "response": {
+      "find": [
+        {
+          "item": "BIC",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "BAC"
+          ],
+          "kind": "angle_measure",
+          "quote": "\u2220BAC = 72\u00b0",
+          "value": 72
+        },
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "angle_measure",
+          "quote": "\u2220ABC = 58\u00b0",
+          "value": 58
+        },
+        {
+          "items": [
+            "AI",
+            "BAC"
+          ],
+          "kind": "bisects_angle",
+          "quote": "the angle bisectors from all three vertices meet at the incenter I"
+        },
+        {
+          "items": [
+            "BI",
+            "ABC"
+          ],
+          "kind": "bisects_angle",
+          "quote": "the angle bisectors from all three vertices meet at the incenter I"
+        },
+        {
+          "items": [
+            "CI",
+            "BCA"
+          ],
+          "kind": "bisects_angle",
+          "quote": "the angle bisectors from all three vertices meet at the incenter I"
+        },
+        {
+          "items": [
+            "I"
+          ],
+          "kind": "other",
+          "quote": "the angle bisectors from all three vertices meet at the incenter I"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "I"
+      ],
+      "prove": [],
+      "requested": [
+        {
+          "item": "ABC",
+          "kind": "triangle"
+        },
+        {
+          "item": "I",
+          "kind": "point"
+        }
+      ],
+      "triangles": [
+        "ABC"
+      ]
     }
   },
   "8fcefc0d72bbc3cdd8334721cb64c704": {
@@ -3260,6 +5861,197 @@
       "triangles": []
     }
   },
+  "903099e0a8ab711c4ce5ea4af56a2be1": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nFrom external point $P$, a tangent touches circle $O$ at point $T$, and a secant passes through points $A$ ",
+      "recorded_at": 1794613935.70006
+    },
+    "response": {
+      "circles": [
+        "O"
+      ],
+      "find": [
+        {
+          "item": "P",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "circle": "O",
+          "items": [
+            "PT"
+          ],
+          "kind": "tangent",
+          "point": "T",
+          "quote": "a tangent touches circle O at point T"
+        },
+        {
+          "expr": "secant through A and B from P",
+          "items": [
+            "P",
+            "A",
+            "B"
+          ],
+          "kind": "other",
+          "quote": "a secant passes through points A and B on the circle"
+        },
+        {
+          "circle": "O",
+          "items": [
+            "A",
+            "B",
+            "T"
+          ],
+          "kind": "on_circle",
+          "quote": "a secant passes through points A and B on the circle"
+        },
+        {
+          "expr": "P is an external point",
+          "items": [],
+          "kind": "other",
+          "quote": "From external point P"
+        },
+        {
+          "circle": "O",
+          "items": [
+            "AT"
+          ],
+          "kind": "angle_measure",
+          "quote": "intercepted arcs measure arc AT = 168\u00b0",
+          "value": 168
+        },
+        {
+          "circle": "O",
+          "items": [
+            "BT"
+          ],
+          "kind": "angle_measure",
+          "quote": "intercepted arcs measure arc BT = 62\u00b0",
+          "value": 62
+        }
+      ],
+      "points": [
+        "P",
+        "O",
+        "T",
+        "A",
+        "B"
+      ],
+      "prove": [],
+      "requested": [
+        {
+          "item": "O",
+          "kind": "circle"
+        },
+        {
+          "item": "P",
+          "kind": "point"
+        },
+        {
+          "item": "T",
+          "kind": "point"
+        },
+        {
+          "item": "A",
+          "kind": "point"
+        },
+        {
+          "item": "B",
+          "kind": "point"
+        },
+        {
+          "item": "PT",
+          "kind": "segment"
+        },
+        {
+          "item": "PA",
+          "kind": "segment"
+        },
+        {
+          "item": "PB",
+          "kind": "segment"
+        }
+      ],
+      "segments": [
+        "PT",
+        "PA",
+        "PB"
+      ]
+    }
+  },
+  "91568bad383183e8a652ef76009adf66": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n$\\overrightarrow{QS}$ bisects $\\angle PQR$. If $m\\angle PQS = 7x - 4$ and $m\\angle SQR = 4x + 17$, find $m\\",
+      "recorded_at": 1794613939.8160949
+    },
+    "response": {
+      "find": [
+        {
+          "item": "PQR",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "QS",
+            "PQR"
+          ],
+          "kind": "bisects_angle",
+          "quote": "Ray QS bisects angle PQR"
+        },
+        {
+          "expr": "7x - 4",
+          "items": [
+            "PQS"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220PQS = 7x - 4"
+        },
+        {
+          "expr": "4x + 17",
+          "items": [
+            "SQR"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220SQR = 4x + 17"
+        }
+      ],
+      "points": [
+        "P",
+        "Q",
+        "R",
+        "S"
+      ],
+      "prove": [],
+      "rays": [
+        "QS"
+      ],
+      "requested": [
+        {
+          "item": "QS",
+          "kind": "ray"
+        },
+        {
+          "item": "PQR",
+          "kind": "angle"
+        },
+        {
+          "item": "PQS",
+          "kind": "angle"
+        },
+        {
+          "item": "SQR",
+          "kind": "angle"
+        }
+      ]
+    }
+  },
   "95b6aeca11f1f22fd0c49e5833e0fe37": {
     "meta": {
       "mode": "bank_chat",
@@ -3317,6 +6109,100 @@
         "solution_steps": null
       },
       "reply": "Here's the figure for the problem \u2014 triangle ABC with DE drawn parallel to BC inside it, all angle measures placed correctly for x = 10."
+    }
+  },
+  "9755f77af03b43500a4eced810ef1335": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nAn exterior angle of a triangle measures $(8x + 5)\u00b0$. The two non-adjacent interior angles measure $(3x + 1",
+      "recorded_at": 1794613964.448842
+    },
+    "response": {
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "expr": "8x + 5",
+          "items": [],
+          "kind": "angle_measure",
+          "quote": "An exterior angle of a triangle measures (8x + 5)\u00b0"
+        },
+        {
+          "expr": "3x + 12",
+          "items": [],
+          "kind": "angle_measure",
+          "quote": "The two non-adjacent interior angles measure (3x + 12)\u00b0"
+        },
+        {
+          "expr": "4x - 7",
+          "items": [],
+          "kind": "angle_measure",
+          "quote": "and (4x - 7)\u00b0"
+        }
+      ],
+      "points": [],
+      "prove": [],
+      "requested": [
+        {
+          "item": "",
+          "kind": "triangle"
+        }
+      ],
+      "triangles": [
+        ""
+      ]
+    }
+  },
+  "99310de2f57ee3618e866c978662718e": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nA circle has radius $r = 8$ cm. A central angle of $\\dfrac{3\\pi}{4}$ radians intercepts an arc. Find (a) th",
+      "recorded_at": 1794613931.065255
+    },
+    "response": {
+      "circles": [
+        ""
+      ],
+      "find": [
+        {
+          "item": "length of the arc",
+          "kind": "other"
+        },
+        {
+          "item": "area of the sector formed by this central angle",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "expr": "8",
+          "items": [],
+          "kind": "other",
+          "quote": "A circle has radius r = 8 cm"
+        },
+        {
+          "circle": "",
+          "expr": "3\u03c0/4",
+          "items": [],
+          "kind": "central_angle",
+          "quote": "A central angle of 3\u03c0/4 radians intercepts an arc",
+          "value": null
+        }
+      ],
+      "points": [],
+      "prove": [],
+      "requested": [
+        {
+          "item": "",
+          "kind": "circle"
+        }
+      ]
     }
   },
   "99f5b4c4e394e556a32914c26007aad0": {
@@ -3539,6 +6425,337 @@
       "triangles": []
     }
   },
+  "a05aa1f441088eb549256454daf7da33": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nA circle has a radius of $8$ inches. A central angle of $\\dfrac{3\\pi}{4}$ radians intercepts an arc. Find t",
+      "recorded_at": 1794613930.930822
+    },
+    "response": {
+      "circles": [
+        ""
+      ],
+      "find": [
+        {
+          "item": "exact arc length s",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "expr": "8",
+          "items": [],
+          "kind": "other",
+          "quote": "A circle has a radius of 8 inches."
+        },
+        {
+          "expr": "3\u03c0/4",
+          "items": [],
+          "kind": "central_angle",
+          "quote": "A central angle of 3\u03c0/4 radians intercepts an arc.",
+          "value": null
+        }
+      ],
+      "points": [],
+      "prove": [],
+      "requested": [
+        {
+          "item": "",
+          "kind": "circle"
+        }
+      ]
+    }
+  },
+  "a1e6b7f58da06e41752cf1bd7f72e85f": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nA circle has a radius of $8$ inches. A central angle of $\\dfrac{3\\pi}{4}$ radians intercepts an arc. Find t",
+      "recorded_at": 1794613930.627363
+    },
+    "response": {
+      "circles": [
+        ""
+      ],
+      "find": [
+        {
+          "item": "exact arc length s",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "circle": "",
+          "items": [],
+          "kind": "radius",
+          "quote": "A circle has a radius of 8 inches.",
+          "value": 8
+        },
+        {
+          "circle": "",
+          "expr": "3\u03c0/4",
+          "items": [],
+          "kind": "central_angle",
+          "quote": "A central angle of 3\u03c0/4 radians intercepts an arc."
+        }
+      ],
+      "points": [],
+      "prove": [],
+      "requested": [
+        {
+          "item": "",
+          "kind": "circle"
+        }
+      ]
+    }
+  },
+  "a26204e2b5549d087fb462afd4773f4a": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn $\\triangle PQR$, ray $QS$ bisects $\\angle PQR$ and intersects $\\overline{PR}$ at point $S$. If $PQ = 12$",
+      "recorded_at": 1794614214.895345
+    },
+    "response": {
+      "figure_spec": {
+        "arc_groups": [
+          [
+            "PQS",
+            "SQR"
+          ]
+        ],
+        "points": {
+          "P": [
+            0,
+            0
+          ],
+          "Q": [
+            8.9,
+            8.049
+          ],
+          "R": [
+            25,
+            0
+          ],
+          "S": [
+            10,
+            0
+          ]
+        },
+        "rays": [
+          "QS"
+        ],
+        "segments": [
+          "PQ",
+          "QR",
+          "PR",
+          "QS"
+        ],
+        "shape": "construction",
+        "side_labels": {
+          "PQ": "12",
+          "PR": "25",
+          "QR": "18"
+        },
+        "type": "geometry"
+      }
+    }
+  },
+  "a39f02bf68bfdbe755510ab4af2c2f01": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nFrom external point $P$, a tangent touch",
+      "recorded_at": 1794613928.612662
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "angle_labels": {
+            "TPB": "P"
+          },
+          "arcs": [
+            {
+              "center": "O",
+              "endpoints": [
+                "A",
+                "T"
+              ]
+            },
+            {
+              "center": "O",
+              "endpoints": [
+                "B",
+                "T"
+              ]
+            },
+            {
+              "center": "O",
+              "endpoints": [
+                "A",
+                "B"
+              ]
+            }
+          ],
+          "circles": [
+            {
+              "center": "O",
+              "radius": 3
+            }
+          ],
+          "points": {
+            "A": [
+              1.286,
+              -1.97
+            ],
+            "B": [
+              1.97,
+              -0.347
+            ],
+            "O": [
+              0,
+              0
+            ],
+            "P": [
+              4.5,
+              -2.5
+            ],
+            "T": [
+              -2.457,
+              1.709
+            ]
+          },
+          "right_angles": [
+            "OTP"
+          ],
+          "segments": [
+            "OT",
+            "PA",
+            "PT"
+          ],
+          "shape": "construction",
+          "side_labels": {
+            "AT": "168\u00b0",
+            "BT": "62\u00b0"
+          },
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": null
+      },
+      "reply": "Here's the figure with external point P, tangent PT, secant PAB, and the three arcs labeled with their given measures."
+    }
+  },
+  "a3e389626ef1c65cc70a9c4988e2f124": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, the exterior angle at vertex $C$ measures $(8x + 4)\u00b0$. The two non-adjacent interior an",
+      "recorded_at": 1794613958.275299
+    },
+    "response": {
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        },
+        {
+          "item": "exterior angle at C",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "expr": "8x + 4",
+          "items": [
+            "BCA"
+          ],
+          "kind": "angle_measure",
+          "quote": "the exterior angle at vertex C measures (8x + 4)\u00b0"
+        },
+        {
+          "expr": "3x + 9",
+          "items": [
+            "A"
+          ],
+          "kind": "angle_measure",
+          "quote": "The two non-adjacent interior angles measure (3x + 9)\u00b0"
+        },
+        {
+          "expr": "4x - 1",
+          "items": [
+            "B"
+          ],
+          "kind": "angle_measure",
+          "quote": "and (4x - 1)\u00b0"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "prove": [],
+      "requested": [
+        {
+          "item": "ABC",
+          "kind": "triangle"
+        }
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "a41ed4492b2326fc25d1c085f9c6ae3b": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nA circle has radius $r = 8$ cm. A central angle of $\\dfrac{3\\pi}{4}$ radians intercepts an arc. Find (a) th",
+      "recorded_at": 1794613931.048776
+    },
+    "response": {
+      "circles": [
+        ""
+      ],
+      "find": [
+        {
+          "item": "arc length of the intercepted arc",
+          "kind": "other"
+        },
+        {
+          "item": "area of the sector formed by the central angle",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "expr": "8",
+          "items": [],
+          "kind": "other",
+          "quote": "A circle has radius r = 8 cm"
+        },
+        {
+          "circle": "",
+          "expr": "3\u03c0/4",
+          "items": [],
+          "kind": "central_angle",
+          "quote": "A central angle of 3\u03c0/4 radians intercepts an arc",
+          "value": null
+        }
+      ],
+      "points": [],
+      "prove": [],
+      "requested": [
+        {
+          "item": "",
+          "kind": "circle"
+        }
+      ]
+    }
+  },
   "a524da28aa04dc3b268a833ba84b46c2": {
     "meta": {
       "mode": "bank_chat",
@@ -3549,6 +6766,243 @@
     "response": {
       "proposal": "{\n  \"figure_spec\": {\n    \"type\": \"geometry\",\n    \"shape\": \"construction\",\n    \"points\": {\n      \"A\": [0, 0],\n      \"B\": [0, 10],\n      \"C\": [6, 10],\n      \"O\": [3, 5]\n    },\n    \"segments\": [\"AB\", \"BC\", \"AC\"],\n    \"circles\": [\n      {\"center\": \"O\", \"through\": \"A\"}\n    ],\n    \"right_angles\": [\"ACB BAC\".split(\" \")[0]],\n    \"side_labels\": {\n      \"AB\": \"10\",\n      \"BC\": \"6\"\n    },\n    \"right_angles\": [\"ABC\"]\n  },\n  \"question\": null,\n  \"solution_steps\": null,\n  \"final_answer\": null\n}",
       "reply": "Here's the figure with triangle ABC inscribed in its circumscribed circle, with the right angle at B marked and the given side lengths labeled."
+    }
+  },
+  "a6516ce6b0595be656b31ccf9f580cdb": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nIn right triangle $PQR$ with the right a",
+      "recorded_at": 1794613972.672968
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "points": {
+            "P": [
+              0,
+              0
+            ],
+            "Q": [
+              4,
+              6
+            ],
+            "R": [
+              13,
+              0
+            ],
+            "S": [
+              4,
+              0
+            ]
+          },
+          "right_angles": [
+            "PQR",
+            "QSP"
+          ],
+          "segments": [
+            "PQ",
+            "QR",
+            "PR",
+            "QS"
+          ],
+          "shape": "construction",
+          "side_labels": {
+            "PS": "4",
+            "SR": "9"
+          },
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": null
+      },
+      "reply": "Here's the figure for the problem \u2014 right triangle PQR with the right angle at Q, and altitude QS drawn to hypotenuse PR, with PS = 4 and SR = 9 labeled."
+    }
+  },
+  "a6550da7b93e355b3e7b503027c08abf": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn isosceles $\\triangle ABC$, $AB = AC$. The vertex angle at $A$ measures $(4x + 6)\u00b0$ and each base angle m",
+      "recorded_at": 1794613981.116277
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        },
+        {
+          "item": "A",
+          "kind": "angle"
+        },
+        {
+          "item": "B",
+          "kind": "angle"
+        },
+        {
+          "item": "C",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "isosceles",
+          "point": "A",
+          "quote": "In isosceles \u25b3ABC, AB = AC"
+        },
+        {
+          "items": [
+            "AB",
+            "AC"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB = AC"
+        },
+        {
+          "expr": "4x + 6",
+          "items": [
+            "A"
+          ],
+          "kind": "angle_measure",
+          "quote": "The vertex angle at A measures (4x + 6)\u00b0"
+        },
+        {
+          "expr": "5x - 3",
+          "items": [
+            "B"
+          ],
+          "kind": "angle_measure",
+          "quote": "each base angle measures (5x - 3)\u00b0"
+        },
+        {
+          "expr": "5x - 3",
+          "items": [
+            "C"
+          ],
+          "kind": "angle_measure",
+          "quote": "each base angle measures (5x - 3)\u00b0"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "expr": "angle_A + angle_B + angle_C = 180",
+          "items": [],
+          "kind": "other",
+          "quote": "Verify that the three angles sum to 180\u00b0"
+        }
+      ],
+      "rays": [],
+      "requested": [
+        {
+          "item": "ABC",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "AB",
+        "AC",
+        "BC"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "a7df2a39b4950a6bc84fb90d2fcc4cc7": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nTwo parallel lines are cut by a transversal forming a pair of co-interior (same-side interior) angles measu",
+      "recorded_at": 1794613944.522279
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        },
+        {
+          "item": "first co-interior angle",
+          "kind": "angle"
+        },
+        {
+          "item": "second co-interior angle",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "",
+            ""
+          ],
+          "kind": "parallel",
+          "quote": "Two parallel lines are cut by a transversal"
+        },
+        {
+          "items": [
+            "",
+            "",
+            ""
+          ],
+          "kind": "transversal",
+          "quote": "Two parallel lines are cut by a transversal"
+        },
+        {
+          "items": [],
+          "kind": "same_side_interior",
+          "quote": "forming a pair of co-interior (same-side interior) angles"
+        },
+        {
+          "expr": "4x - 15",
+          "items": [],
+          "kind": "angle_measure",
+          "quote": "angles measuring (4x - 15)\u00b0"
+        },
+        {
+          "expr": "2x + 9",
+          "items": [],
+          "kind": "angle_measure",
+          "quote": "and (2x + 9)\u00b0"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [
+        {
+          "item": "first parallel line",
+          "kind": "line"
+        },
+        {
+          "item": "second parallel line",
+          "kind": "line"
+        },
+        {
+          "item": "transversal",
+          "kind": "line"
+        }
+      ],
+      "segments": [],
+      "triangles": []
     }
   },
   "a9138bcf40221a3aed831b61e10e1a07": {
@@ -4223,6 +7677,74 @@
       }
     }
   },
+  "b1a648b85c1d308e45e3225871c927fb": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nIn $\\triangle XYZ$, $M$ is the midpoint ",
+      "recorded_at": 1794613965.867575
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "parallel_groups": [
+            [
+              "MN",
+              "YZ"
+            ]
+          ],
+          "points": {
+            "M": [
+              2,
+              3.5
+            ],
+            "N": [
+              6,
+              3.5
+            ],
+            "X": [
+              4,
+              7
+            ],
+            "Y": [
+              0,
+              0
+            ],
+            "Z": [
+              8,
+              0
+            ]
+          },
+          "segments": [
+            "XY",
+            "YZ",
+            "XZ",
+            "MN"
+          ],
+          "shape": "construction",
+          "side_labels": {
+            "MN": "3k - 2",
+            "YZ": "8k - 12"
+          },
+          "tick_groups": [
+            [
+              "XM",
+              "MY"
+            ],
+            [
+              "XN",
+              "NZ"
+            ]
+          ],
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": null
+      },
+      "reply": "Here's a figure for the question showing triangle XYZ with midpoints M and N marked, the midsegment MN, and tick marks indicating the midpoint relationships."
+    }
+  },
   "b1f0726225379708d9eb09fe23063194": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -4448,6 +7970,279 @@
       ]
     }
   },
+  "b60c7cce6b1c592eaf5be55b98b558d2": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, the angle bisectors from all three vertices meet at the incenter $I$. If $\\angle BAC = ",
+      "recorded_at": 1794613969.245791
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "BIC",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "BAC"
+          ],
+          "kind": "angle_measure",
+          "quote": "\u2220BAC = 72\u00b0",
+          "value": 72
+        },
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "angle_measure",
+          "quote": "\u2220ABC = 58\u00b0",
+          "value": 58
+        },
+        {
+          "items": [
+            "AI",
+            "BAC"
+          ],
+          "kind": "bisects_angle",
+          "quote": "the angle bisectors from all three vertices meet at the incenter I"
+        },
+        {
+          "items": [
+            "BI",
+            "ABC"
+          ],
+          "kind": "bisects_angle",
+          "quote": "the angle bisectors from all three vertices meet at the incenter I"
+        },
+        {
+          "items": [
+            "CI",
+            "BCA"
+          ],
+          "kind": "bisects_angle",
+          "quote": "the angle bisectors from all three vertices meet at the incenter I"
+        },
+        {
+          "items": [
+            "I"
+          ],
+          "kind": "other",
+          "quote": "the angle bisectors from all three vertices meet at the incenter I"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "I"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [
+        "AI",
+        "BI",
+        "CI"
+      ],
+      "requested": [
+        {
+          "item": "ABC",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "b8369446747a7d68e62cfc20ff023bf6": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle XYZ$, $M$ is the midpoint of $\\overline{XY}$ and $N$ is the midpoint of $\\overline{XZ}$. If $",
+      "recorded_at": 1794613971.554254
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "k",
+          "kind": "other"
+        },
+        {
+          "item": "YZ",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "XY"
+          ],
+          "kind": "midpoint",
+          "point": "M",
+          "quote": "M is the midpoint of XY"
+        },
+        {
+          "items": [
+            "XZ"
+          ],
+          "kind": "midpoint",
+          "point": "N",
+          "quote": "N is the midpoint of XZ"
+        },
+        {
+          "expr": "3k - 2",
+          "items": [
+            "MN"
+          ],
+          "kind": "equal_length",
+          "quote": "MN = 3k - 2"
+        },
+        {
+          "expr": "8k - 12",
+          "items": [
+            "YZ"
+          ],
+          "kind": "equal_length",
+          "quote": "YZ = 8k - 12"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "X",
+        "Y",
+        "Z",
+        "M",
+        "N"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [
+        {
+          "item": "XYZ",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "XY",
+        "XZ",
+        "MN",
+        "YZ"
+      ],
+      "triangles": [
+        "XYZ"
+      ]
+    }
+  },
+  "bd061ec07e9364e86afbebe511f803c4": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nTwo parallel lines are cut by a transversal. One pair of co-interior angles measures $(5x + 2y)\u00b0$ and $(3x ",
+      "recorded_at": 1794613953.8650858
+    },
+    "response": {
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        },
+        {
+          "item": "y",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "",
+            ""
+          ],
+          "kind": "parallel",
+          "quote": "Two parallel lines are cut by a transversal."
+        },
+        {
+          "items": [
+            "",
+            "",
+            ""
+          ],
+          "kind": "transversal",
+          "quote": "Two parallel lines are cut by a transversal."
+        },
+        {
+          "items": [
+            "",
+            ""
+          ],
+          "kind": "same_side_interior",
+          "quote": "One pair of co-interior angles measures (5x + 2y)\u00b0 and (3x - y + 40)\u00b0"
+        },
+        {
+          "expr": "5x + 2y",
+          "items": [
+            ""
+          ],
+          "kind": "angle_measure",
+          "quote": "One pair of co-interior angles measures (5x + 2y)\u00b0 and (3x - y + 40)\u00b0"
+        },
+        {
+          "expr": "3x - y + 40",
+          "items": [
+            ""
+          ],
+          "kind": "angle_measure",
+          "quote": "One pair of co-interior angles measures (5x + 2y)\u00b0 and (3x - y + 40)\u00b0"
+        },
+        {
+          "items": [
+            "",
+            ""
+          ],
+          "kind": "corresponding",
+          "quote": "a pair of corresponding angles gives the additional condition that the first angle equals (7x - 10)\u00b0"
+        },
+        {
+          "expr": "7x - 10",
+          "items": [
+            ""
+          ],
+          "kind": "angle_measure",
+          "quote": "the first angle equals (7x - 10)\u00b0"
+        }
+      ],
+      "lines": [
+        "",
+        "",
+        ""
+      ],
+      "points": [],
+      "prove": [],
+      "requested": [
+        {
+          "item": "",
+          "kind": "line"
+        },
+        {
+          "item": "",
+          "kind": "line"
+        },
+        {
+          "item": "",
+          "kind": "line"
+        }
+      ]
+    }
+  },
   "bde765bb9b6a69931078b202edc0b1e2": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -4514,6 +8309,59 @@
         "ABD",
         "CBD"
       ]
+    }
+  },
+  "be1afb01be7fcd6a372cc56c5ca31baf": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\n$\\overrightarrow{QS}$ bisects $\\angle PQ",
+      "recorded_at": 1794613935.350333
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "angle_labels": {
+            "PQS": "7x \u2212 4",
+            "SQR": "4x + 17"
+          },
+          "arc_groups": [
+            [
+              "PQS",
+              "SQR"
+            ]
+          ],
+          "points": {
+            "P": [
+              -3.572,
+              3.572
+            ],
+            "Q": [
+              0,
+              0
+            ],
+            "R": [
+              3.572,
+              3.572
+            ],
+            "S": [
+              0,
+              5
+            ]
+          },
+          "segments": [
+            "QP",
+            "QS",
+            "QR"
+          ],
+          "shape": "construction",
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": null
+      },
+      "reply": "Here's a diagram showing the angle bisector setup with the two half-angles marked as congruent."
     }
   },
   "c03e9b585f9efeb58a91807c65b7fe21": {
@@ -4649,6 +8497,92 @@
       "triangles": [
         "ABC",
         "CDA"
+      ]
+    }
+  },
+  "c17befa355ff33ec39e15d42c173fcfe": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle PQR$, the interior angles satisfy $m\\angle P = (3x + 10)\u00b0$, $m\\angle Q = (2x - 5)\u00b0$, and $\\an",
+      "recorded_at": 1794613969.132104
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "value of x",
+          "kind": "other"
+        },
+        {
+          "item": "P",
+          "kind": "angle"
+        },
+        {
+          "item": "Q",
+          "kind": "angle"
+        },
+        {
+          "item": "exterior angle at P",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "expr": "3x + 10",
+          "items": [
+            "P"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220P = (3x + 10)\u00b0"
+        },
+        {
+          "expr": "2x - 5",
+          "items": [
+            "Q"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220Q = (2x - 5)\u00b0"
+        },
+        {
+          "items": [
+            "R"
+          ],
+          "kind": "right_angle",
+          "point": "R",
+          "quote": "\u2220R is a right angle"
+        },
+        {
+          "items": [
+            "RP"
+          ],
+          "kind": "other",
+          "quote": "An exterior angle is formed at vertex P by extending side RP beyond P"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "P",
+        "Q",
+        "R"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [
+        {
+          "item": "PQR",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "RP",
+        "PQ",
+        "QR"
+      ],
+      "triangles": [
+        "PQR"
       ]
     }
   },
@@ -4874,6 +8808,517 @@
       ]
     }
   },
+  "cb1d288459179add70f21e278f5b87d3": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn right triangle $PQR$ with the right angle at $Q$, altitude $\\overline{QS}$ is drawn to hypotenuse $\\over",
+      "recorded_at": 1794613979.910326
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "QS",
+          "kind": "segment"
+        },
+        {
+          "item": "PQ",
+          "kind": "segment"
+        },
+        {
+          "item": "QR",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "PQR"
+          ],
+          "kind": "right_triangle",
+          "point": "Q",
+          "quote": "right triangle PQR with the right angle at Q"
+        },
+        {
+          "items": [
+            "PR"
+          ],
+          "kind": "on_segment",
+          "point": "S",
+          "quote": "altitude QS is drawn to hypotenuse PR"
+        },
+        {
+          "items": [
+            "QS",
+            "PR"
+          ],
+          "kind": "perpendicular",
+          "point": "S",
+          "quote": "altitude QS is drawn to hypotenuse PR"
+        },
+        {
+          "items": [
+            "PS"
+          ],
+          "kind": "equal_length",
+          "quote": "PS = 4",
+          "value": 4
+        },
+        {
+          "items": [
+            "SR"
+          ],
+          "kind": "equal_length",
+          "quote": "SR = 9",
+          "value": 9
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "P",
+        "Q",
+        "R",
+        "S"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [
+        {
+          "item": "PQR",
+          "kind": "triangle"
+        },
+        {
+          "item": "QS",
+          "kind": "segment"
+        },
+        {
+          "item": "PR",
+          "kind": "segment"
+        },
+        {
+          "item": "S",
+          "kind": "point"
+        }
+      ],
+      "segments": [
+        "QS",
+        "PR",
+        "PS",
+        "SR",
+        "PQ",
+        "QR"
+      ],
+      "triangles": [
+        "PQR"
+      ]
+    }
+  },
+  "cc2166afab8d8bdbe3904789e2df0048": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\n$\\overrightarrow{QS}$ bisects $\\angle PQR$. If $m\\angle PQS = 7x - 4$ and $m\\angle SQR = 4x + 17$, find $m\\",
+      "recorded_at": 1794613939.810306
+    },
+    "response": {
+      "find": [
+        {
+          "item": "PQR",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "QS",
+            "PQR"
+          ],
+          "kind": "bisects_angle",
+          "quote": "Ray QS bisects angle PQR"
+        },
+        {
+          "expr": "7x - 4",
+          "items": [
+            "PQS"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220PQS = 7x - 4"
+        },
+        {
+          "expr": "4x + 17",
+          "items": [
+            "SQR"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220SQR = 4x + 17"
+        }
+      ],
+      "points": [
+        "P",
+        "Q",
+        "R",
+        "S"
+      ],
+      "prove": [],
+      "rays": [
+        "QS"
+      ],
+      "requested": [
+        {
+          "item": "QS",
+          "kind": "ray"
+        },
+        {
+          "item": "PQR",
+          "kind": "angle"
+        },
+        {
+          "item": "PQS",
+          "kind": "angle"
+        },
+        {
+          "item": "SQR",
+          "kind": "angle"
+        }
+      ]
+    }
+  },
+  "cc7bfb21d9c615edc0a0735ac7985884": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nIn isosceles $\\triangle ABC$, $AB = AC$.",
+      "recorded_at": 1794613973.405437
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "angle_labels": {
+            "ABC": "(5x \u2212 3)\u00b0",
+            "ACB": "(5x \u2212 3)\u00b0",
+            "BAC": "(4x + 6)\u00b0"
+          },
+          "points": {
+            "A": [
+              4,
+              7
+            ],
+            "B": [
+              0,
+              0
+            ],
+            "C": [
+              8,
+              0
+            ]
+          },
+          "segments": [
+            "AB",
+            "AC",
+            "BC"
+          ],
+          "shape": "construction",
+          "tick_groups": [
+            [
+              "AB",
+              "AC"
+            ]
+          ],
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": null
+      },
+      "reply": "Here's the isosceles triangle figure with the vertex and base angle expressions labeled as given in the problem."
+    }
+  },
+  "cdb3e2aa1156aba3e51d74f26b67713b": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nLines $a \\parallel b$ are cut by two transversals, forming a triangle between them. The two base angles of ",
+      "recorded_at": 1794613958.492335
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        },
+        {
+          "item": "A",
+          "kind": "angle"
+        },
+        {
+          "item": "B",
+          "kind": "angle"
+        },
+        {
+          "item": "C",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "a",
+            "b"
+          ],
+          "kind": "parallel",
+          "quote": "Lines a \u2225 b"
+        },
+        {
+          "items": [
+            "",
+            "a",
+            "b"
+          ],
+          "kind": "transversal",
+          "quote": "cut by two transversals, forming a triangle between them"
+        },
+        {
+          "items": [
+            "",
+            "a",
+            "b"
+          ],
+          "kind": "transversal",
+          "quote": "cut by two transversals, forming a triangle between them"
+        },
+        {
+          "items": [
+            "a"
+          ],
+          "kind": "on_line",
+          "point": "A",
+          "quote": "The two base angles of the triangle (one on line a, one on line b)"
+        },
+        {
+          "items": [
+            "b"
+          ],
+          "kind": "on_line",
+          "point": "B",
+          "quote": "The two base angles of the triangle (one on line a, one on line b)"
+        },
+        {
+          "expr": "4x + 9",
+          "items": [
+            "A"
+          ],
+          "kind": "angle_measure",
+          "quote": "The two base angles of the triangle (one on line a, one on line b) measure (4x + 9)\u00b0"
+        },
+        {
+          "expr": "6x - 11",
+          "items": [
+            "B"
+          ],
+          "kind": "angle_measure",
+          "quote": "and (6x - 11)\u00b0"
+        },
+        {
+          "expr": "2x + 18",
+          "items": [
+            "C"
+          ],
+          "kind": "angle_measure",
+          "quote": "the interior angle of the triangle at the apex (between the two transversals) measures (2x + 18)\u00b0"
+        }
+      ],
+      "lines": [
+        "a",
+        "b"
+      ],
+      "named_lines": [
+        "a",
+        "b"
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "expr": "(4x+9) + (6x-11) + (2x+18) = 180",
+          "items": [],
+          "kind": "other",
+          "quote": "verify that the angles sum to 180\u00b0"
+        }
+      ],
+      "rays": [],
+      "requested": [
+        {
+          "item": "a",
+          "kind": "line"
+        },
+        {
+          "item": "b",
+          "kind": "line"
+        },
+        {
+          "item": "ACB",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [],
+      "triangles": [
+        "ACE"
+      ]
+    }
+  },
+  "cdf1c6e91f87b79865658ff05e57e40c": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nIn $\\triangle PQR$, the interior angles ",
+      "recorded_at": 1794613963.183289
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "angle_labels": {
+            "PQR": "(2x\u22125)\u00b0",
+            "QPR": "(3x+10)\u00b0",
+            "QRP": "90\u00b0"
+          },
+          "points": {
+            "P": [
+              0,
+              3
+            ],
+            "Q": [
+              5.195,
+              0
+            ],
+            "R": [
+              0,
+              0
+            ],
+            "_ext": [
+              -1.5,
+              3
+            ]
+          },
+          "right_angles": [
+            "QPR"
+          ],
+          "segments": [
+            "PQ",
+            "QR",
+            "RP",
+            "P_ext"
+          ],
+          "shape": "construction",
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": null
+      },
+      "reply": "Here's the figure for the triangle with the exterior angle at P marked."
+    }
+  },
+  "ce883db6da2c9d0bd9edc807c88ba309": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle PQR$, ray $QS$ bisects $\\angle PQR$ and intersects $\\overline{PR}$ at point $S$. If $PQ = 12$",
+      "recorded_at": 1794613977.620571
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "PS",
+          "kind": "segment"
+        },
+        {
+          "item": "SR",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "QS",
+            "PQR"
+          ],
+          "kind": "bisects_angle",
+          "quote": "ray QS bisects \u2220PQR"
+        },
+        {
+          "items": [
+            "PR"
+          ],
+          "kind": "on_segment",
+          "point": "S",
+          "quote": "intersects PR at point S"
+        },
+        {
+          "items": [
+            "PQ"
+          ],
+          "kind": "equal_length",
+          "quote": "PQ = 12",
+          "value": 12
+        },
+        {
+          "items": [
+            "QR"
+          ],
+          "kind": "equal_length",
+          "quote": "QR = 18",
+          "value": 18
+        },
+        {
+          "items": [
+            "PR"
+          ],
+          "kind": "equal_length",
+          "quote": "PR = 25",
+          "value": 25
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "P",
+        "Q",
+        "R",
+        "S"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [
+        "QS"
+      ],
+      "requested": [
+        {
+          "item": "PQR",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "QS",
+        "PR",
+        "PQ",
+        "QR"
+      ],
+      "triangles": [
+        "PQR"
+      ]
+    }
+  },
   "d2fb850c89aac76418f6d78ace2bf0d1": {
     "meta": {
       "mode": "bank_chat",
@@ -4986,6 +9431,77 @@
       "reply": "Here's a figure showing the two right triangles sharing hypotenuse BC, with right angles at A and D, and the equal legs AB = DB marked."
     }
   },
+  "d4659d73c7ec0f5c1f0072fef07d439d": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn circle $O$, inscribed angle $\\angle BAC = 38\u00b0$. Find the measure of arc $BC$. Then find the measure of t",
+      "recorded_at": 1794613932.82034
+    },
+    "response": {
+      "circles": [
+        "O"
+      ],
+      "find": [
+        {
+          "item": "measure of arc BC",
+          "kind": "other"
+        },
+        {
+          "item": "BOC",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "circle": "O",
+          "items": [
+            "A",
+            "B",
+            "C"
+          ],
+          "kind": "on_circle",
+          "quote": "In circle O"
+        },
+        {
+          "circle": "O",
+          "items": [
+            "BAC"
+          ],
+          "kind": "inscribed_angle",
+          "quote": "inscribed angle \u2220BAC = 38\u00b0",
+          "value": 38
+        },
+        {
+          "circle": "O",
+          "items": [
+            "BOC"
+          ],
+          "kind": "central_angle",
+          "quote": "the central angle \u2220BOC"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "O",
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [
+        {
+          "item": "O",
+          "kind": "circle"
+        }
+      ],
+      "segments": [],
+      "triangles": []
+    }
+  },
   "d59d1908e82dc8f53c492c09d4c6defc": {
     "meta": {
       "mode": "bank_chat",
@@ -5054,6 +9570,555 @@
         "solution_steps": null
       },
       "reply": "Here's a figure for the problem with two triangles showing the given congruent sides (tick marks) and congruent included angles (arc marks)."
+    }
+  },
+  "d7bac93610288bbf471c5a9a3f754567": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nTwo lines $\\ell_1$ and $\\ell_2$ are cut by a transversal. The transversal forms an angle of $3x + 15$ degre",
+      "recorded_at": 1794613949.288074
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "value of x that makes \u21131 \u2225 \u21132",
+          "kind": "other"
+        },
+        {
+          "item": "theorem or postulate that justifies the answer",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "",
+            "\u21131",
+            "\u21132"
+          ],
+          "kind": "transversal",
+          "quote": "Two lines \u21131 and \u21132 are cut by a transversal."
+        },
+        {
+          "expr": "3x + 15",
+          "items": [],
+          "kind": "angle_measure",
+          "quote": "The transversal forms an angle of 3x + 15 degrees with \u21131"
+        },
+        {
+          "expr": "5x - 9",
+          "items": [],
+          "kind": "angle_measure",
+          "quote": "an angle of 5x - 9 degrees with \u21132 at the corresponding positions"
+        },
+        {
+          "items": [],
+          "kind": "corresponding",
+          "quote": "an angle of 5x - 9 degrees with \u21132 at the corresponding positions"
+        }
+      ],
+      "lines": [],
+      "named_lines": [
+        "\u21131",
+        "\u21132"
+      ],
+      "points": [],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [
+        {
+          "item": "\u21131",
+          "kind": "line"
+        },
+        {
+          "item": "\u21132",
+          "kind": "line"
+        },
+        {
+          "item": "transversal",
+          "kind": "line"
+        }
+      ],
+      "segments": [],
+      "triangles": []
+    }
+  },
+  "d8fc52f57b3b47a690339d08f8e56054": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nThe three interior angles of a triangle ",
+      "recorded_at": 1794613962.423677
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "angle_labels": {
+            "ABC": "(2x-5)\u00b0",
+            "BAC": "(3x+10)\u00b0",
+            "BCA": "(x+15)\u00b0"
+          },
+          "points": {
+            "A": [
+              0,
+              0
+            ],
+            "B": [
+              0,
+              4
+            ],
+            "C": [
+              3.444,
+              0
+            ]
+          },
+          "right_angles": [
+            "BAC"
+          ],
+          "segments": [
+            "AB",
+            "BC",
+            "CA"
+          ],
+          "shape": "construction",
+          "type": "geometry"
+        }
+      },
+      "reply": "Here's a triangle figure with the three angle expressions labeled. Since one angle works out to exactly 90\u00b0, I've placed the triangle as a right triangle with the right angle at A."
+    }
+  },
+  "e00650384772bd73b283edfbf4b88cb3": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle PQR$, the interior angles satisfy $m\\angle P = (3x + 10)\u00b0$, $m\\angle Q = (2x - 5)\u00b0$, and $\\an",
+      "recorded_at": 1794613969.173532
+    },
+    "response": {
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        },
+        {
+          "item": "P",
+          "kind": "angle"
+        },
+        {
+          "item": "Q",
+          "kind": "angle"
+        },
+        {
+          "item": "exterior angle at P",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "expr": "3x + 10",
+          "items": [
+            "P"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220P = (3x + 10)\u00b0"
+        },
+        {
+          "expr": "2x - 5",
+          "items": [
+            "Q"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220Q = (2x - 5)\u00b0"
+        },
+        {
+          "items": [
+            "R"
+          ],
+          "kind": "right_angle",
+          "point": "R",
+          "quote": "\u2220R is a right angle"
+        },
+        {
+          "items": [
+            "PQR"
+          ],
+          "kind": "right_triangle",
+          "point": "R",
+          "quote": "\u2220R is a right angle"
+        },
+        {
+          "items": [
+            "RP"
+          ],
+          "kind": "other",
+          "quote": "An exterior angle is formed at vertex P by extending side RP beyond P"
+        }
+      ],
+      "points": [
+        "P",
+        "Q",
+        "R"
+      ],
+      "prove": [],
+      "requested": [
+        {
+          "item": "PQR",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "RP"
+      ],
+      "triangles": [
+        "PQR"
+      ]
+    }
+  },
+  "e3c13a0911cccee88d23b1a14f3182cb": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nAn exterior angle of a triangle measures $(11x - 4)\u00b0$. The two non-adjacent interior angles measure $(4x + ",
+      "recorded_at": 1794613965.166601
+    },
+    "response": {
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        },
+        {
+          "item": "BAC",
+          "kind": "angle"
+        },
+        {
+          "item": "BCA",
+          "kind": "angle"
+        },
+        {
+          "item": "ABC",
+          "kind": "angle"
+        },
+        {
+          "item": "CBD",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "expr": "11x - 4",
+          "items": [
+            "CBD"
+          ],
+          "kind": "angle_measure",
+          "quote": "An exterior angle of a triangle measures (11x - 4)\u00b0"
+        },
+        {
+          "expr": "4x + 9",
+          "items": [
+            "BAC"
+          ],
+          "kind": "angle_measure",
+          "quote": "The two non-adjacent interior angles measure (4x + 9)\u00b0 and (5x + 3)\u00b0"
+        },
+        {
+          "expr": "5x + 3",
+          "items": [
+            "BCA"
+          ],
+          "kind": "angle_measure",
+          "quote": "The two non-adjacent interior angles measure (4x + 9)\u00b0 and (5x + 3)\u00b0"
+        },
+        {
+          "items": [
+            "BC",
+            "BD"
+          ],
+          "kind": "opposite_rays",
+          "quote": "An exterior angle of a triangle"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "requested": [
+        {
+          "item": "ABC",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [
+        "BD"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "e439dd7db6b5e4b73ca9808f555e3fa4": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nTwo lines intersect forming two pairs of vertical angles. One angle has measure $3x + 20$ and its vertical ",
+      "recorded_at": 1794613931.804986
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "measures of all four angles formed at the intersection",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [],
+          "kind": "intersect",
+          "quote": "Two lines intersect forming two pairs of vertical angles."
+        },
+        {
+          "items": [],
+          "kind": "vertical_angles",
+          "quote": "Two lines intersect forming two pairs of vertical angles."
+        },
+        {
+          "expr": "3x + 20",
+          "items": [],
+          "kind": "angle_measure",
+          "quote": "One angle has measure 3x + 20"
+        },
+        {
+          "expr": "5x - 8",
+          "items": [],
+          "kind": "angle_measure",
+          "quote": "its vertical angle has measure 5x - 8"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [
+        {
+          "item": "drawing of the figure",
+          "kind": "line"
+        }
+      ],
+      "segments": [],
+      "triangles": []
+    }
+  },
+  "e5ab19d4c90ae03892c1f97e8221bef5": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nRay $\\overrightarrow{BD}$ lies in the interior of $\\angle ABC$. If $m\\angle ABD = 4x + 6$, $m\\angle DBC = 2",
+      "recorded_at": 1794613940.654222
+    },
+    "response": {
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        },
+        {
+          "item": "ABD",
+          "kind": "angle"
+        },
+        {
+          "item": "DBC",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "BD"
+          ],
+          "kind": "other",
+          "quote": "Ray BD lies in the interior of \u2220ABC"
+        },
+        {
+          "expr": "4x + 6",
+          "items": [
+            "ABD"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220ABD = 4x + 6"
+        },
+        {
+          "expr": "2x + 14",
+          "items": [
+            "DBC"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220DBC = 2x + 14"
+        },
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220ABC = 74\u00b0",
+          "value": 74
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "rays": [
+        "BD"
+      ],
+      "requested": [
+        {
+          "item": "BD",
+          "kind": "ray"
+        },
+        {
+          "item": "ABC",
+          "kind": "angle"
+        },
+        {
+          "item": "ABD",
+          "kind": "angle"
+        },
+        {
+          "item": "DBC",
+          "kind": "angle"
+        }
+      ]
+    }
+  },
+  "e96eb4908c9d6af3de672d76ffda8ba1": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nTriangle $ABC$ has vertices $A(0, 0)$, $B(6, 0)$, and $C(3, 4)$. Find the exact perimeter of $\\triangle ABC",
+      "recorded_at": 1794613976.83376
+    },
+    "response": {
+      "find": [
+        {
+          "item": "exact perimeter of \u25b3ABC",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "expr": "A = (0, 0)",
+          "items": [
+            "A"
+          ],
+          "kind": "other",
+          "quote": "Triangle ABC has vertices A(0, 0)"
+        },
+        {
+          "expr": "B = (6, 0)",
+          "items": [
+            "B"
+          ],
+          "kind": "other",
+          "quote": "B(6, 0)"
+        },
+        {
+          "expr": "C = (3, 4)",
+          "items": [
+            "C"
+          ],
+          "kind": "other",
+          "quote": "C(3, 4)"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "prove": [],
+      "requested": [
+        {
+          "item": "ABC",
+          "kind": "triangle"
+        }
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "e9e7e3fe2325e0737b6a7e17dd33a760": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nTwo lines intersect forming two pairs of vertical angles. One angle has measure $3x + 20$ and its vertical ",
+      "recorded_at": 1794613931.1550689
+    },
+    "response": {
+      "find": [
+        {
+          "item": "measures of all four angles formed at the intersection",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "",
+            ""
+          ],
+          "kind": "intersect",
+          "quote": "Two lines intersect forming two pairs of vertical angles."
+        },
+        {
+          "items": [
+            "",
+            ""
+          ],
+          "kind": "vertical_angles",
+          "quote": "Two lines intersect forming two pairs of vertical angles."
+        },
+        {
+          "expr": "3x + 20",
+          "items": [
+            ""
+          ],
+          "kind": "angle_measure",
+          "quote": "One angle has measure 3x + 20"
+        },
+        {
+          "expr": "5x - 8",
+          "items": [
+            ""
+          ],
+          "kind": "angle_measure",
+          "quote": "its vertical angle has measure 5x - 8"
+        }
+      ],
+      "points": [],
+      "prove": [],
+      "requested": [
+        {
+          "item": "",
+          "kind": "line"
+        },
+        {
+          "item": "",
+          "kind": "line"
+        }
+      ]
     }
   },
   "e9efe5ebd2884eb87ba0e9dd6e61bc53": {
@@ -5127,6 +10192,169 @@
         "ABC",
         "CDA"
       ]
+    }
+  },
+  "ea74e3a142eca1d222d229065b3709d0": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\n$\\overrightarrow{QS}$ bisects $\\angle PQR$. If $m\\angle PQS = 7x - 4$ and $m\\angle SQR = 4x + 17$, find $m\\",
+      "recorded_at": 1794613960.879454
+    },
+    "response": {
+      "figure_spec": {
+        "angle_labels": {
+          "PQS": "7x \u2212 4",
+          "SQR": "4x + 17"
+        },
+        "arc_groups": [
+          [
+            "PQS",
+            "SQR"
+          ]
+        ],
+        "points": {
+          "P": [
+            -3.536,
+            3.536
+          ],
+          "Q": [
+            0,
+            0
+          ],
+          "R": [
+            3.536,
+            3.536
+          ],
+          "S": [
+            0,
+            5
+          ]
+        },
+        "rays": [
+          "QS"
+        ],
+        "segments": [
+          "QP",
+          "QR"
+        ],
+        "shape": "construction",
+        "type": "geometry"
+      }
+    }
+  },
+  "eb0136c89c47234df25c2673a058d858": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nThe three interior angles of a triangle measure $(3x + 10)\u00b0$, $(2x - 5)\u00b0$, and $(x + 15)\u00b0$. Find the value ",
+      "recorded_at": 1794613968.162784
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        },
+        {
+          "item": "(3x+10)\u00b0",
+          "kind": "angle"
+        },
+        {
+          "item": "(2x-5)\u00b0",
+          "kind": "angle"
+        },
+        {
+          "item": "(x+15)\u00b0",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "expr": "3x + 10",
+          "items": [],
+          "kind": "angle_measure",
+          "quote": "The three interior angles of a triangle measure (3x + 10)\u00b0"
+        },
+        {
+          "expr": "2x - 5",
+          "items": [],
+          "kind": "angle_measure",
+          "quote": "The three interior angles of a triangle measure \u2026 (2x - 5)\u00b0"
+        },
+        {
+          "expr": "x + 15",
+          "items": [],
+          "kind": "angle_measure",
+          "quote": "The three interior angles of a triangle measure \u2026 and (x + 15)\u00b0"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [
+        {
+          "item": "unnamed triangle",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [],
+      "triangles": []
+    }
+  },
+  "eb60d6c0884c3037cfced484db787207": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nAn exterior angle of a triangle measures $(8x + 5)\u00b0$. The two non-adjacent interior angles measure $(3x + 1",
+      "recorded_at": 1794613966.4587572
+    },
+    "response": {
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "expr": "8x + 5",
+          "items": [],
+          "kind": "other",
+          "quote": "An exterior angle of a triangle measures (8x + 5)\u00b0"
+        },
+        {
+          "expr": "8x + 5",
+          "items": [],
+          "kind": "angle_measure",
+          "quote": "An exterior angle of a triangle measures (8x + 5)\u00b0"
+        },
+        {
+          "expr": "3x + 12",
+          "items": [],
+          "kind": "angle_measure",
+          "quote": "The two non-adjacent interior angles measure (3x + 12)\u00b0 and (4x - 7)\u00b0"
+        },
+        {
+          "expr": "4x - 7",
+          "items": [],
+          "kind": "angle_measure",
+          "quote": "The two non-adjacent interior angles measure (3x + 12)\u00b0 and (4x - 7)\u00b0"
+        }
+      ],
+      "points": [],
+      "prove": [],
+      "requested": [
+        {
+          "item": "<UNKNOWN>",
+          "kind": "triangle"
+        }
+      ],
+      "triangles": []
     }
   },
   "eba223f280d6fa6462c142aa408cff12": {
@@ -5205,6 +10433,135 @@
       "triangles": []
     }
   },
+  "ec298ce9daab4e667592d357e8fb8368": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nTwo angles are supplementary. The measur",
+      "recorded_at": 1794613927.681721
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "angle_labels": {
+            "AVC": "4x + 15\u00b0",
+            "CVB": "x"
+          },
+          "arc_groups": [],
+          "points": {
+            "A": [
+              0,
+              0
+            ],
+            "B": [
+              8,
+              0
+            ],
+            "C": [
+              5.268,
+              2.571
+            ],
+            "V": [
+              4,
+              0
+            ]
+          },
+          "rays": [
+            "VC"
+          ],
+          "segments": [
+            "AV",
+            "VB"
+          ],
+          "shape": "construction",
+          "type": "geometry"
+        }
+      },
+      "reply": "The diagram tool can't draw abstract angle relationships like supplementary angles without a geometric context (e.g., a straight line or intersecting lines). I've added a figure showing two supplementary angles on a straight line, with the smaller angle labeled $x$ and the larger labeled $4x+15\u00b0$, which matches the problem setup perfectly."
+    }
+  },
+  "edd4cc6d1dda0af5488c4565e7d88179": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nTwo parallel lines are cut by a transver",
+      "recorded_at": 1794613937.302374
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "angle_labels": {
+            "PQD": "(5x - 8)\u00b0",
+            "T1PB": "(3x + 12)\u00b0"
+          },
+          "arc_groups": [
+            [
+              "T1PB",
+              "PQD"
+            ]
+          ],
+          "lines": [
+            {
+              "through": [
+                "T1",
+                "T2"
+              ]
+            }
+          ],
+          "parallel_groups": [
+            [
+              "AB",
+              "CD"
+            ]
+          ],
+          "points": {
+            "A": [
+              0,
+              6
+            ],
+            "B": [
+              8,
+              6
+            ],
+            "C": [
+              0,
+              2
+            ],
+            "D": [
+              8,
+              2
+            ],
+            "P": [
+              2.667,
+              6
+            ],
+            "Q": [
+              5.333,
+              2
+            ],
+            "T1": [
+              2,
+              8
+            ],
+            "T2": [
+              6,
+              0
+            ]
+          },
+          "segments": [
+            "AB",
+            "CD"
+          ],
+          "shape": "construction",
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": null
+      },
+      "reply": "Here's a diagram showing two parallel lines cut by a transversal, with the two corresponding angles labeled."
+    }
+  },
   "ee4e4f3e4ca26cc485ff4069f131582a": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -5271,6 +10628,73 @@
       "triangles": [
         "ABC",
         "CDA"
+      ]
+    }
+  },
+  "ef201c12591060bd03466d36a7d34d25": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, the exterior angle at vertex $C$ measures $(8x + 4)\u00b0$. The two non-adjacent interior an",
+      "recorded_at": 1794613959.188659
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        },
+        {
+          "item": "exterior angle at C",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "expr": "8x + 4",
+          "items": [
+            "ACD"
+          ],
+          "kind": "angle_measure",
+          "quote": "the exterior angle at vertex C measures (8x + 4)\u00b0"
+        },
+        {
+          "expr": "3x + 9",
+          "items": [
+            "A"
+          ],
+          "kind": "angle_measure",
+          "quote": "The two non-adjacent interior angles measure (3x + 9)\u00b0"
+        },
+        {
+          "expr": "4x - 1",
+          "items": [
+            "B"
+          ],
+          "kind": "angle_measure",
+          "quote": "and (4x - 1)\u00b0"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [
+        {
+          "item": "ABC",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [],
+      "triangles": [
+        "ABC"
       ]
     }
   },
@@ -5364,6 +10788,74 @@
         "ABC",
         "DEF"
       ]
+    }
+  },
+  "f115ecbbf94cdff8996d51f0993b3578": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nA circle has radius $r = 8$ cm. A centra",
+      "recorded_at": 1794613927.0360131
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "angle_labels": {
+            "AOB": "\\frac{3\\pi}{4}"
+          },
+          "arcs": [
+            {
+              "center": "O",
+              "endpoints": [
+                "A",
+                "B"
+              ]
+            }
+          ],
+          "circles": [
+            {
+              "center": "O",
+              "radius": 8
+            }
+          ],
+          "points": {
+            "A": [
+              8,
+              0
+            ],
+            "B": [
+              -5.657,
+              5.657
+            ],
+            "O": [
+              0,
+              0
+            ]
+          },
+          "segments": [
+            "OA",
+            "OB"
+          ],
+          "shaded": [
+            {
+              "sector": {
+                "center": "O",
+                "endpoints": [
+                  "A",
+                  "B"
+                ]
+              }
+            }
+          ],
+          "shape": "construction",
+          "side_labels": {
+            "OA": "8 cm",
+            "OB": "8 cm"
+          },
+          "type": "geometry"
+        }
+      },
+      "reply": "Here's a diagram showing the circle with radius 8 cm, the central angle of 3\u03c0/4 radians, and the shaded sector."
     }
   },
   "f44ff4609c0b42d15de60978584190d9": {
@@ -5460,6 +10952,132 @@
         "solution_steps": null
       },
       "reply": "Here's a diagram showing the two parallel lines m and n cut by transversal t, with the angle bisector from A meeting line n at point P, and the angle \u03b8 marked at P."
+    }
+  },
+  "f477ac179b7cf13633a80d81d42757b2": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nThe three interior angles of a triangle measure $(3x + 10)\u00b0$, $(2x - 5)\u00b0$, and $(x + 15)\u00b0$. Find the value ",
+      "recorded_at": 1794613967.786581
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        },
+        {
+          "item": "BAC",
+          "kind": "angle"
+        },
+        {
+          "item": "ABC",
+          "kind": "angle"
+        },
+        {
+          "item": "BCA",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "expr": "3x + 10",
+          "items": [
+            "BAC"
+          ],
+          "kind": "angle_measure",
+          "quote": "The three interior angles of a triangle measure (3x + 10)\u00b0"
+        },
+        {
+          "expr": "2x - 5",
+          "items": [
+            "ABC"
+          ],
+          "kind": "angle_measure",
+          "quote": "The three interior angles of a triangle measure \u2026 (2x - 5)\u00b0"
+        },
+        {
+          "expr": "x + 15",
+          "items": [
+            "BCA"
+          ],
+          "kind": "angle_measure",
+          "quote": "The three interior angles of a triangle measure \u2026 and (x + 15)\u00b0"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [
+        {
+          "item": "ABC",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "f5b58e0638f7d74bd6c30d4d099d3cc1": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are a worldclass math professor with expertise in breaking down math problem || Course: Geometry Honors/Trig\nTopic: Geometry Honors/Trig\n\nCurrent question:\nIn $\\triangle ABC$, the angle bisectors ",
+      "recorded_at": 1794613963.056333
+    },
+    "response": {
+      "proposal": {
+        "figure_spec": {
+          "angle_labels": {
+            "ABC": "58\u00b0",
+            "BAC": "72\u00b0",
+            "BIC": "126\u00b0"
+          },
+          "points": {
+            "A": [
+              3.5,
+              6.0
+            ],
+            "B": [
+              0.0,
+              0.0
+            ],
+            "C": [
+              7.0,
+              0.0
+            ],
+            "I": [
+              3.5,
+              1.924
+            ]
+          },
+          "segments": [
+            "AB",
+            "BC",
+            "CA",
+            "BI",
+            "CI",
+            "AI"
+          ],
+          "shape": "construction",
+          "type": "geometry"
+        },
+        "final_answer": null,
+        "question": null,
+        "solution_steps": null
+      },
+      "reply": "Here's the figure for the problem, with the incenter I placed at exact coordinates and the three angle bisectors drawn."
     }
   },
   "f60103432048b5c932c157830d76ac03": {
@@ -5646,6 +11264,115 @@
         "ABM",
         "DCM"
       ]
+    }
+  },
+  "f86b5bc35ee4e4d8d033f7947329eb72": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nLines $a \\parallel b$ are cut by two transversals, forming a triangle between them. The two base angles of ",
+      "recorded_at": 1794613957.462744
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        },
+        {
+          "item": "base angle on line a = (4x+9)\u00b0",
+          "kind": "angle"
+        },
+        {
+          "item": "base angle on line b = (6x-11)\u00b0",
+          "kind": "angle"
+        },
+        {
+          "item": "apex angle = (2x+18)\u00b0",
+          "kind": "angle"
+        },
+        {
+          "item": "verify the three angles sum to 180\u00b0",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "a",
+            "b"
+          ],
+          "kind": "parallel",
+          "quote": "Lines a \u2225 b"
+        },
+        {
+          "items": [
+            "",
+            "a",
+            "b"
+          ],
+          "kind": "transversal",
+          "quote": "cut by two transversals, forming a triangle between them"
+        },
+        {
+          "items": [
+            "",
+            "a",
+            "b"
+          ],
+          "kind": "transversal",
+          "quote": "cut by two transversals, forming a triangle between them"
+        },
+        {
+          "items": [],
+          "kind": "other",
+          "quote": "forming a triangle between them"
+        },
+        {
+          "expr": "4x + 9",
+          "items": [],
+          "kind": "angle_measure",
+          "quote": "The two base angles of the triangle (one on line a, one on line b) measure (4x + 9)\u00b0"
+        },
+        {
+          "expr": "6x - 11",
+          "items": [],
+          "kind": "angle_measure",
+          "quote": "and (6x - 11)\u00b0"
+        },
+        {
+          "expr": "2x + 18",
+          "items": [],
+          "kind": "angle_measure",
+          "quote": "the interior angle of the triangle at the apex (between the two transversals) measures (2x + 18)\u00b0"
+        }
+      ],
+      "lines": [],
+      "named_lines": [
+        "a",
+        "b"
+      ],
+      "points": [],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [
+        {
+          "item": "a",
+          "kind": "line"
+        },
+        {
+          "item": "b",
+          "kind": "line"
+        },
+        {
+          "item": "triangle formed between the two transversals and the two parallel lines",
+          "kind": "triangle"
+        }
+      ],
+      "segments": [],
+      "triangles": []
     }
   }
 }
