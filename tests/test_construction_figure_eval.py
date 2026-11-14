@@ -26,12 +26,6 @@ import pytest
 from tests.harness.probes import construction_figures as cf
 
 WRONG_PASSED = "no figure judged wrong by eye passed the checker"
-# The figures judged wrong by eye that the checker still passes: the known
-# gap below. Any other wrong figure fails the bar; catching one of these
-# means removing it here. 77195d48-step1 is not a construction figure: the
-# solver's old-shape triangle for a step of a rewritten problem, which no
-# reading checks.
-KNOWN_WRONG_PASSED = {"77195d48-step1"}
 # Figures drawn (of the 21 that should exist) in the recorded run. The
 # design doc's 80% was met before the redesign only by counting six wrong
 # figures; checked against the agreed reading, 15 are drawn and right, and
@@ -71,14 +65,7 @@ async def test_construction_figure_eval_meets_the_bar(monkeypatch: pytest.Monkey
     results, redraws = await cf.run_all()
     summary = cf.summarize(results, redraws)
 
-    # A figure judged wrong that passed is the known gap the xfail test
-    # below holds (a decline case that drew one fails its verdict for the
-    # same reason); everything else must pass.
-    def known_gap(r: dict, name: str) -> bool:
-        judged_wrong = any(cf.verdict(k, spec).startswith("wrong") for k, spec in cf.drawn_figures(r))
-        return name == WRONG_PASSED or (judged_wrong and name.startswith("by-eye verdict holds"))
-
-    failed = {r["id"]: [c.name for c in cf.checks(r) if not c.passed and not known_gap(r, c.name)] for r in results}
+    failed = {r["id"]: [c.name for c in cf.checks(r) if not c.passed] for r in results}
     assert {k: v for k, v in failed.items() if v} == {}
     assert summary["drawn"] >= DRAWN_FLOOR, summary
     # Every reading was either trusted or declined with its reason.
@@ -88,22 +75,24 @@ async def test_construction_figure_eval_meets_the_bar(monkeypatch: pytest.Monkey
         >= summary["readings"], summary
     assert summary["not_looked_at"] == 0
     judged_wrong = {k for r in results for k, spec in cf.drawn_figures(r) if cf.verdict(k, spec).startswith("wrong")}
-    assert judged_wrong == KNOWN_WRONG_PASSED, "a figure judged wrong passed the checker"
+    assert judged_wrong == set(), WRONG_PASSED
+    assert summary["wrong_but_passed"] == 0
     assert summary["negatives_rejected"] == sum(1 for r in results if r["figure_svg"])
     assert summary["false_claims"] == 0
-    assert summary["step_figures"] >= 2 and summary["step_figures_moved"] == []
+    # Step figures are measured by the generation eval
+    # (tests/test_generation_figure_eval.py); here none may move a point.
+    assert summary["step_figures_moved"] == []
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Known gap: the solver's old-shape step figure for a rewritten problem (77195d48 step 1) "
-    "is rendered unchecked; it is not a construction figure. Strict: this fails loudly once it's caught.",
-)
 @pytest.mark.asyncio
-async def test_no_figure_judged_wrong_passed_the_checker(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_a_rewritten_problem_without_a_figure_gets_no_step_figures(monkeypatch: pytest.MonkeyPatch) -> None:
+    """77195d48: the chat rewrote the problem (no figure: it names no
+    points) and re-solved it. Its steps used to carry the solver's
+    old-shape triangle, unchecked and wrong; a problem with no checked
+    figure now gets no step figures."""
     monkeypatch.setenv("HARNESS_LLM_MODE", "replay")
-    results, redraws = await cf.run_all()
-    assert cf.summarize(results, redraws)["wrong_but_passed"] == 0
+    results, _ = await cf.run_all([c for c in cf.load_cases() if c["id"] == "77195d48"])
+    assert results[0]["step_figures"] == []
 
 
 @pytest.mark.asyncio

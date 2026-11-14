@@ -364,7 +364,9 @@ async def generate_solutions(
             problem += (
                 "\n\nThe figure drawn with this problem, as data — its labels "
                 "and measurements are part of the problem:\n"
-                + json.dumps(q["figure_spec"])
+                # Sorted, so the prompt is the same however the spec's keys
+                # arrived (a live call's order, or a stored one's).
+                + json.dumps(q["figure_spec"], sort_keys=True)
             )
         # Step figures build on the problem's checked construction figure
         # (and are checked themselves by the caller); a problem without one
