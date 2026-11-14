@@ -154,13 +154,15 @@ _POLY_WORDS = {"quadrilateral": 4, "pentagon": 5, "hexagon": 6, "polygon": 0}
 # only when the reading states one (the kind after the name below: "SAS"
 # needs a stated pair of congruent triangles). Not here at all, because
 # applying them asserts a relation the name alone can't place: the
-# Corollary to the Triangle Sum Theorem (a right triangle), the Alternate
-# Interior / Corresponding Angles theorems (parallel lines cut by a
+# Alternate Interior / Corresponding Angles theorems (parallel lines cut by a
 # transversal), the Vertical Angles Theorem, the Base Angles and Isosceles
 # Triangle theorems, the Pythagorean Theorem, the Exterior Angle Theorem,
 # the Angle / Segment Addition postulates, HL, SSA, "definition of
 # midpoint / bisector / perpendicular", "properties of …".
 METHOD_NAMES: tuple[tuple[str, str, str], ...] = (
+    (r"(?:the )?corollary to the triangle sum theorem", "right_triangle",
+     "a right triangle's acute angles are complementary: only with the one listed triangle's right angle stated "
+     "(1c9d21ab)"),
     (r"(?:the )?triangle sum theorem", "triangle", "any triangle's angles add to 180° (df891226)"),
     (r"(?:the )?reflexive property(?: of (?:congruence|equality))?", "", "a part equals itself (dd7ab4c1)"),
     (r"(?:the )?(?:transitive|substitution|symmetric) property(?: of (?:congruence|equality))?", "", "algebra"),
@@ -181,6 +183,11 @@ def _states_a(needs: str, facts: FigureFacts) -> bool:
         return True
     if needs == "triangle":
         return bool(facts.triangles)
+    if needs == "right_triangle":  # the problem's one triangle, with its right angle stated
+        tris = [split_names(x) for x in facts.triangles]
+        have = _given_atoms(facts)
+        return len(tris) == 1 and len(tris[0]) == 3 and any(
+            ("measure", ("ang", v, frozenset(set(tris[0]) - {v})), 90.0, None) in have for v in tris[0])
     return any(f.kind == needs for f in (*facts.givens, *facts.prove))
 
 

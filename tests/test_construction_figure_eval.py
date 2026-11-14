@@ -56,10 +56,12 @@ KNOWN_WRONG_PASSED = {"77195d48-step1"}
 # Alternate Interior Angles Theorem" asserts parallel lines).
 # Review round 8 (a method that applies only to some figure counts only when
 # the reading states that figure; the Corollary to the Triangle Sum Theorem
-# is off the list): 24. Lost: 1c9d21ab ("Use the Corollary to the Triangle
+# was off the list): 24. Lost: 1c9d21ab ("Use the Corollary to the Triangle
 # Sum Theorem") and dd5e6fa8 ("using triangle congruence (SSS or SAS) and
-# CPCTC" with no congruent triangles stated).
-DRAWN_FLOOR = 24
+# CPCTC" with no congruent triangles stated). After round 9 the corollary
+# counts when the one listed triangle's right angle is stated: 1c9d21ab is
+# drawn again, 25.
+DRAWN_FLOOR = 25
 
 
 @pytest.mark.asyncio
