@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from typing import Any
 
 from api.core.geometry.facts import (
     _ANGLE_SUM,
@@ -39,10 +40,13 @@ from api.core.geometry.facts import (
     FigureFacts,
     _angle_sum_of_triangle,
     _clauses,
+    _closure,
+    _fact_atoms,
     _fraction_value,
     _question_spans,
     _restated,
     line_key,
+    seg,
     split_names,
 )
 
@@ -143,26 +147,35 @@ _POLY_KINDS = frozenset({"congruent_triangles", "similar_triangles", "isosceles"
                          "rhombus", "trapezoid", "isosceles_trapezoid", "kite"})
 # Words that name a listed polygon by its number of corners.
 _POLY_WORDS = {"quadrilateral": 4, "pentagon": 5, "hexagon": 6, "polygon": 0}
-# A method's name, which states nothing about the figure: a theorem's name
-# (the words before "theorem" back to a word that would make it a
-# statement: "the triangle is isosceles by the Base Angles Theorem" names
-# "the Base Angles Theorem" only), "SAS", "the definition of midpoint";
-# with the verb that applies it ("by", "using", "use", "apply").
-_STATEMENT_WORD = (r"(?:is|are|be|was|were|isn't|aren't|by|using|use|uses|apply|applying|and|or|so|then|if|that|"
-                   r"which|with|since|because|as|thus|hence|therefore|prove|show|given)")
-_THEOREM_NAME = (rf"(?:(?!{_STATEMENT_WORD}\b)[A-Za-z][A-Za-z-]*\s+){{0,6}}"
-                 r"(?:theorem|postulate|corollary|property|properties)s?\b")
-_DEFINITION = (r"definitions?\s+of\s+(?:an?\s+|the\s+)?[A-Za-z-]+(?:"
-               r"\s+(?:lines?|triangles?|angles?|segments?|bisectors?))?")
-_ACRONYM = r"(?:SAS|ASA|AAS|SSS|HL|CPCTC|AA|SSA|CPCF)\b"
+# A method's name, accounted for only from this list, matched whole
+# (with the verb that applies it: "by", "using", "use", "apply"). Each
+# name was reviewed against "does it assert anything about THIS figure?":
+# only names that hold for any figure the rest of the problem states are
+# here. Not here, on purpose, because applying them asserts a relation:
+# the Alternate Interior / Corresponding Angles theorems (parallel lines),
+# the Vertical Angles Theorem (vertical angles), the Base Angles and
+# Isosceles Triangle theorems (isosceles), the Pythagorean Theorem (a
+# right angle), the Exterior Angle Theorem, the Angle / Segment Addition
+# postulates (a ray inside, a point between), HL (right triangles), SSA,
+# "definition of midpoint / bisector / perpendicular", "properties of …".
+METHOD_NAMES: tuple[tuple[str, str], ...] = (
+    (r"(?:the )?(?:corollary to the )?triangle sum theorem", "any triangle's angles add to 180° (1c9d21ab, df891226)"),
+    (r"(?:the )?reflexive property(?: of (?:congruence|equality))?", "a part equals itself (dd7ab4c1)"),
+    (r"(?:the )?(?:transitive|substitution|symmetric) property(?: of (?:congruence|equality))?", "algebra"),
+    (r"(?:the )?(?:SSS|SAS|ASA|AAS) (?:congruence )?(?:postulate|theorem)", "a congruence method (afee316c)"),
+    (r"(?:SSS|SAS|ASA|AAS|AA|CPCTC|CPCF)\b", "a congruence / similarity method by its letters (589e4a97, dd5e6fa8)"),
+    (r"(?:the )?parallel postulate", "Euclid's: one parallel through a point; nothing about this figure"),
+    (r"(?:the )?definitions? of congruen(?:t|ce)(?: (?:segments|angles|triangles))?", "what ≅ means"),
+)
 _METHOD = re.compile(
-    rf"\b(?:(?:by|using|use|uses|apply|applying)\s+(?:the\s+)?)?(?:{_ACRONYM}|{_DEFINITION}\b|{_THEOREM_NAME})",
+    r"\b(?:(?:by|using|use|uses|apply|applying)\s+(?:the\s+)?)?(?:"
+    + "|".join(rx.replace(" ", r"\s+") for rx, _ in METHOD_NAMES) + r")(?![A-Za-z])",
     re.IGNORECASE)
 # A question that asserts nothing: "determine whether AB ∥ CD" (up to a
 # condition, which is a statement: "…, given that the triangle is isosceles").
 _WHETHER = re.compile(r"\bwhether\b[^.;?\n]*?(?=,|\s+(?:given|if|when|where|since|because|knowing)\b|[.;?\n]|$)",
                       re.IGNORECASE)
-_NOT_NAMES = {"SAS", "ASA", "AAS", "SSS", "HL", "CPCTC", "AA", "SSA", "CPCF", "NOT"}
+_NOT_NAMES = {"SAS", "ASA", "AAS", "SSS", "HL", "CPCTC", "AA", "SSA", "CPCF", "NOT"}  # never point names
 
 
 @dataclass
@@ -379,13 +392,13 @@ def _fact_accounts(f: Fact, run: list[Tok], facts: FigureFacts) -> list[Tok]:
     relation = not vocab  # a numbered angle's label has no relation word
     # A part named by its role, exactly ("each base angle", "the vertex
     # angle", "one acute angle … the other"): those words, and the part.
-    role_words = _named_by_role(f, run, facts)
-    named = bool(role_words)  # the quote names a part of the fact
+    role = _named_by_role(f, run, facts)
+    named = bool(role)  # the quote names a part of the fact
     if f.kind == "perpendicular" and any(k.norm == "altitude" for k in run):
         vocab = vocab | {"drawn"}  # "altitude QS is drawn to PR"
     for k in run:
         if k.kind == "name":
-            ok = _uses_name(f, k, facts)
+            ok = _uses_name(f, k, facts) or id(k) in role
             named |= ok
         elif k.kind == "num":
             ok = k.value is not None and round(k.value, 6) in nums
@@ -394,7 +407,7 @@ def _fact_accounts(f: Fact, run: list[Tok], facts: FigureFacts) -> list[Tok]:
             ok = k.norm in vs or line
             named |= line
         elif k.kind == "word":
-            ok = k.norm in vocab or k.norm in INERT_WORDS or k.norm in role_words
+            ok = k.norm in vocab or k.norm in INERT_WORDS or id(k) in role
             relation |= k.norm in vocab
         else:  # a symbol
             ok = k.norm in vocab or (algebra and k.norm in ("sym:+", "sym:-", "sym:/", "sym:^", "sym:=", _DEG))
@@ -416,56 +429,155 @@ def _vertex(f: Fact) -> str:
     return xs[1] if len(xs) == 3 else xs[0] if len(xs) == 1 else ""
 
 
-def _isosceles(facts: FigureFacts) -> list[tuple[str, set[str]]]:
-    """Each stated isosceles triangle: (apex, base vertices)."""
-    out = []
+# ── Derived facts ─────────────────────────────────────────────────────
+# A wording that needs more than one fact ("each base angle", "G and H
+# respectively", "intersects PR at S") is accounted for only this way:
+# code parses exactly those words with a fixed grammar, derives the
+# fact(s) they state, and requires each derived fact to be in the agreed
+# reading, in canonical form. The figure is then checked against the
+# reading's facts like any other. A wording the grammar doesn't parse
+# exactly, or that fits more than one part, is a gap.
+
+
+def _given_atoms(facts: FigureFacts) -> set[Any]:
+    out: set[Any] = set()
     for g in facts.givens:
-        xs = split_names(g.items[0]) if g.items else []
-        if g.kind == "isosceles" and len(xs) == 3 and g.point in xs:
-            out.append((g.point, set(xs) - {g.point}))
-    return out
+        out |= _fact_atoms(g, facts)
+    return _closure(out)
 
 
-def _acute_pairs(facts: FigureFacts) -> list[set[str]]:
-    """The two acute angles' vertices of each stated right triangle."""
-    tris = [set(split_names(x)) for x in facts.triangles]
-    return [set(ends) for ends, v in _right_vertices(facts).items() if {*ends, v} in tris]
+def _in_reading(derived: list[Fact], facts: FigureFacts) -> bool:
+    have = _given_atoms(facts)
+    for d in derived:
+        a = _fact_atoms(d, facts)
+        if not a or not a <= have or any(x[0] == "other" for x in a):
+            return False
+    return True
 
 
-def _same_measure(a: Fact, b: Fact) -> bool:
-    def norm(e: str | None) -> str:
-        return re.sub(r"\s+", "", (e or "").replace("\u2212", "-"))
-    return (a.value, norm(a.expr)) == (b.value, norm(b.expr))
+def _apex(tri: list[str], have: set[Any]) -> str | None:
+    """The apex of a listed triangle, from its stated equal legs; none when
+    no pair (or every pair: equilateral) of sides is stated equal."""
+    if len(tri) != 3:
+        return None
+    apexes = [v for v in tri if ("eqlen", frozenset(seg(v + o) for o in tri if o != v)) in have]
+    return apexes[0] if len(apexes) == 1 else None
 
 
-def _named_by_role(f: Fact, run: list[Tok], facts: FigureFacts) -> set[str]:
-    """The role words that name the fact's angle exactly, or none:
-    "each base angle measures …" when both base angles of a stated
-    isosceles triangle have that measure; "the vertex angle" for its apex;
-    "one acute angle measures …" and "the other measures …" when the two
-    facts are on the two acute angles of a stated right triangle."""
+def _triangle_tok(run: list[Tok], i: int) -> bool:
+    k = run[i]
+    return k.kind == "name" and len(split_names(k.norm)) == 3 and (
+        k.wrap == "triangle" or (i > 0 and run[i - 1].kind == "word" and run[i - 1].norm == "triangle"))
+
+
+def _the_triangle(run: list[Tok], at: int, facts: FigureFacts, fits: Any) -> tuple[list[str], list[Tok]] | None:
+    """The triangle a role phrase is about: the one named right after it
+    ("each base angle of △DEF"), else the only listed triangle that fits.
+    With its name's token, if named."""
+    j = at
+    if j + 1 < len(run) and run[j].kind == "word" and run[j].norm == "of":
+        if j + 2 < len(run) and run[j + 1].kind == "word" and run[j + 1].norm == "triangle":
+            j += 1
+        if j + 1 < len(run) and _triangle_tok(run, j + 1):
+            tri = split_names(run[j + 1].norm)
+            listed = any(set(split_names(x)) == set(tri) for x in facts.triangles)
+            return (tri, [run[j], run[j + 1]]) if listed and fits(tri) else None
+        return None
+    cands = [split_names(x) for x in facts.triangles if fits(split_names(x))]
+    return (cands[0], []) if len(cands) == 1 else None
+
+
+def _seq(run: list[Tok], i: int, *norms: str) -> bool:
+    return i + len(norms) <= len(run) and all(
+        run[i + n].kind == "word" and run[i + n].norm in w.split("|") for n, w in enumerate(norms))
+
+
+def _angle_at(tri: list[str], v: str) -> str:
+    a, b = (x for x in tri if x != v)
+    return a + v + b
+
+
+def _named_by_role(f: Fact, run: list[Tok], facts: FigureFacts) -> set[int]:
+    """The tokens (by id) of a role phrase that names the fact's angle
+    exactly, or none. Each derives the angle(s) from the words:
+    - "each / one base angle [of △DEF] measures …": the two base angles of
+      that triangle (or of the only listed triangle with stated equal
+      legs), taken from its stated equal legs, each with this measure;
+    - "the vertex angle [of △DEF]": its apex;
+    - "one acute angle measures … and the other measures …": the two acute
+      angles of the problem's one listed triangle, by its stated right
+      angle (with two triangles, "acute angle" could be either's);
+    - "the exterior angle at P measures …": the angle between the stated
+      extension past P and the triangle's other side at P."""
     if f.kind != "angle_measure" or not f.items:
         return set()
-    words = {k.norm for k in run if k.kind == "word"}
-    v = _vertex(f)
-    q = f.quote or ""
-    for apex, base in _isosceles(facts):
-        if "base" in words and v in base:
-            same = {_vertex(g) for g in facts.givens if g.kind == "angle_measure" and g.quote == q
-                    and _same_measure(g, f)}
-            # "each base angle", "one base angle": the two are equal, so both
-            return {"each", "one", "base"} if same == base else set()
-        if "vertex" in words and v == apex:
-            return {"vertex"}
-    for pair in _acute_pairs(facts):
-        if v not in pair:
-            continue
-        other = [g for g in facts.givens if g.kind == "angle_measure" and _vertex(g) in pair - {v}]
-        if "one" in words and "acute" in words and any("other" in (g.quote or "").split() for g in other):
-            return {"one", "acute"}
-        if "other" in words and any(re.search(r"\bone acute\b", g.quote or "") for g in other):
-            return {"other"}
+    have = _given_atoms(facts)
+
+    def is_(derived: list[Fact]) -> bool:
+        return _in_reading(derived, facts)
+
+    def measure(angle: str) -> Fact:
+        return Fact(kind="angle_measure", items=[angle], value=f.value, expr=f.expr)
+
+    for i in range(len(run)):
+        if _seq(run, i, "each|one", "base", "angle"):
+            found = _the_triangle(run, i + 3, facts, lambda tr: _apex(tr, have) is not None)
+            if found:
+                tri, named = found
+                apex = _apex(tri, have)
+                if is_([measure(_angle_at(tri, b)) for b in tri if b != apex]):
+                    return {id(run[i]), id(run[i + 1]), *map(id, named)}
+            return set()
+        if _seq(run, i, "vertex", "angle"):
+            found = _the_triangle(run, i + 2, facts, lambda tr: _apex(tr, have) is not None)
+            if found:
+                tri, named = found
+                apex = _apex(tri, have)
+                if apex and is_([measure(_angle_at(tri, apex))]):
+                    return {id(run[i]), *map(id, named)}
+            return set()
+        if _seq(run, i, "one", "acute", "angle") or _seq(run, i, "the", "other"):
+            rights = [(tr, v) for tr in map(split_names, facts.triangles) if len(tr) == 3
+                      for v in tr if ("measure", ("ang", v, frozenset(set(tr) - {v})), 90.0, None) in have]
+            if len(rights) != 1 or len(facts.triangles) != 1:
+                return set()
+            tri, right = rights[0]
+            acute = [x for x in tri if x != right]
+            v = _vertex(f)
+            if v not in acute:
+                return set()
+            other = _angle_at(tri, next(x for x in acute if x != v))
+            first = run[i].norm == "one"
+            # The partner fact: the other acute angle, said by the other half.
+            partner = any(g.kind == "angle_measure" and g.items and _fact_atoms(g, facts) and any(
+                a[1] == ("ang", other[1], frozenset((other[0], other[2]))) for a in _fact_atoms(g, facts))
+                and re.search(r"\bthe other\b" if first else r"\bone acute angle\b", g.quote or "", re.I)
+                for g in facts.givens)
+            if partner and is_([measure(_angle_at(tri, v))]):
+                return {id(run[i]), id(run[i + 1])}
+            return set()
+        if _seq(run, i, "exterior", "angle", "at") and i + 3 < len(run) and run[i + 3].kind == "name":
+            p = run[i + 3].norm
+            ext = _extensions_past(p, facts)
+            if len(ext) == 1 and ext[0][2]:
+                start, end, to, third = ext[0]
+                if is_([measure(third + end + to)]):
+                    return {id(run[i]), id(run[i + 1]), id(run[i + 2]), id(run[i + 3])}
+            return set()
     return set()
+
+
+def _extensions_past(p: str, facts: FigureFacts) -> list[tuple[str, str, str, str]]:
+    """The stated extensions of a listed triangle's side past its vertex p:
+    (start, end = p, the point past it or "", the triangle's third vertex)."""
+    out = []
+    for g in facts.givens:
+        xs = split_names(g.items[0]) if g.kind == "extension" and g.items else []
+        if len(xs) == 2 and xs[1] == p:
+            for tr in map(split_names, facts.triangles):
+                if set(xs) <= set(tr) and len(tr) == 3:
+                    out.append((xs[0], p, g.point or "", next(c for c in tr if c not in xs)))
+    return out
 
 
 _EQUAL_SIDED = ("equilateral", "square", "rhombus")
@@ -729,10 +841,10 @@ INSTRUCTION_PHRASES: tuple[tuple[str, str], ...] = (
     (r"using your value of(?= [a-z]\b)", "the unknown after it is accounted for only if asked (2f44f46d)"),
 )
 _PHRASES = [re.compile(r"\b" + rx.replace(" ", r"\s+"), re.IGNORECASE) for rx, _ in INSTRUCTION_PHRASES]
-_ACR = r"(?:SAS|ASA|AAS|SSS|HL|CPCTC|AA|SSA)"
-_METHOD_LISTS = re.compile(  # "AAS or ASA congruence", "triangle congruence (SSS or SAS)", "properties of …"
+_ACR = r"(?:SAS|ASA|AAS|SSS|CPCTC|AA)"  # the method names above by their letters (no HL: right triangles)
+_METHOD_LISTS = re.compile(  # "AAS or ASA congruence", "triangle congruence (SSS or SAS)"
     rf"\b(?:(?:using|by)\s+)?(?:triangle\s+congruence\s*\(\s*{_ACR}(?:\s+or\s+{_ACR})*\s*\)|{_ACR}(?:\s+or\s+{_ACR})+"
-    rf"(?:\s+congruence)?|properties\s+of\s+(?:supplementary|complementary|congruent|parallel)\s+(?:angles|lines))",
+    rf"(?:\s+congruence)?)(?![A-Za-z])",
     re.IGNORECASE)
 _SENT_END = re.compile(r"[.;?!\n]")
 
@@ -749,8 +861,8 @@ def _sentence_of(toks: list[Tok], i: int) -> tuple[int, int]:
 
 
 def _exact_rules(t: str, toks: list[Tok], facts: FigureFacts) -> None:
-    """Wordings accounted for by an exact rule, each checked against the
-    reading (see each rule)."""
+    """Wordings accounted for by an exact rule: the instruction phrases and
+    method lists, and the derived-fact rules (see "Derived facts")."""
     def mark(a: int, b: int, kinds: tuple[str, ...] = ("word",)) -> None:
         for k in toks:
             if a <= k.a and k.b <= b and k.kind in kinds:
@@ -768,6 +880,8 @@ def _exact_rules(t: str, toks: list[Tok], facts: FigureFacts) -> None:
         mark(*m.span())
     words = [k for k in toks if k.kind != "punct"]
     pos = {id(k): i for i, k in enumerate(toks)}
+    have = _given_atoms(facts)
+    tris = [split_names(x) for x in facts.triangles if len(split_names(x)) == 3]
 
     def sentence_words(k: Tok) -> list[Tok]:
         a, b = _sentence_of(toks, pos[id(k)])
@@ -776,25 +890,36 @@ def _exact_rules(t: str, toks: list[Tok], facts: FigureFacts) -> None:
     def norm_seq(i: int, n: int) -> list[str]:
         return [w.norm for w in words[i:i + n]]
 
-    iso = _isosceles(facts)
-    tris = [split_names(x) for x in facts.triangles]
+    def is_name(i: int, n: int | None = None) -> bool:
+        return i < len(words) and words[i].kind == "name" and (n is None or len(split_names(words[i].norm)) == n)
+
+    def done(*ws: Tok) -> None:
+        for w in ws:
+            w.done = True
+
     for i, k in enumerate(words):
         if k.kind != "word":
             continue
         # "the base angles satisfy m∠Q = … and m∠R = …": the angles named
-        # after it are exactly a stated isosceles triangle's base angles;
-        # "the interior angles satisfy …": each is an angle of a listed triangle.
-        if norm_seq(i, 4)[1:] in (["base", "angles", "satisfy"], ["interior", "angles", "satisfy"]) and k.norm == "the":
+        # after it are exactly the base angles of the listed triangle holding
+        # them, by its stated equal legs; "the interior angles satisfy …":
+        # all are angles of one listed triangle.
+        if k.norm == "the" and norm_seq(i, 4)[1:] in (["base", "angles", "satisfy"], ["interior", "angles", "satisfy"]):
             sent = sentence_words(k)
             after = [w for w in sent[sent.index(k) + 4:] if w.kind == "name" and w.wrap == "angle"]
             vs = {split_names(w.norm)[1] if len(split_names(w.norm)) == 3 else w.norm for w in after}
-            ok = bool(after) and (any(vs == base for _, base in iso) if words[i + 1].norm == "base"
-                                  else any(vs <= set(tri) for tri in tris))
+            holding = [tr for tr in tris if vs <= set(tr)]
+            if words[i + 1].norm == "base":
+                ok = len(holding) == 1 and len(vs) == 2 and (apex := _apex(holding[0], have)) is not None \
+                    and vs == set(holding[0]) - {apex}
+            else:
+                ok = bool(after) and len(holding) == 1
             if ok:
-                for w in words[i + 1:i + 4]:
-                    w.done = True
-        # "OA, OB, OC, and OD all share endpoint O" / "△ABC and △ABD share
-        # side AB": every part named before it in the sentence has it.
+                done(*words[i + 1:i + 4])
+        # "OA, OB, OC, and OD all share endpoint O": every part named before
+        # it in the sentence is a ray named from O (so it starts at O by its
+        # name), drawn as a listed ray. "△ABC and △ABD share side AB": every
+        # part named before is a listed triangle whose name holds A and B.
         if k.norm == "share":
             j = i + 1
             while j < len(words) and words[j].norm in ("a", "the", "common"):
@@ -813,106 +938,170 @@ def _exact_rules(t: str, toks: list[Tok], facts: FigureFacts) -> None:
                             2 if what == "side" else 1) for w in tri_names) and all(
                         any(set(split_names(w.norm)) == set(tr) for tr in tris) for w in tri_names)
                 if ok:
-                    for w in [*before, *words[i:j + 2]]:
-                        w.done = True
+                    done(*before, *words[i:j + 2])
                     if i and words[i - 1].norm == "all":
-                        words[i - 1].done = True
-        # "ray QS … intersects PR at point S": S is on PR (a fact) and on the
-        # part the sentence is about, whose name holds S.
-        if k.norm in ("intersects", "meets") and i + 1 < len(words) and words[i + 1].kind == "name":
-            line = words[i + 1].norm
+                        done(words[i - 1])
+        # "[subject] intersects PR at (point) S": S is on PR and on the
+        # clause's subject: the name right before the verb ("EF intersects"),
+        # past one clause set off by commas ("QS, the bisector, intersects"),
+        # or, after "and", the name that starts the clause ("ray QS bisects
+        # ∠PQR and intersects"; a clause set off by commas may stand before
+        # the "and").
+        if k.norm in ("intersects", "meets") and is_name(i + 1, 2):
+            xy = words[i + 1].norm
             j = i + 2
             if j < len(words) and words[j].norm == "at":
                 j += 1
-                if j < len(words) and words[j].norm in ("point", "points"):
+                if j < len(words) and words[j].norm == "point":
                     j += 1
-                if j < len(words) and words[j].kind == "name" and len(words[j].norm) == 1:
+                subject = _subject_of(toks, pos[id(k)])
+                if is_name(j, 1) and subject is not None:
                     pt = words[j].norm
-                    subject = next((w for w in reversed(words[:i]) if w.kind == "name"
-                                    and len(split_names(w.norm)) == 2), None)
-                    on = any(g.kind in ("on_segment", "on_line") and g.point == pt and g.items
-                             and set(split_names(g.items[0])) == set(split_names(line)) for g in facts.givens)
-                    if on and subject is not None and pt in split_names(subject.norm) and subject in sentence_words(k):
-                        for w in words[i:j + 1]:
-                            w.done = True
-        # "an exterior angle is formed at vertex P by …", "the exterior angle
-        # at P", "the exterior angle ∠ACD": a stated extension of a listed
-        # triangle's side past that vertex makes it.
+                    derived = [Fact(kind="on_segment", items=[xy], point=pt)]
+                    if pt not in split_names(subject.norm):
+                        derived.append(Fact(kind="on_line", items=[subject.norm], point=pt))
+                    if _in_reading(derived, facts):
+                        done(*words[i:j + 1])
+        # The exterior angle:
+        # - "an exterior angle is formed at (vertex) P by extending (side) RP
+        #   beyond P (to point T)": exactly the stated extension;
+        # - "the exterior angle ∠ACD": the extension of the listed triangle's
+        #   side BC past C to D;
+        # - "the exterior angle at P" in a question: the one stated extension
+        #   past P (with its measure, see _named_by_role).
         if k.norm == "exterior" and i + 1 < len(words) and words[i + 1].norm == "angle":
-            ext = [(split_names(g.items[0]), g.point or "") for g in facts.givens
-                   if g.kind == "extension" and g.items and len(split_names(g.items[0])) == 2]
-            # (start, end, point past the end, the triangle's third vertex)
-            sides_ok = [(a, b, to, c) for (a, b), to in ext for tr in tris if {a, b} <= set(tr)
-                        for c in tr if c not in (a, b)]
             j = i + 2
-            span = [k, words[i + 1]]
-            ok = False
-            named = words[j] if j < len(words) else None
-            if named is not None and named.kind == "name" and named.wrap == "angle" \
-                    and len(split_names(named.norm)) == 3:
-                x, v, y = split_names(named.norm)
-                ok = any(v == b and to and {x, y} == {to, c} for _a, b, to, c in sides_ok)
-            else:
-                if norm_seq(j, 2) == ["is", "formed"]:
-                    span += words[j:j + 2]
-                    j += 2
+            if norm_seq(j, 2) == ["is", "formed"]:
+                j += 2
+                ok = False
                 if j < len(words) and words[j].norm == "at":
-                    span.append(words[j])
-                    j += 1
-                    if j < len(words) and words[j].norm == "vertex":
-                        span.append(words[j])
-                        j += 1
-                    if j < len(words) and words[j].kind == "name" and len(words[j].norm) == 1:
-                        ok = any(b == words[j].norm for _a, b, _to, _c in sides_ok)
-                        span.append(words[j])
-                        if ok and j + 1 < len(words) and words[j + 1].norm == "by":
-                            span.append(words[j + 1])
-            if ok:
-                for w in span:
-                    w.done = True
-        # "Draw altitude AD ⊥ BC": AD is perpendicular (a fact) to the side
-        # opposite A in a listed triangle.
-        if k.norm == "altitude" and i + 1 < len(words) and words[i + 1].kind == "name":
-            xs = split_names(words[i + 1].norm)
-            if len(xs) == 2 and any(
-                    g.kind == "perpendicular" and len(g.items) == 2
-                    and set(xs) in [set(split_names(x)) for x in g.items]
-                    and any(xs[0] in tr and set(split_names(o)) == set(tr) - {xs[0]}
-                            for tr in tris for o in g.items if set(split_names(o)) != set(xs))
-                    for g in facts.givens):
-                k.done = True
+                    j += 1 + (j + 1 < len(words) and words[j + 1].norm == "vertex")
+                    if is_name(j, 1) and norm_seq(j + 1, 2) == ["by", "extending"]:
+                        p = words[j].norm
+                        sd = j + 3 + (j + 3 < len(words) and words[j + 3].norm == "side")
+                        if is_name(sd, 2) and norm_seq(sd + 1, 1) == ["beyond"] and is_name(sd + 2, 1) \
+                                and words[sd + 2].norm == p and p in split_names(words[sd].norm):
+                            st = next(x for x in split_names(words[sd].norm) if x != p)
+                            end = sd + 3
+                            to = ""
+                            if norm_seq(end, 1) == ["to"]:
+                                q = end + 1 + (end + 1 < len(words) and words[end + 1].norm == "point")
+                                if is_name(q, 1):
+                                    to, end = words[q].norm, q + 1
+                            ok = _in_reading([Fact(kind="extension", items=[st + p], point=to or None)], facts) \
+                                and any({st, p} <= set(tr) for tr in tris)
+                            if ok:
+                                done(*words[i:end])
+            elif is_name(j, 3) and words[j].wrap == "angle":
+                x, v, y = split_names(words[j].norm)
+                derived = [Fact(kind="extension", items=[c + v], point=d)
+                           for e, d in ((x, y), (y, x)) for tr in tris if {e, v} <= set(tr) and d not in tr
+                           for c in tr if c not in (e, v)]
+                if len(derived) == 1 and _in_reading(derived, facts):
+                    done(k, words[i + 1])
+            elif norm_seq(j, 1) == ["at"] and is_name(j + 1, 1) and _in_target(t, k):
+                ext = _extensions_past(words[j + 1].norm, facts)
+                if len(ext) == 1:
+                    done(k, words[i + 1], words[j], words[j + 1])
+        # "altitude CD (is drawn to AB)": CD is perpendicular to the side
+        # opposite C of the one listed triangle with corner C (not D).
+        if k.norm == "altitude" and is_name(i + 1, 2):
+            c, d = split_names(words[i + 1].norm)
+            holding = [tr for tr in tris if c in tr and d not in tr]
+            if len(holding) == 1:
+                opposite = "".join(x for x in holding[0] if x != c)
+                if _in_reading([Fact(kind="perpendicular", items=[c + d, opposite], point=d)], facts):
+                    done(k)
         # "transversal EF cutting both lines at points G and H respectively":
-        # G is on the first line and the transversal, H on the second.
-        if k.norm == "respectively" and i >= 3 and words[i - 2].norm == "and":
-            g_, h_ = words[i - 3].norm, words[i - 1].norm
-            both = next((w for w in reversed(words[:i]) if w.norm == "both"), None)
-            for tr in (x for x in facts.givens if x.kind == "transversal" and len(x.items) == 3):
-                tl, l1, l2 = (set(split_names(x)) for x in tr.items)
-
-                def meets(p: str, line: set[str], tl: set[str] = tl) -> bool:
-                    return any(g.kind == "intersect" and g.point == p and len(g.items) == 2
-                               and {frozenset(split_names(x)) for x in g.items} == {frozenset(tl), frozenset(line)}
-                               for g in facts.givens)
-                if both is not None and both in sentence_words(k) and meets(g_, l1) and meets(h_, l2):
-                    k.done = both.done = True
-    # In a target: "the measure of each angle", "both angle measures",
-    # "each acute angle" of a stated right triangle: what is asked, stated
-    # of nothing; "arc BC" when both ends lie on a stated circle.
-    on_circle = {p for g in facts.givens if g.kind == "on_circle" for p in g.items}
+        # the two lines named before EF in the sentence, in the order the
+        # text names them; G is where EF meets the first, H the second.
+        if k.norm == "respectively" and i >= 7 and words[i - 2].norm == "and" and is_name(i - 1, 1):
+            j = i - 3
+            if is_name(j, 1):
+                g_, h_ = words[j].norm, words[i - 1].norm
+                j -= 1 + (words[j - 1].norm == "points")
+                if words[j].norm == "at" and norm_seq(j - 2, 2) == ["both", "lines"] \
+                        and words[j - 3].norm in ("cutting", "cuts", "intersecting", "intersects", "meeting",
+                                                  "meets") and is_name(j - 4, 2):
+                    tl = words[j - 4]
+                    sent = sentence_words(k)
+                    lines_: list[str] = []
+                    for w in sent[:sent.index(tl)]:
+                        if w.kind == "name" and len(split_names(w.norm)) == 2 and \
+                                set(split_names(w.norm)) != set(split_names(tl.norm)) and \
+                                set(split_names(w.norm)) not in [set(split_names(x)) for x in lines_]:
+                            lines_.append(w.norm)
+                    if len(lines_) == 2 and _in_reading([
+                            Fact(kind="intersect", items=[tl.norm, lines_[0]], point=g_),
+                            Fact(kind="intersect", items=[tl.norm, lines_[1]], point=h_)], facts):
+                        done(*words[j - 3:i + 1])
+    # In a question: "the measure of each angle", "both angle measures"
+    # (what is asked, stated of nothing); "each acute angle" when the one
+    # listed triangle has a stated right angle; "arc AB" when A and B lie on
+    # one stated circle (exactly one).
+    rights = [tr for tr in tris for v in tr if ("measure", ("ang", v, frozenset(set(tr) - {v})), 90.0, None) in have]
     for a, b in _target_spans(t):
         inside = [w for w in words if a <= w.a and w.b <= b]
         for i, w in enumerate(inside):
             nxt = inside[i + 1:i + 3]
             if w.norm in ("each", "both") and nxt:
-                acute = nxt[0].norm == "acute" and bool(_acute_pairs(facts))
+                acute = nxt[0].norm == "acute" and len(tris) == 1 and len(rights) == 1
                 head = nxt[1] if acute and len(nxt) > 1 else nxt[0]
                 if head.norm in ("angle", "angles", "measure", "measures", "side", "sides"):
                     w.done = True
                     if acute:
                         nxt[0].done = True
-            if w.norm == "arc" and nxt and nxt[0].kind == "name" and len(split_names(nxt[0].norm)) == 2 and set(
-                    split_names(nxt[0].norm)) <= on_circle:  # "major"/"minor" stay gaps: which arc is not checked
-                w.done = nxt[0].done = True
+            if w.norm == "arc" and nxt and nxt[0].kind == "name" and len(split_names(nxt[0].norm)) == 2 \
+                    and not (i and inside[i - 1].norm in ("major", "minor")):
+                ends = split_names(nxt[0].norm)
+                circles = {c for c in facts.circles if all(("on_circle", p, c) in have for p in ends)}
+                if len(circles) == 1:
+                    w.done = nxt[0].done = True
+
+
+def _in_target(t: str, k: Tok) -> bool:
+    return any(a <= k.a and k.b <= b for a, b in _target_spans(t))
+
+
+def _subject_of(toks: list[Tok], at: int) -> Tok | None:
+    """The subject of the verb at toks[at] (see the "intersects" rule)."""
+    verb = toks[at]
+    # Words and names, plus the punctuation that matters here: commas and
+    # sentence ends ("$, " is a comma; " $" is nothing).
+    sig = [k for k in toks if k.kind != "punct" or "," in k.norm or _SENT_END.search(k.norm)]
+    at = next(n for n, k in enumerate(sig) if k is verb)
+
+    def comma(i: int) -> bool:
+        return 0 <= i and sig[i].kind == "punct" and "," in sig[i].norm and not _SENT_END.search(sig[i].norm)
+
+    def stop(i: int) -> bool:
+        return i < 0 or comma(i) or (sig[i].kind == "punct" and bool(_SENT_END.search(sig[i].norm)))
+
+    def name2(k: Tok) -> bool:
+        return k.kind == "name" and len(split_names(k.norm)) == 2
+
+    i = at - 1
+    after_and = i >= 0 and sig[i].kind == "word" and sig[i].norm == "and"
+    if after_and:
+        i -= 1
+    if comma(i):  # one clause set off by commas
+        i -= 1
+        while not stop(i):
+            i -= 1
+        if not comma(i):
+            return None
+        i -= 1
+    if i < 0:
+        return None
+    if not after_and:
+        return sig[i] if name2(sig[i]) else None
+    # The clause before "and": from the previous comma or the sentence's start.
+    while not stop(i):
+        i -= 1
+    i += 1
+    while i < at and sig[i].kind == "word" and sig[i].norm in ("ray", "line", "segment", "the"):
+        i += 1
+    return sig[i] if name2(sig[i]) else None
 
 
 def _draw(toks: list[Tok], facts: FigureFacts) -> None:
