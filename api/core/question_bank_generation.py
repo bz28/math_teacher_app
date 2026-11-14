@@ -558,19 +558,42 @@ _COORDINATE_OR_CURVE = re.compile(
     re.IGNORECASE,
 )
 
+# A run of 2 to 8 capitals inside math markup: "$ABCD$", "$AC = 5$". Words
+# set in \text{} or \mathrm{} are words, not points; and in a problem with
+# a matrix ("$A = \begin{pmatrix}…$", "Find $AB$") capitals name matrices.
+_MATH_WORDS = re.compile(r"\\(?:text|mathrm|textbf|textit|operatorname)\s*\{[^{}]*\}")
+_MATH_POINT_RUN = re.compile(r"(?<![A-Za-z])(?:[A-Z]'*){2,8}(?![A-Za-z])")
+_MATRIX = re.compile(r"\\begin\s*\{\s*[pbBvV]?matrix\s*\}")
+
+
+def _math_point_runs(text: str) -> bool:
+    if _MATRIX.search(text):
+        return False
+    for span in _MATH.findall(text):  # $…$, $$…$$, \(…\), \[…\]
+        math = _MATH_WORDS.sub(" ", span)
+        if re.search(r"\b[a-z]{3,}\b", re.sub(r"\\[A-Za-z]+", " ", math)):
+            continue  # prose between two prices ("$40 per month. Plan TM costs $35"), not math
+        for run in _MATH_POINT_RUN.findall(math):
+            letters = run.replace("'", "")
+            if len(set(letters)) == len(letters):
+                return True
+    return False
+
+
 def _names_points(text: str) -> bool:
     """The problem names points in math markup or an explicit point form:
-    "$\\triangle ABC$", "$\\overline{AB}$", "$m\\angle A$", "point $P$",
-    "$ABCD$ is a rectangle", "circle $O$" (`_named_points`, and the
-    figure checker's own parse of the problem, which is what the figure is
-    checked against). No guessing from a bare run of capitals ("ladder AB",
+    "$\\triangle ABC$", "$\\overline{AB}$", "$m\\angle A$", "point $P$"
+    (`_named_points`), a run of capitals in math ("Let $ABCD$ be a square",
+    "Find $AC$"; `_math_point_runs`), or what the figure checker's own
+    parse of the problem reads ("circle $O$"), which is what the figure is
+    checked against. No guessing from a bare run of capitals ("ladder AB",
     "In PQRS", "the distance NYC to LA"): the generation prompt writes every
     point name in math markup (FIGURE_PROBLEM_WORDING), and the guesses
     mistook acronyms for points. At worst a problem with bare names gets no
     figure (counted as missing), never a wrong one."""
     from api.core.geometry.facts import parse_problem_points
 
-    return bool(_named_points(text) or parse_problem_points(text))
+    return bool(_named_points(text) or _math_point_runs(text) or parse_problem_points(text))
 
 
 def _needs_figure(q: dict[str, Any], subject: str = "math") -> bool:

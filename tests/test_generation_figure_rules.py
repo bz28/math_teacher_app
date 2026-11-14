@@ -193,6 +193,11 @@ def test_the_replacement_and_variation_wording() -> None:
     (r"In $\triangle ABC$, $AB = AC$.", True),
     (r"In $ABCD$, $AB = 5$. Find $CD$.", True),
     (r"In $PQRS$, the diagonals bisect each other. Find $PR$ if $PT = 4$.", True),
+    # A run of capitals in math markup names points (coordinator, after round 3).
+    (r"Let $ABCD$ be a square with side 4. Find $AC$.", True),
+    (r"Square $ABCD$ has side 6. Find $BD$.", True),
+    (r"$PQRS$ is a rhombus with side 5. Find its perimeter.", True),
+    (r"A store sells a jacket for \$85 and a hat for \$15 in the $\text{USA}$.", False),  # a word set in math
     ("A(2, 3) and B(5, 7) are points. Find the distance AB.", False),  # coordinates
     ("Point P is on the parabola y = x^2. Find P.", False),  # a curve
     ("A rectangle has width 7 and length 9. Find its area.", False),  # shapes only
