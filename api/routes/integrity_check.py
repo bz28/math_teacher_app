@@ -753,6 +753,16 @@ async def post_student_turn(
 _STREAMED_TURNS: set[asyncio.Task[None]] = set()
 
 
+async def drain_streamed_turns(timeout: float = 30.0) -> None:
+    """Let streamed turns still running finish before the process exits.
+
+    A turn whose student already disconnected has no request keeping the
+    server's shutdown waiting on it, so without this a deploy would
+    cancel it mid-loop and roll back the student's reply."""
+    if _STREAMED_TURNS:
+        await asyncio.wait(set(_STREAMED_TURNS), timeout=timeout)
+
+
 def _sse(event: str, data: str) -> str:
     return f"event: {event}\ndata: {data}\n\n"
 
