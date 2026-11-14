@@ -496,6 +496,20 @@ def _to_tool_params(schema: ToolSchema) -> tuple[list[ToolParam], ToolChoiceTool
 
 _F = TypeVar("_F", bound=Callable[..., Awaitable[Any]])
 
+# `(content_block_index, text_delta)` — see call_claude_conversation.
+TextDeltaCallback = Callable[[int, str], Awaitable[None]]
+
+
+async def _replay_text(on_text: TextDeltaCallback, blocks: Any) -> None:
+    """Feed a replayed conversation response to a streaming caller, one
+    delta per recorded text block, so the harness exercises the same
+    path a live streamed call does."""
+    if not isinstance(blocks, list):
+        return
+    for i, b in enumerate(blocks):
+        if isinstance(b, dict) and b.get("type") == "text":
+            await on_text(i, b.get("text") or "")
+
 
 def _get_cassette() -> Any | None:
     """Return the harness cassette when active, else None. The test
@@ -549,6 +563,9 @@ def _cassetted(default_model: str) -> Callable[[_F], _F]:
             cached = cassette.get(fn.__name__, key)
             # record always re-records (force-refresh); replay/auto reuse.
             if cassette.mode != "record" and cached is not MISS:
+                on_text = args_dict.get("on_text")
+                if on_text is not None:
+                    await _replay_text(on_text, cached)
                 return cached
             if cassette.mode == "replay":
                 raise CassetteMissError(
@@ -994,6 +1011,7 @@ async def call_claude_conversation(
     temperature: float | None = None,
     submission_id: str | None = None,
     call_metadata: dict[str, Any] | None = None,
+    on_text: TextDeltaCallback | None = None,
 ) -> list[dict[str, Any]]:
     """Run one conversational turn with multiple tools available and
     `tool_choice="auto"` — the model picks between replying in text,
@@ -1025,6 +1043,13 @@ async def call_claude_conversation(
     particular tool. Callers handle tool_use blocks themselves and
     loop back with tool_result messages as needed.
 
+    `on_text`, when given, streams the response: it's awaited with
+    `(content_block_index, text)` for every text delta as the model
+    writes it, so the caller can show words before the call finishes.
+    The return value, logging and cost row are the same either way —
+    `get_final_message()` hands back the same Message `create` would.
+    On a cassette replay it's called once per recorded text block.
+
     Single attempt. Used by the integrity conversational agent; the
     caller handles retries when tool input validation fails.
     """
@@ -1050,18 +1075,29 @@ async def call_claude_conversation(
         {} if temperature is None else {"temperature": temperature}
     )
 
+    request: dict[str, Any] = {
+        "model": use_model,
+        "max_tokens": max_tokens,
+        "system": _system_with_cache(_with_safety(system_prompt)),
+        "messages": _with_transcript_cache(messages),
+        "tools": tools,
+        "tool_choice": {"type": "auto"},
+        "timeout": 90.0,
+        **temp_kwargs,
+    }
     start = time.monotonic()
     try:
-        response = await client.messages.create(  # type: ignore[call-overload]
-            model=use_model,
-            max_tokens=max_tokens,
-            system=_system_with_cache(_with_safety(system_prompt)),
-            messages=_with_transcript_cache(messages),
-            tools=tools,
-            tool_choice={"type": "auto"},
-            timeout=90.0,
-            **temp_kwargs,
-        )
+        if on_text is None:
+            response = await client.messages.create(**request)
+        else:
+            async with client.messages.stream(**request) as stream:
+                async for event in stream:
+                    if (
+                        event.type == "content_block_delta"
+                        and event.delta.type == "text_delta"
+                    ):
+                        await on_text(event.index, event.delta.text)
+                response = await stream.get_final_message()
         latency_ms = round((time.monotonic() - start) * 1000, 2)
 
         # Build a compact text summary of the final assistant output
