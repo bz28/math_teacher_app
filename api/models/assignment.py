@@ -118,8 +118,7 @@ class Submission(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="submitted")
     # The student's submitted work — list of {key, media_type, filename?}
     # where `key` names the JPEG/PNG/PDF page in the photo bucket
-    # (api/core/photo_store.py; rows not yet moved by
-    # scripts/backfill_photo_bucket.py still hold base64 `data`).
+    # (api/core/photo_store.py).
     # Multi-file because students often work across pages. Validated
     # server-side via api.core.image_utils.validate_and_decode_upload
     # (magic bytes + per-format size cap) before upload.

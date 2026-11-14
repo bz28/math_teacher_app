@@ -113,18 +113,15 @@ class SubmissionFileOut(BaseModel):
     it: a URL to load it from — never the bytes. `media_type` is
     image/jpeg, image/png, or application/pdf."""
 
-    # A short-lived presigned URL to the photo bucket. (A `data:` URL for
-    # a row the backfill hasn't moved yet; removed with that branch.)
+    # A short-lived presigned URL to the photo bucket.
     url: str
     media_type: str
     # Stable across responses, unlike `url` (re-signed every time): the
     # web client keys its URL cache on it, so reopening a page reuses the
-    # URL it already loaded and the browser cache serves it. Null for a
-    # not-yet-moved row.
-    id: str | None = None
-    # Seconds `url` works for from when the response was sent. Null when
-    # it doesn't expire (a data: URL).
-    expires_in: int | None = None
+    # URL it already loaded and the browser cache serves it.
+    id: str
+    # Seconds `url` works for from when the response was sent.
+    expires_in: int
     # Never populated by the backend today; kept Optional so the confirm/
     # submitted screens can read it (falling back to "Page N") without
     # the three clients drifting on whether the field exists.

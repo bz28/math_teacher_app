@@ -18,7 +18,6 @@ import {
   PencilIcon,
   XIcon,
 } from "@/components/ui/icons";
-import { useOpenableUrl } from "@/hooks/use-blob-url";
 import { onPhotoError } from "@/lib/submission-photos";
 import { Modal } from "@/components/ui/modal";
 import { useDeviceType } from "./use-device-type";
@@ -1280,10 +1279,6 @@ function FileZoomModal({
 }) {
   const isPdf = file.media_type === "application/pdf";
   const label = file.filename ?? "Submitted page";
-  // The link is the only fallback when <embed> can't render inline, so
-  // it must navigate (`useOpenableUrl`: a not-yet-moved page's data: URL
-  // can't, and becomes a blob: handle).
-  const pdfUrl = useOpenableUrl(isPdf ? file.url : "");
   return (
     <Modal
       open
@@ -1308,12 +1303,12 @@ function FileZoomModal({
         {isPdf ? (
           <>
             <embed
-              src={pdfUrl}
+              src={file.url}
               type="application/pdf"
               className="h-[75vh] w-full rounded-[--radius-md] bg-white"
             />
             <a
-              href={pdfUrl}
+              href={file.url}
               target="_blank"
               rel="noopener noreferrer"
               className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary underline-offset-2 hover:underline"

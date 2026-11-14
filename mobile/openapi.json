@@ -4834,15 +4834,8 @@
         "description": "One file the student turned in, as `photo_store.page_out` serves\nit: a URL to load it from \u2014 never the bytes. `media_type` is\nimage/jpeg, image/png, or application/pdf.",
         "properties": {
           "expires_in": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Expires In"
+            "title": "Expires In",
+            "type": "integer"
           },
           "filename": {
             "anyOf": [
@@ -4856,15 +4849,8 @@
             "title": "Filename"
           },
           "id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Id"
+            "title": "Id",
+            "type": "string"
           },
           "media_type": {
             "title": "Media Type",
@@ -4877,7 +4863,9 @@
         },
         "required": [
           "url",
-          "media_type"
+          "media_type",
+          "id",
+          "expires_in"
         ],
         "title": "SubmissionFileOut",
         "type": "object"

@@ -5,7 +5,7 @@ import { afterEach, describe, it, mock } from "node:test";
 import type { SubmissionFile } from "./api.ts";
 import { PHOTO_URLS_EXPIRED, onPhotoError, stablePhotoUrls } from "./submission-photos.ts";
 
-const page = (id: string | null, url: string, expiresIn: number | null = 3600): SubmissionFile => ({
+const page = (id: string, url: string, expiresIn = 3600): SubmissionFile => ({
   id,
   url,
   media_type: "image/jpeg",
@@ -30,9 +30,7 @@ describe("stablePhotoUrls", () => {
     assert.equal(later!.url, "https://b/p2?sig=b");
   });
 
-  it("leaves pages without an id (a not-yet-moved data: URL) and null lists alone", () => {
-    const inline = page(null, "data:image/jpeg;base64,AAAA", null);
-    assert.deepEqual(stablePhotoUrls([inline]), [inline]);
+  it("leaves a null list alone", () => {
     assert.equal(stablePhotoUrls(null), null);
   });
 });

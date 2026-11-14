@@ -6448,11 +6448,11 @@ export interface components {
          */
         SubmissionFileOut: {
             /** Expires In */
-            expires_in?: number | null;
+            expires_in: number;
             /** Filename */
             filename?: string | null;
             /** Id */
-            id?: string | null;
+            id: string;
             /** Media Type */
             media_type: string;
             /** Url */
