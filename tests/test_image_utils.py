@@ -8,12 +8,16 @@ from PIL import Image
 
 from api.core.constants import MAX_IMAGE_BYTES, MAX_PDF_BYTES
 from api.core.image_utils import (
+    READER_MAX_EDGE,
+    READER_MAX_PIXELS,
     VISION_MAX_EDGE,
     page_looks_sideways,
     pdf_page_checks,
     pdf_pages_as_images,
     pdf_scan_long_edges,
+    prepare_page_for_reader,
     preprocess_image_for_vision,
+    reader_page_size,
     rotate_upload,
     to_content_block,
     validate_and_decode_image,
@@ -217,6 +221,106 @@ class TestPreprocessImageForVision:
         # still reaches the model.
         junk = base64.b64encode(b"not really a jpeg").decode("ascii")
         assert preprocess_image_for_vision(junk, "image/jpeg") == junk
+
+
+    def test_still_capped_at_the_old_edge_for_its_other_callers(self) -> None:
+        # image_extract (Sonnet 4.6) and the drawing check's page look keep
+        # 1568: the reader's larger size is the reader's alone.
+        assert VISION_MAX_EDGE == 1568
+        img = Image.new("RGB", (3000, 4000), "white")
+        w, h = _decode_size(preprocess_image_for_vision(_encode(img, "JPEG"), "image/jpeg"))
+        assert (w, h) == (1176, 1568)
+
+
+# ── prepare_page_for_reader (the reader's native resolution) ─────────
+
+
+def _decoded(b64: str) -> Image.Image:
+    return Image.open(io.BytesIO(base64.b64decode(b64)))
+
+
+def _noise(size: tuple[int, int]) -> Image.Image:
+    import os
+
+    return Image.frombytes("RGB", size, os.urandom(size[0] * size[1] * 3))
+
+
+class TestPreparePageForReader:
+    def test_reader_size_fits_the_long_edge_and_the_pixel_cap(self) -> None:
+        # A wide strip binds on the long edge; a 3:4 page on 3.75 MP.
+        assert reader_page_size(5000, 500) == (READER_MAX_EDGE, 257)
+        w, h = reader_page_size(551, 727)
+        assert h <= READER_MAX_EDGE and w * h <= READER_MAX_PIXELS and w * h > 0.995 * READER_MAX_PIXELS
+        assert abs(w / h - 551 / 727) < 0.002
+        for size in ((1, 1), (10, 3000), (4032, 3024), (2576, 2576)):
+            w, h = reader_page_size(*size)
+            assert max(w, h) <= READER_MAX_EDGE and w * h <= READER_MAX_PIXELS
+
+    def test_a_small_page_is_enlarged_and_sent_as_jpeg(self) -> None:
+        # zack's page: a 551 × 727 PNG, letters 6–8 px tall.
+        out, media = prepare_page_for_reader(_encode(Image.new("RGB", (551, 727), "white"), "PNG"), "image/png")
+        assert media == "image/jpeg"
+        img = _decoded(out)
+        assert img.format == "JPEG" and img.size == reader_page_size(551, 727)
+        assert img.size[1] > 2200
+
+    def test_a_wide_small_page_reaches_the_long_edge(self) -> None:
+        out, _ = prepare_page_for_reader(_encode(Image.new("RGB", (1000, 200), "white"), "JPEG"), "image/jpeg")
+        assert _decoded(out).size == (READER_MAX_EDGE, 515)
+
+    def test_a_large_photo_is_shrunk(self) -> None:
+        out, media = prepare_page_for_reader(_encode(Image.new("RGB", (4032, 3024), "white"), "JPEG"), "image/jpeg")
+        w, h = _decoded(out).size
+        assert media == "image/jpeg" and (w, h) == reader_page_size(4032, 3024)
+        assert w <= READER_MAX_EDGE and w * h <= READER_MAX_PIXELS and w > 2200
+
+    def test_a_png_that_isnt_enlarged_stays_png(self) -> None:
+        out, media = prepare_page_for_reader(_encode(Image.new("RGB", (3000, 4000), "white"), "PNG"), "image/png")
+        assert media == "image/png" and _decoded(out).format == "PNG"
+        assert _decoded(out).size == reader_page_size(3000, 4000)
+
+    def test_a_heavy_png_goes_as_jpeg_under_the_api_limit(self) -> None:
+        # Noise is the worst case for both encoders: at full reader size a
+        # PNG of it is ~11 MB; the page must still fit the API's 5 MB.
+        out, media = prepare_page_for_reader(_encode(_noise((1677, 2236)), "PNG"), "image/png")
+        assert media == "image/jpeg"
+        assert len(out) < 5 * 1024 * 1024
+        w, h = _decoded(out).size
+        assert w * h <= READER_MAX_PIXELS
+
+    def test_a_jpeg_over_the_byte_cap_steps_its_quality_down(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from api.core import image_utils
+
+        # Noise at full reader size is ~3.4 MB at quality 90: under a lower
+        # cap the page must still come in under it.
+        monkeypatch.setattr(image_utils, "_READER_PAGE_MAX_BYTES", 2_600_000)
+        out, media = prepare_page_for_reader(_encode(_noise((1677, 2236)), "JPEG"), "image/jpeg")
+        assert media == "image/jpeg" and len(base64.b64decode(out)) <= 2_600_000
+
+    def test_every_page_fits_the_api(self) -> None:
+        for size, fmt in (((551, 727), "PNG"), ((4064, 3048), "JPEG"), ((1448, 1086), "PNG"), ((300, 3000), "JPEG")):
+            out, _ = prepare_page_for_reader(_encode(_noise(size), fmt), f"image/{fmt.lower()}")
+            w, h = _decoded(out).size
+            assert len(out) < 5 * 1024 * 1024, size
+            assert max(w, h) <= READER_MAX_EDGE and w * h <= READER_MAX_PIXELS, size
+
+    def test_exif_orientation_baked_in(self) -> None:
+        img = Image.new("RGB", (240, 120), "white")
+        exif = img.getexif()
+        exif[0x0112] = 6
+        out, _ = prepare_page_for_reader(_encode(img, "JPEG", exif=exif), "image/jpeg")
+        w, h = _decoded(out).size
+        assert h > w  # turned upright, then enlarged
+
+    def test_transparency_is_flattened_for_jpeg(self) -> None:
+        out, media = prepare_page_for_reader(_encode(Image.new("RGBA", (400, 300), (0, 0, 0, 0)), "PNG"), "image/png")
+        assert media == "image/jpeg" and _decoded(out).mode == "RGB"
+
+    def test_non_images_and_junk_come_back_untouched(self) -> None:
+        pdf_b64 = base64.b64encode(b"%PDF-1.4\nstuff").decode("ascii")
+        assert prepare_page_for_reader(pdf_b64, "application/pdf") == (pdf_b64, "application/pdf")
+        junk = base64.b64encode(b"not really a jpeg").decode("ascii")
+        assert prepare_page_for_reader(junk, "image/jpeg") == (junk, "image/jpeg")
 
 
 # ── rotate_upload (the student's rotate button, applied at submit) ────
@@ -592,11 +696,17 @@ def _is(rgb: tuple[int, ...], want: tuple[int, int, int]) -> bool:
     return all(abs(a - b) < 60 for a, b in zip(rgb, want, strict=True))
 
 
+def _letter_at_reader_edge(size: tuple[int, int]) -> bool:
+    """A whole 612 × 792 pt Letter page rendered at the reader's long edge
+    (pdfium truncates scale × points, so a side can land a pixel short)."""
+    return abs(size[0] - 612 * READER_MAX_EDGE / 792) <= 1 and size[1] == READER_MAX_EDGE
+
+
 class TestPdfPagesAsImages:
     def test_a_printed_photo_is_cut_out_of_its_margins_at_its_own_resolution(self) -> None:
         [page] = pdf_pages_as_images(printed_pdf(_corners((1500, 2000)), texts=_CHROME))
         img = _image(page)
-        # The photo's own pixels plus a hairline of padding — not the 2400 px
+        # The photo's own pixels plus a hairline of padding — not the 2576 px
         # page, and not the ~60% of a page the photo filled there.
         assert 1500 <= img.width <= 1560 and 2000 <= img.height <= 2060
         assert _is(img.getpixel((40, 40)), (255, 0, 0))
@@ -611,7 +721,7 @@ class TestPdfPagesAsImages:
             printed_pdf(None, at=(42, 210, 582, 750), fill=(120, 120, 120), texts=_CHROME)
         )
         img = _image(page)
-        assert max(img.size) == 2400
+        assert max(img.size) == READER_MAX_EDGE
         assert abs(img.width / img.height - 1) < 0.05  # the 540 × 540 pt shape, not the page
         assert _is(img.getpixel((img.width // 2, img.height // 2)), (120, 120, 120))
 
@@ -620,14 +730,14 @@ class TestPdfPagesAsImages:
         texts = (("Jane Doe - Period 3", 72, 750), ("1. x = 3", 72, 400), ("page 2", 300, 36))
         [page] = pdf_pages_as_images(printed_pdf(None, texts=texts))
         img = _image(page)
-        assert max(img.size) == 2400
+        assert max(img.size) == READER_MAX_EDGE
         dark = [y for y in range(img.height) if min(img.crop((0, y, img.width, y + 1)).getextrema()[0]) < 100]
         # The header and the footer line are both on the render.
         assert dark[0] < img.height * 0.1 and dark[-1] > img.height * 0.9
 
     def test_a_blank_page_is_rendered_whole(self) -> None:
         [page] = pdf_pages_as_images(printed_pdf(None))
-        assert _image(page).size == (1855, 2400)
+        assert _letter_at_reader_edge(_image(page).size)
 
     def test_a_full_page_scan_is_the_scan(self) -> None:
         [page] = pdf_pages_as_images(pdf_of([_corners((1200, 1600))]))
@@ -662,7 +772,7 @@ class TestPdfPagesAsImages:
         photo.save(buf)
         pages = [_image(p) for p in pdf_pages_as_images(_b64(buf.getvalue()))]
         # pdfium truncates scale × points, so a page can land a pixel short.
-        assert pages[0].height < 2100 and abs(max(pages[1].size) - 2400) <= 2
+        assert pages[0].height < 2100 and abs(max(pages[1].size) - READER_MAX_EDGE) <= 2
 
 
 def raw_pdf(content: str, *, pages_node: str = "", page: str = "", extra: tuple[str, ...] = ()) -> str:
@@ -721,4 +831,4 @@ class TestPdfCutKeepsTheWork:
     def test_a_framed_page_keeps_its_frame(self) -> None:
         framed = "1 1 1 rg 0 0 0 RG 10 w 5 5 602 782 re B 0 0 0 rg 300 300 20 20 re f"
         [page] = pdf_pages_as_images(raw_pdf(framed, page="/MediaBox [0 0 612 792]"))
-        assert _image(page).size == (1855, 2400)
+        assert _letter_at_reader_edge(_image(page).size)
