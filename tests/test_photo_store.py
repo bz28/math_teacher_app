@@ -170,6 +170,28 @@ async def test_a_retake_stores_new_keys_and_its_attempt_keeps_the_old_ones(
     assert sorted(_objects(s3)) == sorted([first[0]["key"], now[0]["key"]])
 
 
+async def test_deleting_pages_batches_them_through_delete_objects(
+    s3: Any, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A course's worth of pages goes in a few DeleteObjects calls, not one
+    request per page; a key that's already gone isn't an error."""
+    stored = await photo_store.store_pages(uuid.uuid4(), [{"data": PAGE_PNG, "media_type": "image/png"}] * 5)
+    keep = await photo_store.store_pages(uuid.uuid4(), [{"data": PAGE_PNG, "media_type": "image/png"}])
+    monkeypatch.setattr(photo_store, "DELETE_BATCH", 2)
+    store = photo_store.backend()
+    calls: list[int] = []
+    real = store.delete_many
+
+    def counting(keys: list[str]) -> list[str]:
+        calls.append(len(keys))
+        return real(keys)
+
+    monkeypatch.setattr(store, "delete_many", counting)
+    await photo_store.delete_pages([*stored, {"key": "submissions/gone/x.png"}])
+    assert calls == [2, 2, 2]
+    assert _objects(s3) == [keep[0]["key"]]
+
+
 # ── read helper ──
 
 
