@@ -489,8 +489,9 @@ def test_a_transversal_alone_does_not_account_for_where_two_angles_sit() -> None
 def test_the_angles_must_sit_where_the_problem_says() -> None:
     reading = _same_side_reading(Fact(kind="same_side_interior", items=["1", "2"]))
     lines = [{"through": ["A", "B"]}, {"through": ["C", "D"]}, {"through": ["E", "F"]}]
-    right = _fig(TR, lines=lines, angle_labels={"BGH": "1", "DHG": "2"})
-    wrong = _fig(TR, lines=lines, angle_labels={"BGH": "1", "CHG": "2"})  # alternate interior instead
+    right = _fig(TR, lines=lines, angle_labels={"BGH": "1", "DHG": "2"}, parallel_groups=[["AB", "CD"]])
+    wrong = _fig(TR, lines=lines, angle_labels={"BGH": "1", "CHG": "2"},  # alternate interior instead
+                 parallel_groups=[["AB", "CD"]])
     assert check_construction(right, _SAME_SIDE_TEXT, facts=reading) == []
     issues = check_construction(wrong, _SAME_SIDE_TEXT, facts=reading)
     assert any("∠1 and ∠2 are same-side interior angles" in i.message for i in issues), issues

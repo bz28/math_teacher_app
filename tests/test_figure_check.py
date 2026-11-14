@@ -58,7 +58,7 @@ def test_named_segment_drawn() -> None:
 def test_segment_drawn_in_pieces_counts() -> None:
     """AB drawn as AM + MB (M on it) covers AB."""
     problem = r"$M$ is the midpoint of $\overline{AB}$."
-    f = fig(points={"A": (0, 0), "M": (2, 0), "B": (4, 0)}, segments=["AM", "MB"])
+    f = fig(points={"A": (0, 0), "M": (2, 0), "B": (4, 0)}, segments=["AM", "MB"], tick_groups=[["AM", "MB"]])
     assert messages(problem, f) == []
 
 
@@ -66,8 +66,8 @@ def test_triangle_in_words_needs_its_sides() -> None:
     problem = "Triangle $ABC$ has a right angle at $B$."
     pts = {"A": (0, 3), "B": (0, 0), "C": (4, 0)}
     assert parse_problem(problem).segments == {frozenset("AB"), frozenset("BC"), frozenset("CA")}
-    assert messages(problem, fig(points=pts, segments=["AB", "BC", "CA"])) == []
-    assert "not drawn: AC" in messages(problem, fig(points=pts, segments=["AB", "BC"]))
+    assert messages(problem, fig(points=pts, segments=["AB", "BC", "CA"], right_angles=["ABC"])) == []
+    assert "not drawn: AC" in messages(problem, fig(points=pts, segments=["AB", "BC"], right_angles=["ABC"]))
 
 
 def test_ray_drawn() -> None:
@@ -99,7 +99,7 @@ def test_named_lines_drawn() -> None:
         {"name": "q", "through": ["_q1", "_q2"]},
         {"name": "t", "through": ["_t1", "_t2"]},
     ]
-    assert messages(problem, fig(points=pts, lines=lines)) == []
+    assert messages(problem, fig(points=pts, lines=lines, parallel_groups=[["p", "q"]])) == []
     assert "not drawn: line q" in messages(problem, fig(points=pts, lines=[lines[0], lines[2]]))
 
 

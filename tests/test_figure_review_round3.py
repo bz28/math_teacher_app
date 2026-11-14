@@ -319,7 +319,7 @@ STEP_FACTS = FigureFacts(points=list("ABCD"), segments=["AD"], givens=[
     F("equal_length", ["BD"], value=3, quote="BD = 3"), F("equal_length", ["AD"], value=4, quote="AD = 4")])
 AREA_BASE = fig(points={"A": (3, 4), "B": (0, 0), "C": (6, 0)}, segments=["AB", "BC", "CA"])
 STEP_GOOD = fig(points={"A": (3, 4), "B": (0, 0), "C": (6, 0), "D": (3, 0)}, segments=["AB", "BC", "CA", "AD"],
-                right_angles=["ADC"])
+                right_angles=["ADC"], tick_groups=[["BD", "DC"]])
 STEP_BAD = fig(points={"A": (3, 4), "B": (0, 0), "C": (6, 0), "D": (1.5, 0)}, segments=["AB", "BC", "CA", "AD"])
 
 
@@ -449,7 +449,7 @@ def test_two_sides_equal_is_congruence() -> None:
                         givens=[F("equal_length", ["DA", "DC"], quote="DA = DC")])
     unequal = fig(points={"A": (0, 0), "D": (2, 4), "C": (6, 0)}, segments=["AD", "DC", "CA"])
     assert "the given DA = DC is not true in the drawing" in check(unequal, text, facts)
-    iso = fig(points={"A": (0, 0), "D": (3, 4), "C": (6, 0)}, segments=["AD", "DC", "CA"])
+    iso = fig(points={"A": (0, 0), "D": (3, 4), "C": (6, 0)}, segments=["AD", "DC", "CA"], tick_groups=[["DA", "DC"]])
     assert check(iso, text, facts) == []
 
 
@@ -483,7 +483,8 @@ def test_an_interior_ray_is_held_and_its_arms_are_not_requested() -> None:
         F("angle_measure", ["ABD"], value=30, quote="m∠ABD = 30°")], find=[Target(kind="angle", item="DBC")])
     read = standard_reading(r)
     assert [f.kind for f in read.givens] == ["interior_ray", "angle_measure"]
-    inside = fig(points={"B": (0, 0), "A": P(0), "D": P(30), "C": P(80)}, rays=["BA", "BD", "BC"])
+    inside = fig(points={"B": (0, 0), "A": P(0), "D": P(30), "C": P(80)}, rays=["BA", "BD", "BC"],
+                 angle_labels={"ABD": "30°"})
     outside = fig(points={"B": (0, 0), "A": P(0), "D": P(30), "C": P(20)}, rays=["BA", "BD", "BC"])
     assert check(inside, text, read) == []
     assert "the given ray BD lies inside ∠ABC is not true in the drawing" in check(outside, text, read)

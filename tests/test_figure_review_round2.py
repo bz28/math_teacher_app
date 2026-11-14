@@ -53,15 +53,16 @@ def test_a_flat_parallelogram_is_refused() -> None:
     out = check(flat, text, facts)
     assert "ABCD is drawn flat (it has no area)" in out
     assert "the given parallelogram ABCD (AB ∥ CD) is not true in the drawing" in out
-    good = fig(points={"A": (0, 0), "B": (4, 0), "C": (5, 3), "D": (1, 3)}, segments=["AB", "BC", "CD", "DA"])
+    good = fig(points={"A": (0, 0), "B": (4, 0), "C": (5, 3), "D": (1, 3)}, segments=["AB", "BC", "CD", "DA"],
+               parallel_groups=[["AB", "CD"], ["BC", "DA"]])
     assert check(good, text, facts) == []
 
 
 def test_a_flat_triangle_is_refused() -> None:
-    flat = fig(points={"B": (0, 0), "A": (3, 0), "C": (6, 0)}, segments=["AB", "BC", "CA"])
+    flat = fig(points={"B": (0, 0), "A": (3, 0), "C": (6, 0)}, segments=["AB", "BC", "CA"], tick_groups=[["AB", "AC"]])
     assert check(flat, ISO, ISO_FACTS) == ["triangle ABC is drawn flat (it has no area)"]
-    assert check(fig(points={"B": (0, 0), "A": (3, 4), "C": (6, 0)}, segments=["AB", "BC", "CA"]),
-                 ISO, ISO_FACTS) == []
+    assert check(fig(points={"B": (0, 0), "A": (3, 4), "C": (6, 0)}, segments=["AB", "BC", "CA"],
+                     tick_groups=[["AB", "AC"]]), ISO, ISO_FACTS) == []
 
 
 def test_three_corners_in_a_row_is_no_polygon() -> None:
@@ -76,15 +77,21 @@ def test_parallel_pieces_on_one_line_are_not_parallel() -> None:
     text = r"Lines $m$ and $n$ are parallel."
     facts = FigureFacts(named_lines=["m", "n"], givens=[F("parallel", ["m", "n"], quote="m ∥ n")])
     same = fig(points={"_a": (0, 0), "_b": (4, 0), "_c": (6, 0), "_d": (9, 0)},
-               lines=[{"name": "m", "through": ["_a", "_b"]}, {"name": "n", "through": ["_c", "_d"]}])
-    assert check(same, text, facts) == ["the given m ∥ n is not true in the drawing"]
+               lines=[{"name": "m", "through": ["_a", "_b"]}, {"name": "n", "through": ["_c", "_d"]}],
+               parallel_groups=[["m", "n"]])
+    assert check(same, text, facts) == ["the given m ∥ n is not true in the drawing",
+                                        "the parallel arrows on m, n are on pieces that aren't parallel in the drawing"]
     apart = fig(points={"_a": (0, 0), "_b": (4, 0), "_c": (0, 3), "_d": (4, 3)},
-                lines=[{"name": "m", "through": ["_a", "_b"]}, {"name": "n", "through": ["_c", "_d"]}])
+                lines=[{"name": "m", "through": ["_a", "_b"]}, {"name": "n", "through": ["_c", "_d"]}],
+                parallel_groups=[["m", "n"]])
     assert check(apart, text, facts) == []
     text2 = r"Given $\overline{AB} \parallel \overline{CD}$."
     facts2 = FigureFacts(points=list("ABCD"), segments=["AB", "CD"], givens=[F("parallel", ["AB", "CD"])])
-    one_line = fig(points={"A": (0, 0), "B": (2, 0), "C": (4, 0), "D": (7, 0)}, segments=["AB", "CD"])
-    assert check(one_line, text2, facts2) == ["the given AB ∥ CD is not true in the drawing"]
+    one_line = fig(points={"A": (0, 0), "B": (2, 0), "C": (4, 0), "D": (7, 0)}, segments=["AB", "CD"],
+                   parallel_groups=[["AB", "CD"]])
+    assert check(one_line, text2, facts2) == [
+        "the given AB ∥ CD is not true in the drawing",
+        "the parallel arrows on AB, CD are on pieces that aren't parallel in the drawing"]
 
 
 def test_parallel_arrows_on_one_line_are_a_false_mark() -> None:
@@ -166,7 +173,8 @@ FIND_C_FACTS = FigureFacts(points=list("ABC"), triangles=["ABC"],
                            givens=[F("congruent_angles", ["A", "C"]), F("angle_measure", ["A"], value=50)],
                            find=[Target(kind="angle", item="C")])
 _H = 3 * math.tan(math.radians(50))
-FIND_C_BASE: dict[str, Any] = {"points": {"A": (0, 0), "B": (3, _H), "C": (6, 0)}, "segments": ["AB", "BC", "CA"]}
+FIND_C_BASE: dict[str, Any] = {"points": {"A": (0, 0), "B": (3, _H), "C": (6, 0)}, "segments": ["AB", "BC", "CA"],
+                               "arc_groups": [["BAC", "ACB"]]}
 
 
 def test_the_answer_on_its_angle_is_caught_however_it_is_written() -> None:
@@ -185,7 +193,8 @@ def test_a_length_answer_is_caught_however_it_is_written() -> None:
     facts = FigureFacts(points=list("ABCD"), segments=["AB", "CD"],
                         givens=[F("equal_length", ["AB"], value=5), F("congruent_segments", ["AB", "CD"])],
                         find=[Target(kind="segment", item="CD")])
-    base: dict[str, Any] = {"points": {"A": (0, 0), "B": (5, 0), "C": (0, 2), "D": (5, 2)}, "segments": ["AB", "CD"]}
+    base: dict[str, Any] = {"points": {"A": (0, 0), "B": (5, 0), "C": (0, 2), "D": (5, 2)}, "segments": ["AB", "CD"],
+                            "tick_groups": [["AB", "CD"]]}
     for label in ("5", "CD = 5", "CD=5 cm"):
         out = check(fig(**base, side_labels={"AB": "5", "CD": label}), text, facts, final_answer="CD = 5")
         assert f"the label {label!r} on CD gives away the answer (the problem asks for it)" in out, label
@@ -205,11 +214,12 @@ def test_a_number_the_problem_gives_for_another_part_is_not_given_for_this_one()
                         givens=[F("congruent_segments", ["AB", "AC"]), F("angle_measure", ["B"], value=50)],
                         find=[Target(kind="angle", item="A")])
     pts = {"A": (3, 3 * math.tan(math.radians(50))), "B": (0, 0), "C": (6, 0)}
-    derived = fig(points=pts, segments=["AB", "BC", "CA"], angle_labels={"ABC": "50°", "ACB": "50°"})
+    derived = fig(points=pts, segments=["AB", "BC", "CA"], angle_labels={"ABC": "50°", "ACB": "50°"},
+                  tick_groups=[["AB", "AC"]])
     assert check(derived, text, facts, final_answer="80°") == [
         "the label '50°' on ∠ACB shows 50, which the problem doesn't give for ∠ACB",
     ]
-    given = fig(points=pts, segments=["AB", "BC", "CA"], angle_labels={"ABC": "50°"})
+    given = fig(points=pts, segments=["AB", "BC", "CA"], angle_labels={"ABC": "50°"}, tick_groups=[["AB", "AC"]])
     assert check(given, text, facts, final_answer="80°") == []
     # A length too: AB = 5 is not BC = 5.
     text = r"In $\triangle ABC$, $AB = 5$. Find $AC$."
@@ -265,7 +275,7 @@ def test_a_measure_solved_from_the_problem_is_not_given() -> None:
 
 def test_a_label_without_a_number_must_be_a_name_the_problem_uses() -> None:
     pts = {"A": (2, 4), "B": (0, 0), "C": (4, 0)}
-    base: dict[str, Any] = {"points": pts, "segments": ["AB", "BC", "CA"]}
+    base: dict[str, Any] = {"points": pts, "segments": ["AB", "BC", "CA"], "tick_groups": [["AB", "AC"]]}
     for label, why in (("y", "shows y"), ("?", "shows ?"), (" ", "is empty"),
                        ("∠1", "names ∠1, which the problem doesn't have")):
         out = check(fig(**base, angle_labels={"BAC": label}), ISO, ISO_FACTS)
@@ -305,10 +315,11 @@ def test_a_name_label_must_name_a_part_the_problem_names() -> None:
 
 def test_a_label_never_makes_an_extra_piece_count_as_named() -> None:
     pts = {"A": (2, 4), "B": (0, 0), "C": (4, 0), "_m": (2, 0)}
-    plain = fig(points=pts, segments=["AB", "BC", "CA", "A_m"])
+    plain = fig(points=pts, segments=["AB", "BC", "CA", "A_m"], tick_groups=[["AB", "AC"]])
     assert check(plain, ISO, ISO_FACTS) == ["extra segment not in the problem: from A to an unnamed point"]
     for label in ("y", " ", "?", "40°"):
-        f = fig(points=pts, segments=["AB", "BC", "CA", "A_m"], angle_labels={"BA_m": label})
+        f = fig(points=pts, segments=["AB", "BC", "CA", "A_m"], angle_labels={"BA_m": label},
+                tick_groups=[["AB", "AC"]])
         out = check(f, ISO, ISO_FACTS)
         assert "extra segment not in the problem: from A to an unnamed point" in out, label
         assert not any("Am" in m or "_m" in m for m in out), out
@@ -343,7 +354,7 @@ def test_ninety_is_given_only_for_the_right_angle() -> None:
     # ∠BAC drawn as 90°: true in the drawing, but the problem gives 90°
     # only for the angles at D.
     pts2 = {"A": (1.44, 1.92), "B": (0, 0), "C": (4, 0), "D": (1.44, 0)}
-    wrong = fig(points=pts2, segments=["AB", "BC", "CA", "AD"], angle_labels={"BAC": "90°"})
+    wrong = fig(points=pts2, segments=["AB", "BC", "CA", "AD"], angle_labels={"BAC": "90°"}, right_angles=["ADB"])
     assert check(wrong, text, facts) == ["the label '90°' on ∠BAC shows 90, which the problem doesn't give for ∠BAC"]
 
 
@@ -417,7 +428,8 @@ def test_bisector_allows_no_sector_arc_or_shading() -> None:
     pts = {"A": (4, 0), "B": (0, 0), "C": (4 * math.cos(math.radians(80)), 4 * math.sin(math.radians(80))),
            "D": (4 * math.cos(math.radians(40)), 4 * math.sin(math.radians(40)))}
     sector = {"center": "B", "endpoints": ["A", "D"]}
-    f = fig(points=pts, rays=["BA", "BC", "BD"], sectors=[sector], shaded=[{"sector": sector}])
+    f = fig(points=pts, rays=["BA", "BC", "BD"], sectors=[sector], shaded=[{"sector": sector}],
+            arc_groups=[["ABD", "DBC"]])
     assert check(f, text, facts) == ["extra sector not in the problem", "extra shading not in the problem"]
     sector_text = text + " Shade the sector $ABD$."
     assert check(f, sector_text, facts) == []
