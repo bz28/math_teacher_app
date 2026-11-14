@@ -39,7 +39,7 @@ from collections.abc import Collection, Iterable
 from dataclasses import dataclass, field
 from typing import Any, cast
 
-from api.core.geometry.dsl import ConstructionFigure, is_hidden, split_points, used_points
+from api.core.geometry.dsl import ConstructionFigure, is_hidden, split_points, tex_scripts, used_points
 
 Point = tuple[float, float]
 
@@ -2338,7 +2338,7 @@ _LABEL_VAR = r"[a-z](?:_\{?\d+\}?)?"
 
 
 def _parse_label(text: str, numbered: Collection[str] = ()) -> _Label:
-    t = _clean(text).replace("$", " ")
+    t = tex_scripts(_clean(text)).replace("$", " ")
     t = re.sub(r"\\angle\s*", "∠", t)
     t = re.sub(r"\\overline\s*\{([^{}]*)\}", r"\1", t)
     t = re.sub(r"[{}]", "", t).strip().rstrip(".").strip()
@@ -2365,7 +2365,7 @@ def _parse_label(text: str, numbered: Collection[str] = ()) -> _Label:
 def _same_algebra(a: str, b: str) -> bool:
     """Two spellings of one expression: "(2x + 5)°" and "2x+5"."""
     def norm(e: str) -> str:
-        e = re.sub(r"\^\s*\\circ|\\circ|[°()\s*{}$]", "", _clean(e)).replace("−", "-")
+        e = re.sub(r"\^\s*\\circ|\\circ|[°()\s*{}$]", "", tex_scripts(_clean(e))).replace("−", "-")
         return e.lower()
 
     la, lb = linear_expr(a), linear_expr(b)
@@ -2497,8 +2497,9 @@ def _label_issues(
         another part."""
         if any(_same_algebra(name, e) for e in own):
             return True
+        written = re.escape(name[0]) + (rf"_\{{?{re.escape(name[2:].strip('{}'))}\}}?" if len(name) > 1 else "")
         return bool(re.fullmatch(_LABEL_VAR, name)) and name not in variables and re.search(
-            rf"(?<![A-Za-z\\]){re.escape(name)}(?![A-Za-z])", in_math,
+            rf"(?<![A-Za-z\\]){written}(?![A-Za-z0-9])", in_math,
         ) is not None
 
     named_angles = _problem_angles(parts)
