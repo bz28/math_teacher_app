@@ -53,8 +53,8 @@ _CHECKLIST_SYSTEM = """\
 You write the checklist a math teacher uses to grade a student's hand drawing: \
 a graph, a number line, a chart, a diagram or a construction.
 
-You get one question that asks for a drawing, its answer key, what the whole \
-problem is worth, and the class's grading rules. List 3 to 6 features a correct \
+You get one question that asks for a drawing, its answer key, its worked \
+solution, what the whole problem is worth, and the class's grading rules. List 3 to 6 features a correct \
 drawing must show.
 
 Check what a teacher checks: the features that show whether the drawing is right. \
@@ -91,10 +91,11 @@ separately, so no item is about something written beside the drawing ("The solut
 (3, 0) is written", "States the system is inconsistent"). A feature drawn ON the \
 drawing is part of it ("The two lines cross at (3, 0)").
 
-Only the values the question and answer key give. Reading one off is fine (the line \
-y = -2x + 6 crosses the y-axis at (0, 6)); working out a new one is not (asymptotes \
-from a period). When the key doesn't give a feature's values, describe it without \
-them ("A vertical asymptote between each pair of branches").
+Only the values the question, answer key and worked solution give. Reading one off \
+is fine (the line y = -2x + 6 crosses the y-axis at (0, 6); a cosecant's upward U \
+sits over the sine maximum the solution's table lists); working out a new one is not \
+(asymptotes from a period). When none of them gives a feature's values, describe it \
+without them ("A vertical asymptote between each pair of branches").
 
 If the question doesn't ask the student to draw anything (it is a calculation, or \
 only reads a printed figure), set asks_for_drawing to false and list no items.
@@ -221,16 +222,27 @@ def _whole_points(value: Any) -> int:
     return n if n >= 1 else 1
 
 
+def _solution_text(steps: list[dict[str, Any]] | None) -> str:
+    return "\n\n".join(
+        f"{i}. {s.get('title') or ''}\n{s.get('description') or ''}".strip()
+        for i, s in enumerate(steps or [], 1) if isinstance(s, dict)
+    ) or "(none)"
+
+
 async def write_graph_checklist(
     question: str,
     final_answer: str,
     problem_points: int,
     *,
+    solution_steps: list[dict[str, Any]] | None = None,
     class_rules: list[dict[str, Any]] | None = None,
     user_id: str | None = None,
 ) -> WrittenChecklist:
     """The features a correct graph for `question` must show, for a
-    problem worth `problem_points` in all. The model suggests the split:
+    problem worth `problem_points` in all. The worked solution is there to
+    read values off: the key often gives only the rule (a cosecant's U's
+    open upward where the sine is positive), and a writer left to work out
+    where that is put a U over the wrong interval. The model suggests the split:
     the items add up to the graph's share, and at least 1 point is left
     for the work and the answer. Temperature 0, but not reproducible:
     runs on the same question and key can differ, so the teacher sees it.
@@ -242,10 +254,12 @@ async def write_graph_checklist(
     room for a graph part (under 2 points)."""
     if problem_points < 2:
         return WrittenChecklist([])
+    solution = _solution_text(solution_steps)
     out = await call_claude_json(
         _CHECKLIST_SYSTEM,
         (
             f"Question:\n{question}\n\nAnswer key:\n{final_answer}\n\n"
+            f"Worked solution:\n{solution}\n\n"
             f"The whole problem is worth {problem_points} points.\n\n"
             f"Class rules:\n{_format_rules(class_rules)}"
         ),
@@ -270,7 +284,7 @@ async def write_graph_checklist(
             text=text,
             points=_whole_points(raw.get("points")),
             rule_id=rule_id if isinstance(rule_id, str) else None,
-            values_to_check=values_not_given(text, question, final_answer, rule_text),
+            values_to_check=values_not_given(text, question, final_answer, solution, rule_text),
         ))
     return WrittenChecklist(
         fit_checklist(items[:MAX_CHECKLIST_ITEMS], problem_points, problem_points, class_rules),

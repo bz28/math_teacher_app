@@ -302,12 +302,14 @@ async def write_checklist(
     if current_checklist(item) is not None and not replace_teacher_edit:
         return False
     source = source_of(item)
-    question, answer = item.question, item.final_answer
+    question, answer, steps = item.question, item.final_answer, item.solution_steps
     points, rules = await homework_context(db, item)
     await db.rollback()
     if not points:
         return False
-    written = await write_graph_checklist(question, answer, points, class_rules=rules, user_id=user_id)
+    written = await write_graph_checklist(
+        question, answer, points, solution_steps=steps, class_rules=rules, user_id=user_id,
+    )
     if not written.items and written.asks_for_drawing:
         return False
     locked = (await db.execute(
