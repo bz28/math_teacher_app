@@ -35,9 +35,8 @@ WHEN_TO_DRAW = (
     "there's no shape to show, or when the picture would reveal what the student is asked to find or decide."
 )
 NAME_THE_POINTS = (
-    "When a problem gets a figure, its text names every point the figure shows (ladder AB leans against "
-    "wall BC; floor plan ABCDEF), so the figure can be checked; a figure whose points the problem doesn't "
-    "name is not shown."
+    "When a problem gets a figure, its text names every point the figure shows, so the figure can be "
+    "checked; a figure whose points the problem doesn't name is not shown."
 )
 STEPS = (
     "Steps. Give a step its own figure only when that step changes the picture: it draws a new line or "
@@ -64,6 +63,32 @@ def test_the_question_prompt_has_bens_paragraph_and_the_naming_sentence() -> Non
     assert WHEN_TO_DRAW in prompt
     assert NAME_THE_POINTS in prompt
     assert '"shape": "construction"' in prompt
+
+
+def test_both_generation_prompts_say_how_to_word_a_figure_problem() -> None:
+    """Plain math givens with point names, no story, no theorem names (the
+    coordinator's decision 2026-11-14: fix the wording at the source, not the
+    coverage check). The worked example in the wording covers, and a story
+    sentence with no point names is still a gap, so story goes entirely."""
+    w = assignment_generation.FIGURE_PROBLEM_WORDING
+    assert w in assignment_generation._build_question_generation_prompt("math")
+    import inspect
+
+    assert "FIGURE_PROBLEM_WORDING" in inspect.getsource(qbg)  # the regenerate prompt
+    for phrase in ("plain math form", "No story in a problem with a figure", "Never put a theorem's"):
+        assert phrase in w
+
+    from api.core.geometry import coverage as cv
+    from api.core.geometry.facts import Target, standard_reading
+
+    example = r"$\triangle ABC$ has a right angle at $C$, $AB = 13$ and $BC = 5$. Find $AC$."
+    assert example in w  # the worked example the prompt gives
+    facts = FigureFacts(points=list("ABC"), triangles=["ABC"], find=[Target(kind="segment", item="AC")], givens=[
+        Fact(kind="right_angle", items=["C"], quote="right angle at C"),
+        Fact(kind="equal_length", items=["AB"], value=13, quote="AB = 13"),
+        Fact(kind="equal_length", items=["BC"], value=5, quote="BC = 5")])
+    assert cv.coverage(example, standard_reading(facts))[0] == []
+    assert cv.coverage("A ladder rests against a wall. " + example, standard_reading(facts))[0] != []
 
 
 def test_the_construction_step_prompt_has_bens_paragraph_and_the_rules() -> None:

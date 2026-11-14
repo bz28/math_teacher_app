@@ -72,14 +72,25 @@ student level — NOT absolute math/science difficulty:
 # (construction_figures._IN_WORDS). Code enforces one rule on top
 # (question_bank_generation._lacks_figure): a problem that names points or
 # refers to a figure ends with a checked figure, or is replaced or left out.
+# How a problem that gets a figure is worded. Code checks every word of
+# such a problem against the figure (api/core/geometry/coverage.py), so
+# the wording rules come before any figure rule. Shared with the
+# regenerate prompt (question_bank_generation).
+FIGURE_PROBLEM_WORDING = """\
+How to word a problem that gets a figure. Code checks the figure against every word of the problem, so:
+- Name every point the figure shows, and state every given in plain math form with those names: "$\\overline{AB} \\cong \\overline{CD}$", "$m\\angle A = 40^\\circ$", "$\\overline{AB} \\parallel \\overline{CD}$", "$AB = 7$", "$M$ is the midpoint of $\\overline{AB}$", "$\\overline{BD}$ bisects $\\angle ABC$". Not in words ("the two sides are equal", "the angles across from each other").
+- No story in a problem with a figure. A layout from a real situation (a ladder against a wall, a floor plan) is written as plain geometry when it gets a figure: "$\\triangle ABC$ has a right angle at $C$, $AB = 13$ and $BC = 5$. Find $AC$." not "Ladder AB leans against wall BC." No story words (ladder, wall, park, room, garden) in any sentence of it, not even a sentence without point names. A word problem that keeps its story gets no figure and names no points.
+- Never put a theorem's or postulate's name in the problem ("by the Hypotenuse-Leg Theorem", "using SAS", "by the Vertical Angles Theorem"). Theorem names belong in the solution steps.
+"""
+
 _CONSTRUCTION_FIGURES_SECTION = """\
 # Figures (diagrams)
 
 When to draw. Add a figure when seeing it helps a student understand or solve the problem: the problem names points, lines or shapes; it refers to a figure; or it describes a layout a teacher would sketch on the board (a ladder against a wall, a composite floor plan). Leave it out when there's no shape to show, or when the picture would reveal what the student is asked to find or decide.
 
-When a problem gets a figure, its text names every point the figure shows (ladder AB leans against wall BC; floor plan ABCDEF), so the figure can be checked; a figure whose points the problem doesn't name is not shown.
+When a problem gets a figure, its text names every point the figure shows, so the figure can be checked; a figure whose points the problem doesn't name is not shown.
 
-"""
+""" + FIGURE_PROBLEM_WORDING + "\n"
 
 
 def _build_question_generation_prompt(subject: str) -> str:

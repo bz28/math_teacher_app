@@ -21,7 +21,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.assignment_generation import generate_questions, generate_solutions
+from api.core.assignment_generation import FIGURE_PROBLEM_WORDING, generate_questions, generate_solutions
 from api.core.construction_figures import CONSTRUCTION_FIGURE_RULES, read_figure_facts, redraw_figure
 from api.core.document_vision import (
     MAX_TOTAL_SOURCE_B64_BYTES,
@@ -1234,7 +1234,7 @@ async def regenerate_one(
     system_prompt += (
         "\nInclude a figure_spec when the problem needs a diagram (a geometry problem "
         "that names points, segments, angles, lines or circles, or text that refers to "
-        "a figure); omit it otherwise.\n\n" + CONSTRUCTION_FIGURE_RULES + "\n"
+        "a figure); omit it otherwise.\n\n" + FIGURE_PROBLEM_WORDING + "\n" + CONSTRUCTION_FIGURE_RULES + "\n"
     )
     qa_schema = REGENERATE_QA_CONSTRUCTION_SCHEMA
 
