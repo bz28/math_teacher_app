@@ -168,21 +168,7 @@ def test_the_corollary_is_not_inert() -> None:
                         "C": (4, 0)}, segments=["AB", "BC", "CA"], angle_labels={"ABC": "35°"})
     assert any("Corollary" in g for g in cv.coverage(COROLLARY, standard_reading(facts))[0])
     assert not passes(COROLLARY, facts, wrong)
-    # (Coordinator, after round 9: it counts only with the one listed
-    # triangle's right angle stated; see below.)
-    assert [n for rx, n, _c in cv.METHOD_NAMES if "corollary" in rx] == ["right_triangle"]
-
-
-def test_the_corollary_counts_with_the_one_triangles_right_angle() -> None:
-    def facts(*extra: Fact, triangles: tuple[str, ...] = ("ABC",)) -> FigureFacts:
-        return FigureFacts(points=list("ABCD"), triangles=list(triangles), find=[Target(kind="angle", item="A")],
-                           givens=[F("angle_measure", ["B"], value=35, quote="m∠B = 35°"), *extra])
-    at_c = F("right_angle", ["ACB"], quote="x")
-    assert cv.coverage(COROLLARY, facts(at_c))[0] == []
-    assert cv.coverage(COROLLARY, facts())[0] != []  # no right angle
-    assert cv.coverage(COROLLARY, facts(F("right_angle", ["ADB"], quote="x")))[0] != []  # not the triangle's
-    two = COROLLARY.replace(r"In $\triangle ABC$", r"In $\triangle ABC$ and $\triangle ABD$")
-    assert cv.coverage(two, facts(at_c, triangles=("ABC", "ABD")))[0] != []  # which triangle: not said
+    assert not [rx for rx, _n, _c in cv.METHOD_NAMES if "corollary" in rx]  # off the list (round 11)
 
 
 @pytest.mark.parametrize("name, needs", [(rx, needs) for rx, needs, _c in cv.METHOD_NAMES])

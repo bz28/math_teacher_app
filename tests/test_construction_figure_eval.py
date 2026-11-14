@@ -59,9 +59,10 @@ KNOWN_WRONG_PASSED = {"77195d48-step1"}
 # was off the list): 24. Lost: 1c9d21ab ("Use the Corollary to the Triangle
 # Sum Theorem") and dd5e6fa8 ("using triangle congruence (SSS or SAS) and
 # CPCTC" with no congruent triangles stated). After round 9 the corollary
-# counts when the one listed triangle's right angle is stated: 1c9d21ab is
-# drawn again, 25.
-DRAWN_FLOOR = 25
+# counted with the one listed triangle's right angle stated (1c9d21ab drawn
+# again, 25); review round 11 showed it applied to an unnamed right
+# triangle ("find m∠ACD" asserts CD ⊥ AB), so it is off the list: 24.
+DRAWN_FLOOR = 24
 
 
 @pytest.mark.asyncio
