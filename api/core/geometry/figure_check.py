@@ -51,8 +51,10 @@ _TOL_LABEL_ANG = 1.5
 _TOL_COLLINEAR = 0.004
 # Step figures: a shared point may move at most this fraction of the span.
 _TOL_MOVE = 0.01
-# Two named points closer than this fraction of the span sit on one spot.
-_TOL_APART = 0.02
+# Two named points closer than this fraction of the span sit on one spot
+# (5%, about 26 px at the rendered width: closer, a student can't tell them
+# apart; tests/test_figure_points_apart.py).
+_TOL_APART = 0.05
 # A polygon corner straighter (or sharper) than this many degrees is no corner.
 _TOL_CORNER = 2.0
 
