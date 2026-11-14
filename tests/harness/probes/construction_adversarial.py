@@ -748,6 +748,15 @@ CASES: list[dict[str, Any]] = [
      "bad": _fig({"A": [0, 0], "B": [6, 0], "C": [0, 4], "D": [6, 4], "E": [3, 5], "F": [3, 6], "G": [3, 0],
                   "H": [3, 4]}, segments=["AB", "CD"], rays=["EF"], parallel_groups=[["AB", "CD"]]),
      "why": "ray EF points away from both segments; G and H are behind E"},
+    # Review round 10: a derived fact uses the triangle the text names.
+    {"id": "round10-altitude-of-named-triangle",
+     "text": r"In $\triangle ABC$ and $\triangle CBE$, altitude $\overline{CD}$ of $\triangle CBE$ is drawn. "
+             r"Find $CD$.",
+     "good": _fig({"A": [0, 0], "B": [6, 0], "C": [2, 4], "E": [8, 5], "D": [6.828, 2.069]},
+                  segments=["AB", "BC", "CA", "BE", "EC", "CD"], right_angles=["CDB"]),
+     "bad": _fig({"A": [0, 0], "B": [6, 0], "C": [2, 4], "E": [8, 5], "D": [2, 0]},
+                 segments=["AB", "BC", "CA", "BE", "EC", "CD"], right_angles=["CDB"]),
+     "why": "CD is drawn to AB, a side of △ABC, not to BE"},
 ]
 
 

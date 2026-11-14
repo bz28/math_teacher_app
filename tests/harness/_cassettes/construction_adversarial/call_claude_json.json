@@ -951,6 +951,52 @@
       ]
     }
   },
+  "06b3866443d69c9816f715de0e9dc1a5": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$ and $\\triangle CBE$, altitude $\\overline{CD}$ of $\\triangle CBE$ is drawn. Find $CD$.\n\nT",
+      "recorded_at": 1794659135.451058
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "CD",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "CD"
+          ],
+          "kind": "other",
+          "quote": "altitude $\\overline{CD}$ of $\\triangle CBE$"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "CD"
+      ],
+      "triangles": [
+        "ABC",
+        "CBE"
+      ]
+    }
+  },
   "08752d693633a0944ff5a4615072e366": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -19787,6 +19833,56 @@
       "segments": [],
       "triangles": [
         "ABC"
+      ]
+    }
+  },
+  "a21efd26020285742f3392018bc14951": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$ and $\\triangle CBE$, altitude $\\overline{CD}$ of $\\triangle CBE$ is drawn. Find $CD$.\n\nT",
+      "recorded_at": 1794659136.010273
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "CD",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "circle": null,
+          "expr": null,
+          "items": [
+            "CD"
+          ],
+          "kind": "other",
+          "point": null,
+          "quote": "altitude $\\overline{CD}$ of $\\triangle CBE$ is drawn",
+          "value": null
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "CD"
+      ],
+      "triangles": [
+        "ABC",
+        "CBE"
       ]
     }
   },

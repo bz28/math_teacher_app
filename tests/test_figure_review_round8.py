@@ -181,7 +181,8 @@ def test_the_corollary_counts_with_the_one_triangles_right_angle() -> None:
     assert cv.coverage(COROLLARY, facts(at_c))[0] == []
     assert cv.coverage(COROLLARY, facts())[0] != []  # no right angle
     assert cv.coverage(COROLLARY, facts(F("right_angle", ["ADB"], quote="x")))[0] != []  # not the triangle's
-    assert cv.coverage(COROLLARY, facts(at_c, triangles=("ABC", "ABD")))[0] != []  # which triangle: not said
+    two = COROLLARY.replace(r"In $\triangle ABC$", r"In $\triangle ABC$ and $\triangle ABD$")
+    assert cv.coverage(two, facts(at_c, triangles=("ABC", "ABD")))[0] != []  # which triangle: not said
 
 
 @pytest.mark.parametrize("name, needs", [(rx, needs) for rx, needs, _c in cv.METHOD_NAMES])
@@ -299,8 +300,10 @@ def test_properties_of_parallel_lines_is_no_method_list_even_with_congruent_tria
 
 
 def test_the_base_angles_satisfy_needs_one_triangle_holding_them() -> None:
-    """Two listed triangles hold ∠Q and ∠R: which one's base is not said."""
-    text = (r"$PQ = PR$ and $SQ = SR$. The base angles satisfy $m\angle Q = (5y - 8)^\circ$ and "
+    """Two triangles the text names hold ∠Q and ∠R: which one's base is
+    not said."""
+    text = (r"In $\triangle PQR$ and $\triangle SQR$, $PQ = PR$ and $SQ = SR$. "
+            r"The base angles satisfy $m\angle Q = (5y - 8)^\circ$ and "
             r"$m\angle R = (3y + 14)^\circ$. Find $y$.")
     facts = FigureFacts(points=list("PQRS"), triangles=["PQR", "SQR"], find=[Target(kind="other", item="y")], givens=[
         F("congruent_segments", ["PQ", "PR"], quote="PQ = PR"), F("congruent_segments", ["SQ", "SR"], quote="SQ = SR"),
