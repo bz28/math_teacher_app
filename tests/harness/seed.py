@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import select
 
+from api.core import photo_store
 from api.core.auth import create_access_token, create_refresh_token, hash_password
 from api.database import get_session_factory
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
@@ -495,10 +496,12 @@ async def seed_confirmable_submission(
         s.add(student)
         await s.flush()
         s.add(SectionEnrollment(section_id=section_id, course_id=course_id, student_id=student.id))
+        submission_id = uuid.uuid4()
         s.add(Submission(
+            id=submission_id,
             assignment_id=hw.id, student_id=student.id, section_id=section_id,
             status="submitted", is_late=False,
-            files=[{"data": page_b64, "media_type": "image/png"}],
+            files=await photo_store.store_pages(submission_id, [{"data": page_b64, "media_type": "image/png"}]),
             extraction={
                 "steps": [{
                     "problem_position": 1, "step_num": 1,

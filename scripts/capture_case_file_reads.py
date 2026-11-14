@@ -32,6 +32,7 @@ from playwright.async_api import ConsoleMessage
 from sqlalchemy.engine import make_url
 
 from api.config import settings
+from api.core import photo_store
 from api.core.auth import create_access_token, hash_password
 from api.database import get_session_factory
 from api.models.assignment import Assignment, Submission
@@ -157,10 +158,12 @@ async def seed() -> tuple[str, str]:
         )
         s.add(asg)
         await s.flush()
+        sub_id = uuid.uuid4()
         sub = Submission(
+            id=sub_id,
             assignment_id=asg.id, student_id=student.id, section_id=section.id,
             status="submitted",
-            files=[
+            files=await photo_store.store_pages(sub_id, [
                 {"data": scanned_pdf(
                     ["1a)  The square root of consecutive odd",
                      "      integers results in odd products."],
@@ -168,7 +171,7 @@ async def seed() -> tuple[str, str]:
                      "      inductive reasoning cannot cover all cases."],
                  ), "media_type": "application/pdf", "filename": "scan.pdf"},
                 {"data": photo(), "media_type": "image/jpeg", "filename": "p3.jpg"},
-            ],
+            ]),
             extraction=READ,
             # The student corrected one maths row — a LaTeX edit, which must
             # be typeset like the read it replaces.

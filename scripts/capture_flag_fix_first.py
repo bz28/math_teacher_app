@@ -30,6 +30,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from api.core import photo_store
 from api.core.auth import create_access_token, create_refresh_token, hash_password
 from api.database import get_session_factory
 from api.models.assignment import Assignment, AssignmentSection, Submission
@@ -150,9 +151,11 @@ async def seed() -> dict[str, Any]:
             s.add(u)
             await s.flush()
             s.add(SectionEnrollment(section_id=section.id, course_id=course.id, student_id=u.id))
+            sub_id = uuid.uuid4()
             s.add(Submission(
-                assignment_id=hw.id, student_id=u.id, section_id=section.id,
-                status="submitted", files=[_page_file()], extraction=EXTRACTION,
+                id=sub_id, assignment_id=hw.id, student_id=u.id, section_id=section.id,
+                status="submitted", files=await photo_store.store_pages(sub_id, [_page_file()]),
+                extraction=EXTRACTION,
                 submitted_at=now - timedelta(minutes=3),
             ))
             students[name.split()[0].lower()] = {

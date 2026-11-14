@@ -21,7 +21,7 @@ from httpx import AsyncClient
 from PIL import Image
 from sqlalchemy import select
 
-from api.core import graph_grading
+from api.core import graph_grading, photo_store
 from api.core.drawing_check import ChecklistItem, DrawingCheck, ItemResult
 from api.core.grading_ai import run_ai_grading_for_submission as _real_run_ai_grading
 from api.core.graph_checklist import source_of, to_stored
@@ -82,7 +82,7 @@ async def _seed(*, graph: bool = True) -> dict[str, Any]:
             item.graph_checklist = to_stored(ITEMS, 10, source=source_of(item), teacher_edited=False)
         sub = await s.get(Submission, world["submission_ids"][0])
         assert sub is not None
-        sub.files = [{"data": _jpeg(), "media_type": "image/jpeg"}]
+        sub.files = await photo_store.store_pages(sub.id, [{"data": _jpeg(), "media_type": "image/jpeg"}])
         sub.extraction = _EXTRACTION
         await s.commit()
     world["sub_id"] = world["submission_ids"][0]

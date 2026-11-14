@@ -19,6 +19,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from api.core import photo_store
 from api.core.auth import create_access_token, create_refresh_token, hash_password
 from api.database import get_session_factory
 from api.models.assignment import (
@@ -246,9 +247,10 @@ async def seed() -> dict[str, str]:
                       "Give this one a try next time.", None),
         ]}
         maya_score = sum(e["percent"] for e in maya_breakdown) / len(maya_breakdown)
+        maya_sub_id = uuid.uuid4()
         maya_sub = Submission(
-            assignment_id=assignment.id, student_id=maya.id, section_id=section.id,
-            status="submitted", files=[_file_obj()],
+            id=maya_sub_id, assignment_id=assignment.id, student_id=maya.id, section_id=section.id,
+            status="submitted", files=await photo_store.store_pages(maya_sub_id, [_file_obj()]),
             final_answers={str(pids[2]): "x = -6"},
             extraction=extraction,
             extraction_confirmed_at=now - timedelta(hours=1),
@@ -293,9 +295,10 @@ async def seed() -> dict[str, str]:
                     i + 1, status_, pct, conf, "Correct working shown.",
                     "Well done.", "…"))
             score = sum(percents) / len(percents)
+            sub_id = uuid.uuid4()
             sub = Submission(
-                assignment_id=assignment.id, student_id=u.id, section_id=section.id,
-                status="submitted", files=[_file_obj()],
+                id=sub_id, assignment_id=assignment.id, student_id=u.id, section_id=section.id,
+                status="submitted", files=await photo_store.store_pages(sub_id, [_file_obj()]),
                 extraction={"steps": []},
                 extraction_confirmed_at=now - timedelta(hours=1),
                 submitted_at=now - timedelta(hours=2),

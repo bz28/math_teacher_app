@@ -39,6 +39,7 @@ from typing import Any
 
 from sqlalchemy import select
 
+from api.core import photo_store
 from api.core.auth import hash_password
 from api.database import get_session_factory
 from api.models.assignment import Assignment, Submission
@@ -95,10 +96,11 @@ async def _add_ungraded(world: dict[str, str]) -> dict[str, str]:
                 section_id=uuid.UUID(world["section_id"]),
                 course_id=assignment.course_id, student_id=u.id,
             ))
+            sub_id = uuid.uuid4()
             s.add(Submission(
-                assignment_id=assignment.id, student_id=u.id,
+                id=sub_id, assignment_id=assignment.id, student_id=u.id,
                 section_id=uuid.UUID(world["section_id"]),
-                status="submitted", files=[_file_obj()],
+                status="submitted", files=await photo_store.store_pages(sub_id, [_file_obj()]),
                 extraction=extraction,
                 extraction_confirmed_at=now if confirmed else None,
                 submitted_at=now - timedelta(minutes=minutes_ago),

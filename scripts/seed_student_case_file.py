@@ -30,6 +30,7 @@ from PIL import Image, ImageDraw
 from sqlalchemy.engine import make_url
 
 from api.config import settings
+from api.core import photo_store
 from api.core.auth import create_access_token, hash_password
 from api.core.llm_client import LLMMode
 from api.database import get_session_factory
@@ -201,12 +202,13 @@ async def seed() -> dict[str, str]:
             await s.flush()
             return a
 
-        def sub(a: Assignment, days_ago: int, **kw: object) -> Submission:
+        async def sub(a: Assignment, days_ago: int, **kw: object) -> Submission:
+            sub_id = uuid.uuid4()
             row = Submission(
-                assignment_id=a.id, student_id=student.id,
+                id=sub_id, assignment_id=a.id, student_id=student.id,
                 section_id=section.id, status="submitted",
-                files=[{"data": photo, "media_type": "image/jpeg",
-                        "filename": "page1.jpg"}],
+                files=await photo_store.store_pages(sub_id, [{"data": photo, "media_type": "image/jpeg",
+                                                              "filename": "page1.jpg"}]),
                 submitted_at=NOW - timedelta(days=days_ago),
                 **kw,  # type: ignore[arg-type]
             )
@@ -215,22 +217,22 @@ async def seed() -> dict[str, str]:
 
         # THE case: read landed, student never ruled. Six days and
         # counting, and nothing downstream will ever fire.
-        stuck = sub(await hw("Two-Step Equations"), 6, extraction=read_for())
+        stuck = await sub(await hw("Two-Step Equations"), 6, extraction=read_for())
 
         # Published — the happy path, for contrast.
-        done = sub(
+        done = await sub(
             await hw("Fraction Operations"), 12,
             extraction=read_for(),
             extraction_confirmed_at=ruled_at(12),
         )
         # Graded, not yet published, and the teacher moved the score.
-        graded = sub(
+        graded = await sub(
             await hw("Graphing Linear Functions"), 8,
             extraction=read_for(),
             extraction_confirmed_at=ruled_at(8),
         )
         # Student corrected the read, then confirmed — grading queued.
-        repaired = sub(
+        repaired = await sub(
             await hw("Systems of Equations"), 3,
             extraction=read_for(),
             extraction_edits={"1:2": "x = 8"},
@@ -238,15 +240,15 @@ async def seed() -> dict[str, str]:
             extraction_confirmed_at=ruled_at(3),
         )
         # Student rejected the read outright — teacher grades by hand.
-        flagged = sub(
+        flagged = await sub(
             await hw("Word Problems"), 4,
             extraction=read_for(),
             extraction_flagged_at=ruled_at(4),
         )
         # A read was owed and never arrived.
-        sub(await hw("Inequalities"), 2)
+        await sub(await hw("Inequalities"), 2)
         # Both toggles off — the empty trace here is correct.
-        sub(await hw("Exit Ticket", ai=False), 5)
+        await sub(await hw("Exit Ticket", ai=False), 5)
         await s.flush()
 
         s.add_all([

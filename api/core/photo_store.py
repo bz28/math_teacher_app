@@ -85,7 +85,9 @@ PRESIGN_SECONDS = 3600
 # keep one as long as it holds the URL. `private`: never a shared cache.
 _CACHE_CONTROL = "private, max-age=86400, immutable"
 
-EXTENSIONS = {"image/jpeg": "jpg", "image/png": "png", "application/pdf": "pdf"}
+# The three a turn-in accepts, plus SVG for the dev seed scripts' drawn
+# pages (uploads never pass validation as SVG).
+EXTENSIONS = {"image/jpeg": "jpg", "image/png": "png", "application/pdf": "pdf", "image/svg+xml": "svg"}
 
 KEY_PREFIX = "submissions/"
 

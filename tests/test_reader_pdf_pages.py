@@ -14,12 +14,13 @@ from __future__ import annotations
 
 import base64
 import io
+import uuid
 from typing import Any
 
 import pytest
 from PIL import Image
 
-from api.core import integrity_ai
+from api.core import integrity_ai, photo_store
 from api.core.image_utils import READER_MAX_EDGE, READER_MAX_PIXELS
 from tests.test_image_utils import _CHROME, _corners, printed_pdf
 
@@ -52,6 +53,11 @@ def _size(block: dict[str, Any]) -> tuple[int, int]:
         return img.size
 
 
+async def _read(pages: list[dict[str, str]]) -> None:
+    """Run the reader on these pages, stored as a turn-in stores them."""
+    await integrity_ai.extract_student_work_from_pages(await photo_store.store_pages(uuid.uuid4(), pages))
+
+
 def _two_page(first: str, second: str) -> str:
     import pypdfium2 as pdfium
 
@@ -64,7 +70,7 @@ def _two_page(first: str, second: str) -> str:
 
 async def test_a_printed_photo_goes_as_the_photo(sent: list[dict[str, Any]]) -> None:
     pdf = printed_pdf(_corners((1500, 2000)), texts=_CHROME)
-    await integrity_ai.extract_student_work_from_pages([{"data": pdf, "media_type": "application/pdf"}])
+    await _read([{"data": pdf, "media_type": "application/pdf"}])
     assert _shape(sent) == ["--- Page 1 of 1 ---", "image"]
     block = sent[1]
     assert block["source"]["media_type"] == "image/jpeg"
@@ -81,7 +87,7 @@ async def test_a_pdf_page_reaches_the_reader_at_the_reader_size(sent: list[dict[
     # the reader's long edge, then fitted to its pixel cap — not rendered
     # at 2400 and shrunk to 1568 as before.
     pdf = printed_pdf(None, texts=(("1. x = 3", 72, 400), ("2. y = 4", 72, 300)))
-    await integrity_ai.extract_student_work_from_pages([{"data": pdf, "media_type": "application/pdf"}])
+    await _read([{"data": pdf, "media_type": "application/pdf"}])
     w, h = _size(sent[1])
     assert sent[1]["source"]["media_type"] == "image/jpeg"
     assert h <= READER_MAX_EDGE and w * h <= READER_MAX_PIXELS and h > 2000
@@ -92,8 +98,8 @@ async def test_a_multi_page_pdf_is_parts_of_its_files_page(sent: list[dict[str, 
     Image.new("RGB", (600, 800), "white").save(jpeg, format="JPEG")
     photo = base64.b64encode(jpeg.getvalue()).decode()
     pdf = _two_page(printed_pdf(_corners((1500, 2000))), printed_pdf(None, texts=(("1. x = 3", 72, 400),)))
-    await integrity_ai.extract_student_work_from_pages([
-        {"data": f"data:image/jpeg;base64,{photo}", "media_type": "image/jpeg"},
+    await _read([
+        {"data": photo, "media_type": "image/jpeg"},
         {"data": pdf, "media_type": "application/pdf"},
     ])
     assert _shape(sent) == [
@@ -110,7 +116,7 @@ async def test_a_multi_page_pdf_is_parts_of_its_files_page(sent: list[dict[str, 
 
 async def test_a_pdf_pdfium_cant_read_still_goes_as_a_document(sent: list[dict[str, Any]]) -> None:
     junk = base64.b64encode(b"%PDF-1.4\nnot really").decode()
-    await integrity_ai.extract_student_work_from_pages([{"data": junk, "media_type": "application/pdf"}])
+    await _read([{"data": junk, "media_type": "application/pdf"}])
     assert _shape(sent) == ["--- Page 1 of 1 ---", "document"]
     assert sent[1]["source"]["data"] == junk
 
@@ -124,7 +130,7 @@ async def test_a_pdf_past_the_page_cap_goes_whole_as_a_document(
 
     monkeypatch.setattr(image_utils, "_PDF_MAX_PAGES", 1)
     pdf = _two_page(printed_pdf(_corners((1500, 2000))), printed_pdf(_corners((1500, 2000))))
-    await integrity_ai.extract_student_work_from_pages([{"data": pdf, "media_type": "application/pdf"}])
+    await _read([{"data": pdf, "media_type": "application/pdf"}])
     assert _shape(sent) == ["--- Page 1 of 1 ---", "document"]
     assert sent[1]["source"]["data"] == pdf
 
@@ -145,7 +151,7 @@ async def test_a_page_that_wont_render_sends_the_whole_pdf_as_a_document(
 
     monkeypatch.setattr(pdfium.PdfPage, "render", flaky)
     pdf = _two_page(printed_pdf(_corners((1500, 2000))), printed_pdf(_corners((1500, 2000))))
-    await integrity_ai.extract_student_work_from_pages([{"data": pdf, "media_type": "application/pdf"}])
+    await _read([{"data": pdf, "media_type": "application/pdf"}])
     assert calls["n"] == 2
     assert _shape(sent) == ["--- Page 1 of 1 ---", "document"]
     assert sent[1]["source"]["data"] == pdf

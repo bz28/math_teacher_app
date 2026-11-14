@@ -135,7 +135,7 @@ async def _seed() -> dict[str, str]:
             sub = Submission(
                 assignment_id=assignment.id, student_id=student_id,
                 section_id=section.id, status="submitted",
-                files=[{"data": "x", "media_type": "image/jpeg"}],
+                files=[{"key": f"submissions/{uuid.uuid4()}/page.jpg", "media_type": "image/jpeg"}],
                 submitted_at=NOW - timedelta(days=6),
                 **kw,  # type: ignore[arg-type]
             )

@@ -25,6 +25,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from api.core import photo_store
 from api.core.auth import create_access_token, create_refresh_token, hash_password
 from api.database import get_session_factory
 from api.models.assignment import (
@@ -157,9 +158,10 @@ async def seed():
         s.add(AssignmentSection(
             assignment_id=hw_turned_in.id, section_id=section.id, published_at=now,
         ))
+        turned_in_id = uuid.uuid4()
         s.add(Submission(
-            assignment_id=hw_turned_in.id, student_id=student.id, section_id=section.id,
-            status="submitted", files=[_file_obj(), _file_obj()],
+            id=turned_in_id, assignment_id=hw_turned_in.id, student_id=student.id, section_id=section.id,
+            status="submitted", files=await photo_store.store_pages(turned_in_id, [_file_obj(), _file_obj()]),
             submitted_at=now - timedelta(minutes=5),
         ))
 
@@ -176,9 +178,10 @@ async def seed():
         s.add(AssignmentSection(
             assignment_id=hw_graded.id, section_id=section.id, published_at=now,
         ))
+        graded_sub_id = uuid.uuid4()
         graded_sub = Submission(
-            assignment_id=hw_graded.id, student_id=student.id, section_id=section.id,
-            status="submitted", files=[_file_obj()],
+            id=graded_sub_id, assignment_id=hw_graded.id, student_id=student.id, section_id=section.id,
+            status="submitted", files=await photo_store.store_pages(graded_sub_id, [_file_obj()]),
             submitted_at=now - timedelta(days=2),
         )
         s.add(graded_sub)
@@ -210,9 +213,10 @@ async def seed():
         s.add(AssignmentSection(
             assignment_id=hw_integrity.id, section_id=section.id, published_at=now,
         ))
+        icheck_sub_id = uuid.uuid4()
         icheck_sub = Submission(
-            assignment_id=hw_integrity.id, student_id=student.id, section_id=section.id,
-            status="submitted", files=[_file_obj()],
+            id=icheck_sub_id, assignment_id=hw_integrity.id, student_id=student.id, section_id=section.id,
+            status="submitted", files=await photo_store.store_pages(icheck_sub_id, [_file_obj()]),
             extraction={"steps": [{"problem_position": 1, "step_num": 1,
                                    "latex": "2x + 3 = 11", "plain_english": ""}]},
             extraction_confirmed_at=now - timedelta(minutes=10),
