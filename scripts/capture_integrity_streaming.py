@@ -16,6 +16,9 @@ few cents of Sonnet per turn), so it asks for nothing but a local DB:
 2. Browser: one more check driven through the real student chat —
    screenshots mid-stream and final, logs console errors and the
    measured click→first-word time — then the teacher's review of it.
+3. Dropped connection (the prod 499): the browser's stream is cut after
+   the server has finished, so the client sees a network failure while
+   the reply is saved. The chat should show the reply, not an error.
 
 Writes docs/design/integrity-streaming-*.png.
 """
@@ -277,12 +280,40 @@ async def _browser(w: dict[str, Any]) -> None:
             print(f"  {review}")  # noqa: T201
 
 
+async def _dropped(w: dict[str, Any]) -> None:
+    ids = await _seed_check(w, "dropped")
+    url = f"{WEB_BASE}/school/student/courses/{w['course_id']}/homework/{ids['hw']}"
+    async with HarnessBrowser(WEB_BASE) as browser:
+        async with browser.authed_page(w["student_token"], w["student_refresh"]) as page:
+            async def cut(route: Any) -> None:
+                # Let the server run the whole turn, then drop the
+                # connection before the browser sees a byte of it.
+                await route.fetch(timeout=120000)
+                await route.abort("connectionreset")
+
+            await page.route("**/turn/stream", cut)
+            await page.goto(url, wait_until="networkidle", timeout=60000)
+            await page.locator("textarea").fill(REPLY)
+            await page.get_by_role("button", name="Send").click()
+            await page.get_by_text("AI is thinking…").wait_for(state="detached", timeout=120000)
+            await page.wait_for_timeout(800)
+            await page.screenshot(path=str(OUT_DIR / "integrity-streaming-dropped.png"))
+            shown_error = await page.get_by_text("Couldn't send that").count()
+            draft = await page.locator("textarea").input_value()
+            print(  # noqa: T201
+                f"dropped connection: error shown={bool(shown_error)}, "
+                f"draft restored={bool(draft)}",
+            )
+
+
 async def main() -> int:
     _assert_local()
     w = await _seed_world()
     if RUNS:
         await _timing(w)
-    await _browser(w)
+    if os.environ.get("ONLY_DROPPED") != "1":
+        await _browser(w)
+    await _dropped(w)
     return 0
 
 
