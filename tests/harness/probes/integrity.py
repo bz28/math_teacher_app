@@ -47,10 +47,10 @@ out-of-band A/B judgment sweep can reuse the exact same labeled set + scorer.
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, func, select, update
 
 from api.core.integrity_pipeline import (
     DISENGAGED_NOT_TRYING_STREAK,
@@ -1001,6 +1001,9 @@ class CaseResult:
     summary: str | None
     # The agent's engagement label on each student reply, in order.
     engagements: list[str | None]
+    # Streamed text that isn't, in order, a message the turn showed —
+    # always empty when streaming is right (see _streamed_mismatches).
+    stream_mismatches: list[str] = field(default_factory=list)
 
 
 async def _seed_case_rows(
@@ -1113,16 +1116,44 @@ async def drive_case(case: IntegrityCase, ctx: HarnessContext) -> CaseResult:
 
         terminal = {STATUS_COMPLETE, STATUS_SKIPPED_UNREADABLE}
         turns = 0
+        stream_mismatches: list[str] = []
         while check.status not in terminal and turns < case.turn_budget:
             msg = (
                 case.student_script[turns]
                 if turns < len(case.student_script)
                 else _FALLBACK_STUDENT_LINE
             )
+            # Every turn runs streamed, as the web chat does, so each replay
+            # also checks the streamed text against what the turn showed.
+            streamed: dict[int, str] = {}
+
+            async def on_reply_text(
+                bubble: int, text: str, streamed: dict[int, str] = streamed,
+            ) -> None:
+                streamed[bubble] = streamed.get(bubble, "") + text
+
+            before = await _max_ordinal(db, check.id)
             await process_student_turn(
                 check, msg, 30, db, user_id=ctx.student_id,
+                on_reply_text=on_reply_text,
             )
             await db.commit()
+            shown = list((await db.execute(
+                select(IntegrityConversationTurn.content)
+                .where(
+                    IntegrityConversationTurn.integrity_check_submission_id
+                    == check.id,
+                    IntegrityConversationTurn.ordinal > before,
+                    IntegrityConversationTurn.role == "agent",
+                )
+                .order_by(IntegrityConversationTurn.ordinal)
+            )).scalars().all())
+            stream_mismatches += [
+                f"turn {turns + 1}: {m}"
+                for m in _streamed_mismatches(
+                    [streamed[b].strip() for b in sorted(streamed)], shown,
+                )
+            ]
             turns += 1
 
         problem = (await db.execute(
@@ -1148,7 +1179,31 @@ async def drive_case(case: IntegrityCase, ctx: HarnessContext) -> CaseResult:
             headline=check.headline,
             summary=check.overall_summary,
             engagements=engagements,
+            stream_mismatches=stream_mismatches,
         )
+
+
+async def _max_ordinal(db: Any, check_id: uuid.UUID) -> int:
+    return int((await db.execute(
+        select(func.coalesce(func.max(IntegrityConversationTurn.ordinal), -1))
+        .where(IntegrityConversationTurn.integrity_check_submission_id == check_id)
+    )).scalar_one())
+
+
+def _streamed_mismatches(streamed: list[str], shown: list[str]) -> list[str]:
+    """Streamed bubbles that aren't, in order, among the messages the turn
+    showed the student. A streamed bubble the student is never shown (or
+    shown differently) is the one thing streaming must not do."""
+    out: list[str] = []
+    i = 0
+    for bubble in streamed:
+        while i < len(shown) and shown[i] != bubble:
+            i += 1
+        if i == len(shown):
+            out.append(f"streamed {bubble[:60]!r} was not shown as written")
+        else:
+            i += 1
+    return out
 
 
 def summarize_corpus(raws: list[dict[str, Any]]) -> dict[str, Any]:
@@ -1311,6 +1366,7 @@ class IntegrityProbe(Probe):
                 "summary": result.summary,
                 "rationale": case.rationale,
                 "engagements": result.engagements,
+                "stream_mismatches": result.stream_mismatches,
                 "expected_engagement": (
                     [sorted(e) for e in case.expected_engagement]
                     if case.expected_engagement is not None
@@ -1385,6 +1441,13 @@ class IntegrityProbe(Probe):
                 ok,
                 "" if ok else "prompt-injection flipped the verdict to pass",
             ))
+
+        mismatches = list(raw.get("stream_mismatches") or [])
+        checks.append(CheckResult(
+            "streamed text is exactly text the student is shown",
+            not mismatches,
+            "; ".join(mismatches),
+        ))
 
         # Latency/turn envelope: the interview must reach a verdict within the
         # budget, so a future depth change can't make it a nuisance.
