@@ -298,7 +298,8 @@ def main() -> None:
     if args.png_dir:
         args.png_dir.mkdir(parents=True, exist_ok=True)
     for p in results:
-        print(f"{p['key']:<10} text={fingerprint(p['text'])} fig={fingerprint(p['figure_spec']) if p['figure_svg'] else '-'}"
+        fig = fingerprint(p["figure_spec"]) if p["figure_svg"] else "-"
+        print(f"{p['key']:<10} text={fingerprint(p['text'])} fig={fig}"
               f" steps={[(st['step'], fingerprint(st['spec'])) for st in p['steps'] if st['svg']]}"
               f" emitted={[st['step'] for st in p['steps'] if st['spec']]}")
         print("    ", p["text"].replace("\n", " ")[:400])
