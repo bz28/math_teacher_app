@@ -1,0 +1,27 @@
+# Railway deploy settings for the API service (config as code: these
+# override the service's dashboard settings on every deploy).
+
+[build]
+builder = "RAILPACK"
+
+[deploy]
+# Unchanged from the dashboard setting this file replaces.
+startCommand = 'pip install -e "." && python -m alembic upgrade head && python -m uvicorn api.main:app --host 0.0.0.0 --port $PORT'
+
+# Railway sends traffic to a new deployment only once this answers 200,
+# and keeps the old one serving until then. Without it, traffic moved
+# while the new container was still installing and migrating, and every
+# deploy was a stretch of 502s. /v1/health also runs `SELECT 1`, so a
+# deployment that can't reach the database never takes traffic. The
+# timeout covers the install + migrations in the start command.
+healthcheckPath = "/v1/health"
+healthcheckTimeout = 300
+
+# Time between SIGTERM and SIGKILL for the old deployment. Uvicorn
+# finishes in-flight requests and the lifespan waits up to 30s for
+# streamed integrity turns (drain_streamed_turns), so give it that plus
+# a margin instead of cutting them off.
+drainingSeconds = 45
+
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
