@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, lazy, useMemo } from "react";
+import { Suspense, lazy, memo, useMemo } from "react";
 import "katex/dist/katex.min.css";
 import { renderBreakableInlineMath, renderKatex } from "@/lib/math-break-points";
 import { sanitizeSvg } from "@/lib/sanitize-svg";
@@ -273,13 +273,37 @@ export function mathPlainText(input: string): string {
     .trim();
 }
 
+// Typeset HTML by mode + LaTeX source. KaTeX is pure, and the same
+// expressions come back constantly: a teacher's review page re-renders
+// every problem's math on each grade key, and remounts a student's
+// whole homework on each switch. Measured on a 10-problem homework:
+// ~6 ms of KaTeX per grade click on a fast laptop, all of it repeat
+// work. Bounded so a long session can't grow it without limit.
+const HTML_CACHE_LIMIT = 2000;
+const htmlCache = new Map<string, string>();
+function cachedHtml(mode: "i" | "b" | "d", latex: string, render: () => string): string {
+  const key = mode + latex;
+  const hit = htmlCache.get(key);
+  if (hit !== undefined) return hit;
+  const html = render();
+  if (htmlCache.size >= HTML_CACHE_LIMIT) {
+    htmlCache.delete(htmlCache.keys().next().value as string);
+  }
+  htmlCache.set(key, html);
+  return html;
+}
+
 /**
  * IMPORTANT: must be wrapped in a block-level container (div, section,
  * etc.) — NEVER inside a <p>. Display math (matrices, fractions) emits
  * a top-level <div> here, and the HTML spec forbids <div> inside <p>.
  * Browsers auto-close the <p> on hydration → React mismatch error.
  */
-export function MathText({ text, className, breakInline = false }: MathTextProps) {
+export const MathText = memo(function MathText({
+  text,
+  className,
+  breakInline = false,
+}: MathTextProps) {
   const segments = useMemo(() => parse(text), [text]);
 
   return (
@@ -310,8 +334,10 @@ export function MathText({ text, className, breakInline = false }: MathTextProps
                 className={breakInline ? "[&_.base+.base>.strut]:mt-[0.2em]" : undefined}
                 dangerouslySetInnerHTML={{
                   __html: breakInline
-                    ? renderBreakableInlineMath(seg.content, (l) => renderKatex(l, false))
-                    : renderKatex(seg.content, false),
+                    ? cachedHtml("b", seg.content, () =>
+                        renderBreakableInlineMath(seg.content, (l) => renderKatex(l, false)),
+                      )
+                    : cachedHtml("i", seg.content, () => renderKatex(seg.content, false)),
                 }}
               />
             );
@@ -320,7 +346,9 @@ export function MathText({ text, className, breakInline = false }: MathTextProps
               <div
                 key={i}
                 className="my-2 overflow-x-auto"
-                dangerouslySetInnerHTML={{ __html: renderKatex(seg.content, true) }}
+                dangerouslySetInnerHTML={{
+                  __html: cachedHtml("d", seg.content, () => renderKatex(seg.content, true)),
+                }}
               />
             );
           case "svg":
@@ -352,4 +380,4 @@ export function MathText({ text, className, breakInline = false }: MathTextProps
       })}
     </span>
   );
-}
+});
