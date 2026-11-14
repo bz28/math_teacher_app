@@ -92,4 +92,5 @@ async def test_submission_detail_still_returns_photos(client: AsyncClient) -> No
         headers=_auth(world["teacher_token"]),
     )
     assert r.status_code == 200, r.text
-    assert r.json()["files"] == _FILES
+    # A row the backfill hasn't moved: served as a data: URL.
+    assert [f["url"] for f in r.json()["files"]] == [f"data:image/jpeg;base64,{_FILES[0]['data']}"]

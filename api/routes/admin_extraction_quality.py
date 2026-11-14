@@ -71,6 +71,7 @@ from sqlalchemy import Integer, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import undefer
 
+from api.core import photo_store
 from api.core.audit_log import log_student_record_access
 from api.core.extraction_edits import _final_key, _step_key
 from api.core.submission_stage import (
@@ -587,9 +588,10 @@ async def extraction_detail(
         # rows, so this is reported once rather than faked per row.
         "confidence": overall_confidence,
         "rows": rows_out,
-        # The strokes themselves. Base64 inline, one submission only —
-        # see the module docstring on why this is never returned in bulk.
-        "files": sub.files or [],
+        # The strokes themselves, as presigned URLs to the photo bucket,
+        # one submission only — see the module docstring on why this is
+        # never returned in bulk.
+        "files": photo_store.pages_out(sub.files or []),
     }
 
     # This response carries a photograph of a student's own handwriting.
