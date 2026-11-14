@@ -14,6 +14,7 @@ import asyncio
 import logging
 import re
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -551,10 +552,10 @@ async def _draw_figures(
 # Points named as a run of capitals after a word that names a figure or a
 # part of one: "ladder AB", "wall BC", "floor plan ABCDEF", "chord AB",
 # "Let ABCD be", "In PQRS". Each letter once: SAS, ASA and CPCTC name
-# postulates, not points. After "let" / "in" a run of capitals is often an
-# acronym ("a taxi ride in DC", "In PEMDAS"), so there it names points only
-# in math markup ("In $ABCD$") or in a sentence with a figure noun ("Let
-# ABCD be a square"); see `_names_points`.
+# postulates, not points. A run of capitals is often an acronym after any
+# of these words ("a taxi ride in DC", "the distance NYC to LA", "a phone
+# plan AT"), so a bare run names points only with evidence; see
+# `_names_points`.
 _POINT_RUN = re.compile(
     r"\b(?P<word>let|in|segments?|sides?|lines?|rays?|chords?|diameters?|radius|radii|diagonals?|altitudes?|"
     r"medians?|bisectors?|tangents?|secants?|arcs?|triangles?|quadrilaterals?|polygons?|rectangles?|squares?|"
@@ -563,12 +564,18 @@ _POINT_RUN = re.compile(
     r"(?![A-Za-z0-9])",
     re.IGNORECASE,
 )
-# A figure noun: a sentence with one makes "Let ABCD" / "In PQRS" a figure's name.
+# Any other run of 2 to 8 capitals: "Find AC", "\\overline{BC}", "PT = 4".
+_CAPITAL_RUN = re.compile(r"(?<![A-Za-z])(?:[A-Z]'*){2,8}(?![A-Za-z])")
+# A figure noun, as in "Let ABCD be a square" / "ABCD is a rectangle". Not
+# its unit or score senses: "square foot", "points scored", "angle of
+# elevation".
 _FIGURE_NOUN = re.compile(
-    r"\b(?:points?|segments?|sides?|lines?|rays?|chords?|diameters?|radius|radii|diagonals?|altitudes?|medians?|"
-    r"bisectors?|tangents?|secants?|arcs?|angles?|vertex|vertices|triangles?|quadrilaterals?|polygons?|"
-    r"rectangles?|squares?|trapezoids?|parallelograms?|rhombus|kites?|pentagons?|hexagons?|octagons?|circles?|"
-    r"midpoints?|perpendicular|parallel|congruent)\b",
+    r"\b(?:points?(?!\s+(?:scored|earned|per|won|lost)\b)|segments?|sides?|lines?|rays?|chords?|diameters?|"
+    r"radius|radii|diagonals?|altitudes?|medians?|bisectors?|tangents?|secants?|arcs?|"
+    r"angles?(?!\s+of\s+(?:elevation|depression)\b)|vertex|vertices|triangles?|quadrilaterals?|polygons?|"
+    r"rectangles?|squares?(?!\s+(?:foot|feet|inch|inches|yards?|meters?|metres?|miles?|units?|kilometers?|"
+    r"centimeters?|mm|cm|m|km|ft|in|yd|mi)\b)|trapezoids?|parallelograms?|rhombus|kites?|pentagons?|hexagons?|"
+    r"octagons?|circles?|midpoints?)\b",
     re.IGNORECASE,
 )
 _POSTULATE_LETTERS = {"SAS", "ASA", "AAS", "SSS", "HL", "CPCTC", "AA", "SSA", "CPCF", "LL", "LA", "HA"}
@@ -581,38 +588,59 @@ _COORDINATE_OR_CURVE = re.compile(
     re.IGNORECASE,
 )
 
+# The student is to draw it (Ben's rule: then the problem gets no figure).
+_STUDENT_DRAWS = re.compile(r"\b(?:construct|draw|sketch)\b", re.IGNORECASE)
+
 
 def _names_points(text: str) -> bool:
-    """The problem names points: "In △ABC", "point P", "ladder AB"."""
+    """The problem names points: "In △ABC", "point P", "ladder AB … wall BC".
+
+    A bare run of capitals after a figure word ("ladder AB", "In PQRS")
+    counts only with evidence that it names points: it is in math markup
+    ("In $ABCD$"), the problem uses its letters as points elsewhere
+    ("ladder AB … wall BC", "In PQRS … Find PR"), or
+    the problem says it is a figure ("Let ABCD be a square"). So "the
+    distance NYC to LA", "Let NY be the number of points scored" and "In
+    DC, a square plot" name none."""
     from api.core.geometry.facts import parse_problem_points
+
+    if _named_points(text) or parse_problem_points(text):
+        return True
 
     def names(m: re.Match[str]) -> bool:
         run = m[3].replace("'", "")
         if len(set(run)) != len(run) or run in _POSTULATE_LETTERS:
             return False
-        if m["word"].lower() not in ("let", "in") or m["markup"]:
+        if m["markup"]:
             return True
-        if re.match(r"\s+(?:form|notation|format|units?|mode|order|time)\b", text[m.end():], re.IGNORECASE):
-            return False  # "in EF form", "in SI units": a name of something else
-        start = max(text.rfind(".", 0, m.start()), text.rfind("?", 0, m.start()), text.rfind("!", 0, m.start()))
-        ends = [i for i in (text.find(c, m.end()) for c in ".?!") if i >= 0]
-        return bool(_FIGURE_NOUN.search(text[start + 1:min(ends, default=len(text))]))
+        others = (
+            o[0].replace("'", "") for o in _CAPITAL_RUN.finditer(text)
+            if o.start() != m.start(3) and o[0].replace("'", "") not in (run, *_POSTULATE_LETTERS)
+        )
+        if any(set(run) & set(o) for o in others):
+            return True
+        return bool(re.match(rf"\s+(?:is|be)\s+an?\s+(?:[\w-]+\s+){{0,2}}?{_FIGURE_NOUN.pattern}",
+                             text[m.end():], re.IGNORECASE))
 
-    return any(map(names, _POINT_RUN.finditer(text))) or bool(_named_points(text) or parse_problem_points(text))
+    return any(map(names, _POINT_RUN.finditer(text)))
 
 
 def _needs_figure(q: dict[str, Any], subject: str = "math") -> bool:
     """The one figure rule code enforces on a generated problem: it must end
     with a checked figure when its text refers to a figure ("in the figure
     below"), or, in math, names points. A problem on the coordinate plane or
-    about a curve (which the tool can't draw) and one naming only shapes ("a
+    about a curve (which the tool can't draw), one asking the student to
+    construct, draw or sketch the figure, and one naming only shapes ("a
     rectangle 7 wide", which can't be read for checking) are left to the
     generator's judgment, as is every problem in other subjects (a physics
     problem's "point A" is not a geometry figure)."""
     text = q.get("text") or ""
     if _FIGURE_REFERENCE.search(text):
         return True
-    return subject == "math" and _names_points(text) and not _COORDINATE_OR_CURVE.search(text)
+    return (
+        subject == "math" and _names_points(text) and not _COORDINATE_OR_CURVE.search(text)
+        and not _STUDENT_DRAWS.search(text)
+    )
 
 
 def _lacks_figure(q: dict[str, Any], subject: str = "math") -> bool:
@@ -823,107 +851,144 @@ _NO_FIGURE_RULE = (
 )
 
 
+@dataclass(frozen=True)
+class ProblemRequest:
+    """What a generation job asks for: everything a call for problems takes
+    but the count and the rule for that call."""
+
+    unit_name: str
+    course_name: str
+    subject: str
+    user_id: str
+    images: list[dict[str, str]] | None = None
+    constraint_text: str | None = None
+    assignment_title: str | None = None
+    params: dict[str, Any] | None = None
+    call_metadata: dict[str, Any] | None = None
+    job_id: str | None = None
+
+
+def _normalized(text: Any) -> str:
+    return " ".join(str(text or "").split()).casefold()
+
+
+def _without_repeats(new: list[dict[str, Any]], kept: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """`new` less any problem whose text (spacing and case aside) is already
+    in `kept` or earlier in `new`."""
+    seen = {_normalized(q.get("text")) for q in kept}
+    out = []
+    for q in new:
+        key = _normalized(q.get("text"))
+        if key not in seen:
+            seen.add(key)
+            out.append(q)
+    return out
+
+
+async def _ask_for_problems(
+    request: ProblemRequest, count: int, rule: str, kept: list[dict[str, Any]], *, failed: str,
+) -> list[dict[str, Any]]:
+    """`count` more problems under `rule`, told which problems the set
+    already has so none comes back twice. A failed call returns none (logged
+    as `failed`): the problems already kept still ship."""
+    already = (
+        "The set already has these problems; do not repeat any of them:\n"
+        + "\n".join(f"- {q.get('text') or ''}" for q in kept)
+    ) if kept else ""
+    try:
+        return cast(list[dict[str, Any]], await generate_questions(
+            unit_name=request.unit_name,
+            count=count,
+            course_name=request.course_name,
+            subject=request.subject,
+            user_id=request.user_id,
+            images=request.images,
+            extra_instructions="\n\n".join(t for t in (request.constraint_text, rule, already) if t),
+            assignment_title=request.assignment_title,
+            params=request.params,
+            call_metadata=request.call_metadata,
+            generation_job_id=request.job_id,
+        ))
+    except Exception:
+        logger.exception("Job %s: %s", request.job_id, failed)
+        return []
+
+
+async def _no_figure_top_up(
+    request: ProblemRequest, short: int, kept: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Up to `short` problems on the same topic that need no figure, for the
+    slots whose figure couldn't be kept (after drawing, or after solving),
+    so the teacher gets the count asked for."""
+    logger.warning(
+        "Job %s: %d problem(s) still had no figure that could be checked; asking for problems on the same "
+        "topic that need no figure", request.job_id, short,
+    )
+    plain = await _ask_for_problems(
+        request, short, _NO_FIGURE_RULE, kept, failed="the no-figure replacement call failed; keeping the rest",
+    )
+    for q in plain:
+        q["figure_spec"] = q["figure_svg"] = q["figure_facts"] = None  # asked for none; never shown unchecked
+    plain = _without_repeats([q for q in plain if not _needs_figure(q, request.subject)], kept)[:short]
+    if len(plain) < short:
+        logger.warning(
+            "Job %s: left out %d problem(s): no figure could be checked, and no replacement without a "
+            "figure came back", request.job_id, short - len(plain),
+        )
+    return plain
+
+
 async def generate_checked_problems(
-    *,
-    unit_name: str,
-    count: int,
-    course_name: str,
-    subject: str,
-    user_id: str,
-    images: list[dict[str, str]] | None,
-    constraint_text: str | None,
-    assignment_title: str | None,
-    params: dict[str, Any] | None,
-    call_metadata: dict[str, Any] | None,
-    job_id: str | None,
-    docs_selected: int = 0,
+    request: ProblemRequest, *, count: int, docs_selected: int = 0,
 ) -> list[dict[str, Any]]:
     """Generate problems and draw each one's figure, checked. A problem that
     needs a figure (`_needs_figure`: it names points, or refers to a figure)
-    and ends without a checked one is replaced once; a slot whose
-    replacement has the same flaw gets a problem that needs no figure, so
-    the teacher gets the count asked for. Only when that fails too is the
-    slot left out, never handed to the teacher broken."""
+    and ends without a checked one, or repeats another problem, is replaced
+    once; a slot whose replacement has the same flaw gets a problem that
+    needs no figure (`_no_figure_top_up`), so the teacher gets the count
+    asked for. Only when that fails too is the slot left out, never handed
+    to the teacher broken. Each call for more problems is told the ones
+    already kept, and an exact repeat is dropped."""
     question_dicts: list[dict[str, Any]] = cast(list[dict[str, Any]], await generate_questions(
-        unit_name=unit_name,
+        unit_name=request.unit_name,
         count=count,
-        course_name=course_name,
-        subject=subject,
-        user_id=user_id,
-        images=images,
-        extra_instructions=constraint_text,
-        assignment_title=assignment_title,
-        params=params,
-        call_metadata=call_metadata,
-        generation_job_id=job_id,
+        course_name=request.course_name,
+        subject=request.subject,
+        user_id=request.user_id,
+        images=request.images,
+        extra_instructions=request.constraint_text,
+        assignment_title=request.assignment_title,
+        params=request.params,
+        call_metadata=request.call_metadata,
+        generation_job_id=request.job_id,
     ))
     if not question_dicts:
         # Reached only when the call SUCCEEDED and came back empty — a real
         # API failure propagates with its own cause rather than arriving
         # here disguised as "no questions".
-        raise TeacherFacingGenerationError(_empty_result_message(docs_selected, len(images or [])))
+        raise TeacherFacingGenerationError(_empty_result_message(docs_selected, len(request.images or [])))
 
     def lacks(q: dict[str, Any]) -> bool:
-        return _lacks_figure(q, subject)
+        return _lacks_figure(q, request.subject)
 
-    await _draw_figures(question_dicts, user_id=user_id, generation_job_id=job_id)
-    missing = sum(map(lacks, question_dicts))
+    job_id, asked = request.job_id, len(question_dicts)
+    question_dicts = _without_repeats(question_dicts, [])
+    await _draw_figures(question_dicts, user_id=request.user_id, generation_job_id=job_id)
+    kept = [q for q in question_dicts if not lacks(q)]
+    missing = asked - len(kept)
     if not missing:
-        return question_dicts
-    logger.warning("Job %s: replacing %d problem(s) that need a figure they don't have", job_id, missing)
-    try:
-        replacements = cast(list[dict[str, Any]], await generate_questions(
-            unit_name=unit_name,
-            count=missing,
-            course_name=course_name,
-            subject=subject,
-            user_id=user_id,
-            images=images,
-            extra_instructions=(constraint_text + "\n\n" if constraint_text else "") + _REPLACEMENT_RULE,
-            assignment_title=assignment_title,
-            params=params,
-            call_metadata=call_metadata,
-            generation_job_id=job_id,
-        ))
-    except Exception:
-        # The first batch's complete problems still ship; a failed cleanup
-        # call must not cost the teacher the whole job.
-        logger.exception("Job %s: replacement call failed; keeping the rest", job_id)
-        replacements = []
-    await _draw_figures(replacements, user_id=user_id, generation_job_id=job_id)
-    kept = [q for q in question_dicts if not lacks(q)] + [q for q in replacements if not lacks(q)][:missing]
-    short = len(question_dicts) - len(kept)
+        return kept
+    logger.warning(
+        "Job %s: replacing %d problem(s) that need a figure they don't have, or repeat another", job_id, missing,
+    )
+    replacements = await _ask_for_problems(
+        request, missing, _REPLACEMENT_RULE, kept, failed="replacement call failed; keeping the rest",
+    )
+    await _draw_figures(replacements, user_id=request.user_id, generation_job_id=job_id)
+    kept += _without_repeats([q for q in replacements if not lacks(q)], kept)[:missing]
+    short = asked - len(kept)
     if short:
-        logger.warning(
-            "Job %s: %d problem(s) still had no figure that could be checked; asking for problems on the same "
-            "topic that need no figure", job_id, short,
-        )
-        try:
-            plain = cast(list[dict[str, Any]], await generate_questions(
-                unit_name=unit_name,
-                count=short,
-                course_name=course_name,
-                subject=subject,
-                user_id=user_id,
-                images=images,
-                extra_instructions=(constraint_text + "\n\n" if constraint_text else "") + _NO_FIGURE_RULE,
-                assignment_title=assignment_title,
-                params=params,
-                call_metadata=call_metadata,
-                generation_job_id=job_id,
-            ))
-        except Exception:
-            logger.exception("Job %s: the no-figure replacement call failed; keeping the rest", job_id)
-            plain = []
-        for q in plain:
-            q["figure_spec"] = q["figure_svg"] = q["figure_facts"] = None  # asked for none; never shown unchecked
-        plain = [q for q in plain if not _needs_figure(q, subject)][:short]
-        kept += plain
-        if len(plain) < short:
-            logger.warning(
-                "Job %s: left out %d problem(s): no figure could be checked, and no replacement without a "
-                "figure came back", job_id, short - len(plain),
-            )
+        kept += await _no_figure_top_up(request, short, kept)
     if not kept:
         raise TeacherFacingGenerationError(
             "Every generated problem needed a figure that couldn't be drawn. Try again."
@@ -937,13 +1002,16 @@ async def solve_checked_problems(
     subject: str,
     user_id: str,
     job_id: str | None,
+    request: ProblemRequest | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Solve each problem, then, per problem in parallel: drop a figure that
     prints the answer (it was drawn before the problem was solved), and
     check each step's figure (read, checked against the problem's figure
     and facts, one redraw, else the step keeps no figure). A problem that
-    needs a figure and lost it is left out. Returns the kept problems and
-    their solutions."""
+    needs a figure and lost it is left out; with the generation `request`
+    (not for a teacher's upload), its slot gets a problem on the same topic
+    that needs no figure (`_no_figure_top_up`), solved too. Returns the kept
+    problems and their solutions."""
     solutions = await generate_solutions(
         question_dicts, subject=subject, user_id=user_id, generation_job_id=job_id,
     )
@@ -984,13 +1052,22 @@ async def solve_checked_problems(
         "Job %s: left out %d problem(s) whose figure gave away the answer: %s",
         job_id, sum(map(bool, lost)), " | ".join(w for w in lost if w),
     )
-    kept_pairs = [(q, s) for q, s, w in zip(question_dicts, solutions, lost) if not w]
-    if not kept_pairs:
+    kept_qs = [q for q, w in zip(question_dicts, lost) if not w]
+    kept_sols = [s for s, w in zip(solutions, lost) if not w]
+    if request is not None:
+        plain = await _no_figure_top_up(request, sum(map(bool, lost)), kept_qs)
+        if plain:
+            # Asked for no figure and stripped of any: nothing more to lose.
+            more_qs, more_sols = await solve_checked_problems(
+                plain, subject=subject, user_id=user_id, job_id=job_id,
+            )
+            kept_qs, kept_sols = kept_qs + more_qs, kept_sols + more_sols
+    if not kept_qs:
         raise TeacherFacingGenerationError(
             "Every generated problem needs a figure, and each figure gave away its answer, "
             "so none could be kept. Try again."
         )
-    return [q for q, _ in kept_pairs], [s for _, s in kept_pairs]
+    return kept_qs, kept_sols
 
 
 async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
@@ -1023,6 +1100,9 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
 
     # 1. Get question texts — either extract from uploaded images or
     # generate via AI, depending on job mode.
+    # The generation request, for filling a slot after solving; None for an
+    # upload, whose problems are the teacher's own.
+    request: ProblemRequest | None = None
     if job.mode == "upload":
         # Upload mode: extract problems from worksheet pages stored on
         # the job row. Files are [{data, media_type}] — JPEG, PNG, or PDF.
@@ -1111,9 +1191,8 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
         if job.parent_question_id:
             assignment_title = None
 
-        question_dicts = await generate_checked_problems(
+        request = ProblemRequest(
             unit_name=unit_name,
-            count=job.requested_count,
             course_name=course.name,
             subject=course.subject,
             user_id=str(job.created_by_id),
@@ -1123,13 +1202,16 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
             params=job.params,
             call_metadata=doc_metadata,
             job_id=str(job.id),
-            docs_selected=len(doc_ids),
+        )
+        question_dicts = await generate_checked_problems(
+            request, count=job.requested_count, docs_selected=len(doc_ids),
         )
 
     # 2. Solve each question in parallel (capped concurrency inside), then
     # check what the answer and the steps add to each figure.
     question_dicts, solutions = await solve_checked_problems(
         question_dicts, subject=course.subject, user_id=str(job.created_by_id), job_id=str(job.id),
+        request=request,
     )
 
     # 2b. Generate 3 MCQ distractors per question. Stored on the bank

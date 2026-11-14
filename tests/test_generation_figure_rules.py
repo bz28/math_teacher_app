@@ -184,9 +184,9 @@ def test_the_replacement_and_variation_wording() -> None:
     (r"In $\triangle ABC$, $m\angle A = 40°$. Find $m\angle C$.", True),
     ("In the figure below, find x.", True),
     ("A ladder AB leans against wall BC, with its foot 5 ft from the wall.", True),
-    ("The floor plan ABCDEF is L-shaped; find its area.", True),
+    ("The floor plan ABCDEF is L-shaped; side AB is 12 ft. Find its area.", True),
     ("Let ABCD be a rectangle with AB = 3. Find AC.", True),
-    ("Chord AB of circle O has length 8.", True),
+    ("Chord AB of circle O has length 8 and radius OA = 5.", True),
     ("Points A and B lie on circle O.", True),
     ("A(2, 3) and B(5, 7) are points. Find the distance AB.", False),  # coordinates
     ("Point P is on the parabola y = x^2. Find P.", False),  # a curve
@@ -197,9 +197,10 @@ def test_the_replacement_and_variation_wording() -> None:
     (r"Let $A = \begin{pmatrix}1&2\\3&4\end{pmatrix}$. Find $AB$.", False),
     ("Events A and B are independent with P(A) = 0.3.", False),
     ("In the USA, 40% of people use GPS.", False),
-    # Review round 1 (#998): after "in" / "let" an acronym is not a figure's
-    # name; there a run of capitals names points only in math markup or in a
-    # sentence with a figure noun.
+    # Review rounds 1 and 2 (#998): after any figure word an acronym is not a
+    # figure's name; a bare run of capitals names points only in math
+    # markup, when the problem uses its letters as points elsewhere, or when
+    # the problem says it is a figure.
     ("A taxi ride in DC costs $3 plus $2 per mile. How far can you go for $15?", False),
     ("In PEMDAS, which operation comes first?", False),
     ("In NYC, a slice of pizza costs $3.50. How many slices can you buy for $21?", False),
@@ -210,9 +211,31 @@ def test_the_replacement_and_variation_wording() -> None:
     ("Let ABCD be a square with side 4. Find AC.", True),
     (r"In $ABCD$, $AB = 5$. Find $CD$.", True),
     ("In PQRS, the diagonals bisect each other. Find PR if PT = 4.", True),
+    ("The distance NYC to LA is 2800 miles. A plane flies at 560 mph. How long does it take?", False),
+    ("Let NY be the number of points scored in New York.", False),
+    ("In DC, a square plot of land costs $40 per square foot. How much is a plot with side 20 ft?", False),
+    ("A cell phone plan AT costs $40 per month plus $0.10 per text.", False),
+    ("The floor plan ABCDEF is L-shaped; find its area.", False),  # a bare name used once: no evidence
+    ("ABCD is a square. Let ABCD be a square with side 4.", True),
+    ("Let PQRS be a rhombus with side 6. Find its perimeter.", True),  # it says PQRS is a figure
+    ("A ladder AB leans against a wall; ladder AB is 13 ft long.", False),  # the same run twice is no evidence
+    # Ben's rule: when the student is to draw it, the problem gets no figure.
+    (r"Construct the perpendicular bisector of $\overline{AB}$ with a compass and straightedge.", False),
+    (r"Sketch $\triangle ABC$ with $AB = 5$, then find its perimeter.", False),
 ])
 def test_what_needs_a_figure(text: str, needs: bool) -> None:
     assert qbg._needs_figure({"text": text}) is needs
+
+
+@pytest.mark.parametrize("text", ["costs $40 per square foot", "25 square meters", "the points scored",
+                                  "the angle of elevation", "the angle of depression"])
+def test_a_unit_or_a_score_is_not_a_figure_noun(text: str) -> None:
+    assert not qbg._FIGURE_NOUN.search(text)
+
+
+@pytest.mark.parametrize("text", ["a square", "a square with side 4", "the points A and B", "an angle of 40°"])
+def test_a_figure_noun(text: str) -> None:
+    assert qbg._FIGURE_NOUN.search(text)
 
 
 def test_other_subjects_need_one_only_when_they_refer_to_it() -> None:
@@ -239,11 +262,11 @@ async def _generate(batches: list[Any], read: Any) -> tuple[list[dict[str, Any]]
         patch.object(qbg, "read_figure_facts", AsyncMock(side_effect=read)),
         patch.object(qbg, "redraw_figure", AsyncMock(return_value=None)),
     ):
-        out = await qbg.generate_checked_problems(
-            unit_name="Unit 4", count=2, course_name="Geometry", subject="math", user_id="u", images=None,
-            constraint_text=None, assignment_title=None, params=None, call_metadata=None, job_id="j",
-        )
+        out = await qbg.generate_checked_problems(REQUEST, count=2)
     return out, gen
+
+
+REQUEST = qbg.ProblemRequest(unit_name="Unit 4", course_name="Geometry", subject="math", user_id="u", job_id="j")
 
 
 async def _untrusted(*_a: Any, **_k: Any) -> tuple[None, list[str]]:
@@ -295,7 +318,69 @@ async def test_a_named_point_problem_with_no_figure_is_replaced() -> None:
 
 
 @pytest.mark.asyncio
+async def test_each_call_for_more_problems_is_told_the_kept_ones_and_repeats_are_dropped() -> None:
+    """Review round 2 (#998): the replacement and no-figure calls weren't
+    told which problems the set has, so a replacement repeated a kept
+    problem (v4 set1-p4 = set1-p1)."""
+    plain = _q("Solve 2x + 3 = 11.")
+    again = _q("  solve 2x + 3 =   11. ")  # the same problem, spacing and case aside
+    other = _q("Solve 5x = 20.")
+    out, gen = await _generate([[plain, again], [_q("Solve 2x + 3 = 11."), other]], _untrusted)
+    assert [q["text"] for q in out] == [plain["text"], other["text"]]
+    assert gen.await_count == 2 and gen.await_args_list[1].kwargs["count"] == 1
+    told = gen.await_args_list[1].kwargs["extra_instructions"]
+    assert "do not repeat any of them" in told and "- Solve 2x + 3 = 11." in told
+
+
+@pytest.mark.asyncio
+async def test_the_no_figure_call_is_told_the_kept_problems_too() -> None:
+    plain = _q("Solve 2x + 3 = 11.")
+    out, gen = await _generate(
+        [[plain, _q(PROBLEM, TRIANGLE)], [_q(PROBLEM, TRIANGLE)], [_q("Solve 2x + 3 = 11."), _q("Solve 4x = 8.")]],
+        _untrusted,
+    )
+    told = gen.await_args_list[2].kwargs["extra_instructions"]
+    assert "need no figure" in told and "- Solve 2x + 3 = 11." in told
+    assert [q["text"] for q in out] == [plain["text"], "Solve 4x = 8."]  # the repeat is dropped
+
+
+@pytest.mark.asyncio
+async def test_a_slot_lost_after_solving_gets_a_solved_problem_that_needs_no_figure(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Review round 2 (#998): a named-point problem whose figure prints the
+    answer was left out after solving and nothing took its slot."""
+    def check(_fig: Any, _text: str, *, final_answer: str = "", **_kw: Any) -> list[FigureIssue]:
+        return [FigureIssue("label", "the label '70°' gives away the answer")] if final_answer == "70°" else []
+
+    q = {**_q(PROBLEM, TRIANGLE), "figure_svg": "<svg/>", "figure_facts": READING.model_dump()}
+    plain = _q("Solve x + 1 = 2.")
+    no_figure = {**_q("Two angles are supplementary; one is 70°. Find the other."), "figure_spec": TRIANGLE}
+    solve = AsyncMock(side_effect=[
+        [{"question_text": "a", "steps": [], "final_answer": "70°"}, {"question_text": "b", "steps": [],
+                                                                     "final_answer": "1"}],
+        [{"question_text": "c", "steps": [], "final_answer": "110°"}],
+    ])
+    gen = AsyncMock(return_value=[no_figure])
+    with (
+        caplog.at_level("WARNING"),
+        patch.object(qbg, "generate_solutions", solve),
+        patch.object(qbg, "generate_questions", gen),
+        patch.object(qbg, "check_construction", check),
+    ):
+        kept, sols = await qbg.solve_checked_problems(
+            [q, plain], subject="math", user_id="u", job_id="j", request=REQUEST)
+    assert [k["text"] for k in kept] == [plain["text"], no_figure["text"]]
+    assert [s["final_answer"] for s in sols] == ["1", "110°"]
+    assert kept[1]["figure_spec"] is None and kept[1]["figure_svg"] is None
+    told = gen.await_args.kwargs["extra_instructions"]
+    assert gen.await_args.kwargs["count"] == 1 and "need no figure" in told and plain["text"] in told
+
+
+@pytest.mark.asyncio
 async def test_a_named_point_problem_whose_figure_gives_away_the_answer_is_left_out() -> None:
+    """Without a generation request (a teacher's upload) nothing is asked
+    for in its place."""
     def check(_fig: Any, _text: str, *, final_answer: str = "", **_kw: Any) -> list[FigureIssue]:
         return [FigureIssue("label", "the label '70°' gives away the answer")] if final_answer else []
 
