@@ -478,6 +478,61 @@ CASES: list[dict[str, Any]] = [
      "bad": _fig({"_a": [0, 0], "_b": [3.969, 0], "_c": [0, 4.5]}, segments=["_a_b", "_b_c", "_c_a"],
                  right_angles=["_b_a_c"], side_labels={"_b_c": "4", "_c_a": "3"}),
      "why": "4 is on the hypotenuse, not a leg"},
+    # Review round 5: only exact rules loosen coverage. "expect_declined":
+    # the problem can't be checked as worded, so no figure may be drawn.
+    {"id": "r5-rectangle-target", "text": r"Find the area of rectangle $ABCD$ if $AB = 5$ and $BC = 3$.",
+     "good": _fig({"A": [0, 0], "B": [5, 0], "C": [5, 3], "D": [0, 3]}, segments=_SIDES,
+                  side_labels={"AB": "5", "BC": "3"}, right_angles=["DAB", "ABC", "BCD", "CDA"],
+                  parallel_groups=[["AB", "CD"], ["BC", "DA"]]),
+     "bad": _fig({"A": [0, 0], "B": [5, 0], "C": [6.5, 2.598], "D": [1.5, 2.598]}, segments=_SIDES,
+                 side_labels={"AB": "5", "BC": "3"}, right_angles=["DAB", "ABC", "BCD", "CDA"],
+                 parallel_groups=[["AB", "CD"], ["BC", "DA"]]),
+     "why": "a slanted parallelogram, not a rectangle"},
+    {"id": "r5-which",
+     "text": r"In $\triangle ABC$, $\angle B$, which is a right angle, is opposite side $AC = 10$. Find $AB$.",
+     "good": _fig({"A": [6, 0], "B": [0, 0], "C": [0, 8]}, segments=_TRI, right_angles=["ABC"],
+                  side_labels={"CA": "10"}),
+     "bad": _fig({"A": [6, 0], "B": [0, 0], "C": [3, 9.539]}, segments=_TRI, right_angles=["ABC"],
+                 side_labels={"CA": "10"}), "why": "∠B is about 72°"},
+    {"id": "r5-draw-perp",
+     "text": r"In $\triangle ABC$, $AB = 6$. Draw $\overline{AD} \perp \overline{BC}$ with $D$ on $\overline{BC}$. "
+             r"Find $AD$.",
+     "good": _fig({"A": [2, 5.657], "B": [0, 0], "C": [7, 0], "D": [2, 0]}, segments=[*_TRI, "AD"],
+                  right_angles=["ADC"], side_labels={"AB": "6"}),
+     "bad": _fig({"A": [2, 5.657], "B": [0, 0], "C": [7, 0], "D": [3.5, 0]}, segments=[*_TRI, "AD"],
+                 right_angles=["ADC"], side_labels={"AB": "6"}), "why": "AD is slanted"},
+    {"id": "r5-major-arc",
+     "text": r"Points $A$, $B$, and $C$ lie on circle $O$, and $m\angle ACB = 50^\circ$. "
+             r"Find the measure of major arc $ACB$.",
+     "good": _fig({"O": [0, 0], "A": [5.0, 0.0], "B": [-0.868, 4.924], "C": [-3.214, -3.83]}, circles=_CIRCLE,
+                  segments=["CA", "CB"],
+                  arcs=[{"center": "O", "endpoints": ["A", "B"], "major": True}], angle_labels={"ACB": "50°"}),
+     "bad": _fig({"O": [0, 0], "A": [5.0, 0.0], "B": [-0.868, 4.924], "C": [3.214, 3.83]}, circles=_CIRCLE,
+                 segments=["CA", "CB"],
+                 arcs=[{"center": "O", "endpoints": ["A", "B"], "major": True}], angle_labels={"ACB": "50°"}),
+     "why": "C is on the minor arc AB (so ∠ACB is 130°), and the major arc doesn't pass through it"},
+    {"id": "r5-two-right-angles",
+     "text": r"Quadrilateral $ABCD$ has right angles at $A$ and $C$, $AB = 4$, and $AD = 3$. Find $BD$.",
+     "good": _fig({"A": [0, 0], "B": [4, 0], "C": [4.165, 2.75], "D": [0, 3]}, segments=[*_SIDES, "BD"],
+                  right_angles=["DAB", "BCD"], side_labels={"AB": "4", "DA": "3"}),
+     "bad": _fig({"A": [0, 0], "B": [4, 0], "C": [4.5, 3.5], "D": [0, 3]}, segments=[*_SIDES, "BD"],
+                 right_angles=["DAB", "BCD"], side_labels={"AB": "4", "DA": "3"}), "why": "∠C is not right"},
+    {"id": "r5-acute-longest", "expect_declined": True,
+     "text": r"Find $m\angle C$ in acute $\triangle ABC$ with $\overline{AB}$ the longest side and "
+             r"$m\angle A = 70^\circ$.",
+     "good": _fig({"A": [0, 0], "B": [5, 0], "C": [1.015, 2.79]}, segments=_TRI, angle_labels={"CAB": "70°"}),
+     "bad": _fig({"A": [0, 0], "B": [4, 0], "C": [1.642, 4.511]}, segments=_TRI, angle_labels={"CAB": "70°"}),
+     "why": "BC is the longest side"},
+    {"id": "r5-complement-after", "expect_declined": True,
+     "text": r"Triangle $ABC$ is shaded, except the middle third. Find the shaded area.",
+     "good": _fig({"A": [0, 0], "B": [6, 0], "C": [2, 4]}, segments=_TRI),
+     "bad": _fig({"A": [0, 0], "B": [6, 0], "C": [2, 4]}, segments=_TRI, shaded=[{"polygon": ["A", "B", "C"]}]),
+     "why": "the whole triangle shaded, middle third included"},
+    {"id": "r5-span-largest", "expect_declined": True,
+     "text": r"In $\triangle ABC$, $m\angle ABC = 40^\circ$, and $\angle ABC$ is the largest angle. Find $m\angle C$.",
+     "good": _fig({"A": [6, 0], "B": [0, 0], "C": [2.298, 1.928]}, segments=_TRI, angle_labels={"ABC": "40°"}),
+     "bad": _fig({"A": [6, 0], "B": [0, 0], "C": [2.298, 1.928]}, segments=_TRI, angle_labels={"ABC": "40°"}),
+     "why": "no triangle has a 40° largest angle; ∠C is about 112°"},
 ]
 
 
@@ -522,6 +577,7 @@ async def run_case(case: dict[str, Any]) -> dict[str, Any]:
         facts = facts.model_dump()
     return {
         "id": case["id"], "error": "", "reading": why, "facts": facts,
+        "expect_declined": bool(case.get("expect_declined")),
         "good": good, "bad": bad, "bad_caught": caught,
         "bad_fixed_by_removing_marks": not bad and caught,
     }
@@ -566,9 +622,12 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
         "wrong_caught_only_as_unmarked": [
             r["id"] for r in results if r["bad"] and all(x.startswith("not marked:") for x in r["bad"])],
         "correct_passed": sum(1 for r in results if r["good"] == []),
-        "correct_refused": {r["id"]: r["good"] for r in results if r["good"]},
+        "correct_refused": {r["id"]: r["good"] for r in results if r["good"] and not r.get("expect_declined")},
         "readings_agreed": sum(1 for r in results if not r["error"] and not r["reading"]),
-        "reading_failures": {r["id"]: r["reading"] for r in results if r["reading"]},
+        "reading_failures": {r["id"]: r["reading"] for r in results if r["reading"] and not r.get("expect_declined")},
+        # A problem that can't be checked as worded draws nothing: declined.
+        "expected_declines": [r["id"] for r in results if r.get("expect_declined")],
+        "declined_as_expected": [r["id"] for r in results if r.get("expect_declined") and r["reading"]],
     }
 
 

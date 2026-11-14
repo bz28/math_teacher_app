@@ -897,6 +897,77 @@
       ]
     }
   },
+  "15d2a9b38bb75a7fa8a89cecfa2f08b9": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nQuadrilateral $ABCD$ has right angles at $A$ and $C$, $AB = 4$, and $AD = 3$. Find $BD$.\n\nThe teacher's mes",
+      "recorded_at": 1794641230.103192
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "BD",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "DAB"
+          ],
+          "kind": "right_angle",
+          "point": "A",
+          "quote": "Quadrilateral ABCD has right angles at A"
+        },
+        {
+          "items": [
+            "BCD"
+          ],
+          "kind": "right_angle",
+          "point": "C",
+          "quote": "Quadrilateral ABCD has right angles at A and C"
+        },
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "AB = 4",
+          "value": 4
+        },
+        {
+          "items": [
+            "AD"
+          ],
+          "kind": "equal_length",
+          "quote": "AD = 3",
+          "value": 3
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [
+        "ABCD"
+      ],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "AD",
+        "BD"
+      ],
+      "triangles": []
+    }
+  },
   "17ecde886b3fa4aa6cd09e8466b90b06": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -1790,6 +1861,61 @@
       "triangles": []
     }
   },
+  "2f5ad4cf624564997ebc3f865b6bb0f8": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nPoints $A$, $B$, and $C$ lie on circle $O$, and $m\\angle ACB = 50^\\circ$. Find the measure of major arc $AC",
+      "recorded_at": 1794641228.7071528
+    },
+    "response": {
+      "circles": [
+        "O"
+      ],
+      "find": [
+        {
+          "item": "measure of major arc ACB",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "circle": "O",
+          "items": [
+            "A",
+            "B",
+            "C"
+          ],
+          "kind": "on_circle",
+          "quote": "Points A, B, and C lie on circle O"
+        },
+        {
+          "items": [
+            "ACB"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220ACB = 50\u00b0",
+          "value": 50
+        },
+        {
+          "circle": "O",
+          "items": [
+            "ACB"
+          ],
+          "kind": "inscribed_angle",
+          "quote": "Points A, B, and C lie on circle O, and m\u2220ACB = 50\u00b0"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "O"
+      ],
+      "prove": [],
+      "requested": []
+    }
+  },
   "324e4b6fc065e02e1b42cafc94d8bef9": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -2036,6 +2162,66 @@
       "segments": [
         "AD",
         "BC"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "378fa070c9ca3655a53e006a73bd0b1c": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nFind $m\\angle C$ in acute $\\triangle ABC$ with $\\overline{AB}$ the longest side and $m\\angle A = 70^\\circ$.",
+      "recorded_at": 1794641229.584786
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "C",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "expr": "acute",
+          "items": [
+            "ABC"
+          ],
+          "kind": "other",
+          "quote": "acute \u25b3ABC"
+        },
+        {
+          "expr": "longest side",
+          "items": [
+            "AB"
+          ],
+          "kind": "other",
+          "quote": "AB the longest side"
+        },
+        {
+          "items": [
+            "A"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220A = 70\u00b0",
+          "value": 70
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB"
       ],
       "triangles": [
         "ABC"
@@ -2368,6 +2554,69 @@
       ]
     }
   },
+  "46f0daa89673166c43adb48b7f116602": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, $AB = 6$. Draw $\\overline{AD} \\perp \\overline{BC}$ with $D$ on $\\overline{BC}$. Find $A",
+      "recorded_at": 1794641213.757586
+    },
+    "response": {
+      "find": [
+        {
+          "item": "AD",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "AB = 6",
+          "value": 6
+        },
+        {
+          "items": [
+            "AD",
+            "BC"
+          ],
+          "kind": "perpendicular",
+          "quote": "Draw AD \u22a5 BC"
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "on_segment",
+          "point": "D",
+          "quote": "with D on BC"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "requested": [
+        {
+          "item": "AD",
+          "kind": "segment"
+        }
+      ],
+      "segments": [
+        "AB",
+        "AD",
+        "BC"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
   "47cdbd4fb4cafb8b4a1885dc8e7a8e21": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -2571,6 +2820,55 @@
       ],
       "prove": [],
       "requested": []
+    }
+  },
+  "4f6b958ad8b2dba93bad75fb4595ce01": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, $m\\angle ABC = 40^\\circ$, and $\\angle ABC$ is the largest angle. Find $m\\angle C$.\n\nThe",
+      "recorded_at": 1794641244.201868
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "C",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220ABC = 40\u00b0",
+          "value": 40
+        },
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "other",
+          "quote": "\u2220ABC is the largest angle"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": [
+        "ABC"
+      ]
     }
   },
   "4f852ef0f1e547acdf663315a72fed07": {
@@ -3084,6 +3382,65 @@
       "triangles": []
     }
   },
+  "5db8c2e46325556a87ab02be5fff9aa3": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nFind $m\\angle C$ in acute $\\triangle ABC$ with $\\overline{AB}$ the longest side and $m\\angle A = 70^\\circ$.",
+      "recorded_at": 1794641229.410731
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "C",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "right_triangle",
+          "point": null,
+          "quote": "acute \u25b3ABC"
+        },
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "other",
+          "quote": "AB the longest side"
+        },
+        {
+          "items": [
+            "A"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220A = 70\u00b0",
+          "value": 70
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
   "5f25e03f588e1949b7a5c121d5c61590": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -3386,6 +3743,67 @@
       "triangles": []
     }
   },
+  "64d6a652f7b2907c8980085e762bbd3f": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nFind the area of rectangle $ABCD$ if $AB = 5$ and $BC = 3$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794641213.2315872
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "area of rectangle ABCD",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABCD"
+          ],
+          "kind": "rectangle",
+          "quote": "rectangle ABCD"
+        },
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "AB = 5",
+          "value": 5
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "equal_length",
+          "quote": "BC = 3",
+          "value": 3
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [
+        "ABCD"
+      ],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "BC"
+      ],
+      "triangles": []
+    }
+  },
   "6542aebc1939c362f8ddc85605830949": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -3654,6 +4072,67 @@
       ],
       "prove": [],
       "requested": []
+    }
+  },
+  "6a3d042269d7ff822f1fb5781f779301": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nFind the area of rectangle $ABCD$ if $AB = 5$ and $BC = 3$.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794641213.4638798
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "area of rectangle ABCD",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABCD"
+          ],
+          "kind": "rectangle",
+          "quote": "rectangle ABCD"
+        },
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "AB = 5",
+          "value": 5
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "equal_length",
+          "quote": "BC = 3",
+          "value": 3
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [
+        "ABCD"
+      ],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "BC"
+      ],
+      "triangles": []
     }
   },
   "6c31012a87df3fc4e56b0958a17057e5": {
@@ -4306,6 +4785,55 @@
       "requested": [],
       "segments": [],
       "triangles": []
+    }
+  },
+  "7e71602982d61d626ec036f97b16d457": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, $m\\angle ABC = 40^\\circ$, and $\\angle ABC$ is the largest angle. Find $m\\angle C$.\n\nThe",
+      "recorded_at": 1794641244.351914
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "C",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220ABC = 40\u00b0",
+          "value": 40
+        },
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "other",
+          "quote": "\u2220ABC is the largest angle"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": [
+        "ABC"
+      ]
     }
   },
   "809c33c0fb9cd7c7cc9b0a2442f0e7a2": {
@@ -5376,6 +5904,47 @@
       ]
     }
   },
+  "a245152abd5d484883c76a2342f90c4f": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nTriangle $ABC$ is shaded, except the middle third. Find the shaded area.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794641243.619352
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "shaded area",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "other",
+          "quote": "Triangle ABC is shaded, except the middle third."
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
   "a3407b30384643570b82d9da576a8f78": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -5625,6 +6194,43 @@
       ],
       "prove": [],
       "requested": []
+    }
+  },
+  "acaa088d54c97eeb285d1bf515c17953": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nTriangle $ABC$ is shaded, except the middle third. Find the shaded area.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794641244.094699
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "shaded area of triangle ABC",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "other",
+          "quote": "Triangle ABC is shaded, except the middle third."
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": [
+        "ABC"
+      ]
     }
   },
   "ae4311a08cf3b385283db93f8d10e802": {
@@ -5961,6 +6567,77 @@
       ]
     }
   },
+  "c2529a7a0f442d232b309e4ca7a5096e": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nQuadrilateral $ABCD$ has right angles at $A$ and $C$, $AB = 4$, and $AD = 3$. Find $BD$.\n\nThe teacher's mes",
+      "recorded_at": 1794641230.088862
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "BD",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "DAB"
+          ],
+          "kind": "right_angle",
+          "point": "A",
+          "quote": "right angles at A and C"
+        },
+        {
+          "items": [
+            "BCD"
+          ],
+          "kind": "right_angle",
+          "point": "C",
+          "quote": "right angles at A and C"
+        },
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "AB = 4",
+          "value": 4
+        },
+        {
+          "items": [
+            "AD"
+          ],
+          "kind": "equal_length",
+          "quote": "AD = 3",
+          "value": 3
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [
+        "ABCD"
+      ],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "AD",
+        "BD"
+      ],
+      "triangles": []
+    }
+  },
   "ca9bb994cf2c2949d12c5effd54524d0": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -6204,6 +6881,59 @@
       ]
     }
   },
+  "d1f86653260f265a235299b95956d3ed": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, $\\angle B$, which is a right angle, is opposite side $AC = 10$. Find $AB$.\n\nThe teacher",
+      "recorded_at": 1794641212.9379342
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "AB",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "right_triangle",
+          "point": "B",
+          "quote": "\u2220B, which is a right angle"
+        },
+        {
+          "items": [
+            "AC"
+          ],
+          "kind": "equal_length",
+          "quote": "side AC = 10",
+          "value": 10
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AC",
+        "AB"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
   "d2fb2453bb2a3ad45dc7c51929735e4e": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -6340,6 +7070,54 @@
       "triangles": [
         "ABC"
       ]
+    }
+  },
+  "d8d997da44f0ed95606641ee831e9f7e": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nPoints $A$, $B$, and $C$ lie on circle $O$, and $m\\angle ACB = 50^\\circ$. Find the measure of major arc $AC",
+      "recorded_at": 1794641228.159659
+    },
+    "response": {
+      "circles": [
+        "O"
+      ],
+      "find": [
+        {
+          "item": "measure of major arc ACB",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "circle": "O",
+          "items": [
+            "A",
+            "B",
+            "C"
+          ],
+          "kind": "on_circle",
+          "quote": "Points A, B, and C lie on circle O"
+        },
+        {
+          "circle": "O",
+          "items": [
+            "ACB"
+          ],
+          "kind": "inscribed_angle",
+          "quote": "m\u2220ACB = 50\u00b0",
+          "value": 50
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "O"
+      ],
+      "prove": [],
+      "requested": []
     }
   },
   "db6539d7ca6ada98a415b7b7f9284872": {
@@ -6656,6 +7434,64 @@
       "segments": [
         "PA",
         "OA"
+      ]
+    }
+  },
+  "e79199273487f423efa57875dd628b9a": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, $AB = 6$. Draw $\\overline{AD} \\perp \\overline{BC}$ with $D$ on $\\overline{BC}$. Find $A",
+      "recorded_at": 1794641212.914133
+    },
+    "response": {
+      "find": [
+        {
+          "item": "AD",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "AB = 6",
+          "value": 6
+        },
+        {
+          "items": [
+            "AD",
+            "BC"
+          ],
+          "kind": "perpendicular",
+          "quote": "Draw AD \u22a5 BC"
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "on_segment",
+          "point": "D",
+          "quote": "with D on BC"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "AD",
+        "BC"
+      ],
+      "triangles": [
+        "ABC"
       ]
     }
   },
@@ -7084,6 +7920,59 @@
       "triangles": [
         "ABC",
         "A'B'C'"
+      ]
+    }
+  },
+  "f249ed9cacc8754145ab9fbcddff7496": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, $\\angle B$, which is a right angle, is opposite side $AC = 10$. Find $AB$.\n\nThe teacher",
+      "recorded_at": 1794641213.084621
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "AB",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "right_triangle",
+          "point": "B",
+          "quote": "\u2220B, which is a right angle"
+        },
+        {
+          "items": [
+            "AC"
+          ],
+          "kind": "equal_length",
+          "quote": "AC = 10",
+          "value": 10
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AC",
+        "AB"
+      ],
+      "triangles": [
+        "ABC"
       ]
     }
   },
