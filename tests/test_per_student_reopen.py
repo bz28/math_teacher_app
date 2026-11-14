@@ -34,7 +34,7 @@ from api.models.course import CourseTeacher
 from api.models.grading_job import GradingJob
 from api.models.integrity_check import IntegrityCheckSubmission, IntegrityConversationTurn
 from api.routes.school_student_practice import drain_integrity_background_tasks
-from tests.conftest import PAGE_PNG
+from tests.conftest import PAGE_PNG, served_pages
 from tests.conftest import auth_headers as _auth
 from tests.test_submission_retake import NEW_PAGE
 
@@ -262,7 +262,7 @@ async def test_reopening_graded_work_keeps_the_grade_until_they_turn_it_in_again
     assert (a["number"], a["reason"], a["file_count"]) == (1, "reopen", 1)
     assert (a["final_score"], a["grade_published"]) == (70.0, True)
     r = await client.get(f"/v1/teacher/submissions/{sid}/attempts/1/files", headers=_auth(world["teacher_token"]))
-    assert [f["data"] for f in r.json()["files"]] == [PAGE_PNG]
+    assert await served_pages(client, r.json()["files"]) == [PAGE_PNG]
 
     async with get_session_factory()() as s:
         actions = (await s.execute(text(

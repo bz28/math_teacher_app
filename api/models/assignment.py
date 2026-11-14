@@ -116,12 +116,14 @@ class Submission(Base):
         UUID(as_uuid=True), ForeignKey("sections.id", ondelete="CASCADE"), nullable=False,
     )
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="submitted")
-    # The student's submitted work — list of {data, media_type, filename?}
-    # where `data` is base64-encoded JPEG/PNG/PDF. Multi-file because
-    # students often work across pages. Validated server-side via
-    # api.core.image_utils.validate_and_decode_upload (magic bytes +
-    # per-format size cap). S3 migration is the next planned move.
-    # Several MB a row, so deferred and raiseload: a query that needs the
+    # The student's submitted work — list of {key, media_type, filename?}
+    # where `key` names the JPEG/PNG/PDF page in the photo bucket
+    # (api/core/photo_store.py; rows not yet moved by
+    # scripts/backfill_photo_bucket.py still hold base64 `data`).
+    # Multi-file because students often work across pages. Validated
+    # server-side via api.core.image_utils.validate_and_decode_upload
+    # (magic bytes + per-format size cap) before upload.
+    # Deferred and raiseload: a query that needs the
     # photos asks for them (`undefer(Submission.files)` or
     # `select(Submission.files)`), and one that forgot raises instead of
     # quietly reading a whole class's photos to send names and scores.
@@ -325,7 +327,7 @@ class SubmissionAttempt(Base):
     )
     number: Mapped[int] = mapped_column(Integer, nullable=False)
     reason: Mapped[str] = mapped_column(String(20), nullable=False)
-    # The pages, base64 like Submission.files. Deferred: only the
+    # The pages, in the same form as Submission.files. Deferred: only the
     # originals endpoint reads them.
     files: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True, deferred=True)
     extraction: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True, deferred=True)

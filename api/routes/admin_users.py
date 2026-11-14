@@ -15,6 +15,7 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy import Date, cast, distinct, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core import photo_store
 from api.core.audit_log import record_activity
 from api.core.auth import hash_password
 from api.core.email import send_email
@@ -1048,8 +1049,10 @@ async def delete_user(
         {"email": user.email, "role": user.role},
         request=request,
     )
+    pages = await photo_store.pages_of_user(db, user_id)
     await db.delete(user)
     await db.commit()
+    await photo_store.delete_pages(pages)
     return {"status": "ok"}
 
 

@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { Modal } from "@/components/ui/modal";
-import { useBlobUrl } from "@/hooks/use-blob-url";
+import { useOpenableUrl } from "@/hooks/use-blob-url";
 import type { SubmissionFile } from "@/lib/api";
+import { onPhotoError } from "@/lib/submission-photos";
 
 /**
  * The teacher's view of a student's submitted pages.
@@ -31,10 +32,10 @@ function pageLabel(file: SubmissionFile, index: number): string {
  * Both formats get an "open full size in a new tab" escape hatch, which
  * is the only way to actually magnify a page: the inline view is sized
  * to the modal, and browser zoom on the real file is better than any
- * pan-and-zoom we would build here. Both need a `blob:` URL — a `data:`
- * link is inert for top-level navigation in Chrome and Firefox. PDFs
- * additionally need it because some browsers won't render them inline
- * at all and the link is their only recourse.
+ * pan-and-zoom we would build here. PDFs additionally need it because
+ * some browsers won't render them inline at all and the link is their
+ * only recourse. Pages load from their presigned URL; the thumbnails and
+ * the page share one, so the browser downloads each photo once.
  */
 export function WorkGalleryModal({
   files,
@@ -195,9 +196,9 @@ function GalleryBody({
   );
 }
 
-/** The page itself plus its open-full-size link. Split out so the blob
- *  handle is keyed to one file and is revoked when the teacher pages
- *  away, rather than accumulating one per page visited. */
+/** The page itself plus its open-full-size link. Split out so a
+ *  not-yet-moved page's blob handle (`useOpenableUrl`) is keyed to one
+ *  file and is revoked when the teacher pages away. */
 function GalleryPage({
   file,
   label,
@@ -210,9 +211,7 @@ function GalleryPage({
   maxHeightClass: string;
 }) {
   const isPdf = file.media_type === "application/pdf";
-  const dataUrl = `data:${file.media_type};base64,${file.data}`;
-  const blobUrl = useBlobUrl(file.data, file.media_type);
-  const href = blobUrl ?? dataUrl;
+  const href = useOpenableUrl(file.url);
   return (
     <div className="relative overflow-auto">
       {isPdf ? (
@@ -224,8 +223,10 @@ function GalleryPage({
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={dataUrl}
+          src={file.url}
           alt={`${studentName}'s ${label}`}
+          decoding="async"
+          onError={() => onPhotoError(file)}
           className={`mx-auto ${maxHeightClass} w-auto rounded-[--radius-md] object-contain`}
         />
       )}
@@ -255,7 +256,6 @@ function RailThumb({
   onClick: () => void;
 }) {
   const isPdf = file.media_type === "application/pdf";
-  const dataUrl = `data:${file.media_type};base64,${file.data}`;
   return (
     <button
       type="button"
@@ -274,7 +274,14 @@ function RailThumb({
         </div>
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={dataUrl} alt="" className="h-12 w-10 object-cover" />
+        <img
+          src={file.url}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          onError={() => onPhotoError(file)}
+          className="h-12 w-10 object-cover"
+        />
       )}
       <span className="block bg-bg-subtle px-1 text-center text-[9px] text-text-muted">
         {index + 1}

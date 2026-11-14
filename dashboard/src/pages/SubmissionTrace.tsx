@@ -122,10 +122,10 @@ export default function SubmissionTrace() {
     // the confirm stamps. Failure is non-fatal — the call timeline is
     // still worth rendering without it.
     //
-    // The realistic failure is this endpoint alone: it returns the
-    // photos as inline base64, so it can time out or trip a response
-    // size limit on a submission where the small /llm-calls fetch
-    // beside it succeeds. (NOT a deleted assignment or course — both
+    // The realistic failure is this endpoint alone (it signs a URL per
+    // photo, and pages not yet moved to the bucket still come back as
+    // inline base64), while the small /llm-calls fetch beside it
+    // succeeds. (NOT a deleted assignment or course — both
     // FKs cascade, so a submission cannot outlive either.) Everything
     // downstream must therefore treat a null `work` as "unknown",
     // never as "absent".

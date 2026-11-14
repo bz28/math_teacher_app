@@ -4831,12 +4831,18 @@
         "type": "object"
       },
       "SubmissionFileOut": {
-        "additionalProperties": true,
-        "description": "One file the student turned in. `data` is raw base64 (no `data:`\nprefix); `media_type` is image/jpeg, image/png, or application/pdf.",
+        "description": "One file the student turned in, as `photo_store.page_out` serves\nit: a URL to load it from \u2014 never the bytes. `media_type` is\nimage/jpeg, image/png, or application/pdf.",
         "properties": {
-          "data": {
-            "title": "Data",
-            "type": "string"
+          "expires_in": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires In"
           },
           "filename": {
             "anyOf": [
@@ -4849,13 +4855,28 @@
             ],
             "title": "Filename"
           },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
+          },
           "media_type": {
             "title": "Media Type",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
             "type": "string"
           }
         },
         "required": [
-          "data",
+          "url",
           "media_type"
         ],
         "title": "SubmissionFileOut",
@@ -5025,10 +5046,7 @@
         "properties": {
           "files": {
             "items": {
-              "additionalProperties": {
-                "type": "string"
-              },
-              "type": "object"
+              "$ref": "#/components/schemas/SubmissionFileOut"
             },
             "title": "Files",
             "type": "array"
@@ -5652,10 +5670,7 @@
             "anyOf": [
               {
                 "items": {
-                  "additionalProperties": {
-                    "type": "string"
-                  },
-                  "type": "object"
+                  "$ref": "#/components/schemas/SubmissionFileOut"
                 },
                 "type": "array"
               },
