@@ -252,10 +252,10 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
   useTourAction(TOUR_ACTIONS.gotoSubmissions, () => setTab("submissions"));
   useTourAction(TOUR_ACTIONS.gotoGrades, () => setTab("grades"));
 
-  if (loading) {
-    return <CourseWorkspaceSkeleton />;
-  }
-  if (error || !course) {
+  // While the course itself loads, only the header waits on it: the
+  // tab bar and the open tab render now, so a tab's own fetch starts
+  // alongside the course's instead of after it.
+  if (!loading && (error || !course)) {
     return (
       <div className="mx-auto max-w-4xl">
         <p className="text-sm text-[color:var(--color-error)]">{error ?? "Course not found."}</p>
@@ -271,34 +271,38 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
 
   return (
     <div className="mx-auto max-w-6xl">
-      <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
-        <Link
-          href="/school/teacher"
-          className="inline-flex items-center gap-1 font-sans text-[11px] font-semibold uppercase tracking-[0.12em] text-text-secondary transition-colors hover:text-text-primary"
-        >
-          ← My Courses
-        </Link>
-        <div className="mt-3 flex items-baseline justify-between gap-4">
-          <CourseTitle course={course} onRenamed={reloadCourse} />
-          <button
-            type="button"
-            onClick={() => setTab("settings")}
-            aria-label="Course settings"
-            className={`shrink-0 rounded-[--radius-sm] border p-2 transition-colors ${
-              tab === "settings"
-                ? "border-[color:var(--color-primary)] text-[color:var(--color-primary)]"
-                : "border-transparent text-text-muted hover:border-border hover:text-text-primary"
-            }`}
+      {course ? (
+        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
+          <Link
+            href="/school/teacher"
+            className="inline-flex items-center gap-1 font-sans text-[11px] font-semibold uppercase tracking-[0.12em] text-text-secondary transition-colors hover:text-text-primary"
           >
-            <GearIcon />
-          </button>
-        </div>
-        {/* Course-scoped status pills — same shape as the courses-list
-            so the eye learns the row once. Lets the teacher answer
-            "what's pressing in this course right now" without
-            clicking into the Submissions tab. */}
-        <CourseStatusRow course={course} />
-      </motion.div>
+            ← My Courses
+          </Link>
+          <div className="mt-3 flex items-baseline justify-between gap-4">
+            <CourseTitle course={course} onRenamed={reloadCourse} />
+            <button
+              type="button"
+              onClick={() => setTab("settings")}
+              aria-label="Course settings"
+              className={`shrink-0 rounded-[--radius-sm] border p-2 transition-colors ${
+                tab === "settings"
+                  ? "border-[color:var(--color-primary)] text-[color:var(--color-primary)]"
+                  : "border-transparent text-text-muted hover:border-border hover:text-text-primary"
+              }`}
+            >
+              <GearIcon />
+            </button>
+          </div>
+          {/* Course-scoped status pills — same shape as the courses-list
+              so the eye learns the row once. Lets the teacher answer
+              "what's pressing in this course right now" without
+              clicking into the Submissions tab. */}
+          <CourseStatusRow course={course} />
+        </motion.div>
+      ) : (
+        <CourseHeaderSkeleton />
+      )}
 
       {/* Editorial tab bar — underline-on-active matches the student
           top-bar and app-shell grammar. No tinted pill backgrounds. */}
@@ -358,7 +362,7 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
         <ErrorBoundary key={tab}>
         {tab === "sections" && (
           <SectionsTab
-            courseId={course.id}
+            courseId={id}
             onChanged={reloadCourse}
             showNewSection={sectionModalOpen}
             onShowNewSectionChange={(open) => {
@@ -392,18 +396,18 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
             onExpandFirstRosterConsumed={() => setExpandFirstRoster(false)}
           />
         )}
-        {tab === "materials" && <MaterialsTab courseId={course.id} onChanged={reloadCourse} />}
+        {tab === "materials" && <MaterialsTab courseId={id} onChanged={reloadCourse} />}
         {tab === "homework" && (
           <HomeworkTab
-            courseId={course.id}
+            courseId={id}
             onGoToMaterials={() => setTab("materials")}
           />
         )}
-        {tab === "practice" && <PracticeTab courseId={course.id} />}
-        {tab === "insights" && <StudentInsightsTab courseId={course.id} />}
-        {tab === "submissions" && <SubmissionsTab courseId={course.id} />}
-        {tab === "grades" && <GradesTab courseId={course.id} />}
-        {tab === "settings" && <SettingsTab course={course} />}
+        {tab === "practice" && <PracticeTab courseId={id} />}
+        {tab === "insights" && <StudentInsightsTab courseId={id} />}
+        {tab === "submissions" && <SubmissionsTab courseId={id} />}
+        {tab === "grades" && <GradesTab courseId={id} />}
+        {tab === "settings" && course && <SettingsTab course={course} />}
         </ErrorBoundary>
       </div>
     </div>
@@ -539,14 +543,14 @@ function CourseTitle({ course, onRenamed }: { course: TeacherCourse; onRenamed: 
 }
 
 /**
- * Initial-load placeholder for the course workspace. Mirrors the real
- * silhouette — eyebrow back-link, the 40px serif title, the status pill
- * row, the underlined tab bar, then a content slab — so the first paint
- * settles into the workspace instead of blanking to "Loading…".
+ * Placeholder for the course header while the course loads. Mirrors the
+ * real silhouette — eyebrow back-link, the 40px serif title, the status
+ * pill row. The tab bar and the open tab don't wait on the course, so
+ * they render (and fetch) beneath it.
  */
-function CourseWorkspaceSkeleton() {
+function CourseHeaderSkeleton() {
   return (
-    <div className="mx-auto max-w-6xl" aria-busy="true" aria-live="polite">
+    <div aria-busy="true" aria-live="polite">
       <Skeleton className="h-3 w-24 rounded-[--radius-sm]" />
       <div className="mt-3 flex items-baseline justify-between gap-4">
         <Skeleton className="h-9 w-72" />
@@ -556,20 +560,6 @@ function CourseWorkspaceSkeleton() {
       <div className="mt-4 flex flex-wrap gap-2">
         {Array.from({ length: 3 }).map((_, i) => (
           <Skeleton key={i} className="h-6 w-28 rounded-[--radius-pill]" />
-        ))}
-      </div>
-      {/* Tab bar */}
-      <div className="mt-8 flex gap-6 border-b border-border-light pb-3">
-        {["w-16", "w-20", "w-[72px]", "w-[68px]", "w-[88px]", "w-[76px]"].map(
-          (w, i) => (
-            <Skeleton key={i} className={`h-4 rounded-[--radius-sm] ${w}`} />
-          ),
-        )}
-      </div>
-      {/* Content slab */}
-      <div className="mt-6 space-y-2">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <Skeleton key={i} className="h-16 w-full rounded-[--radius-lg]" />
         ))}
       </div>
     </div>
