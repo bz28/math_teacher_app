@@ -121,7 +121,13 @@ class Submission(Base):
     # students often work across pages. Validated server-side via
     # api.core.image_utils.validate_and_decode_upload (magic bytes +
     # per-format size cap). S3 migration is the next planned move.
-    files: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
+    # Several MB a row, so deferred and raiseload: a query that needs the
+    # photos asks for them (`undefer(Submission.files)` or
+    # `select(Submission.files)`), and one that forgot raises instead of
+    # quietly reading a whole class's photos to send names and scores.
+    files: Mapped[list[Any] | None] = mapped_column(
+        JSON, nullable=True, deferred=True, deferred_raiseload=True,
+    )
     # Per-HW-primary final answers the student typed alongside the
     # whole-HW image upload. Flat {bank_item_id: text} map. Optional
     # per problem; the image is the source of truth, the typed

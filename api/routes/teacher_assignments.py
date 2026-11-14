@@ -13,6 +13,7 @@ from sqlalchemy import delete as sql_delete
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import undefer
 
 from api.core.answer_units import units_not_in_work
 from api.core.audit_log import record_activity
@@ -3077,6 +3078,7 @@ async def get_submission_detail(
 
     sub = (await db.execute(
         select(Submission).where(Submission.id == submission_id)
+        .options(undefer(Submission.files))
     )).scalar_one_or_none()
     if sub is None:
         raise HTTPException(status_code=404, detail="Submission not found")

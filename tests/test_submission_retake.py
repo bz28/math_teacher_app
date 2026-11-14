@@ -18,6 +18,7 @@ from typing import Any
 from httpx import AsyncClient
 from PIL import Image
 from sqlalchemy import select, text
+from sqlalchemy.orm import undefer
 
 from api.database import get_session_factory
 from api.models.assignment import Submission, SubmissionAttempt, SubmissionGrade
@@ -76,13 +77,12 @@ async def _row(sid: str) -> Submission:
     async with get_session_factory()() as s:
         return (await s.execute(
             select(Submission).where(Submission.id == uuid.UUID(sid))
+            .options(undefer(Submission.files))
         )).scalar_one()
 
 
 async def _attempts(sid: str) -> list[SubmissionAttempt]:
     """The turn-ins kept for this submission, oldest first, pages and all."""
-    from sqlalchemy.orm import undefer
-
     async with get_session_factory()() as s:
         return list((await s.execute(
             select(SubmissionAttempt)
