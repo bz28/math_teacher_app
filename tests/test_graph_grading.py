@@ -301,7 +301,7 @@ async def test_a_no_another_drawing_shows_or_cant_settle_is_unclear(checks: Chec
     visual = [_drawn(), {**_drawn(), "bbox": BOX2}]
     r = await check_problem_drawing(_extraction(visual=visual), [[(_jpeg(), "image/jpeg")]], 1, three)
     assert r is not None and [i.verdict for i in r.items] == ["yes", "unclear", "no"]
-    assert r.items[1].seen == f"b? {graph_grading._OTHER_DRAWING} b"
+    assert r.items[1].seen == f"b? {graph_grading._OTHER_DRAWING}: b"
     # The other drawing's "yes" never becomes a "yes": only the answering
     # drawing earns points.
     cut = DrawingCheck("wide", "cut_off", [ItemResult(1, "unclear", ""), ItemResult(2, "unclear", "")])
@@ -310,12 +310,40 @@ async def test_a_no_another_drawing_shows_or_cant_settle_is_unclear(checks: Chec
     assert r is not None and [i.verdict for i in r.items] == ["yes", "unclear"]
 
 
-async def test_a_table_is_judged_only_when_no_graph_is_in_view(checks: Checks) -> None:
+async def test_a_located_graph_not_in_view_hunts_the_pages_not_the_table(checks: Checks) -> None:
+    p1, p2 = _jpeg((255, 255, 255)), _jpeg((0, 0, 0))
     table = {**_drawn(), "kind": "table", "bbox": BOX2}
-    checks.queue(_not_found(), _found("tight", "yes", "no"))
-    r = await check_problem_drawing(_extraction(visual=[table, _drawn()]), [[(_jpeg(), "image/jpeg")]], 1, PART)
-    assert [c["bbox"] for c in checks.calls] == [BOX, BOX2]
+    checks.queue(_not_found(), _found("page", "yes", "no"))
+    pages = [[(p1, "image/jpeg")], [(p2, "image/jpeg")]]
+    r = await check_problem_drawing(_extraction(visual=[table, _drawn()]), pages, 1, PART)
+    assert [(c["page"], c["bbox"]) for c in checks.calls] == [(p1, BOX), (p2, None)]
+    assert r is not None and r.step == "page"
+
+
+async def test_a_table_is_judged_when_no_graph_was_located(checks: Checks) -> None:
+    table = {**_drawn(), "kind": "table", "bbox": BOX2}
+    checks.queue(_found("tight", "yes", "no"))
+    visual = [table, _drawn(bbox=None)]
+    r = await check_problem_drawing(_extraction(visual=visual), [[(_jpeg(), "image/jpeg")]], 1, PART)
+    assert [c["bbox"] for c in checks.calls] == [BOX2]
     assert r is not None and [i.verdict for i in r.items] == ["yes", "no"]
+
+
+async def test_a_failed_look_keeps_the_others_and_doubts_their_noes(checks: Checks) -> None:
+    checks.queue(_found("tight", "yes", "no"), RuntimeError("malformed twice"))
+    visual = [_drawn(), {**_drawn(), "bbox": BOX2}]
+    r = await check_problem_drawing(_extraction(visual=visual), [[(_jpeg(), "image/jpeg")]], 1, PART)
+    assert r is not None and r.note is None and [i.verdict for i in r.items] == ["yes", "unclear"]
+    assert graph_grading._FAILED in r.items[1].seen
+
+
+async def test_every_located_miss_counts_against_the_page_looks(checks: Checks) -> None:
+    pages = [[(_jpeg(), "image/jpeg")] for _ in range(9)]
+    checks.queue(*[_not_found() for _ in range(12)])
+    visual = [_drawn(page=1), {**_drawn(page=1), "bbox": BOX2}]
+    await check_problem_drawing(_extraction(visual=visual), pages, 1, PART)
+    # Both misses looked at page 1 whole; the hunt gets what's left.
+    assert len(checks.calls) == graph_grading._MAX_PAGE_LOOKS
 
 
 async def test_without_a_box_the_whole_page_the_work_is_on_is_looked_at_first(checks: Checks) -> None:
