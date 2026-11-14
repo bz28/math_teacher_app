@@ -1177,8 +1177,10 @@ async def delete_assignment(
             detail="Unpublish before deleting",
         )
     # Drafts can't have locked any bank items, so no recompute needed.
+    pages = await photo_store.pages_of_submissions(db, Submission.assignment_id == assignment_id)
     await db.delete(a)
     await db.commit()
+    await photo_store.delete_pages(pages)
     return {"status": "ok"}
 
 

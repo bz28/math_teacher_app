@@ -9,6 +9,7 @@ from sqlalchemy import Integer, and_, case, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core import photo_store
 from api.core.class_rubric import (
     ClassRubric,
     CreditGuidance,
@@ -717,6 +718,16 @@ async def delete_course(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
     course = await get_teacher_course(db, course_id, current_user.user_id)
+    # Its homework and sections cascade to every submission in the course;
+    # their photos are removed once that has committed.
+    pages = await photo_store.pages_of_submissions(
+        db,
+        or_(
+            Submission.assignment_id.in_(select(Assignment.id).where(Assignment.course_id == course_id)),
+            Submission.section_id.in_(select(Section.id).where(Section.course_id == course_id)),
+        ),
+    )
     await db.delete(course)
     await db.commit()
+    await photo_store.delete_pages(pages)
     return {"status": "ok"}

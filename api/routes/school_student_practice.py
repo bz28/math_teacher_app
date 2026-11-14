@@ -2465,6 +2465,7 @@ async def submit_homework(
         raise HTTPException(status_code=403, detail=HOMEWORK_CLOSED_DETAIL)
     if existing is not None and reopened and not user.is_preview:
         return await _resubmit_reopened(db, user, assignment, existing, body, now, due_at)
+    replaced_pages: list[dict[str, Any]] = []
     if existing is not None:
         # A teacher's preview is a rehearsal, not a turn-in. One-shot
         # exists so a student can't resubmit after seeing feedback —
@@ -2473,6 +2474,8 @@ async def submit_homework(
         # deletes a submission. Replace the previous rehearsal instead.
         # Grade, grading job and integrity rows cascade off this row;
         # LLM call records are SET NULL, so the spend stays on the books.
+        # Its photos are removed once the replacement has committed.
+        replaced_pages = await photo_store.pages_of_submissions(db, Submission.id == existing)
         await db.execute(
             sql_delete(Submission).where(Submission.id == existing)
         )
@@ -2543,6 +2546,9 @@ async def submit_homework(
         _spawn_background_task(
             _run_extraction_background(submission_id_for_task),
         )
+    # The replaced rehearsal's photos — after the spawn, though it never
+    # raises, for the reason below.
+    await photo_store.delete_pages(replaced_pages)
 
     # Logged LAST, and deliberately so. The submission is committed and
     # durable by here, and `_run_extraction_background` has exactly one

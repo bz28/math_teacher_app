@@ -15,10 +15,12 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
+from api.core import photo_store
 from api.core.email import send_email
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user, require_teacher
 from api.middleware.rate_limit import limiter
+from api.models.assignment import Submission
 from api.models.course import Course
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
@@ -169,9 +171,12 @@ async def delete_section(
     section = await _get_section_in_course(db, section_id, course_id)
     # Cascades to enrollments, invites, assignment_sections, and ALL student
     # submissions for assignments in this section. Student accounts survive —
-    # only their work in this section is lost.
+    # only their work in this section is lost, photos included (removed
+    # once the delete has committed).
+    pages = await photo_store.pages_of_submissions(db, Submission.section_id == section_id)
     await db.delete(section)
     await db.commit()
+    await photo_store.delete_pages(pages)
     logger.info(
         "AUDIT: teacher=%s deleted section=%s from course=%s",
         current_user.user_id, section_id, course_id,
