@@ -27,6 +27,13 @@ Three operations, one per kind of caller:
   submission, admin drill-in): a short-lived presigned GET URL per page
   instead of the bytes.
 
+And one for deleting: a row's pages don't go with the row (a cascade from
+a user, course, section or assignment drops the rows, never the objects),
+so every path that deletes submissions collects their pages FIRST with
+`pages_of_submissions` / `pages_of_user`, commits, and only then calls
+`delete_pages` — a delete that rolls back keeps its photos. A student's
+deletion request has to remove their photos, not just their rows.
+
 ## Why presigned URLs, and why an hour
 
 The bucket is private (Railway offers no public buckets) and the photos
@@ -63,6 +70,9 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any, Protocol
+
+from sqlalchemy import ColumnElement, or_, select, text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
 
@@ -318,13 +328,75 @@ def pages_out(entries: list[dict[str, Any]] | None) -> list[dict[str, Any]] | No
     return None if entries is None else [page_out(e) for e in entries]
 
 
+# Deletes in flight at once: a course's worth of pages goes in seconds
+# without taking every worker thread.
+_DELETE_CONCURRENCY = 16
+
+
 async def delete_pages(entries: list[dict[str, Any]]) -> None:
-    """Best-effort removal of uploaded pages that ended up unused (the
-    request that stored them failed). Never raises."""
-    for entry in entries:
-        if "key" not in entry:
-            continue
-        try:
-            await asyncio.to_thread(backend().delete, entry["key"])
-        except Exception:  # noqa: BLE001 — an orphaned object is harmless; the error isn't the caller's
-            logger.warning("couldn't delete unused photo object %s", entry["key"])
+    """Best-effort removal of pages: ones a failed request uploaded, or
+    the pages of submissions whose delete has COMMITTED. Never raises — a
+    page that won't delete is logged by key (never a URL), and the request
+    that removed its row still succeeds. INLINE entries have nothing to
+    remove."""
+    keys = [entry["key"] for entry in entries if "key" in entry]
+    if not keys:
+        return
+    gate = asyncio.Semaphore(_DELETE_CONCURRENCY)
+
+    async def delete(key: str) -> None:
+        async with gate:
+            try:
+                await asyncio.to_thread(backend().delete, key)
+            except Exception:  # noqa: BLE001 — an orphaned object is harmless; the error isn't the caller's
+                logger.warning("couldn't delete photo object %s", key)
+
+    await asyncio.gather(*(delete(k) for k in keys))
+
+
+# Every bucket key in the given submissions' `files` and their earlier
+# attempts' — read out in SQL, so a course still holding inline (pre-
+# backfill) pages isn't loaded into memory to find none.
+_KEYS_SQL = text("""
+    SELECT e ->> 'key' FROM (
+        SELECT files FROM submissions WHERE id = ANY(:ids)
+        UNION ALL
+        SELECT files FROM submission_attempts WHERE submission_id = ANY(:ids)
+    ) AS f, jsonb_array_elements(
+        CASE WHEN json_typeof(f.files) = 'array' THEN f.files::jsonb ELSE '[]'::jsonb END
+    ) AS e
+    WHERE e ? 'key'
+""")
+
+
+async def pages_of_submissions(
+    db: AsyncSession, *where: ColumnElement[bool],
+) -> list[dict[str, Any]]:
+    """The bucket pages of the submissions matching `where` (and of their
+    earlier attempts), to pass to `delete_pages` once the rows' delete
+    has committed. Call it BEFORE deleting: after, the rows are gone."""
+    from api.models.assignment import Submission
+
+    ids = list((await db.execute(select(Submission.id).where(*where))).scalars())
+    if not ids:
+        return []
+    keys = (await db.execute(_KEYS_SQL, {"ids": ids})).scalars()
+    return [{"key": k} for k in keys]
+
+
+async def pages_of_user(db: AsyncSession, user_id: uuid.UUID) -> list[dict[str, Any]]:
+    """`pages_of_submissions` for every submission that deleting this user
+    cascades to: their own turn-ins, the turn-ins on homework they own
+    (assignments.teacher_id cascades), and their preview student's
+    (users.preview_owner_id cascades)."""
+    from api.models.assignment import Assignment, Submission
+    from api.models.user import User
+
+    users = select(User.id).where(or_(User.id == user_id, User.preview_owner_id == user_id))
+    return await pages_of_submissions(
+        db,
+        or_(
+            Submission.student_id.in_(users),
+            Submission.assignment_id.in_(select(Assignment.id).where(Assignment.teacher_id.in_(users))),
+        ),
+    )

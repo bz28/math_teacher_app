@@ -14,6 +14,7 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
+from api.core import photo_store
 from api.core.auth import (
     check_lockout,
     create_access_token,
@@ -819,10 +820,14 @@ async def delete_account(
 
     # Capture ID before commit expires the ORM object
     user_id = user.id
+    # Their homework photos go with the account — collected before the
+    # rows cascade away, deleted only once the delete has committed.
+    pages = await photo_store.pages_of_user(db, user_id)
 
     # Delete the user row
     await db.delete(user)
     await db.commit()
+    await photo_store.delete_pages(pages)
 
     logger.info("Account deleted: user=%s", user_id)
 
