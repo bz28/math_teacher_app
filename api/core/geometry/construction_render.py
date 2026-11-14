@@ -19,6 +19,7 @@ import re
 from api.core.geometry.dsl import (
     ConstructionArc,
     ConstructionFigure,
+    ConstructionLine,
     is_hidden,
     split_points,
     used_points,
@@ -117,7 +118,9 @@ def _arc_path(center: Point, r: float, start: float, sweep: float) -> str:
     return f"M{_f(p1[0])},{_f(p1[1])} A{_f(r)},{_f(r)} 0 {large} 1 {_f(p2[0])},{_f(p2[1])}"
 
 
-def _minor_arc(p: dict[str, Point], arc: ConstructionArc) -> tuple[Point, float, float, float]:
+def arc_span(p: dict[str, Point], arc: ConstructionArc) -> tuple[Point, float, float, float]:
+    """(centre, radius, start angle, counter-clockwise sweep) of the arc as
+    drawn: the minor side of its ends, or the major side when `major`."""
     c = p[arc.center]
     e0, e1 = p[arc.endpoints[0]], p[arc.endpoints[1]]
     r = math.dist(c, e0)
@@ -126,6 +129,8 @@ def _minor_arc(p: dict[str, Point], arc: ConstructionArc) -> tuple[Point, float,
     sweep = (a2 - a1) % (2 * math.pi)
     if sweep > math.pi:
         a1, sweep = a2, 2 * math.pi - sweep
+    if arc.major:
+        a1, sweep = a1 + sweep, 2 * math.pi - sweep
     return c, r, a1, sweep
 
 
@@ -207,6 +212,12 @@ def _label_direction(dirs: list[float], fallback: Point) -> Point:
         if gap > best_gap + 1e-9:
             best_gap, best_mid = gap, d + gap / 2
     return math.cos(best_mid), math.sin(best_mid)
+
+
+def _labelled(line: ConstructionLine) -> bool:
+    """A line's name is written by its end unless the name is only its two
+    points ("AB" through A and B reads as line AB already)."""
+    return bool(line.name) and line.name not in ("".join(line.through), "".join(reversed(line.through)))
 
 
 def _line_name(name: str) -> str:
@@ -301,7 +312,7 @@ def render_construction(spec: ConstructionFigure) -> str:
     texts = [
         *(n for n in p if not is_hidden(n)),
         *spec.angle_labels.values(), *spec.side_labels.values(),
-        *(_line_name(ln.name) for ln in spec.lines if ln.name),
+        *(_line_name(ln.name or "") for ln in spec.lines if _labelled(ln)),
     ]
     pad = max(0.2, _label_padding(texts) - margin)
     vb = (box[0] - pad, box[1] - pad, box[2] + pad, box[3] + pad)
@@ -320,10 +331,10 @@ def render_construction(spec: ConstructionFigure) -> str:
             attr = " ".join(f"{_f(p[n][0])},{_f(p[n][1])}" for n in region.polygon)
             parts.append(f'<polygon points="{attr}" {fill}/>')
         elif region.sector:
-            c, r, a1, sw = _minor_arc(p, region.sector)
+            c, r, a1, sw = arc_span(p, region.sector)
             parts.append(f'<path d="M{_f(c[0])},{_f(c[1])} L{_arc_path(c, r, a1, sw)[1:]} Z" {fill}/>')
     for sector in spec.sectors:
-        c, r, a1, sw = _minor_arc(p, sector)
+        c, r, a1, sw = arc_span(p, sector)
         arc = _arc_path(c, r, a1, sw)[1:]
         parts.append(f'<path d="M{_f(c[0])},{_f(c[1])} L{arc} Z" {fill}/>')
         parts.append(
@@ -339,7 +350,7 @@ def render_construction(spec: ConstructionFigure) -> str:
             f'stroke="{_STROKE}" stroke-width="{_f(_STROKE_WIDTH)}"/>',
         )
     for arc_spec in spec.arcs:
-        c, r, a1, sw = _minor_arc(p, arc_spec)
+        c, r, a1, sw = arc_span(p, arc_spec)
         parts.append(
             f'<path d="{_arc_path(c, r, a1, sw)}" fill="none" stroke="{_STROKE}" '
             f'stroke-width="{_f(_STROKE_WIDTH)}"/>',
@@ -366,10 +377,10 @@ def render_construction(spec: ConstructionFigure) -> str:
         parts.append(_line(back, fwd))
         parts.append(_chevron(fwd, u))
         parts.append(_chevron(back, back_u))
-        if line.name:
+        if _labelled(line):
             # The name goes by the end further right (or higher, if vertical).
             end, d = (fwd, u) if (u[0], u[1]) > (0.0, 0.0) else (back, back_u)
-            line_ends.append((_line_name(line.name), end, d))
+            line_ends.append((_line_name(line.name or ""), end, d))
 
     # 4. Marks: ticks, angle arcs, right-angle boxes, parallel arrows.
     thin = _STROKE_WIDTH * 0.9

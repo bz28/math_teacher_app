@@ -34,7 +34,7 @@ from api.core.drawing_requirement import combine_requires_drawing
 from api.core.geometry import FigureSpecError, figure_point_names, render_figure, render_figure_or_none
 from api.core.geometry.dsl import ConstructionFigure, split_points
 from api.core.geometry.facts import FigureFacts, as_facts
-from api.core.geometry.figure_check import check_construction, unbacked_marks
+from api.core.geometry.figure_check import check_construction, unbacked_marks, with_arc_sides
 from api.core.image_utils import to_content_block
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
 from api.core.llm_schemas import (
@@ -251,7 +251,7 @@ def _check_figure(
         facts = as_facts(facts)
         if facts is None:
             return None, None, [_NOT_READ]
-        raw_spec = _without_empty_mark_groups(raw_spec)
+        raw_spec = with_arc_sides(_without_empty_mark_groups(raw_spec), f"{text}\n{request}\n{step_text or ''}")
         try:
             fig = ConstructionFigure.model_validate(raw_spec)
             if step_text is None:

@@ -601,11 +601,13 @@ def _construction_reply(
     has_figure = drew_top or (not rewrites and bool(item.figure_svg))
     missing = (not has_figure and _FIGURE_REFERENCE.search(question_text or "") is not None
                and not (top_construction and not drew_top))
+    removed = _removal_notes(proposal, item, drew_top=drew_top, rewrites=rewrites, failed=top_construction)
     if not touches_figure:
         notes: list[str] = []
         if not drew_top and not drew_step and _CLAIMS_FIGURE.search(reply):
             reply = " ".join(s for s in _sentences(reply) if not _CLAIMS_FIGURE.search(s))
             notes.append("No diagram was added.")
+        notes += removed
         if missing:
             notes.append("This problem refers to a figure, and it doesn't have one yet.")
         return "\n\n".join(filter(None, [reply, *notes])).strip()
@@ -653,11 +655,36 @@ def _construction_reply(
         for n, issues in sorted(step_drops.items())
     ]
     figures += [f"{d} That step is shown without one." for d in other_step_drops]
+    figures += removed
     if missing:
         figures.append("This problem refers to a figure, and it doesn't have one yet.")
     if proposal is None:
         figures.append("Nothing was changed.")
     return "\n\n".join(filter(None, [" ".join(said), " ".join(figures)])).strip()
+
+
+def _removal_notes(
+    proposal: dict[str, Any] | None, item: Any, *, drew_top: bool, rewrites: bool, failed: bool,
+) -> list[str]:
+    """What accepting the proposal takes away: the question's diagram when
+    the question is reworded without a new one (accept clears it, since it
+    no longer matches), and a step's diagram when the steps are rewritten
+    without it."""
+    if not proposal:
+        return []
+    out: list[str] = []
+    if rewrites and not drew_top and getattr(item, "figure_svg", None):
+        why = "the new diagram didn't pass its check" if failed else "the reworded question comes without one"
+        out.append(f"Accepting this removes the current diagram: {why}.")
+    new_steps = proposal.get("solution_steps")
+    if isinstance(new_steps, list):
+        new = [s for s in new_steps if isinstance(s, dict)]
+        lost = [str(n) for n, s in enumerate(item_steps(item), start=1)
+                if s.get("figure_svg") and not (n <= len(new) and new[n - 1].get("figure_svg"))]
+        if lost:
+            plural = "s" if len(lost) > 1 else ""
+            out.append(f"Accepting this removes the diagram{plural} on step{plural} {_join(lost)}.")
+    return out
 
 
 def item_steps(item: Any) -> list[dict[str, Any]]:

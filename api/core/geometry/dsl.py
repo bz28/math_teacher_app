@@ -529,11 +529,15 @@ class ConstructionCircle(BaseModel):
 
 
 class ConstructionArc(BaseModel):
-    """The MINOR arc (or sector) of the circle centred at `center` through
-    endpoints[0], running to the ray toward endpoints[1]."""
+    """The minor arc (or sector) of the circle centred at `center` through
+    endpoints[0], running to the ray toward endpoints[1]; the major one when
+    `major`. Code sets `major` from the problem's words ("major arc AB",
+    "arc ACB" through C, "major sector AOB"); the AI's figure format
+    doesn't offer it."""
 
     center: str
     endpoints: list[str] = Field(min_length=2, max_length=2)
+    major: bool = False
 
 
 class ShadedRegion(BaseModel):

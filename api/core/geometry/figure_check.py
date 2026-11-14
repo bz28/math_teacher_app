@@ -127,7 +127,8 @@ def shaded_regions(text: str) -> list[tuple[Any, ...]]:
     for m in _shading_statements(text):
         pts = tuple(re.findall(r"[A-Z][0-9]*'*", m.group("n")))
         if "sector" in (m.group("w") or "").lower() and len(pts) == 3:
-            region: tuple[Any, ...] = ("sector", pts[1], frozenset((pts[0], pts[2])))
+            major = (m.group("side") or "").strip().lower() == "major"
+            region: tuple[Any, ...] = ("sector", pts[1], frozenset((pts[0], pts[2])), major)
         else:
             region = ("polygon", pts)
         if region not in out:
@@ -140,9 +141,22 @@ def _shading_statements(text: str) -> list[re.Match[str]]:
     these, so they need no fact of a reading's."""
     names = r"\{?\s*(?P<n>(?-i:(?:[A-Z][0-9]*'*){3,}))\s*\}?(?![A-Za-z])"  # capitals, however the words are cased
     return [m for pattern in (
-        rf"\bshad(?:e|ed|es|ing)\s+(?:the\s+|a\s+)?(?P<w>{_REGION_WORD})?{names}",
-        rf"(?P<w>{_REGION_WORD}){names}\s+(?:is|are)\s+shaded",
-    ) for m in re.finditer(pattern, text, re.IGNORECASE)]
+        rf"\bshad(?:e|ed|es|ing)\s+(?:the\s+|a\s+)?(?P<side>(?:major|minor)\s+)?(?P<w>{_REGION_WORD})?{names}",
+        rf"(?P<side>\b(?:major|minor)\s+)?(?P<w>{_REGION_WORD}){names}\s+(?:is|are)\s+shaded",
+    ) for m in re.finditer(pattern, text, re.IGNORECASE) if not _COMPLEMENT.search(_sentence_before(text, m.start()))]
+
+
+# "Everything except sector AOB is shaded", "the region outside △ABD is
+# shaded": the shading is the rest, not the region named. No drawing is
+# held to that, so the words are left for a reading (and can't be checked).
+_COMPLEMENT = re.compile(
+    r"\b(?:except|but|not|outside|other\s+than|besides|excluding|apart\s+from|without|minus)\b", re.IGNORECASE)
+
+
+def _sentence_before(text: str, at: int) -> str:
+    """The text from the start of `at`'s sentence up to `at`."""
+    start = max((text.rfind(ch, 0, at) for ch in ".;?!\n"), default=-1)
+    return text[start + 1:at]
 
 
 def figure_words(text: str) -> set[str]:
@@ -542,6 +556,13 @@ class _UnparsedError(ValueError):
     """Algebra the parser doesn't read: the fact it came from can't be checked."""
 
 
+def _mixed(m: re.Match[str]) -> str:
+    whole, num, den = (int(g) for g in m.groups())
+    if den == 0:
+        return m.group(0)  # left for the parser to refuse
+    return f"({whole + num / den!r})"
+
+
 def _polynomial(expr: str) -> dict[str, float]:
     """Algebra as {variable: coefficient} plus "" for the constant, read by a
     small recursive parser: + − × ÷, brackets ( ) [ ] { }, implicit
@@ -554,6 +575,12 @@ def _polynomial(expr: str) -> dict[str, float]:
     t = re.sub(r"\\div\b", "/", t)
     t = re.sub(r"\^\s*\{?\s*\\circ\s*\}?|\\circ|°|\\,|\\!|\\;|\$", " ", t)
     t = re.sub(r"\\[dt]?frac\s*", r"\\frac", t)
+    t = re.sub(r"\\frac(\d)(\d)", r"\\frac{\1}{\2}", t)  # \frac12 is \frac{1}{2}
+    # A mixed number is one number: 4\frac{1}{2} and 4 1/2 are 4.5 (not 4·½).
+    t = re.sub(r"(?<![\d.])(\d+)\s*\\frac\s*\{\s*(\d+)\s*\}\s*\{\s*(\d+)\s*\}", _mixed, t)
+    t = re.sub(r"(?<![\d./])(\d+)\s+(\d+)\s*/\s*(\d+)(?![\d.])", _mixed, t)
+    # A decimal comma (1,5 or 2{,}5) is left unread: reading it as two
+    # numbers would misread the measure.
     tokens = re.findall(r"\\frac|\d+(?:\.\d+)?|\.\d+|[a-z]|[-+*/()\[\]{}^]|\S", t)
     pos = 0
 
@@ -1162,9 +1189,14 @@ def check_construction(
     for message in _degenerate(d, parts):
         say("degenerate", message)
 
-    # Every mark on the figure is true in the drawing.
+    # Every mark on the figure is true in the drawing, and every given with
+    # a textbook mark is marked (so "the givens are marked" is always true).
     for message in _mark_issues(d):
         say("false_mark", message)
+    # (A step figure builds on the question's, which carries the marks; what
+    # a step shows needs none.)
+    for what in [] if is_step else _unmarked(d, parts, problem_text)[0]:
+        say("unmarked", f"not marked: the given {what} (mark it as a textbook does)")
 
     # Two figures the problem names apart (no corner shared) are drawn
     # apart: overlapping, their sides and labels read as one figure.
@@ -1178,6 +1210,9 @@ def check_construction(
     # Numbers on the figure: agree with the drawing, come from the problem.
     for message in _label_issues(d, parts, final_answer if not is_step else None, problem_text, step_text):
         say("label", message)
+
+    for message in _arc_side_issues(d, _clean(f"{problem_text}\n{request_text}\n{step_text or ''}")):
+        say("arc_side", message)
 
     if base is not None:
         for message in _step_consistency(d, _Drawing(base)):
@@ -1315,6 +1350,22 @@ def _holds(rel: _Relation, d: _Drawing) -> bool | None:
             if not all(n in p for n in (o, a, b)):
                 return None
             return abs(_angle(p[a], p[o], p[b]) - 180) < _TOL_ANG
+        if k == "anglerange":
+            ang = d.resolve(args[0])
+            if ang is None:
+                return None
+            return _shaped(d.measure(ang), args[1])
+        if k == "trishape":
+            (a, b, c), shape = args
+            if not all(n in p for n in (a, b, c)):
+                return None
+            if shape == "scalene":
+                sides = sorted(_dist(p[x], p[y]) for x, y in ((a, b), (b, c), (c, a)))
+                return all(s2 - s1 >= _SHAPE_LEN * s2 for s1, s2 in zip(sides, sides[1:]))
+            corners = [_angle(p[x], p[v], p[y]) for x, v, y in ((c, a, b), (a, b, c), (b, c, a))]
+            if shape == "obtuse":
+                return any(_shaped(m, "obtuse") for m in corners)
+            return all(_shaped(m, "acute") for m in corners)
         if k == "vertical":
             a1, a2 = d.resolve(args[0]), d.resolve(args[1])
             if a1 is None or a2 is None:
@@ -1423,12 +1474,15 @@ def _holds(rel: _Relation, d: _Drawing) -> bool | None:
                 return True
             return False if all(r is False for r in results) else None
         if k == "lengthlabel":
-            # A length on a side the problem doesn't name: some side carries it.
-            for text in d.fig.side_labels.values():
+            # A length on a side the problem doesn't name: some side of the
+            # role the words give (any side, a leg, …) carries it.
+            role = args[1] if len(args) > 1 else ""
+            for ref, text in d.fig.side_labels.items():
                 named = re.fullmatch(r"\s*\$?\s*[A-Za-z]\s*=\s*(.+)", text)  # "c = 13"
                 value = _plain_number((named.group(1) if named else text).rstrip(". "))
                 if value is not None and abs(value - float(args[0])) <= 1e-9 * max(1.0, abs(value)):
-                    return True
+                    if _has_role(d, ref, role):
+                        return True
             return False
         if k == "anyshape":
             return _has_shape(d, args[0])
@@ -1463,6 +1517,54 @@ def _holds(rel: _Relation, d: _Drawing) -> bool | None:
     except (KeyError, ValueError, TypeError, ZeroDivisionError):
         return None
     return None
+
+
+def _has_role(d: _Drawing, ref: str, role: str) -> bool:
+    """The labelled part `ref` plays `role`: "" any side; "leg" or
+    "hypotenuse" a side of a drawn triangle with a right angle beside it or
+    across from it; "radius" from a circle's centre to the circle;
+    "diameter" a chord through the centre."""
+    if not role:
+        return True
+    try:
+        a, b = split_points(ref, 2)
+    except ValueError:
+        return False
+    p = d.p
+    if a not in p or b not in p:
+        return False
+    if role in ("radius", "diameter"):
+        for c in d.fig.circles:
+            if role == "radius" and c.center in (a, b) and _on_circle(d, c, b if c.center == a else a):
+                return True
+            if role == "diameter" and _on_circle(d, c, a) and _on_circle(d, c, b) and d.collinear(
+                    p[a], p[b], p[c.center]) and 0 < d.param(p[a], p[b], p[c.center]) < 1:
+                return True
+        return False
+    for v in p:
+        if v in (a, b):
+            continue
+        if not (d.seg_drawn(a, b) and d.seg_drawn(a, v) and d.seg_drawn(b, v)):
+            continue
+        right_at = [x for x, (y, z) in ((v, (a, b)), (a, (v, b)), (b, (v, a)))
+                    if abs(_angle(p[y], p[x], p[z]) - 90) < _TOL_ANG]
+        if role == "hypotenuse" and v in right_at:
+            return True
+        if role == "leg" and (a in right_at or b in right_at):
+            return True
+    return False
+
+
+# An obtuse or acute angle, or a scalene triangle, has to look it: 5° clear
+# of a right angle, and sides 5% apart (a 91° angle reads as right).
+_SHAPE_ANG = 5.0
+_SHAPE_LEN = 0.05
+
+
+def _shaped(measure: float, shape: str) -> bool:
+    if shape == "obtuse":
+        return 90 + _SHAPE_ANG <= measure <= 180 - _SHAPE_ANG
+    return _SHAPE_ANG <= measure <= 90 - _SHAPE_ANG
 
 
 def _degenerate(d: _Drawing, parts: ProblemParts) -> list[str]:
@@ -1684,21 +1786,30 @@ def _marked(rel: _Relation, d: _Drawing) -> bool:
             m, (a, b) = args
             return same_group(f.tick_groups, (a, m), (m, b), 2)
         if k == "par":
-            line_names = {ln.name for ln in f.lines if ln.name}
-            segs = [[r for r in g if r not in line_names] for g in f.parallel_groups]
+            # Arrows on a segment, or on a named line through its two ends
+            # ("AB ∥ CD" drawn as lines AB and CD).
+            through = {ln.name: "".join(ln.through) for ln in f.lines if ln.name and len(ln.through) == 2}
+            segs = [[through.get(r, r) for r in g if r in through or r not in {ln.name for ln in f.lines}]
+                    for g in f.parallel_groups]
             return same_group(segs, args[0], args[1], 2)
         if k == "linepar":
             return any({args[0], args[1]} <= {_line_key(r) for r in g} for g in f.parallel_groups)
         if k == "eqang":
             a1, a2 = (d.resolve(x) for x in args)
             return a1 is not None and a2 is not None and same_group(f.arc_groups, a1, a2, 3)
+        if k == "bisang":
+            e, (x, v, z) = args
+            return same_group(f.arc_groups, (x, v, e), (e, v, z), 3)
+        # A right angle is marked by its box, or by a "90°" label on it.
+        right = [*f.right_angles,
+                 *(r for r, text in f.angle_labels.items() if 90.0 in _parse_label(text, set()).values)]
         if k == "perp":
             (a, b), (c, e) = args
-            return any(_box_on_lines(d, _three(r), (p[a], p[b]), (p[c], p[e])) for r in f.right_angles)
+            return any(_box_on_lines(d, _three(r), (p[a], p[b]), (p[c], p[e])) for r in right)
         if k == "lineperp":
             l1, l2 = d.lines[args[0]].through, d.lines[args[1]].through
             return any(
-                _box_on_lines(d, _three(r), (p[l1[0]], p[l1[1]]), (p[l2[0]], p[l2[1]])) for r in f.right_angles
+                _box_on_lines(d, _three(r), (p[l1[0]], p[l1[1]]), (p[l2[0]], p[l2[1]])) for r in right
             )
         if k == "measure":
             ang = d.resolve(args[0])
@@ -1778,19 +1889,42 @@ def _rel_key(rel: _Relation) -> Any:
 
 
 # The givens a textbook figure marks: ticks, arcs, boxes and arrows.
-_MARKABLE = ("eqlen", "eqang", "perp", "par", "linepar", "lineperp", "mid")
+_MARKABLE = ("eqlen", "eqang", "perp", "par", "linepar", "lineperp", "mid", "bisang")
+
+
+def unmarked_givens(fig: ConstructionFigure, problem_text: str, facts: Any = None) -> tuple[list[str], int]:
+    """The givens that have a textbook mark (≅ sides by ticks, ≅ angles and
+    an angle bisector's halves by arcs, ⊥ and right angles by a box, ∥ by
+    arrows, a midpoint's halves by ticks, a stated measure by its label)
+    but aren't marked on `fig`; and how many givens have one."""
+    return _unmarked(_Drawing(fig), problem_parts(problem_text, facts), problem_text)
+
+
+def _unmarked(d: _Drawing, parts: ProblemParts, problem_text: str) -> tuple[list[str], int]:
+    stated = _numbers(_clean(problem_text))
+
+    def markable(r: _Relation) -> bool:
+        if r.kind in ("eqlen", "eqang") and r.args[0] == r.args[1]:
+            return False  # "AB ≅ AB" (a shared side) has no mark
+        if r.kind in _MARKABLE:
+            return True
+        if r.kind != "measure" or str(r.args[0]).isdigit():
+            return False  # ∠1's figure label is its name "1", not its measure
+        # A measure the problem states (a solved one would print the answer;
+        # one given as algebra, "m∠1 = 4x + 9", solved to 41°, is labelled by
+        # its expression, which a label can't be matched against).
+        value = float(r.args[1])
+        return value == 90 or (value in stated and r.family != "solved")
+
+    shown = [r for r in parts.givens if markable(r)]
+    return [r.text for r in shown if not _marked(r, d)], len(shown)
 
 
 def givens_marked(fig: ConstructionFigure, problem_text: str, facts: Any = None) -> bool:
-    """Every given that has a textbook mark (≅ sides, ≅ angles, ⊥, ∥, a
-    right angle, a midpoint) is marked on `fig`, and there is at least one."""
-    parts = problem_parts(problem_text, facts)
-    d = _Drawing(fig)
-    markable = [
-        r for r in parts.givens
-        if r.kind in _MARKABLE or (r.kind == "measure" and float(r.args[1]) == 90)
-    ]
-    return bool(markable) and all(_marked(r, d) for r in markable)
+    """Every given with a textbook mark is marked on `fig`, and there is at
+    least one (so "the givens are marked" is true)."""
+    missing, markable = unmarked_givens(fig, problem_text, facts)
+    return bool(markable) and not missing
 
 
 def _is_radius(d: _Drawing, a: str, b: str) -> bool:
@@ -1955,7 +2089,8 @@ def _curved_extras(d: _Drawing, parts: ProblemParts) -> list[str]:
                 )
     for region in d.fig.shaded:
         if region.sector is not None:
-            drawn: tuple[Any, ...] = ("sector", region.sector.center, frozenset(region.sector.endpoints))
+            drawn: tuple[Any, ...] = ("sector", region.sector.center, frozenset(region.sector.endpoints),
+                                      region.sector.major)
             if drawn in parts.shaded and not on_kept(region.sector.center, region.sector.endpoints):
                 out.append(
                     "the shaded sector is not drawn on the problem's circle "
@@ -1970,16 +2105,125 @@ def _curved_extras(d: _Drawing, parts: ProblemParts) -> list[str]:
                 else "the shading is not on the region the problem says is shaded",
             )
     # And each region the problem says is shaded is drawn shaded.
-    shown = [("sector", r.sector.center, frozenset(r.sector.endpoints)) if r.sector is not None
+    shown = [("sector", r.sector.center, frozenset(r.sector.endpoints), r.sector.major) if r.sector is not None
              else ("polygon", tuple(r.polygon or ())) for r in d.fig.shaded]
     for want in parts.shaded:
         if not any(_same_region(x, want) for x in shown):
             if want[0] == "sector":
                 a, b = sorted(want[2])
-                what = f"sector {a}{want[1]}{b}"
+                what = f"{'major ' if want[3] else ''}sector {a}{want[1]}{b}"
             else:
                 what = "".join(want[1])
             out.append(f"not drawn: the shading of {what}")
+    return out
+
+
+# "major arc AB", "minor arc AB", "arc ACB" (through C), "major sector AOB";
+# a two-letter arc ("arc AB") is the minor one.
+_NAMED_ARC = re.compile(
+    r"(?:\b(?P<side>major|minor)\s+)?\b(?P<w>arc|sector)s?\s+\{?\s*(?P<n>(?-i:(?:[A-Z][0-9]*'*){2,3}))\s*\}?(?![A-Za-z])",
+    re.IGNORECASE,
+)
+
+
+def named_arcs(text: str) -> list[tuple[str, frozenset[str], str]]:
+    """(arc | sector, its two ends, what the text says of its side: "major",
+    "minor", or a point it passes through) for each arc or sector the
+    (cleaned) text names. A sector XYZ is centred at Y."""
+    out: list[tuple[str, frozenset[str], str]] = []
+    for m in _NAMED_ARC.finditer(text):
+        pts = re.findall(r"[A-Z][0-9]*'*", m["n"])
+        word, side = m["w"].lower(), (m["side"] or "").lower()
+        if word == "sector":
+            if len(pts) == 3:
+                out.append(("sector", frozenset((pts[0], pts[2])), side or "minor"))
+        elif len(pts) == 2:
+            out.append(("arc", frozenset(pts), side or "minor"))
+        elif not side:
+            out.append(("arc", frozenset((pts[0], pts[2])), pts[1]))  # arc ACB passes through C
+    return out
+
+
+def _side_through(p: dict[str, Point], center: str, ends: list[str], through: str) -> bool | None:
+    """Whether the arc of `ends` through `through` is the major one (None when
+    the point isn't placed)."""
+    if through not in p or center not in p or not all(n in p for n in ends):
+        return None
+    c = p[center]
+
+    def at(n: str) -> float:
+        return math.atan2(p[n][1] - c[1], p[n][0] - c[0])
+
+    a1, a2, x = at(ends[0]), at(ends[1]), at(through)
+    sweep = (a2 - a1) % (2 * math.pi)
+    inside = (x - a1) % (2 * math.pi) < sweep  # on the counter-clockwise run from ends[0]
+    return inside == (sweep > math.pi)
+
+
+def with_arc_sides(raw_spec: dict[str, Any], text: str) -> dict[str, Any]:
+    """The figure with each arc, sector and shaded sector drawn on the side
+    the problem names ("major arc AB", "arc ACB", "major sector AOB"): code
+    chooses it, since the AI's figure format has no side. An arc the problem
+    doesn't name keeps the minor side."""
+    wants = named_arcs(_clean(text))
+    if not wants:
+        return raw_spec
+    p = {k: tuple(v) for k, v in (raw_spec.get("points") or {}).items()
+         if isinstance(v, (list, tuple)) and len(v) == 2}
+
+    def side(arc: Any, word: str) -> Any:
+        if not isinstance(arc, dict) or not isinstance(arc.get("endpoints"), list):
+            return arc
+        ends = frozenset(arc["endpoints"])
+        said = [s for w, e, s in wants if e == ends and w == word]
+        if not said:
+            return arc
+        s = said[0]
+        major: bool | None = s == "major"
+        if s not in ("major", "minor"):
+            try:
+                major = _side_through(p, arc.get("center"), list(arc["endpoints"]), s)  # type: ignore[arg-type]
+            except (TypeError, ValueError):
+                major = None
+        if major is None or bool(arc.get("major")) == major:
+            return arc
+        return {**arc, "major": major}
+
+    out = dict(raw_spec)
+    out["arcs"] = [side(a, "arc") for a in raw_spec.get("arcs") or []]
+    out["sectors"] = [side(a, "sector") for a in raw_spec.get("sectors") or []]
+    out["shaded"] = [
+        {**r, "sector": side(r["sector"], "sector")} if isinstance(r, dict) and isinstance(r.get("sector"), dict)
+        else r for r in raw_spec.get("shaded") or []
+    ]
+    out = {k: v for k, v in out.items() if v or k in raw_spec}
+    return raw_spec if all(out.get(k) == raw_spec.get(k) for k in ("arcs", "sectors", "shaded")) else out
+
+
+def _arc_side_issues(d: _Drawing, text: str) -> list[str]:
+    """Each arc or sector drawn for one the problem names is on the side it
+    names: major or minor, or through the point it names."""
+    out: list[str] = []
+    wants = named_arcs(text)
+    pieces = [("arc", a) for a in d.fig.arcs] + [("sector", a) for a in d.fig.sectors] + [
+        ("sector", r.sector) for r in d.fig.shaded if r.sector is not None]
+    for word, arc in pieces:
+        ends = frozenset(arc.endpoints)
+        said = [s for w, e, s in wants if e == ends and w == word]
+        if not said:
+            continue
+        ok = []
+        for s in said:
+            if s in ("major", "minor"):
+                ok.append(arc.major == (s == "major"))
+            else:
+                major = _side_through(d.p, arc.center, list(arc.endpoints), s)
+                ok.append(major is not None and major == arc.major)
+        if not any(ok):
+            a, b = sorted(ends)
+            name = f"{a}{arc.center}{b}" if word == "sector" else f"{a}{b}"
+            what = {"major": f"major {word} {name}", "minor": f"{word} {name}"}.get(said[0], f"arc {a}{said[0]}{b}")
+            out.append(f"the {word} {name} is drawn on the other side of the circle from {what}")
     return out
 
 
@@ -1987,7 +2231,7 @@ def _same_region(a: tuple[Any, ...], b: tuple[Any, ...]) -> bool:
     if a[0] != b[0]:
         return False
     if a[0] == "sector":
-        return bool(a[1] == b[1] and a[2] == b[2])
+        return bool(a[1:4] == b[1:4])
     x, y = list(a[1]), list(b[1])
     if len(x) != len(y) or set(x) != set(y):
         return False
@@ -2475,9 +2719,13 @@ def unbacked_marks(fig: ConstructionFigure, problem_text: str, facts: Any = None
         if len(akeys) < 2 or None in akeys or not angs.same(akeys):
             out.setdefault("arc_groups", []).append(i)
     line_names = {ln.name for ln in fig.lines if ln.name}
+    # A named line through two points is backed by a given about either the
+    # line (ℓ ∥ m) or the segment between them ("AB ∥ CD" drawn as lines).
+    through = {ln.name: seg_key(ln.through) for ln in fig.lines if ln.name and len(ln.through) == 2}
     for i, group in enumerate(fig.parallel_groups):
         pkeys = [_line_key(r) if r in line_names else seg_key(_two(r)) for r in group]
-        if len(pkeys) < 2 or not pars.same(pkeys):
+        tkeys = [through.get(r, k) for r, k in zip(group, pkeys)]
+        if len(pkeys) < 2 or not (pars.same(pkeys) or pars.same(tkeys)):
             out.setdefault("parallel_groups", []).append(i)
     for i, ref in enumerate(fig.right_angles):
         if not _box_backed(d, _three(ref), parts.givens):
