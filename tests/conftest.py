@@ -79,6 +79,27 @@ def _blank_page_png() -> str:
 PAGE_PNG = _blank_page_png()
 
 
+async def stored_pages(files: list[dict[str, Any]] | None) -> list[str]:
+    """The base64 of each page a row stores, read back from the photo
+    store (the row holds keys, not bytes)."""
+    from api.core import photo_store
+
+    return [p["data"] for p in await photo_store.load_pages(files)]
+
+
+async def served_pages(client: AsyncClient, files: list[dict[str, Any]]) -> list[str]:
+    """The base64 of each page a response serves, fetched from its URL —
+    in tests, the signed dev route the local photo store hands out."""
+    from api.config import settings
+
+    out = []
+    for f in files:
+        r = await client.get(f["url"].removeprefix(settings.photo_local_base_url))
+        assert r.status_code == 200, f["url"]
+        out.append(base64.b64encode(r.content).decode("ascii"))
+    return out
+
+
 def auth_headers(token: str) -> dict[str, str]:
     """Build a Bearer Authorization header for an access token."""
     return {"Authorization": f"Bearer {token}"}
