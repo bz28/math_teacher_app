@@ -188,7 +188,22 @@ Use only the names the problem itself uses; never invent one. When it names no p
 rectangle has a width of 7"), points is [] and facts have items []: rectangle [], right_triangle [],
 equal_length [] with value for each length it gives (say which side in quote).
 Points are letters ("A", "B'"); "∠1" is an angle, not a point.
-Each fact's quote is the exact words of the problem it comes from."""
+Quotes: each fact's quote is the shortest exact run of the problem's own words that states it,
+copied character for character. It contains the names the fact is about and the word or symbol of
+its relation ("AB ∥ CD", "M is the midpoint of BC", "∠R is a right angle"), and nothing else the
+problem says. Facts may share a quote: never shorten or reword one to fit a fact.
+One fact per stated relation: a sentence that states two relations gives two facts.
+"each", "both", "respectively" and lists joined by "and" state a relation of several parts: give one
+fact per part, with the shared quote ("each base angle measures 50°": one angle_measure per base
+angle; "M is the midpoint of AC and BD": two midpoints; "cutting both lines at G and H
+respectively": one intersect per line). "one acute angle … the other": the first is the acute angle
+whose vertex comes first in the triangle's name.
+Only what the words state: no fact for a part the statement doesn't name (an equilateral
+triangle's other sides, a radius the problem doesn't mention, the right angle an altitude makes).
+A claim inside a hint or an instruction ("First prove that △QRT ≅ △SRT") goes under prove.
+A side extended past a vertex ("extending side RP beyond P", "BC is extended to point D") is a
+fact other whose quote is exactly that phrase.
+Write a mixed number as an improper fraction (2½x → "5x/2")."""
 
 _FACTS_SYSTEM_A = f"""You read geometry problems for a figure checker. List what the problem STATES
 about its figure — nothing you infer, derive or solve, and nothing from the solution.
@@ -256,6 +271,7 @@ async def read_figure_facts(
         merged,
         standard_reading,
         unverifiable,
+        without_other,
     )
 
     message = f"Problem:\n{problem_text}"
@@ -291,6 +307,8 @@ async def read_figure_facts(
         return None, [_IN_WORDS]
     if described_in_words(a) and described_in_words(b):
         return None, [_IN_WORDS]
+    # (After "described in words", which reads the "other" facts' items.)
+    a, b = without_other(a), without_other(b)
     differ = disagreements(a, b)
     if differ:
         logger.warning("figure facts: the two readings differ: %s", differ)

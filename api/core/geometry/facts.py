@@ -881,6 +881,21 @@ def _angle_sum_of_triangle(quote: str, facts: FigureFacts) -> bool:
     return bool(corners)
 
 
+def without_other(facts: FigureFacts) -> FigureFacts:
+    """The reading without its "other" facts (each noted in `dropped`).
+
+    An "other" fact has no check and accounts for none of the problem's
+    words (coverage.py), so every word it quotes must still be accounted
+    for by a checked fact or an exact rule, or the problem is refused. It
+    adds nothing a figure is held to; keeping it only let two readings
+    "disagree" when one wrote it down and the other didn't."""
+    notes = [f"other: {f.quote}" for f in [*facts.givens, *facts.prove] if f.kind == "other"]
+    return facts.model_copy(update={
+        "givens": [f for f in facts.givens if f.kind != "other"],
+        "prove": [f for f in facts.prove if f.kind != "other"],
+        "dropped": [*facts.dropped, *notes]})
+
+
 def standard_reading(facts: FigureFacts) -> FigureFacts:
     """What code reads out of a reading's own words before the two readings
     are compared (both get the same treatment, so this can only make them
