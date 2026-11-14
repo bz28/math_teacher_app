@@ -633,17 +633,21 @@ async def test_regenerate_refuses_a_new_version_whose_figure_fails(question: str
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("question", "ai_flag", "teacher_draws", "drawn"), [
-    *[(t, None, False, False) for t in CONSTRUCT_AND_PROVE],  # the regex says the student draws it
-    (AUX_LINE_PROOF, None, False, True),
-    (AUX_LINE_PROOF, True, False, False),  # the AI's flag counts, as in the stored flag
+@pytest.mark.parametrize(("question", "ai_flag", "teacher", "drawn"), [
+    *[(t, None, None, False) for t in CONSTRUCT_AND_PROVE],  # the regex says the student draws it
+    (AUX_LINE_PROOF, None, None, True),
+    (AUX_LINE_PROOF, True, None, False),  # the AI's flag counts, as in the stored flag
     (AUX_LINE_PROOF, None, True, False),  # so does a teacher's "the student draws it"
+    # Review round 7: a teacher's "the student doesn't draw it" stands too,
+    # over the regex and the AI: the figure is kept.
+    *[(t, True, False, True) for t in KNOWN_DROPPED_AUX_PROOFS],
 ])
 async def test_regenerate_drops_the_figure_when_the_student_draws_it(
-    question: str, ai_flag: Any, teacher_draws: bool, drawn: bool,
+    question: str, ai_flag: Any, teacher: bool | None, drawn: bool,
 ) -> None:
-    """Review round 6 (#998): regenerate uses the same test as the item's
-    stored drawing flag, so a construct-and-prove version is not drawn."""
+    """Review rounds 6-7 (#998): regenerate's figure guard uses the flag
+    the item stores (a teacher's choice, else the AI's flag or the regex),
+    so a construct-and-prove version is not drawn, and the two agree."""
     from sqlalchemy import select
 
     from api.database import get_session_factory
@@ -656,7 +660,7 @@ async def test_regenerate_drops_the_figure_when_the_student_draws_it(
         item = QuestionBankItem(
             course_id=w["course"], unit_id=w["unit"], originating_assignment_id=w["assignment"],
             title="t", question="old", final_answer="1", status="approved", source="generated",
-            requires_drawing=teacher_draws, requires_drawing_teacher_set=teacher_draws,
+            requires_drawing=bool(teacher), requires_drawing_teacher_set=teacher is not None,
         )
         s.add(item)
         await s.commit()
@@ -673,3 +677,6 @@ async def test_regenerate_drops_the_figure_when_the_student_draws_it(
             course = (await s.execute(select(Course).where(Course.id == w["course"]))).scalar_one()
             await qbg.regenerate_one(s, item, course, instructions=None, user_id=w["teacher"])
     assert (resolve.await_args.args[0] is not None) is drawn
+    async with get_session_factory()() as s:
+        item = (await s.execute(select(QuestionBankItem).where(QuestionBankItem.id == item_id))).scalar_one()
+        assert item.question == question and item.requires_drawing is not drawn  # guard and stored flag agree

@@ -563,12 +563,14 @@ async def _draw_figures(
     await asyncio.gather(*(draw(q) for q in questions))
 
 
-def _drop_unwanted_figure(q: dict[str, Any], job_id: str | None = None) -> None:
+def _drop_unwanted_figure(q: dict[str, Any], job_id: str | None = None, *, stored_flag: bool | None = None) -> None:
     """Ben's rule: when the student is to draw or construct it, the problem
     gets no figure. A figure the AI drafted for such a problem is dropped
-    before it is drawn. The test is the item's stored flag itself
-    (`combine_requires_drawing`: the AI's flag or the regex), so a problem
-    never shows a figure while grading expects the student to draw it.
+    before it is drawn. The test is the item's stored flag itself:
+    `stored_flag` when the caller has already worked it out (regenerate,
+    where a teacher's choice stands), else `combine_requires_drawing` (the
+    AI's flag or the regex). So a problem never shows a figure while grading
+    expects the student to draw it, nor loses one grading doesn't expect.
 
     The safe direction: this only ever removes a figure, so a wrong call
     costs a missing figure, never a wrong one. Known limitation: a proof
@@ -576,7 +578,8 @@ def _drop_unwanted_figure(q: dict[str, Any], job_id: str | None = None) -> None:
     loses its figure; telling an auxiliary line from the student's own
     construction belongs in drawing_requirement.py."""
     text = q.get("text") or ""
-    if q.get("figure_spec") and combine_requires_drawing(text, q.get("requires_drawing")):
+    draws = combine_requires_drawing(text, q.get("requires_drawing")) if stored_flag is None else stored_flag
+    if q.get("figure_spec") and draws:
         logger.info("Job %s: the student draws this one, so its figure is dropped: %.80s", job_id, q.get("text"))
         q["figure_spec"] = None
 
@@ -1412,12 +1415,15 @@ async def regenerate_one(
     new_final = real_newlines(str(new_answer)) if new_answer else ""
     # Figure first, so a problem that points at a figure it can't have is
     # refused before anything is overwritten.
-    # The figure guard uses the flag the item will store: a teacher's "the
-    # student draws it" stands; otherwise the AI's flag OR'd with the regex.
-    teacher_draws = item.requires_drawing_teacher_set and item.requires_drawing
-    drafted = {"text": new_question, "figure_spec": result.get("figure_spec"),
-               "requires_drawing": True if teacher_draws else result.get("requires_drawing")}
-    _drop_unwanted_figure(drafted)
+    # The flag the item will store, worked out once: a teacher's choice
+    # stands; otherwise the AI's flag OR'd with the regex. The figure guard
+    # uses this same value.
+    stored_flag = (
+        item.requires_drawing if item.requires_drawing_teacher_set
+        else combine_requires_drawing(new_question, result.get("requires_drawing"))
+    )
+    drafted = {"text": new_question, "figure_spec": result.get("figure_spec")}
+    _drop_unwanted_figure(drafted, stored_flag=stored_flag)
     new_figure_spec, new_figure_svg, figure_issues, new_facts = await _resolve_figure_with_retry(
         drafted["figure_spec"], new_question, mode=LLMMode.REGENERATE_BANK_ITEM,
         user_id=str(user_id), final_answer=new_final,
@@ -1444,8 +1450,7 @@ async def regenerate_one(
     # A regenerated question is new AI text, so its drawing requirement is
     # re-derived — the same call's answer (REGENERATE_QA_SCHEMA) OR'd with
     # the regex — unless the teacher set it themselves.
-    if not item.requires_drawing_teacher_set:
-        item.requires_drawing = combine_requires_drawing(item.question, result.get("requires_drawing"))
+    item.requires_drawing = stored_flag
     item.solution_steps = new_steps_rendered
     item.final_answer = new_final
     # The figure resolved above, from the regenerated payload. If the new
