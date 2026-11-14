@@ -36,7 +36,7 @@ from api.core.document_vision import (
     build_vision_content,
     fetch_source_documents,
 )
-from api.core.drawing_requirement import _IS_PROOF, combine_requires_drawing, requires_drawing
+from api.core.drawing_requirement import combine_requires_drawing
 from api.core.geometry import FigureSpecError, figure_point_names, render_figure, render_figure_or_none
 from api.core.geometry.dsl import ConstructionFigure, split_points
 from api.core.geometry.facts import FigureFacts, as_facts
@@ -558,15 +558,19 @@ async def _draw_figures(
 
 
 def _drop_unwanted_figure(q: dict[str, Any], job_id: str | None = None) -> None:
-    """Ben's rule: when the student is to draw or construct it
-    (`requires_drawing`), the problem gets no figure. A figure the AI
-    drafted for such a problem is dropped before it is drawn, unless the
-    problem is a proof: there "Draw the median $\\overline{AD}$" or
-    "Construct the angle bisector" adds a line to the figure, it is not the
-    student's drawing. The safe direction: a wrong call here costs a
-    missing figure, never a wrong one."""
+    """Ben's rule: when the student is to draw or construct it, the problem
+    gets no figure. A figure the AI drafted for such a problem is dropped
+    before it is drawn. The test is the item's stored flag itself
+    (`combine_requires_drawing`: the AI's flag or the regex), so a problem
+    never shows a figure while grading expects the student to draw it.
+
+    The safe direction: this only ever removes a figure, so a wrong call
+    costs a missing figure, never a wrong one. Known limitation: a proof
+    that adds a line ("Draw the median $\\overline{AD}$. Prove ...") also
+    loses its figure; telling an auxiliary line from the student's own
+    construction belongs in drawing_requirement.py."""
     text = q.get("text") or ""
-    if q.get("figure_spec") and requires_drawing(text) and not _IS_PROOF.search(text):
+    if q.get("figure_spec") and combine_requires_drawing(text, q.get("requires_drawing")):
         logger.info("Job %s: the student draws this one, so its figure is dropped: %.80s", job_id, q.get("text"))
         q["figure_spec"] = None
 
@@ -1402,7 +1406,11 @@ async def regenerate_one(
     new_final = real_newlines(str(new_answer)) if new_answer else ""
     # Figure first, so a problem that points at a figure it can't have is
     # refused before anything is overwritten.
-    drafted = {"text": new_question, "figure_spec": result.get("figure_spec")}
+    # The figure guard uses the flag the item will store: a teacher's "the
+    # student draws it" stands; otherwise the AI's flag OR'd with the regex.
+    teacher_draws = item.requires_drawing_teacher_set and item.requires_drawing
+    drafted = {"text": new_question, "figure_spec": result.get("figure_spec"),
+               "requires_drawing": True if teacher_draws else result.get("requires_drawing")}
     _drop_unwanted_figure(drafted)
     new_figure_spec, new_figure_svg, figure_issues, new_facts = await _resolve_figure_with_retry(
         drafted["figure_spec"], new_question, mode=LLMMode.REGENERATE_BANK_ITEM,

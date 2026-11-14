@@ -309,20 +309,41 @@ async def _passes(spec: Any, _text: str, **_kw: Any) -> tuple[Any, str | None, l
     return spec, ("<svg/>" if spec else None), [], (READING if spec else None)
 
 
+# Review round 6 (#998): the student constructs or plots it, then proves
+# something. The figure would show the student's own drawing: dropped.
+CONSTRUCT_AND_PROVE = [
+    r"Using a compass and straightedge, construct the perpendicular bisector of $\overline{AB}$. "
+    r"Prove that your construction is correct.",
+    r"Construct an equilateral triangle $ABC$ on segment $\overline{AB}$ using a compass and straightedge. "
+    r"Then prove that $\triangle ABC$ is equilateral.",
+    r"Plot $A(1,2)$, $B(4,6)$, $C(7,2)$ on the coordinate plane. Prove that $\triangle ABC$ is isosceles.",
+    r"Construct the bisector of $\angle ABC$ with a compass and straightedge, and write a proof that it "
+    r"bisects the angle.",
+]
+# Known limitation (review round 6 of #998): a proof that adds a line is
+# not the student's drawing, but `requires_drawing` can't tell, so these
+# lose their figure too (missing, never wrong). A smarter split belongs in
+# drawing_requirement.py, its own PR; when it lands these move to shown.
+KNOWN_DROPPED_AUX_PROOFS = [
+    r"In $\triangle ABC$, $AB = AC$. Draw the median $\overline{AD}$. Prove $\angle B \cong \angle C$.",
+    r"$ABCD$ is a parallelogram. Draw diagonal $\overline{AC}$. Prove $\triangle ABC \cong \triangle CDA$.",
+    r"In $\triangle ABC$, $AB = AC$. Draw segment $AD$ to the midpoint $D$ of $\overline{BC}$. "
+    r"Prove $\angle BAD \cong \angle CAD$.",
+    r"In $\triangle ABC$, $AB = AC$. Construct the angle bisector of $\angle A$, meeting $\overline{BC}$ at $D$. "
+    r"Prove $\triangle ABD \cong \triangle ACD$.",
+]
+AUX_LINE_PROOF = (r"In $\triangle ABC$, $AB = AC$. Draw $\overline{AD}$ bisecting $\angle BAC$. "
+                  r"Prove: $\angle B \cong \angle C$.")
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(("text", "shown"), [
     # The student constructs it: a drafted figure is dropped (Ben's rule).
     (r"Using only a compass and straightedge, construct the perpendicular bisector of $\overline{AB}$.", False),
-    # An auxiliary line in a proof is not the student's drawing: kept
-    # (review round 5 of #998: the usual wordings).
-    (r"In $\triangle ABC$, $AB = AC$. Draw $\overline{AD}$ bisecting $\angle BAC$. "
-     r"Prove: $\angle B \cong \angle C$.", True),
-    (r"In $\triangle ABC$, $AB = AC$. Draw the median $\overline{AD}$. Prove $\angle B \cong \angle C$.", True),
-    (r"$ABCD$ is a parallelogram. Draw diagonal $\overline{AC}$. Prove $\triangle ABC \cong \triangle CDA$.", True),
-    (r"In $\triangle ABC$, $AB = AC$. Draw segment $AD$ to the midpoint $D$ of $\overline{BC}$. "
-     r"Prove $\angle BAD \cong \angle CAD$.", True),
-    (r"In $\triangle ABC$, $AB = AC$. Construct the angle bisector of $\angle A$, meeting $\overline{BC}$ at $D$. "
-     r"Prove $\triangle ABD \cong \triangle ACD$.", True),
+    *[(t, False) for t in CONSTRUCT_AND_PROVE],
+    *[(t, False) for t in KNOWN_DROPPED_AUX_PROOFS],
+    # Not a drawing task by the stored flag's test: the figure is kept.
+    (AUX_LINE_PROOF, True),
 ])
 async def test_a_figure_for_a_problem_the_student_draws_is_dropped(text: str, shown: bool) -> None:
     gen = AsyncMock(return_value=[_q(text, TRIANGLE), _q("Solve x + 1 = 2.")])
@@ -609,3 +630,46 @@ async def test_regenerate_refuses_a_new_version_whose_figure_fails(question: str
     async with get_session_factory()() as s:
         item = (await s.execute(select(QuestionBankItem).where(QuestionBankItem.id == item_id))).scalar_one()
         assert item.question == "old"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("question", "ai_flag", "teacher_draws", "drawn"), [
+    *[(t, None, False, False) for t in CONSTRUCT_AND_PROVE],  # the regex says the student draws it
+    (AUX_LINE_PROOF, None, False, True),
+    (AUX_LINE_PROOF, True, False, False),  # the AI's flag counts, as in the stored flag
+    (AUX_LINE_PROOF, None, True, False),  # so does a teacher's "the student draws it"
+])
+async def test_regenerate_drops_the_figure_when_the_student_draws_it(
+    question: str, ai_flag: Any, teacher_draws: bool, drawn: bool,
+) -> None:
+    """Review round 6 (#998): regenerate uses the same test as the item's
+    stored drawing flag, so a construct-and-prove version is not drawn."""
+    from sqlalchemy import select
+
+    from api.database import get_session_factory
+    from api.models.course import Course
+    from api.models.question_bank import QuestionBankItem
+    from tests.test_single_answer_practice import _world
+
+    w = await _world("homework")
+    async with get_session_factory()() as s:
+        item = QuestionBankItem(
+            course_id=w["course"], unit_id=w["unit"], originating_assignment_id=w["assignment"],
+            title="t", question="old", final_answer="1", status="approved", source="generated",
+            requires_drawing=teacher_draws, requires_drawing_teacher_set=teacher_draws,
+        )
+        s.add(item)
+        await s.commit()
+        item_id = item.id
+    call = AsyncMock(return_value={"title": "t", "question": question, "solution_steps": [], "final_answer": "1",
+                                   "figure_spec": TRIANGLE, "requires_drawing": ai_flag})
+    resolve = AsyncMock(side_effect=_passes)
+    with (
+        patch("api.core.question_bank_generation.call_claude_json", call),
+        patch.object(qbg, "_resolve_figure_with_retry", resolve),
+    ):
+        async with get_session_factory()() as s:
+            item = (await s.execute(select(QuestionBankItem).where(QuestionBankItem.id == item_id))).scalar_one()
+            course = (await s.execute(select(Course).where(Course.id == w["course"]))).scalar_one()
+            await qbg.regenerate_one(s, item, course, instructions=None, user_id=w["teacher"])
+    assert (resolve.await_args.args[0] is not None) is drawn
