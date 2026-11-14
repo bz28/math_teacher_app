@@ -57,7 +57,7 @@ export function ImageZoomModal({ file, label, onClose }: Props) {
           >
             <AnimatedPressable onPress={onClose} scaleDown={1}>
               <Image
-                source={{ uri: `data:${file.media_type};base64,${file.data}` }}
+                source={{ uri: file.url }}
                 style={styles.image}
                 resizeMode="contain"
               />

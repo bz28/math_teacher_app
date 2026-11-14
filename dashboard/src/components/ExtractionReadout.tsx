@@ -62,8 +62,11 @@ function ReadText({ text, isLatex }: { text: string; isLatex: boolean }) {
 }
 
 /** One uploaded file of the student's work. A submission is photos OR
- *  scanned PDFs — an <img> cannot show a PDF, so it renders page by page
- *  instead. `index` is 0-based. */
+ *  scanned PDFs — an <img> cannot show a PDF. A PDF in the photo bucket
+ *  is shown by the browser's own viewer: the bucket sends no CORS headers,
+ *  so pdf.js can't fetch it to draw page by page. One the backfill hasn't
+ *  moved yet still arrives inline and is drawn page by page as before
+ *  (INLINE: that branch goes once the backfill has run). `index` is 0-based. */
 export function WorkFile({
   file,
   index,
@@ -71,14 +74,22 @@ export function WorkFile({
   file: ExtractionDetail["files"][number];
   index: number;
 }) {
-  return file.media_type === "application/pdf" ? (
-    <PdfPages b64={file.data} label={`Submitted work, file ${index + 1}`} />
-  ) : (
-    <img
-      src={`data:${file.media_type};base64,${file.data}`}
-      alt={`Submitted work, page ${index + 1}`}
-      loading="lazy"
-    />
+  const label = `Submitted work, file ${index + 1}`;
+  if (file.media_type !== "application/pdf") {
+    return (
+      <img src={file.url} alt={`Submitted work, page ${index + 1}`} loading="lazy" decoding="async" />
+    );
+  }
+  if (file.url.startsWith("data:")) {
+    return <PdfPages b64={file.url.slice(file.url.indexOf(",") + 1)} label={label} />;
+  }
+  return (
+    <div className="xq-pdf">
+      <embed src={file.url} type="application/pdf" aria-label={label} style={{ width: "100%", height: "80vh" }} />
+      <a href={file.url} target="_blank" rel="noopener noreferrer">
+        Open the full PDF
+      </a>
+    </div>
   );
 }
 

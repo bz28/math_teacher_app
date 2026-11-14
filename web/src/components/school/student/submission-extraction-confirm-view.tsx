@@ -18,7 +18,8 @@ import {
   PencilIcon,
   XIcon,
 } from "@/components/ui/icons";
-import { useBlobUrl } from "@/hooks/use-blob-url";
+import { useOpenableUrl } from "@/hooks/use-blob-url";
+import { onPhotoError } from "@/lib/submission-photos";
 import { Modal } from "@/components/ui/modal";
 import { useDeviceType } from "./use-device-type";
 import {
@@ -983,7 +984,6 @@ function FileThumbnail({
   onClick: () => void;
 }) {
   const isPdf = file.media_type === "application/pdf";
-  const dataUrl = `data:${file.media_type};base64,${file.data}`;
   const label = file.filename ?? `Page ${index + 1}`;
   return (
     <button
@@ -1001,8 +1001,11 @@ function FileThumbnail({
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={dataUrl}
+          src={file.url}
           alt={label}
+          loading="lazy"
+          decoding="async"
+          onError={() => onPhotoError(file)}
           className="h-[120px] w-full bg-surface object-cover"
         />
       )}
@@ -1276,11 +1279,11 @@ function FileZoomModal({
   onClose: () => void;
 }) {
   const isPdf = file.media_type === "application/pdf";
-  const dataUrl = `data:${file.media_type};base64,${file.data}`;
   const label = file.filename ?? "Submitted page";
-  // blob: URL for the PDF — a data: link is inert in Chrome/Firefox and
-  // that link is the only fallback when <embed> can't render inline.
-  const pdfUrl = useBlobUrl(isPdf ? file.data : null, "application/pdf") ?? dataUrl;
+  // The link is the only fallback when <embed> can't render inline, so
+  // it must navigate (`useOpenableUrl`: a not-yet-moved page's data: URL
+  // can't, and becomes a blob: handle).
+  const pdfUrl = useOpenableUrl(isPdf ? file.url : "");
   return (
     <Modal
       open
@@ -1321,8 +1324,10 @@ function FileZoomModal({
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src={dataUrl}
+            src={file.url}
             alt={label}
+            decoding="async"
+            onError={() => onPhotoError(file)}
             className="mx-auto max-h-[80vh] w-auto rounded-[--radius-md] object-contain"
           />
         )}

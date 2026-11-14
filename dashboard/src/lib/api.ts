@@ -592,8 +592,10 @@ export interface ExtractionDetail {
   /** One score for the whole read; Vision does not rate rows. */
   confidence: number | null;
   rows: ExtractionRow[];
-  /** The strokes themselves — base64, drill-in only, never in the list. */
-  files: { data: string; media_type: string; filename?: string }[];
+  /** The strokes themselves, drill-in only, never in the list: a
+   *  short-lived presigned URL per page to the photo bucket (or, for a row
+   *  the photo backfill hasn't moved yet, a data: URL). */
+  files: { url: string; media_type: string; filename?: string | null }[];
 }
 
 
