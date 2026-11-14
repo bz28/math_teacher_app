@@ -541,6 +541,47 @@
       "requested": []
     }
   },
+  "0e98a8d9540b7ca95e868efe1b0fb560": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nFind $m\\angle A$ in $\\triangle ABC$, given $\\angle B$ is obtuse.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794637866.692687
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "A",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "B"
+          ],
+          "kind": "other",
+          "quote": "\u2220B is obtuse"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
   "0f250d2e8885700ecdc3afbcd4a5f0ee": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -610,6 +651,68 @@
       "rays": [],
       "requested": [],
       "segments": [],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "11c39b52890c6bd93b5820d0a935bb79": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, $AB = 2.5$, $AC = 2.5$, and $m\\angle A = 40^\\circ$. Find $BC$.\n\nThe teacher's message:\n",
+      "recorded_at": 1794637886.913553
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "BC",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "AB = 2.5",
+          "value": 2.5
+        },
+        {
+          "items": [
+            "AC"
+          ],
+          "kind": "equal_length",
+          "quote": "AC = 2.5",
+          "value": 2.5
+        },
+        {
+          "items": [
+            "A"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220A = 40\u00b0",
+          "value": 40
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "AC",
+        "BC"
+      ],
       "triangles": [
         "ABC"
       ]
@@ -3127,6 +3230,68 @@
       "triangles": []
     }
   },
+  "6184e8484f57a1288f1f3abd2125ad6e": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, $AB = 2.5$, $AC = 2.5$, and $m\\angle A = 40^\\circ$. Find $BC$.\n\nThe teacher's message:\n",
+      "recorded_at": 1794637887.292041
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "BC",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "AB = 2.5",
+          "value": 2.5
+        },
+        {
+          "items": [
+            "AC"
+          ],
+          "kind": "equal_length",
+          "quote": "AC = 2.5",
+          "value": 2.5
+        },
+        {
+          "items": [
+            "A"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220A = 40\u00b0",
+          "value": 40
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "AC",
+        "BC"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
   "62757c1be96c21196a4230f43a1b940f": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -4856,6 +5021,47 @@
       ]
     }
   },
+  "9877c099c3fea7fdf86826d45080cf1c": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nFind $m\\angle A$ in $\\triangle ABC$, given $\\angle B$ is obtuse.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794637865.855241
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "A",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "B"
+          ],
+          "kind": "other",
+          "quote": "\u2220B is obtuse"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
   "9ae692c9e69b304681c469828773bc5f": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -5027,6 +5233,97 @@
       ],
       "prove": [],
       "requested": []
+    }
+  },
+  "9ef36524295d751371a177b620c46d4f": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nA right triangle has legs of length 3 and 4. Find the length of its hypotenuse.\n\nFinal answer (shown only s",
+      "recorded_at": 1794637892.9872909
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "hypotenuse",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [],
+          "kind": "right_triangle",
+          "quote": "A right triangle"
+        },
+        {
+          "circle": null,
+          "expr": null,
+          "items": [],
+          "kind": "equal_length",
+          "point": null,
+          "quote": "legs of length 3",
+          "value": 3
+        },
+        {
+          "circle": null,
+          "expr": null,
+          "items": [],
+          "kind": "equal_length",
+          "point": null,
+          "quote": "legs of length 3 and 4",
+          "value": 4
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": []
+    }
+  },
+  "a058920fbc9d3506e47c3c5539585014": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn scalene $\\triangle ABC$, name the longest side.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794637875.737272
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "longest side of \u25b3ABC",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "expr": "all sides have different lengths",
+          "items": [
+            "ABC"
+          ],
+          "kind": "other",
+          "quote": "scalene \u25b3ABC"
+        }
+      ],
+      "lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "requested": [],
+      "segments": [],
+      "triangles": [
+        "ABC"
+      ]
     }
   },
   "a221eb6171997dd6df05406bf711806f": {
@@ -5328,6 +5625,63 @@
       ],
       "prove": [],
       "requested": []
+    }
+  },
+  "ae4311a08cf3b385283db93f8d10e802": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\n$m\\angle ABD = \\left(2\\frac{1}{2}x\\right)^\\circ$, $m\\angle DBC = x^\\circ$, and $m\\angle ABC = 105^\\circ$. F",
+      "recorded_at": 1794637881.345474
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "expr": "2.5x",
+          "items": [
+            "ABD"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220ABD = (2\u00bdx)\u00b0"
+        },
+        {
+          "expr": "x",
+          "items": [
+            "DBC"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220DBC = x\u00b0"
+        },
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220ABC = 105\u00b0",
+          "value": 105
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": []
     }
   },
   "ae5e189de7da342b7d476ff2622bd6dc": {
@@ -5694,6 +6048,51 @@
         "AB",
         "CD"
       ]
+    }
+  },
+  "ce37842dcd5e9c0359d0e5d926c8aa61": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nA right triangle has legs of length 3 and 4. Find the length of its hypotenuse.\n\nFinal answer (shown only s",
+      "recorded_at": 1794637892.6374981
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "hypotenuse",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [],
+          "kind": "right_triangle",
+          "quote": "A right triangle"
+        },
+        {
+          "items": [],
+          "kind": "equal_length",
+          "quote": "legs of length 3",
+          "value": 3
+        },
+        {
+          "items": [],
+          "kind": "equal_length",
+          "quote": "legs of length 3 and 4",
+          "value": 4
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": []
     }
   },
   "d16a96eec93334217b4b0755dc08c578": {
@@ -6605,6 +7004,48 @@
       ]
     }
   },
+  "f00eef0a89cff29dd6557e8a44513cd6": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn scalene $\\triangle ABC$, name the longest side.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794637865.962292
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "longest side of \u25b3ABC",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "expr": "scalene",
+          "items": [
+            "ABC"
+          ],
+          "kind": "other",
+          "quote": "scalene \u25b3ABC"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
   "f194c18053b82475bdb044e07cf002cd": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -6901,6 +7342,63 @@
         "ABC",
         "DEF"
       ]
+    }
+  },
+  "fb199f6cc47496892ca1bb33898746fb": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n$m\\angle ABD = \\left(2\\frac{1}{2}x\\right)^\\circ$, $m\\angle DBC = x^\\circ$, and $m\\angle ABC = 105^\\circ$. F",
+      "recorded_at": 1794637881.24618
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "x",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "expr": "5x/2",
+          "items": [
+            "ABD"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220ABD = (2\u00bdx)\u00b0"
+        },
+        {
+          "expr": "x",
+          "items": [
+            "DBC"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220DBC = x\u00b0"
+        },
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220ABC = 105\u00b0",
+          "value": 105
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": []
     }
   },
   "fb93cb2b22fece195fbd26031c8b191a": {

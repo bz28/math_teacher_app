@@ -151,19 +151,19 @@ BY_EYE: dict[str, tuple[str, str]] = {
     "95c727b2": ("97496d672c65", "right"),  # XY ≅ XZ; base angles (7k − 9)° = (4k + 18)° = 54°
     "18ce1004": ("00636307c0c6", "right"),  # △FGH ≅ △PQR; FG = 3x − 1 and PQ = 2x + 5 drawn equal
     "584320a7": ("f3e243e9c24a", "right"),  # right angle at C, legs 9 and 40 to scale; AB (the answer) unlabelled
-    "07a8c9b1": ("b7517f3e1151", "right"),  # △ABC ∼ △DEF; 4, 6, 5 and DE 10 to scale; EF, DF unlabelled
+    "07a8c9b1": ("b658c8b24a97", "right"),  # △ABC ∼ △DEF; 4, 6, 5 and DE 10 to scale; matching angles arced 1, 2, 3
     "21807dd6": ("f7b3f1d6132d", "right"),  # ∠A 52°, ∠B 79°, arcs to ∠D, ∠E; ∠C, ∠F (the answer) unlabelled
     "afee316c": ("5aff074e7614", "right"),  # M the midpoint of AC and BD (ticks)
     # Looked at 2026-11-14 after review round 3 and the breadth batch.
-    "1c5107aa": ("5e42bb77d775", "right"),  # ∠ABD 42°, ∠DBC 32° as 4x + 6, 2x + 14 (x = 9)
+    "1c5107aa": ("1526dcfafef6", "right"),  # ∠ABD 42°, ∠DBC 32° as 4x + 6, 2x + 14 (x = 9); ∠ABC labelled 74°
     "6c5008f2": ("e9e9c05d1879", "right"),  # at its coordinates; the parallels to prove unmarked
     "df891226": ("1ceca1259bb7", "right"),  # right ∠R; ∠P 61°, ∠Q 29° (x = 17); RP extended past P
-    "430894a4": ("9f78d3637ab0", "right"),  # ∠A 72°, ∠B 58°; the bisectors meet at I; ∠BIC unlabelled
+    "430894a4": ("59c0f026b208", "right"),  # ∠A 72°, ∠B 58° labelled; bisected halves arced; rays meet at I
     "ab10c024": ("c107ef00e7d6", "right"),  # AB ≅ AC; vertex ≈ 57.4°, base angles ≈ 61.3° (x = 90/7)
     "08e3224d": ("1842b9ac4fc2", "right"),  # A(0, 0), B(6, 0), C(3, 4) to scale; the perimeter unlabelled
     "9d6733ba": ("6efcef0f92b8", "right"),  # PQ ⊥ AB at its midpoint M; X on PQ; XA, XB unmarked
-    "bac5ea12": ("6fcbe94aac23", "right"),  # BD bisects ∠ABC (40° each); DA ⊥ BA, DC ⊥ BC boxed; DA, DC unmarked
-    "0511d648": ("36a9785d0e59", "right"),  # AB ∥ CD cut by EF at G and H; ∠AGH, ∠GHD unmarked
+    "bac5ea12": ("8973698f95c7", "right"),  # BD bisects ∠ABC, halves arced; DA ⊥ BA, DC ⊥ BC boxed; DA, DC unmarked
+    "0511d648": ("b0a6d1defb88", "right"),  # lines AB ∥ CD (arrows) cut by EF at G and H; ∠AGH, ∠GHD unmarked
     "dee52ce7": ("6333df6365d1", "right"),  # DE ∥ BC, D on AB, E on AC (arrows); the angle sum to prove unmarked
     "dd5e6fa8": ("48d94fa608c2", "right"),  # AB ≅ AC, D the midpoint of BC (ticks), AD drawn; ∠ABC, ∠ACB unmarked
 }

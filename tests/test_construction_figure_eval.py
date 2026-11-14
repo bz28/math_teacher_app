@@ -121,6 +121,7 @@ async def test_the_adversarial_wordings(monkeypatch: pytest.MonkeyPatch) -> None
     summary = ca.summarize(await ca.run_all())
     assert summary["errors"] == []
     assert summary["wrong_passed"] == []
+    assert summary["wrong_caught_only_as_unmarked"] == [], summary
     assert summary["correct_refused"] == {}, summary
     assert summary["reading_failures"] == {}, summary
     assert summary["correct_passed"] == summary["cases"]
