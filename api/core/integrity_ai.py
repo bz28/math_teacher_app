@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.image_utils import (
     crop_region_for_vision,
     pdf_pages_as_images,
-    preprocess_image_for_vision,
+    prepare_page_for_reader,
     to_content_block,
 )
 from api.core.llm_client import (
@@ -266,8 +266,9 @@ async def extract_student_work_from_pages(
         raw = f.get("data", "")
         recorded_media = f.get("media_type", "image/jpeg")
         base64_data, media_type = _strip_data_url_prefix(raw, recorded_media)
-        # EXIF-orient + downscale phone photos before Vision sees them.
-        parts = [(preprocess_image_for_vision(base64_data, media_type), media_type)]
+        # EXIF-orient + fit to the reader's native resolution. Resampling
+        # a page to ~3.75 MP is CPU work: keep it off the event loop.
+        parts = [await asyncio.to_thread(prepare_page_for_reader, base64_data, media_type)]
         if media_type == "application/pdf":
             # Sent as a document, a PDF page is rasterized by the API at a
             # fixed ~1.2 MP, so a photo printed to PDF reached the reader
@@ -279,7 +280,7 @@ async def extract_student_work_from_pages(
             # text reads as well.
             rendered = await asyncio.to_thread(_pdf_pages_for_vision, base64_data)
             if rendered:
-                parts = [(page, "image/jpeg") for page in rendered]
+                parts = rendered
             else:
                 logger.warning("extract: PDF file %d not rendered in full, sent as a document", page_number)
         # Label every page before its image. Without this, asking the
@@ -358,11 +359,12 @@ async def extract_student_work_from_pages(
     return result
 
 
-def _pdf_pages_for_vision(data_base64: str) -> list[str]:
-    """A PDF's pages as the reader gets them: rendered and cut to the work,
-    then downscaled like a photo. CPU-bound — run it off the event loop."""
+def _pdf_pages_for_vision(data_base64: str) -> list[tuple[str, str]]:
+    """A PDF's pages as the reader gets them: rendered at the reader's
+    long edge and cut to the work, then fitted like a photo. CPU-bound —
+    run it off the event loop."""
     return [
-        preprocess_image_for_vision(page, "image/jpeg")
+        prepare_page_for_reader(page, "image/jpeg")
         for page in pdf_pages_as_images(data_base64, complete=True)
     ]
 

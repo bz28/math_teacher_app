@@ -20,7 +20,7 @@ import pytest
 from PIL import Image
 
 from api.core import integrity_ai
-from api.core.image_utils import VISION_MAX_EDGE
+from api.core.image_utils import READER_MAX_EDGE, READER_MAX_PIXELS
 from tests.test_image_utils import _CHROME, _corners, printed_pdf
 
 pytestmark = pytest.mark.anyio
@@ -68,10 +68,23 @@ async def test_a_printed_photo_goes_as_the_photo(sent: list[dict[str, Any]]) -> 
     assert _shape(sent) == ["--- Page 1 of 1 ---", "image"]
     block = sent[1]
     assert block["source"]["media_type"] == "image/jpeg"
-    # Cut to the photo and capped like a photo upload: the photo fills the
-    # long edge, where the whole Letter page gave it ~79% of ~1250 px.
+    # Cut to the photo and fitted like a photo upload: the photo fills the
+    # reader's box (here its 3.75 MP cap, a 3:4 page's long edge ~2236 px),
+    # where the whole Letter page gave it ~79% of ~1250 px.
     w, h = _size(block)
-    assert h == VISION_MAX_EDGE and abs(w / h - 0.75) < 0.02
+    assert abs(w / h - 0.75) < 0.02
+    assert h <= READER_MAX_EDGE and w * h <= READER_MAX_PIXELS and w * h > 0.99 * READER_MAX_PIXELS
+
+
+async def test_a_pdf_page_reaches_the_reader_at_the_reader_size(sent: list[dict[str, Any]]) -> None:
+    # A typed page (vector text, no picture to hold it to) is rendered at
+    # the reader's long edge, then fitted to its pixel cap — not rendered
+    # at 2400 and shrunk to 1568 as before.
+    pdf = printed_pdf(None, texts=(("1. x = 3", 72, 400), ("2. y = 4", 72, 300)))
+    await integrity_ai.extract_student_work_from_pages([{"data": pdf, "media_type": "application/pdf"}])
+    w, h = _size(sent[1])
+    assert sent[1]["source"]["media_type"] == "image/jpeg"
+    assert h <= READER_MAX_EDGE and w * h <= READER_MAX_PIXELS and h > 2000
 
 
 async def test_a_multi_page_pdf_is_parts_of_its_files_page(sent: list[dict[str, Any]]) -> None:
@@ -88,8 +101,11 @@ async def test_a_multi_page_pdf_is_parts_of_its_files_page(sent: list[dict[str, 
         "--- Page 2 of 2, part 1 of 2 ---", "image",
         "--- Page 2 of 2, part 2 of 2 ---", "image",
     ]
-    # The photo upload is untouched by any of this.
-    assert sent[1]["source"]["media_type"] == "image/jpeg" and _size(sent[1]) == (600, 800)
+    # The photo upload is fitted to the reader on its own terms: a small
+    # page is enlarged, never left at 600 px.
+    w, h = _size(sent[1])
+    assert sent[1]["source"]["media_type"] == "image/jpeg" and abs(w / h - 0.75) < 0.01
+    assert h <= READER_MAX_EDGE and w * h <= READER_MAX_PIXELS and h > 2200
 
 
 async def test_a_pdf_pdfium_cant_read_still_goes_as_a_document(sent: list[dict[str, Any]]) -> None:

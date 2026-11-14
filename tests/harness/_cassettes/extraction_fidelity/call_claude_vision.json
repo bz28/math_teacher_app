@@ -1,0 +1,182 @@
+{
+  "61b82654310ed7edcab29722331bbe1f": {
+    "meta": {
+      "mode": "integrity_extract",
+      "model": "claude-opus-5-5",
+      "prompt": "You are a teacher reading a student's handwritten homework. Your job is to copy  ||",
+      "recorded_at": 1794617536.9759412
+    },
+    "response": {
+      "confidence": 0.1,
+      "final_answers": [],
+      "steps": [
+        {
+          "latex": "",
+          "plain_english": "First handwritten line, starting with what looks like a problem number. It is too blurry to read.",
+          "problem_position": 1,
+          "step_num": 1
+        },
+        {
+          "latex": "",
+          "plain_english": "Second handwritten line. It is too blurry to read.",
+          "problem_position": 1,
+          "step_num": 2
+        },
+        {
+          "latex": "",
+          "plain_english": "Third handwritten line. It is too blurry to read.",
+          "problem_position": 1,
+          "step_num": 3
+        },
+        {
+          "latex": "",
+          "plain_english": "Fourth handwritten line. It is too blurry to read.",
+          "problem_position": 1,
+          "step_num": 4
+        },
+        {
+          "latex": "",
+          "plain_english": "Fifth handwritten line, which may contain a fraction. It is too blurry to read.",
+          "problem_position": 1,
+          "step_num": 5
+        },
+        {
+          "latex": "",
+          "plain_english": "Sixth and last handwritten line. It is too blurry to read.",
+          "problem_position": 1,
+          "step_num": 6
+        }
+      ],
+      "visual_work": []
+    }
+  },
+  "76970764dca06b5bca2a78ab8b195334": {
+    "meta": {
+      "mode": "integrity_extract",
+      "model": "claude-opus-5-5",
+      "prompt": "You are a teacher reading a student's handwritten homework. Your job is to copy  ||",
+      "recorded_at": 1794617544.6123142
+    },
+    "response": {
+      "confidence": 0.97,
+      "final_answers": [
+        {
+          "answer_latex": "m = -2",
+          "answer_plain": "m = -2",
+          "page_index": 1,
+          "problem_position": 1
+        }
+      ],
+      "steps": [
+        {
+          "latex": "m = (9 - (-3)) / (-2 - 4)",
+          "page_index": 1,
+          "plain_english": "Labeled 1.; sets up slope as (9 minus negative 3) divided by (negative 2 minus 4)",
+          "problem_position": 1,
+          "step_num": 1
+        },
+        {
+          "latex": "m = 12 / -6",
+          "page_index": 1,
+          "plain_english": "m equals 12 divided by negative 6",
+          "problem_position": 1,
+          "step_num": 2
+        },
+        {
+          "latex": "m = -2",
+          "page_index": 1,
+          "plain_english": "m equals negative 2",
+          "problem_position": 1,
+          "step_num": 3
+        }
+      ],
+      "visual_work": []
+    }
+  },
+  "d4dbe17c2ac9844aa2d6bde000248830": {
+    "meta": {
+      "mode": "integrity_extract",
+      "model": "claude-opus-5-5",
+      "prompt": "You are a teacher reading a student's handwritten homework. Your job is to copy  ||",
+      "recorded_at": 1794617541.2498019
+    },
+    "response": {
+      "confidence": 0.1,
+      "final_answers": [],
+      "steps": [
+        {
+          "latex": "",
+          "page_index": 1,
+          "plain_english": "There's a line of handwriting near the top of the page, but it's too blurry to read. No characters can be made out reliably.",
+          "problem_position": null,
+          "step_num": 1
+        },
+        {
+          "latex": "",
+          "page_index": 1,
+          "plain_english": "There's a second, shorter line of handwriting below the first. It's also too blurry to read, and no characters can be made out reliably.",
+          "problem_position": null,
+          "step_num": 2
+        }
+      ],
+      "visual_work": []
+    }
+  },
+  "ee25f974d7eec73ea9045d95c70d9e6f": {
+    "meta": {
+      "mode": "integrity_extract",
+      "model": "claude-opus-5-5",
+      "prompt": "You are a teacher reading a student's handwritten homework. Your job is to copy  ||",
+      "recorded_at": 1794617531.261037
+    },
+    "response": {
+      "confidence": 0.1,
+      "final_answers": [],
+      "steps": [
+        {
+          "latex": "\\text{[illegible] (a) } y = \\ldots",
+          "page_index": 1,
+          "plain_english": "First line, seemingly a problem label and part (a) with an equation starting with y; the rest is too blurry to read.",
+          "problem_position": 1,
+          "step_num": 1
+        },
+        {
+          "latex": "\\text{[illegible line]}",
+          "page_index": 1,
+          "plain_english": "Second line, possibly a domain statement for part (a); unreadable.",
+          "problem_position": 1,
+          "step_num": 2
+        },
+        {
+          "latex": "\\text{[illegible line]}",
+          "page_index": 1,
+          "plain_english": "Third line, possibly a range statement for part (a); unreadable.",
+          "problem_position": 1,
+          "step_num": 3
+        },
+        {
+          "latex": "\\text{[illegible] } y = \\ldots",
+          "page_index": 1,
+          "plain_english": "Fourth line, seemingly part (b) with an equation starting with y; the rest is unreadable.",
+          "problem_position": 1,
+          "step_num": 4
+        },
+        {
+          "latex": "\\text{[illegible line]}",
+          "page_index": 1,
+          "plain_english": "Fifth line, longer expression, possibly a domain for part (b); unreadable.",
+          "problem_position": 1,
+          "step_num": 5
+        },
+        {
+          "latex": "\\text{[illegible line]}",
+          "page_index": 1,
+          "plain_english": "Sixth line, longer expression, possibly a range for part (b); unreadable.",
+          "problem_position": 1,
+          "step_num": 6
+        }
+      ],
+      "visual_work": []
+    }
+  }
+}

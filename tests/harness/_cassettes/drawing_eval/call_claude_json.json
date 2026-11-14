@@ -86,6 +86,64 @@
       ]
     }
   },
+  "60de24b20cb86f379418eeb416c3e7af": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-opus-5-5",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 2x - 1 \u2014 Labeled '1.', the student wr",
+      "recorded_at": 1794617607.549633
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.65,
+          "deductions": [
+            {
+              "points_off": 20,
+              "reason": "Partial credit: required drawing present but incomplete \u2014 intersection not marked, lines unlabeled, axes unnumbered",
+              "rule_id": null,
+              "step_ref": null
+            }
+          ],
+          "percent": 80,
+          "problem_position": 1,
+          "reasoning": "The final answer $(2, 3)$ matches the key, and the required graph is present with both lines drawn and crossing in the first quadrant. Under the rubric's 'present but incomplete' drawing anchor, it falls short: the intersection point is not marked, the lines are unlabeled, and the axes have no numbers, so the answer can't be clearly read off the graph. The drawing was read only from the full page, so the teacher may want to check the photo.",
+          "score_status": "partial",
+          "student_answer": "$(2, 3)$",
+          "student_feedback": "Your answer $(2, 3)$ is correct, and you graphed both lines. Next time, number your axes, label each line with its equation, and mark and label the intersection point so the graph clearly shows the solution."
+        }
+      ]
+    }
+  },
+  "65c901e13042a0400a1a4b67bbe9551b": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-opus-5-5",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 2x - 1 \u2014 Wrote first equation y = 2x ",
+      "recorded_at": 1794617584.885111
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.8,
+          "deductions": [
+            {
+              "points_off": 25,
+              "reason": "Partial credit: required drawing present but incomplete \u2014 only one line plotted, intersection not marked",
+              "rule_id": null,
+              "step_ref": null
+            }
+          ],
+          "percent": 75,
+          "problem_position": 1,
+          "reasoning": "The final answer (2, 3) is correct, but it was found algebraically by setting the expressions equal. The required graph shows only y = 2x \u2212 1, with no second line and no marked intersection, so under Partial credit the drawing is present but incomplete (~75%).",
+          "score_status": "partial",
+          "student_answer": "$(2, 3)$",
+          "student_feedback": "Your algebra correctly finds (2, 3), and you started the graph with y = 2x \u2212 1. This problem asks you to solve by graphing, so also plot y = \u2212x + 5 and mark where the two lines cross."
+        }
+      ]
+    }
+  },
   "91d3a774719af9f29d36ee78728a05e3": {
     "meta": {
       "mode": "ai_grading",
@@ -104,6 +162,92 @@
           "score_status": "full",
           "student_answer": "$x > 4$",
           "student_feedback": "Nice work \u2014 you solved the inequality cleanly and your number line correctly shows an open circle at 4 with shading to the right."
+        }
+      ]
+    }
+  },
+  "bc6bc3e03155832eb1143243fda8df55": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-opus-5-5",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 2x - 1 \u2014 Wrote first equation y = 2x ",
+      "recorded_at": 1794617588.568237
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.8,
+          "deductions": [
+            {
+              "points_off": 25,
+              "reason": "Partial credit: required drawing present but incomplete \u2014 only one line plotted, second line and intersection missing",
+              "rule_id": null,
+              "step_ref": null
+            }
+          ],
+          "percent": 75,
+          "problem_position": 1,
+          "reasoning": "Correct answer $(2,3)$, found algebraically by setting the expressions equal. The required graph is present but incomplete: only $y = 2x - 1$ is plotted, with no second line and no marked intersection. That fits the Partial credit anchor for a required drawing that is present but incomplete (~75%).",
+          "score_status": "partial",
+          "student_answer": "$(2, 3)$",
+          "student_feedback": "Your algebra is correct and $(2, 3)$ is the right solution, but this problem asks you to solve by graphing. Plot both lines, including $y = -x + 5$, and mark where they cross to show the solution on the graph."
+        }
+      ]
+    }
+  },
+  "c0f684a1b957f795a67df3f43eb27ea3": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-opus-5-5",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: y = 2x - 1 \u2014 Labeled '1.', the student wr",
+      "recorded_at": 1794617614.886401
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.75,
+          "deductions": [
+            {
+              "points_off": 15,
+              "reason": "Partial credit: required drawing present but incomplete \u2014 intersection point not marked or labeled",
+              "rule_id": null,
+              "step_ref": null
+            },
+            {
+              "points_off": 5,
+              "reason": "Partial credit: drawing imprecise \u2014 lines unlabeled and second line's x-intercept inaccurate",
+              "rule_id": null,
+              "step_ref": null
+            }
+          ],
+          "percent": 80,
+          "problem_position": 1,
+          "reasoning": "The final answer $(2, 3)$ matches the key, and the required graph is present with both lines at roughly correct y-intercepts ($-1$ and $5$). Under the Partial credit criterion, the drawing is present but incomplete: the intersection point is not marked or labeled, the lines are unlabeled, and the second line's x-intercept (about 2\u20133 ticks rather than 5) is imprecise.",
+          "score_status": "partial",
+          "student_answer": "$(2, 3)$",
+          "student_feedback": "Your answer $(2, 3)$ is correct, and both lines start at the right y-intercepts. Next time, mark and label the point where the lines cross, label each line with its equation, and plot the lines more carefully (for example, $y = -x + 5$ should cross the x-axis at 5)."
+        }
+      ]
+    }
+  },
+  "f505d2d5e34279c972af7eea47d22021": {
+    "meta": {
+      "mode": "ai_grading",
+      "model": "claude-opus-5-5",
+      "prompt": "You are a world-class math professor grading a student's homework submission. Th || THIS STUDENT'S WORK\n\n## Problem 1\n<student_work>\nStudent's work:\n  Step 1: 2x - 3 > 5 \u2014 Labeled '1.', student writes",
+      "recorded_at": 1794617626.656291
+    },
+    "response": {
+      "grades": [
+        {
+          "confidence": 0.9,
+          "deductions": [],
+          "percent": 100,
+          "problem_position": 1,
+          "reasoning": "The student correctly adds 3 and divides by 2 to get x > 4, matching the key. The required drawing is present: an open circle at 4 with a ray shaded to the right, which meets the Full credit criterion. The drawing was read from the full page only, so it was not checked on a zoomed look.",
+          "score_status": "full",
+          "student_answer": "$x > 4$",
+          "student_feedback": "Nice work \u2014 you solved the inequality cleanly and graphed it correctly. The open circle at 4 and the ray shading right match x > 4."
         }
       ]
     }

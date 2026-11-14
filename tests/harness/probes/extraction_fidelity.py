@@ -29,7 +29,9 @@ from __future__ import annotations
 
 import base64
 import io
+import os
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
@@ -37,6 +39,11 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 from api.core.integrity_ai import extract_student_work_from_pages
 from tests.harness.probe import Probe
 from tests.harness.types import CheckResult, GeneratedItem, HarnessContext
+
+# Its own cassettes, committed: the default vision cassette is a gitignored
+# local cache, which left this probe with nothing to replay in CI or a
+# fresh checkout.
+_CASSETTE_DIR = Path(__file__).resolve().parent.parent / "_cassettes" / "extraction_fidelity"
 
 # A handwriting face if the host has one, else the default bitmap font. The
 # probe must not fail merely because a font is missing.
@@ -251,28 +258,36 @@ class ExtractionFidelityProbe(Probe):
     async def generate(
         self, ctx: HarnessContext, constraint: str | None = None,
     ) -> list[GeneratedItem]:
-        out: list[GeneratedItem] = []
-        for case in GOLDEN_CASES:
-            b64, media = render_page(case)
-            extraction = await extract_student_work_from_pages(
-                [{"data": b64, "media_type": media}], problems=case.problems,
-            )
-            out.append(GeneratedItem(
-                id=case.name,
-                label=f"[fidelity] {case.name}",
-                problem_text=case.problems[0]["question"],
-                figure_svg=None,
-                figure_spec=None,
-                raw={
-                    "written": case.written,
-                    "must_contain": case.must_contain,
-                    "must_not_contain": case.must_not_contain,
-                    "rationale": case.rationale,
-                    "transcript": _transcribed_values(extraction),
-                    "confidence": extraction.get("confidence"),
-                },
-            ))
-        return out
+        prev = os.environ.get("HARNESS_CASSETTE_DIR")
+        os.environ["HARNESS_CASSETTE_DIR"] = str(_CASSETTE_DIR)
+        try:
+            return [await self._run_case(case) for case in GOLDEN_CASES]
+        finally:
+            if prev is None:
+                os.environ.pop("HARNESS_CASSETTE_DIR", None)
+            else:
+                os.environ["HARNESS_CASSETTE_DIR"] = prev
+
+    async def _run_case(self, case: FidelityCase) -> GeneratedItem:
+        b64, media = render_page(case)
+        extraction = await extract_student_work_from_pages(
+            [{"data": b64, "media_type": media}], problems=case.problems,
+        )
+        return GeneratedItem(
+            id=case.name,
+            label=f"[fidelity] {case.name}",
+            problem_text=case.problems[0]["question"],
+            figure_svg=None,
+            figure_spec=None,
+            raw={
+                "written": case.written,
+                "must_contain": case.must_contain,
+                "must_not_contain": case.must_not_contain,
+                "rationale": case.rationale,
+                "transcript": _transcribed_values(extraction),
+                "confidence": extraction.get("confidence"),
+            },
+        )
 
     def deterministic_checks(self, item: GeneratedItem) -> list[CheckResult]:
         text = _normalize(item.raw.get("transcript") or "")

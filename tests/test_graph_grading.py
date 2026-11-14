@@ -28,7 +28,7 @@ from api.core.graph_grading import (
     page_images,
     uploads_look_sideways,
 )
-from api.core.image_utils import pdf_pages_as_images
+from api.core.image_utils import READER_MAX_EDGE, pdf_pages_as_images
 from api.models.question_bank import QuestionBankItem
 
 pytestmark = pytest.mark.anyio
@@ -166,7 +166,7 @@ def test_a_pdf_renders_one_image_per_page() -> None:
     pages = pdf_pages_as_images(_pdf(3))
     assert len(pages) == 3
     img = Image.open(io.BytesIO(base64.b64decode(pages[0])))
-    assert img.format == "JPEG" and max(img.size) == 2400
+    assert img.format == "JPEG" and abs(max(img.size) - READER_MAX_EDGE) <= 2  # pdfium truncates
 
 
 def test_an_unreadable_pdf_has_no_pages() -> None:
