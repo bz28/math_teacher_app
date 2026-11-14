@@ -4,6 +4,7 @@ import base64
 import ctypes
 import io
 import logging
+import math
 import threading
 from typing import Any
 
@@ -13,10 +14,25 @@ from api.core.constants import MAX_IMAGE_BYTES, MAX_PDF_BYTES
 
 logger = logging.getLogger(__name__)
 
-# Anthropic vision downscales anything past ~1568px on the long edge
-# anyway, so we cap there before sending: same legibility, roughly half
-# the vision-token cost. Matches the harness judge's _MAX_EDGE.
+# The long-edge cap for vision calls other than the homework reader.
+# 1568px is what pre-Opus-4.7 models (Sonnet 4.6, which `image_extract`
+# runs on) read natively; they downscale anything bigger server-side.
+# Newer models read up to `READER_MAX_EDGE`, but the drawing check's
+# whole-page look hasn't been measured there, so it stays here too.
+# Matches the harness judge's _MAX_EDGE.
 VISION_MAX_EDGE = 1568
+
+# What the homework reader (Opus 5.5) reads natively: up to 2576px on the
+# long edge and 3.75 MP, past which the API downscales. At 1568px a phone
+# photo of 15 problems reached the reader with exponents ~4px tall, and
+# a 551px upload stayed at 551px; the reader filled the unreadable ink
+# in from the question (prod, Nov 2026). `prepare_page_for_reader` fits
+# every page to this box, enlarging small ones.
+READER_MAX_EDGE = 2576
+READER_MAX_PIXELS = 3_750_000
+# The API refuses an image past 5 MB of base64; a page above this many
+# raw bytes (base64 adds a third) is re-encoded as a smaller JPEG.
+_READER_PAGE_MAX_BYTES = 3_500_000
 
 # The smallest homework photo worth reading, by its long edge. Prod,
 # Oct 2026: some devices send 320×240 pages; the reader can't make out
@@ -285,15 +301,65 @@ def preprocess_image_for_vision(data_base64: str, media_type: str) -> str:
         return data_base64
 
 
+def reader_page_size(width: int, height: int) -> tuple[int, int]:
+    """The size a `width` x `height` page goes to the reader at: as large
+    as fits in `READER_MAX_EDGE` and `READER_MAX_PIXELS`, aspect kept.
+    Rounded down so neither limit is crossed by a pixel."""
+    scale = min(
+        READER_MAX_EDGE / max(width, height, 1),
+        math.sqrt(READER_MAX_PIXELS / max(width * height, 1)),
+    )
+    return max(1, int(width * scale)), max(1, int(height * scale))
+
+
+def prepare_page_for_reader(data_base64: str, media_type: str) -> tuple[str, str]:
+    """A homework page as the reader gets it: EXIF-oriented and resampled
+    (LANCZOS) to `reader_page_size` — shrunk if large, ENLARGED if small.
+    Enlarging adds no detail, but it gives handwriting a few pixels tall
+    room the model reads: on a 551px prod page the reader added a radical
+    and wrote the key's answer; the same page enlarged read as written.
+
+    Returns `(base64, media_type)`. A PNG stays PNG when it wasn't
+    enlarged and fits `_READER_PAGE_MAX_BYTES`; everything else goes as
+    JPEG, stepping quality down until it fits, so no page passes the
+    API's per-image limit. Non-images, and pages that fail to decode,
+    come back untouched.
+    """
+    if not media_type.startswith("image/"):
+        return data_base64, media_type
+    try:
+        with _open_bounded(base64.b64decode(data_base64)) as opened:
+            img = ImageOps.exif_transpose(opened)
+            size = reader_page_size(*img.size)
+            enlarged = size[0] > img.width
+            if size != img.size:
+                img = img.resize(size, Image.Resampling.LANCZOS)
+            if media_type == "image/png" and not enlarged:
+                buf = io.BytesIO()
+                img.save(buf, format="PNG")
+                if buf.tell() <= _READER_PAGE_MAX_BYTES:
+                    return base64.b64encode(buf.getvalue()).decode("ascii"), "image/png"
+            if img.mode not in ("RGB", "L"):
+                img = img.convert("RGB")
+            for quality in (90, 80, 70, 60):
+                buf = io.BytesIO()
+                img.save(buf, format="JPEG", quality=quality)
+                if buf.tell() <= _READER_PAGE_MAX_BYTES:
+                    break
+            return base64.b64encode(buf.getvalue()).decode("ascii"), "image/jpeg"
+    except Exception:
+        return data_base64, media_type
+
+
 def crop_region_for_vision(
     data_base64: str, media_type: str, bbox: dict[str, Any], *, margin: float = 0.35,
     min_frac: float = 0.22, upscale_to: int = 1200,
 ) -> str | None:
     """Crop a normalized `bbox` (fractions of the ORIENTED page) out of the
     original photo and hand it back enlarged, for a second look at a
-    small drawing. The full-page pass downsizes a phone photo to
-    `VISION_MAX_EDGE`, which turns a 2-inch sketch into a thumbnail the
-    model can't read — it then fills the gap from the algebra beside it.
+    small drawing. A full page fitted to a vision call's size leaves a
+    2-inch sketch a thumbnail the model can't read reliably — it then
+    fills the gap from the algebra beside it.
 
     `margin` pads the box (the model's boxes are rough), `min_frac`
     guarantees a usable window even when it under-reports the size, and
@@ -338,10 +404,11 @@ def crop_region_for_vision(
         return None
 
 
-# Enough pixels for a hand-drawn graph to survive the crop-and-enlarge
-# (crop_region_for_vision), a little above what a phone photo of the same
-# page carries after VISION_MAX_EDGE.
-_PDF_RENDER_LONG_EDGE = 2400
+# The reader's long edge, so a PDF page loses nothing on its way to the
+# reader (`prepare_page_for_reader` then fits it to the pixel cap), and
+# enough for a hand-drawn graph to survive the drawing check's
+# crop-and-enlarge (crop_region_for_vision).
+_PDF_RENDER_LONG_EDGE = READER_MAX_EDGE
 # A homework upload is a few pages; past this, a "PDF" is not homework.
 _PDF_MAX_PAGES = 30
 _PDF_LOCK = threading.Lock()
