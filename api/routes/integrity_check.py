@@ -10,12 +10,17 @@ transcript + per-problem + overall state.
 
 from __future__ import annotations
 
+import asyncio
+import json
+import logging
 import re
 import uuid
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -33,6 +38,7 @@ from api.core.integrity_pipeline import (
     STATUS_SKIPPED_UNREADABLE,
     TOOL_GENERATE_VARIANT,
     UNFINISHED_REASONS,
+    ReplyTextCallback,
     count_student_turns,
     finalize_if_abandoned,
     longest_not_trying_streak,
@@ -40,7 +46,7 @@ from api.core.integrity_pipeline import (
     touch_open_check,
     trailing_not_trying_streak,
 )
-from api.database import get_db
+from api.database import get_db, get_session_factory
 from api.middleware.auth import CurrentUser, get_current_user_full, require_teacher
 from api.models.assignment import Assignment, Submission
 from api.models.integrity_check import (
@@ -53,6 +59,8 @@ from api.models.user import User
 from api.routes.teacher_assignments import get_teacher_assignment
 from api.schemas.extraction import ExtractionOut
 from api.services.bank import problem_ids_in_content
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["integrity"])
 
@@ -615,15 +623,23 @@ async def get_my_integrity_state(
 CHECK_CLOSED = "This check has closed."
 
 
-@router.post("/school/student/integrity/submissions/{submission_id}/turn")
-async def post_student_turn(
+class _OpenTurn(NamedTuple):
+    check: IntegrityCheckSubmission
+    message: str
+    is_stuck_tap: bool
+
+
+async def _open_turn(
+    db: AsyncSession,
     submission_id: uuid.UUID,
     body: TurnRequest,
-    user: User = Depends(get_current_user_full),
-    db: AsyncSession = Depends(get_db),
-) -> IntegrityStateResponse:
-    """Append a student turn, run the agent loop, return fresh state."""
-    await _load_my_submission(db, submission_id, user.id)
+    user_id: uuid.UUID,
+) -> _OpenTurn:
+    """Validate a student reply and lock its check for the turn.
+
+    Raises the HTTP error a refused reply gets. On return the check row
+    is locked in `db`'s transaction until `_run_turn` commits."""
+    await _load_my_submission(db, submission_id, user_id)
     # Locked for the whole turn, and read fresh under the lock: a close
     # that committed a moment ago is seen here, and nothing can close
     # the check while this reply is being answered.
@@ -669,15 +685,29 @@ async def post_student_turn(
     # query beats loading the whole transcript.
     if await count_student_turns(check.id, db) >= MAX_STUDENT_TURNS:
         raise HTTPException(status_code=409, detail=CHECK_CLOSED)
+    return _OpenTurn(check, message, is_stuck_tap)
 
+
+async def _run_turn(
+    db: AsyncSession,
+    submission_id: uuid.UUID,
+    turn: _OpenTurn,
+    body: TurnRequest,
+    user_id: uuid.UUID,
+    *,
+    on_reply_text: ReplyTextCallback | None = None,
+) -> IntegrityStateResponse:
+    """Run an opened turn's agent loop, commit it, and return fresh state."""
+    check = turn.check
     telemetry = (
         body.telemetry.model_dump(mode="json") if body.telemetry else None
     )
     try:
         await process_student_turn(
-            check, message, body.seconds_on_turn, db,
-            user_id=str(user.id),
+            check, turn.message, body.seconds_on_turn, db,
+            user_id=str(user_id),
             telemetry=telemetry,
+            on_reply_text=on_reply_text,
         )
         await db.commit()
     except IntegrityError:
@@ -685,7 +715,7 @@ async def post_student_turn(
         # two tabs): the other one landed first. Answer like a repeat
         # instead of a 500 — for a stuck tap that's "already used".
         await db.rollback()
-        if is_stuck_tap:
+        if turn.is_stuck_tap:
             raise HTTPException(
                 status_code=400, detail=_STUCK_ALREADY_USED,
             ) from None
@@ -702,6 +732,154 @@ async def post_student_turn(
     turns = await _load_transcript(db, check.id)
     return await _build_state_response(
         submission_id, check, problems, turns, db, fallback_status="no_check",
+    )
+
+
+@router.post("/school/student/integrity/submissions/{submission_id}/turn")
+async def post_student_turn(
+    submission_id: uuid.UUID,
+    body: TurnRequest,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> IntegrityStateResponse:
+    """Append a student turn, run the agent loop, return fresh state."""
+    turn = await _open_turn(db, submission_id, body, user.id)
+    return await _run_turn(db, submission_id, turn, body, user.id)
+
+
+# Streamed turns still running. Each owns its session and can outlive
+# its request (see post_student_turn_stream); holding them here keeps
+# them from being garbage-collected mid-turn.
+_STREAMED_TURNS: set[asyncio.Task[None]] = set()
+
+
+async def drain_streamed_turns(timeout: float = 30.0) -> None:
+    """Let streamed turns still running finish before the process exits.
+
+    A turn whose student already disconnected has no request keeping the
+    server's shutdown waiting on it, so without this a deploy would
+    cancel it mid-loop and roll back the student's reply."""
+    if _STREAMED_TURNS:
+        await asyncio.wait(set(_STREAMED_TURNS), timeout=timeout)
+
+
+# How often a streamed turn sends a `: ping` comment while it has nothing
+# else to send. Well under the web client's 15s inactivity timeout, so a
+# long but healthy turn (six model calls, tool handling) never trips it.
+STREAM_HEARTBEAT_SECONDS = 5.0
+
+
+def _sse(event: str, data: str) -> str:
+    return f"event: {event}\ndata: {data}\n\n"
+
+
+@router.post(
+    "/school/student/integrity/submissions/{submission_id}/turn/stream",
+    response_class=StreamingResponse,
+    responses={200: {
+        "content": {"text/event-stream": {}},
+        "description": (
+            "Server-sent events. `delta` {bubble, text}: agent text as "
+            "it's written, appended to bubble `bubble` (one per agent "
+            "message). Then exactly one of `done` (the "
+            "IntegrityStateResponse /turn returns — the authoritative "
+            "result, which replaces the streamed bubbles) or `error` "
+            "{status, detail} (the status and detail /turn would have "
+            "answered with). While nothing else is being sent, a "
+            "`: ping` comment goes out every few seconds, so a client "
+            "can time out on silence rather than on total duration."
+        ),
+    }},
+)
+async def post_student_turn_stream(
+    submission_id: uuid.UUID,
+    body: TurnRequest,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
+    """/turn, streamed: the same turn, with the agent's words sent as
+    the model writes them instead of all at once when it's done.
+
+    Only text already certain to be shown is streamed (see
+    process_student_turn); the `done` event carries exactly what /turn
+    returns. A refused reply (closed check, short message, spent stuck
+    tap) gets the same plain HTTP error /turn gives, before any stream
+    starts.
+
+    The turn runs in its own task on its own session, so a student who
+    drops the connection mid-reply still has the turn saved — as with
+    /turn — instead of it being cancelled along with the stream.
+    """
+    user_id = user.id
+    # Auth used the request's session; release its connection rather
+    # than hold it idle for the length of the reply.
+    await db.close()
+
+    session = get_session_factory()()
+    try:
+        turn = await _open_turn(session, submission_id, body, user_id)
+    except BaseException:
+        await session.close()
+        raise
+
+    queue: asyncio.Queue[str | None] = asyncio.Queue()
+
+    async def on_reply_text(bubble: int, text: str) -> None:
+        queue.put_nowait(
+            _sse("delta", json.dumps({"bubble": bubble, "text": text})),
+        )
+
+    async def run() -> None:
+        try:
+            state = await _run_turn(
+                session, submission_id, turn, body, user_id,
+                on_reply_text=on_reply_text,
+            )
+            queue.put_nowait(_sse("done", state.model_dump_json()))
+        except HTTPException as e:
+            queue.put_nowait(_sse("error", json.dumps(
+                {"status": e.status_code, "detail": e.detail},
+            )))
+        except Exception:
+            logger.exception(
+                "streamed integrity turn failed for submission %s",
+                submission_id,
+            )
+            queue.put_nowait(_sse("error", json.dumps(
+                {"status": 500, "detail": "Something went wrong on our end."},
+            )))
+        finally:
+            await session.close()
+            queue.put_nowait(None)
+
+    task = asyncio.create_task(run())
+    _STREAMED_TURNS.add(task)
+    task.add_done_callback(_STREAMED_TURNS.discard)
+
+    async def events() -> AsyncIterator[str]:
+        # An opening comment gets the headers and first bytes through
+        # any proxy before the model's first word.
+        yield ": open\n\n"
+        while True:
+            try:
+                item = await asyncio.wait_for(
+                    queue.get(), STREAM_HEARTBEAT_SECONDS,
+                )
+            except TimeoutError:
+                # Nothing to send — the loop is in a tool call or a
+                # response that isn't streamed. A comment tells the
+                # client the turn is alive, so its inactivity timeout
+                # only trips on a server that has really gone quiet.
+                yield ": ping\n\n"
+                continue
+            if item is None:
+                return
+            yield item
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 

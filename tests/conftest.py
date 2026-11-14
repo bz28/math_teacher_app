@@ -215,12 +215,25 @@ async def _mock_run_agent_turn(
     messages: list[dict[str, Any]],
     **kwargs: Any,
 ) -> list[Any]:
-    _ = system_prompt, kwargs
+    _ = system_prompt
     _AGENT_CALL_LOG.append(list(messages))
-    if _AGENT_SCRIPT:
-        return _AGENT_SCRIPT.pop(0)
-    # Default: a benign text reply so the pipeline doesn't stall.
-    return [_TextBlock("Got it — thanks!")]
+    blocks: list[Any] = (
+        _AGENT_SCRIPT.pop(0) if _AGENT_SCRIPT
+        # Default: a benign text reply so the pipeline doesn't stall.
+        else [_TextBlock("Got it — thanks!")]
+    )
+    # A streamed call: feed each text block's text as the model would,
+    # a few characters per delta. An Exception entry in the script
+    # raises after the text before it has streamed — a call that
+    # fails mid-response.
+    on_text = kwargs.get("on_text")
+    for i, b in enumerate(blocks):
+        if isinstance(b, Exception):
+            raise b
+        if on_text is not None and getattr(b, "type", None) == "text":
+            for j in range(0, len(b.text), 4):
+                await on_text(i, b.text[j:j + 4])
+    return blocks
 
 
 @pytest.fixture(autouse=True)

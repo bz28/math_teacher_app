@@ -496,6 +496,20 @@ def _to_tool_params(schema: ToolSchema) -> tuple[list[ToolParam], ToolChoiceTool
 
 _F = TypeVar("_F", bound=Callable[..., Awaitable[Any]])
 
+# `(content_block_index, text_delta)` — see call_claude_conversation.
+TextDeltaCallback = Callable[[int, str], Awaitable[None]]
+
+
+async def _replay_text(on_text: TextDeltaCallback, blocks: Any) -> None:
+    """Feed a replayed conversation response to a streaming caller, one
+    delta per recorded text block, so the harness exercises the same
+    path a live streamed call does."""
+    if not isinstance(blocks, list):
+        return
+    for i, b in enumerate(blocks):
+        if isinstance(b, dict) and b.get("type") == "text":
+            await on_text(i, b.get("text") or "")
+
 
 def _get_cassette() -> Any | None:
     """Return the harness cassette when active, else None. The test
@@ -549,6 +563,9 @@ def _cassetted(default_model: str) -> Callable[[_F], _F]:
             cached = cassette.get(fn.__name__, key)
             # record always re-records (force-refresh); replay/auto reuse.
             if cassette.mode != "record" and cached is not MISS:
+                on_text = args_dict.get("on_text")
+                if on_text is not None:
+                    await _replay_text(on_text, cached)
                 return cached
             if cassette.mode == "replay":
                 raise CassetteMissError(
@@ -980,6 +997,32 @@ def _serialize_content_blocks(blocks: list[Any]) -> list[dict[str, Any]]:
     return out
 
 
+async def _stream_message(
+    client: Any, request: dict[str, Any], on_text: TextDeltaCallback,
+) -> Any:
+    """`messages.stream` the request, forwarding each text delta, and
+    return the final Message — the same one `create` returns."""
+    async with client.messages.stream(**request) as stream:
+        async for event in stream:
+            if (
+                event.type == "content_block_delta"
+                and event.delta.type == "text_delta"
+            ):
+                await on_text(event.index, event.delta.text)
+        return await stream.get_final_message()
+
+
+def _stream_failure_is_retryable(e: Exception) -> bool:
+    """Whether `create` could succeed where the stream failed. A request
+    the API refused as invalid (a 4xx other than 429) fails the same way
+    again; anything else — an error event mid-stream (which arrives on
+    the 200), overload, 5xx, a broken connection — is what the SDK's
+    own retries exist for."""
+    if isinstance(e, anthropic.APIStatusError):
+        return not (400 <= e.status_code < 500 and e.status_code != 429)
+    return True
+
+
 @_cassetted(default_model=MODEL_REASON)
 async def call_claude_conversation(
     system_prompt: str,
@@ -994,6 +1037,7 @@ async def call_claude_conversation(
     temperature: float | None = None,
     submission_id: str | None = None,
     call_metadata: dict[str, Any] | None = None,
+    on_text: TextDeltaCallback | None = None,
 ) -> list[dict[str, Any]]:
     """Run one conversational turn with multiple tools available and
     `tool_choice="auto"` — the model picks between replying in text,
@@ -1025,6 +1069,13 @@ async def call_claude_conversation(
     particular tool. Callers handle tool_use blocks themselves and
     loop back with tool_result messages as needed.
 
+    `on_text`, when given, streams the response: it's awaited with
+    `(content_block_index, text)` for every text delta as the model
+    writes it, so the caller can show words before the call finishes.
+    The return value, logging and cost row are the same either way —
+    `get_final_message()` hands back the same Message `create` would.
+    On a cassette replay it's called once per recorded text block.
+
     Single attempt. Used by the integrity conversational agent; the
     caller handles retries when tool input validation fails.
     """
@@ -1050,18 +1101,38 @@ async def call_claude_conversation(
         {} if temperature is None else {"temperature": temperature}
     )
 
+    request: dict[str, Any] = {
+        "model": use_model,
+        "max_tokens": max_tokens,
+        "system": _system_with_cache(_with_safety(system_prompt)),
+        "messages": _with_transcript_cache(messages),
+        "tools": tools,
+        "tool_choice": {"type": "auto"},
+        "timeout": 90.0,
+        **temp_kwargs,
+    }
     start = time.monotonic()
     try:
-        response = await client.messages.create(  # type: ignore[call-overload]
-            model=use_model,
-            max_tokens=max_tokens,
-            system=_system_with_cache(_with_safety(system_prompt)),
-            messages=_with_transcript_cache(messages),
-            tools=tools,
-            tool_choice={"type": "auto"},
-            timeout=90.0,
-            **temp_kwargs,
-        )
+        if on_text is None:
+            response = await client.messages.create(**request)
+        else:
+            try:
+                response = await _stream_message(client, request, on_text)
+            except Exception as e:
+                if not _stream_failure_is_retryable(e):
+                    raise
+                # The SDK retries a failed `create` (overloaded, 5xx, a
+                # dropped connection) but not a stream that fails after its
+                # first byte — an overloaded error mid-stream, a transport
+                # drop. Make the same call the unstreamed path makes, with
+                # those retries, so streaming never fails a call `create`
+                # would have survived. The caller's final result replaces
+                # whatever partial text already streamed.
+                logger.warning(
+                    "streamed %s call failed (%s); retrying unstreamed",
+                    mode, type(e).__name__,
+                )
+                response = await client.messages.create(**request)
         latency_ms = round((time.monotonic() - start) * 1000, 2)
 
         # Build a compact text summary of the final assistant output

@@ -84,6 +84,9 @@ _IDENTITY_EXCLUDE = {
     # Operational, not response-determining: changing a call's timeout must
     # not invalidate its recordings.
     "timeout",
+    # How the caller receives the reply (streamed text callback), not what
+    # the reply is — and a fresh closure per call would never hash stably.
+    "on_text",
 }
 
 

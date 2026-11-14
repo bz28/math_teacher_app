@@ -33,6 +33,7 @@ from api.core.llm_client import (
     MODEL_OPUS,
     MODEL_REASON,
     LLMMode,
+    TextDeltaCallback,
     call_claude_conversation,
     call_claude_json,
     call_claude_vision,
@@ -1016,6 +1017,7 @@ async def run_agent_turn(
     user_id: str | None = None,
     submission_id: str | None = None,
     call_metadata: dict[str, Any] | None = None,
+    on_text: TextDeltaCallback | None = None,
 ) -> list[Any]:
     """One Claude round trip for the conversational integrity agent.
 
@@ -1036,6 +1038,9 @@ async def run_agent_turn(
     log so the admin dashboard can correlate the agent's calls with
     the rest of the submission's pipeline (Vision, equivalence,
     grading) and surface posture/turn context as debug chips.
+
+    `on_text` streams the response's text deltas as they're written
+    (see `call_claude_conversation`); the return value is unchanged.
     """
     blocks = await call_claude_conversation(
         system_prompt,
@@ -1048,6 +1053,7 @@ async def run_agent_turn(
         temperature=0.0,
         submission_id=submission_id,
         call_metadata=call_metadata,
+        on_text=on_text,
     )
     return [_AgentContentBlock(b) for b in blocks]
 
