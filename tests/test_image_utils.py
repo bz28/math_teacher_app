@@ -726,8 +726,8 @@ def _is(rgb: tuple[int, ...], want: tuple[int, int, int]) -> bool:
 
 def _letter_at_reader_edge(size: tuple[int, int]) -> bool:
     """A whole 612 × 792 pt Letter page rendered at the reader's long edge
-    (pdfium truncates scale × points, so a side can land a pixel short)."""
-    return abs(size[0] - 612 * READER_MAX_EDGE / 792) <= 1 and size[1] == READER_MAX_EDGE
+    (pdfium truncates scale × points, so a side can land a pixel or two short)."""
+    return abs(size[0] - 612 * READER_MAX_EDGE / 792) <= 2 and abs(size[1] - READER_MAX_EDGE) <= 2
 
 
 class TestPdfPagesAsImages:
@@ -749,7 +749,7 @@ class TestPdfPagesAsImages:
             printed_pdf(None, at=(42, 210, 582, 750), fill=(120, 120, 120), texts=_CHROME)
         )
         img = _image(page)
-        assert max(img.size) == READER_MAX_EDGE
+        assert abs(max(img.size) - READER_MAX_EDGE) <= 2  # pdfium truncates scale × points
         assert abs(img.width / img.height - 1) < 0.05  # the 540 × 540 pt shape, not the page
         assert _is(img.getpixel((img.width // 2, img.height // 2)), (120, 120, 120))
 
@@ -758,7 +758,7 @@ class TestPdfPagesAsImages:
         texts = (("Jane Doe - Period 3", 72, 750), ("1. x = 3", 72, 400), ("page 2", 300, 36))
         [page] = pdf_pages_as_images(printed_pdf(None, texts=texts))
         img = _image(page)
-        assert max(img.size) == READER_MAX_EDGE
+        assert abs(max(img.size) - READER_MAX_EDGE) <= 2  # pdfium truncates scale × points
         dark = [y for y in range(img.height) if min(img.crop((0, y, img.width, y + 1)).getextrema()[0]) < 100]
         # The header and the footer line are both on the render.
         assert dark[0] < img.height * 0.1 and dark[-1] > img.height * 0.9

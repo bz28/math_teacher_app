@@ -166,7 +166,7 @@ def test_a_pdf_renders_one_image_per_page() -> None:
     pages = pdf_pages_as_images(_pdf(3))
     assert len(pages) == 3
     img = Image.open(io.BytesIO(base64.b64decode(pages[0])))
-    assert img.format == "JPEG" and max(img.size) == READER_MAX_EDGE
+    assert img.format == "JPEG" and abs(max(img.size) - READER_MAX_EDGE) <= 2  # pdfium truncates
 
 
 def test_an_unreadable_pdf_has_no_pages() -> None:
