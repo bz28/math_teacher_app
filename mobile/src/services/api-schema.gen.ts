@@ -6411,18 +6411,21 @@ export interface components {
         };
         /**
          * SubmissionFileOut
-         * @description One file the student turned in. `data` is raw base64 (no `data:`
-         *     prefix); `media_type` is image/jpeg, image/png, or application/pdf.
+         * @description One file the student turned in, as `photo_store.page_out` serves
+         *     it: a URL to load it from — never the bytes. `media_type` is
+         *     image/jpeg, image/png, or application/pdf.
          */
         SubmissionFileOut: {
-            /** Data */
-            data: string;
+            /** Expires In */
+            expires_in?: number | null;
             /** Filename */
             filename?: string | null;
+            /** Id */
+            id?: string | null;
             /** Media Type */
             media_type: string;
-        } & {
-            [key: string]: unknown;
+            /** Url */
+            url: string;
         };
         /** SubmitHomeworkRequest */
         SubmitHomeworkRequest: {
@@ -6486,9 +6489,7 @@ export interface components {
         /** TeacherAttemptFiles */
         TeacherAttemptFiles: {
             /** Files */
-            files: {
-                [key: string]: string;
-            }[];
+            files: components["schemas"]["SubmissionFileOut"][];
         };
         /**
          * TeacherGraphCheck
@@ -6698,9 +6699,7 @@ export interface components {
             /** Extraction Flagged At */
             extraction_flagged_at?: string | null;
             /** Files */
-            files: {
-                [key: string]: string;
-            }[] | null;
+            files: components["schemas"]["SubmissionFileOut"][] | null;
             /** Final Score */
             final_score: number | null;
             /** Grade Dirty */

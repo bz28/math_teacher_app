@@ -222,8 +222,8 @@ describe("ExtractionConfirmScreen", () => {
     mockedApi.getSubmission.mockResolvedValue({
       ...SUBMISSION,
       files: [
-        { data: "QQ==", media_type: "image/jpeg" },
-        { data: "QQ==", media_type: "application/pdf", filename: "work.pdf" },
+        { url: "https://bucket.test/p1.jpg", media_type: "image/jpeg" },
+        { url: "https://bucket.test/p2.pdf", media_type: "application/pdf", filename: "work.pdf" },
       ],
     } as never);
     render(<ExtractionConfirmScreen assignmentId="a" onDone={jest.fn()} onIntegrityCheck={jest.fn()} />);

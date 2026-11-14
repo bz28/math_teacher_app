@@ -10,6 +10,7 @@
 // contract types below are the first batch, the rest stay hand-written
 // for follow-up batches.
 import type { components } from "./api-schema.gen";
+import { stablePhotoUrls } from "./submission-photos.ts";
 
 type Schemas = components["schemas"];
 
@@ -2177,13 +2178,15 @@ export const teacher = {
   },
   // ── Submissions ──
   submissionDetail(submissionId: string) {
-    return apiFetch<TeacherSubmissionDetail>(`/teacher/submissions/${submissionId}`);
+    return apiFetch<TeacherSubmissionDetail>(`/teacher/submissions/${submissionId}`).then(
+      (d) => ({ ...d, files: stablePhotoUrls(d.files) }),
+    );
   },
   /** The photos of an earlier turn-in, for "View original photos". */
   attemptFiles(submissionId: string, attemptNumber: number) {
     return apiFetch<{ files: SubmissionFile[] }>(
       `/teacher/submissions/${submissionId}/attempts/${attemptNumber}/files`,
-    );
+    ).then((r) => ({ files: stablePhotoUrls(r.files) }));
   },
   integrityDetail(submissionId: string) {
     return apiFetch<TeacherIntegrityDetail>(`/teacher/integrity/submissions/${submissionId}`);
@@ -2854,11 +2857,13 @@ export interface StudentHomeworkDetail {
   next_step: StudentNextStep | null;
 }
 
-/** Backend `SubmissionFileOut` (api/schemas/extraction.py). `data` is
- *  base64 (no `data:` prefix); `media_type` is image/jpeg|png or
- *  application/pdf; `filename` is never set by the backend today and is
- *  read defensively (falls back to "Page N") on the confirm/submitted
- *  screens. Aliased onto the generated schema so it can't drift. */
+/** Backend `SubmissionFileOut` (api/schemas/extraction.py). `url` is a
+ *  short-lived presigned link to the photo (never the bytes) — see
+ *  lib/submission-photos.ts for why responses pass through
+ *  `stablePhotoUrls`; `media_type` is image/jpeg|png or application/pdf;
+ *  `filename` is never set by the backend today and is read defensively
+ *  (falls back to "Page N") on the confirm/submitted screens. Aliased
+ *  onto the generated schema so it can't drift. */
 export type SubmissionFile = Schemas["SubmissionFileOut"];
 
 export interface StudentSubmission {
@@ -3108,7 +3113,9 @@ export const schoolStudent = {
     });
   },
   getMySubmission(assignmentId: string) {
-    return apiFetch<StudentSubmission>(`/school/student/homework/${assignmentId}/submission`);
+    return apiFetch<StudentSubmission>(
+      `/school/student/homework/${assignmentId}/submission`,
+    ).then((s) => ({ ...s, files: stablePhotoUrls(s.files) }));
   },
   // ── Integrity check ──
   // The conversational understanding-check. A single /turn endpoint
