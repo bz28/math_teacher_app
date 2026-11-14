@@ -69,6 +69,11 @@ def test_a_longer_command_is_refused_not_read_as_a_symbol(label: str) -> None:
 @pytest.mark.parametrize(("label", "shown"), [
     ("$a_1$", "a₁"), ("$a_{1}$", "a₁"), ("$x^2$", "x²"), ("$x^{2}$", "x²"), ("$x_{12}$", "x₁₂"),
     ("$(x^2 + 3)$", "(x² + 3)"),
+    # Without braces a script takes one digit, as TeX does.
+    ("$a_12$", "a₁2"), ("$x^23$", "x²3"),
+    # A command's trailing space ends it.
+    ("$(2\\cdot x + 10)°$", "(2·x + 10)°"), ("$3 \\times 4$", "3×4"), ("$2\\pi r$", "2πr"),
+    ("$\\angle ABC \\cong \\angle DEF$", "∠ABC≅∠DEF"),
 ])
 def test_a_digit_script_is_its_character(label: str, shown: str) -> None:
     """One rule for "_" and "^": a digit becomes its sub/superscript."""
@@ -101,14 +106,25 @@ def test_a_subscripted_name_the_problem_gives_passes_the_label_check(label: str,
     assert _check_figure(other, problem, facts=SEQ_FACTS)[2]  # a name the problem doesn't give
 
 
-def test_a_superscript_label_is_the_problems_expression() -> None:
-    """"(x^2 + 10)°" is drawn as "(x² + 10)°" and is still the problem's
-    own expression for ∠B."""
-    from api.core.geometry.figure_check import _same_algebra
+def test_a_label_a12_is_not_the_problems_a_sub_12() -> None:
+    """"$a_12$" is a₁ then 2, as TeX shows it, so it isn't the name
+    "$a_{12}$" the problem gives; "$a_{12}$" is."""
+    problem = SEQ.replace("a_1", "a_{12}")
+    assert _check_figure({**SEQ_FIG, "side_labels": {"BC": "$a_{12}$"}}, problem, facts=SEQ_FACTS)[2] == []
+    assert _check_figure({**SEQ_FIG, "side_labels": {"BC": "$a_12$"}}, problem, facts=SEQ_FACTS)[2]
 
-    assert _same_algebra(plain_label("$(x^2 + 10)°$"), "(x^2 + 10)^\\circ")
-    assert _same_algebra(plain_label("$(x^{2} + 10)°$"), "(x^{2}+10)°")
-    assert not _same_algebra(plain_label("$(x^3 + 10)°$"), "(x^2 + 10)°")
+
+def test_a_squared_label_is_drawn_plain_but_the_checker_refuses_it() -> None:
+    """End to end: "$(x^2 + 10)°$" is shown as "(x² + 10)°", but the
+    checker knows only linear expressions, so a checked figure with it is
+    refused, never drawn. (√ and π labels likewise only reach figures that
+    are rendered, not checked.)"""
+    assert plain_label("$(x^2 + 10)°$") == "(x² + 10)°"
+    problem = r"In $\triangle ABC$, $m\angle B = (x^2 + 10)°$. Find $x$."
+    facts = FigureFacts(points=list("ABC"), triangles=["ABC"])
+    spec = {**SEQ_FIG, "angle_labels": {"ABC": "$(x^2 + 10)°$"}}
+    _spec, svg, issues = _check_figure(spec, problem, facts=facts)
+    assert svg is None and any("(x² + 10)°" in i for i in issues)
 
 
 AREA = r"In $\triangle ABC$, $AB = 5$, $AC = 5$, and $BC = 6$. Find the area of $\triangle ABC$."
@@ -133,3 +149,21 @@ def test_a_step_figure_is_refused_when_the_questions_figure_cant_be_read() -> No
     assert _check_figure(MOVED, AREA, step_text=STEP, base=BASE, facts=AREA_FACTS)[2]  # caught with a good base
     spec, svg, issues = _check_figure(MOVED, AREA, step_text=STEP, base=unreadable, facts=AREA_FACTS)
     assert (spec, svg, issues) == (None, None, [_BASE_UNREADABLE])
+
+
+@pytest.mark.asyncio
+async def test_an_unreadable_question_figure_gets_no_redraw() -> None:
+    """A redraw can't fix the question's figure, so a step figure checked
+    against an unreadable one is refused without an AI redraw."""
+    from unittest.mock import AsyncMock, patch
+
+    import api.core.question_bank_generation as qbg
+
+    unreadable = {**BASE, "side_labels": {"AB": "$5\\text{ cm}$"}}
+    redraw = AsyncMock(return_value=MOVED)
+    with patch.object(qbg, "redraw_figure", redraw):
+        spec, svg, issues, _ = await qbg._resolve_figure_with_retry(
+            MOVED, AREA, mode="m", user_id=None, step_text=STEP, base=unreadable, facts=AREA_FACTS,
+        )
+    assert (spec, svg, issues) == (None, None, [_BASE_UNREADABLE])
+    redraw.assert_not_awaited()

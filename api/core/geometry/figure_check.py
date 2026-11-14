@@ -39,7 +39,7 @@ from collections.abc import Collection, Iterable
 from dataclasses import dataclass, field
 from typing import Any, cast
 
-from api.core.geometry.dsl import ConstructionFigure, is_hidden, split_points, tex_scripts, used_points
+from api.core.geometry.dsl import ConstructionFigure, digit_scripts, is_hidden, split_points, used_points
 
 Point = tuple[float, float]
 
@@ -2334,11 +2334,11 @@ class _Label:
 
 _LABEL_ANGLE = rf"∠\s*(?:{_PT}){{1,3}}|∠\s*\d+"
 _LABEL_SEG = rf"(?:{_PT}){{2}}"
-_LABEL_VAR = r"[a-z](?:_\{?\d+\}?)?"
+_LABEL_VAR = r"[a-z](?:_\{?\d+\}?|[₀-₉]+)?"
 
 
 def _parse_label(text: str, numbered: Collection[str] = ()) -> _Label:
-    t = tex_scripts(_clean(text)).replace("$", " ")
+    t = _clean(text).replace("$", " ")
     t = re.sub(r"\\angle\s*", "∠", t)
     t = re.sub(r"\\overline\s*\{([^{}]*)\}", r"\1", t)
     t = re.sub(r"[{}]", "", t).strip().rstrip(".").strip()
@@ -2365,7 +2365,7 @@ def _parse_label(text: str, numbered: Collection[str] = ()) -> _Label:
 def _same_algebra(a: str, b: str) -> bool:
     """Two spellings of one expression: "(2x + 5)°" and "2x+5"."""
     def norm(e: str) -> str:
-        e = re.sub(r"\^\s*\\circ|\\circ|[°()\s*{}$]", "", tex_scripts(_clean(e))).replace("−", "-")
+        e = re.sub(r"\^\s*\\circ|\\circ|[°()\s*{}$]", "", _clean(e)).replace("−", "-")
         return e.lower()
 
     la, lb = linear_expr(a), linear_expr(b)
@@ -2489,6 +2489,8 @@ def _label_issues(
         return [e for part, e in parts.expressions if match(part)]
 
     variables = {lin[2] for _p, e in parts.expressions if (lin := linear_expr(e))}
+    shown_variables = {digit_scripts(v) for v in variables}
+    shown_math = digit_scripts(in_math)
 
     def letter_ok(name: str, own: list[str]) -> bool:
         """A letter is this part's own algebra ("x" where m∠A = x°), or a
@@ -2497,9 +2499,11 @@ def _label_issues(
         another part."""
         if any(_same_algebra(name, e) for e in own):
             return True
-        written = re.escape(name[0]) + (rf"_\{{?{re.escape(name[2:].strip('{}'))}\}}?" if len(name) > 1 else "")
-        return bool(re.fullmatch(_LABEL_VAR, name)) and name not in variables and re.search(
-            rf"(?<![A-Za-z\\]){written}(?![A-Za-z0-9])", in_math,
+        # A label shows "a₁" for the problem's "a_1" or "a_{1}": both sides
+        # are compared with their digit scripts as characters, as drawn.
+        shown = digit_scripts(name)
+        return bool(re.fullmatch(_LABEL_VAR, name)) and shown not in shown_variables and re.search(
+            rf"(?<![A-Za-z\\]){re.escape(shown)}(?![A-Za-z0-9₀-₉])", shown_math,
         ) is not None
 
     named_angles = _problem_angles(parts)

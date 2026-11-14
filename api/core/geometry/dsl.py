@@ -491,18 +491,21 @@ _POINT_NAME = re.compile(r"_[a-z0-9]+|[A-Z][0-9]*'*")
 _END = r"(?![A-Za-z])"
 _LABEL_SYMBOLS = [
     (re.compile(rf"\^\s*\{{?\s*\\circ{_END}\s*\}}?|\\circ{_END}|\\degree{_END}"), "°"),
-    (re.compile(rf"\\cdot{_END}"), "·"), (re.compile(rf"\\times{_END}"), "×"), (re.compile(rf"\\pi{_END}"), "π"),
+    # A command's trailing space only ends it: "2\pi r" is "2πr". The
+    # operators are drawn tight on both sides: "2\cdot x" is "2·x".
+    (re.compile(rf"\s*\\cdot{_END}\s*"), "·"), (re.compile(rf"\s*\\times{_END}\s*"), "×"),
+    (re.compile(rf"\s*\\cong{_END}\s*"), "≅"), (re.compile(rf"\\pi{_END}\s*"), "π"),
     (re.compile(rf"\\angle{_END}\s*"), "∠"), (re.compile(rf"\\triangle{_END}\s*"), "△"),
-    (re.compile(rf"\\cong{_END}"), "≅"),
     (re.compile(rf"\\sqrt{_END}\s*\{{([^{{}}]*)\}}"), r"√\1"), (re.compile(rf"\\(?:left|right){_END}"), ""),
     (re.compile(r"\\[,;! ]"), " "),
 ]
 # One rule for "_" and "^": digits become their subscript or superscript
 # characters ("a_1" and "a_{1}" are both "a₁", "x^2" and "x^{2}" both
-# "x²"); anything else after "_" or "^" is refused.
+# "x²"); anything else after "_" or "^" is refused. Without braces a
+# script takes one digit, as TeX does: "a_12" is "a₁2".
 SUBSCRIPTS = "₀₁₂₃₄₅₆₇₈₉"
 SUPERSCRIPTS = "⁰¹²³⁴⁵⁶⁷⁸⁹"
-_SCRIPT = re.compile(r"([_^])\s*(?:\{\s*(\d+)\s*\}|(\d+))")
+_SCRIPT = re.compile(r"([_^])\s*(?:\{\s*(\d+)\s*\}|(\d))")
 
 
 def _script(m: re.Match[str]) -> str:
@@ -510,14 +513,10 @@ def _script(m: re.Match[str]) -> str:
     return "".join(chars[int(c)] for c in m.group(2) or m.group(3))
 
 
-def tex_scripts(text: str) -> str:
-    """Undo `plain_label`'s scripts for comparing with the problem's TeX:
-    "a₁" is "a_1", "x²" is "x^2"."""
-    def back(m: re.Match[str]) -> str:
-        sub = m.group(0)[0] in SUBSCRIPTS
-        return ("_" if sub else "^") + "".join(str((SUBSCRIPTS if sub else SUPERSCRIPTS).index(c)) for c in m.group(0))
-
-    return re.sub(f"[{SUBSCRIPTS}]+|[{SUPERSCRIPTS}]+", back, text)
+def digit_scripts(text: str) -> str:
+    """`text` with its digit sub/superscripts as characters, as a label
+    shows them: "a_1", "a_{1}" are "a₁"; "a_12" is "a₁2", as TeX shows it."""
+    return _SCRIPT.sub(_script, text)
 
 
 def plain_label(text: str) -> str:
@@ -526,7 +525,7 @@ def plain_label(text: str) -> str:
     out = text.replace("$", "")
     for pattern, repl in _LABEL_SYMBOLS:
         out = pattern.sub(repl, out)
-    out = _SCRIPT.sub(_script, out)
+    out = digit_scripts(out)
     out = " ".join(out.split())
     if any(c in out for c in "\\{}_^"):
         raise ValueError(f"the label {text!r} is math markup that can't be shown as plain text")
