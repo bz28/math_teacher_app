@@ -69,6 +69,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import Integer, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import undefer
 
 from api.core.audit_log import log_student_record_access
 from api.core.extraction_edits import _final_key, _step_key
@@ -428,6 +429,7 @@ async def extraction_detail(
         .join(Course, Course.id == Assignment.course_id)
         .outerjoin(User, User.id == Submission.student_id)
         .where(Submission.id == submission_id)
+        .options(undefer(Submission.files))
     )).first()
     if row is None:
         raise HTTPException(status_code=404, detail="Submission not found")

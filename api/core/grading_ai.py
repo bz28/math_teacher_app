@@ -1432,8 +1432,14 @@ async def run_ai_grading_for_submission(
         and not stored_checks[pid].get("note")
         and stored_checks[pid].get("in_view") != "not_found"
     }
+    to_check = [p for p in problems if p["bank_item_id"] in parts.keys() - checks.keys()]
+    # The photos are read only when a drawing is to be checked — they are
+    # deferred on the model (several MB a submission).
+    files = (await db.execute(
+        select(Submission.files).where(Submission.id == submission_id)
+    )).scalar_one_or_none() if to_check else None
     drawing_checks = asyncio.ensure_future(check_graphs(
-        extraction, sub.files or [], [p for p in problems if p["bank_item_id"] in parts.keys() - checks.keys()],
+        extraction, files or [], to_check,
         user_id=user_id, submission_id=str(submission_id),
     ))
     try:

@@ -110,7 +110,9 @@ async def _attempts(sid: uuid.UUID) -> list[SubmissionAttempt]:
 
 async def _sub(sid: uuid.UUID) -> Submission:
     async with get_session_factory()() as s:
-        return (await s.execute(select(Submission).where(Submission.id == sid))).scalar_one()
+        return (await s.execute(
+            select(Submission).where(Submission.id == sid).options(undefer(Submission.files))
+        )).scalar_one()
 
 
 # ── A student who never turned it in ─────────────────────────────────
