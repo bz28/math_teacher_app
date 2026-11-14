@@ -2293,6 +2293,37 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/school/student/integrity/submissions/{submission_id}/turn/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Post Student Turn Stream
+         * @description /turn, streamed: the same turn, with the agent's words sent as
+         *     the model writes them instead of all at once when it's done.
+         *
+         *     Only text already certain to be shown is streamed (see
+         *     process_student_turn); the `done` event carries exactly what /turn
+         *     returns. A refused reply (closed check, short message, spent stuck
+         *     tap) gets the same plain HTTP error /turn gives, before any stream
+         *     starts.
+         *
+         *     The turn runs in its own task on its own session, so a student who
+         *     drops the connection mid-reply still has the turn saved — as with
+         *     /turn — instead of it being cancelled along with the stream.
+         */
+        post: operations["post_student_turn_stream_v1_school_student_integrity_submissions__submission_id__turn_stream_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/school/student/practice/activity": {
         parameters: {
             query?: never;
@@ -11008,6 +11039,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IntegrityStateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    post_student_turn_stream_v1_school_student_integrity_submissions__submission_id__turn_stream_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TurnRequest"];
+            };
+        };
+        responses: {
+            /** @description Server-sent events. `delta` {bubble, text}: agent text as it's written, appended to bubble `bubble` (one per agent message). Then exactly one of `done` (the IntegrityStateResponse /turn returns — the authoritative result, which replaces the streamed bubbles) or `error` {status, detail} (the status and detail /turn would have answered with). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
                 };
             };
             /** @description Validation Error */
