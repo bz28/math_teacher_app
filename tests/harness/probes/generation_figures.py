@@ -21,8 +21,9 @@ What it measures (the bars):
   - negatives: for each drawn figure a known-wrong version the checker must
     reject (a hand-written NEGATIVES entry for a question figure; a moved
     point for a step figure), so the eval measures the checker;
-  - missing figures (EXPECTED says "figure", none drawn) and unwanted ones
-    (BY_EYE "unwanted: …"), reported.
+  - missing figures (EXPECTED says "figure", none drawn; a target to bring
+    down) and unwanted ones (EXPECTED "none" but drawn, or BY_EYE
+    "unwanted: …"), reported.
 
 Record one set at a time, each under its spending cap, and render every
 figure to PNG:
@@ -77,7 +78,9 @@ BY_EYE: dict[str, tuple[str, str]] = {
 }
 
 # Per problem (by the fingerprint of its text), whether a figure should be
-# drawn by Ben's rubric ("When to draw"): "figure" or "none".
+# drawn by Ben's when-to-draw rule (2026-11-14, `WHEN_TO_DRAW` in
+# api/core/assignment_generation.py): "figure" (MUST or SHOULD), "optional"
+# (a formula-only shape problem) or "none" (NOT).
 EXPECTED: dict[str, str] = {
     "6612b38f698e": "figure", "50782dc510ea": "figure", "800d407c83ba": "figure", "4d47c9775d58": "figure",
     "9c5c37736c53": "figure", "c2f20351d916": "figure", "58d3315ceeab": "figure", "4f978a21eaa1": "figure",
@@ -254,7 +257,9 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
         "step_figures": len(steps_drawn),
         "step_figures_emitted": sum(1 for p in results for st in p["steps"] if st["spec"]),
         "wrong": [f"{k}: {v}" for k, v in said.items() if v.startswith("wrong")],
-        "unwanted": [f"{k}: {v}" for k, v in said.items() if v.startswith("unwanted")],
+        "unwanted": [f"{k}: {v}" for k, v in said.items() if v.startswith("unwanted")]
+        + [f"{p['key']}: drawn, but the rule says no figure" for p in results
+           if p["figure_svg"] and EXPECTED.get(fingerprint(p["text"])) == "none"],
         "not_looked_at": [k for k, v in said.items() if not v],
         "missing_reference": [p["key"] for p in results
                               if qbg._FIGURE_REFERENCE.search(p["text"]) and not p["figure_svg"]],

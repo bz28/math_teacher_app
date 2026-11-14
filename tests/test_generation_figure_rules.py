@@ -28,11 +28,17 @@ from api.core.llm_schemas import (
     DECOMPOSITION_SCHEMA,
 )
 
+# Ben's when-to-draw rule (2026-11-14), its five cases word for word.
 WHEN_TO_DRAW = (
-    "When to draw. Add a figure when seeing it helps a student understand or solve the problem: the "
-    "problem names points, lines or shapes; it refers to a figure; or it describes a layout a teacher "
-    "would sketch on the board (a ladder against a wall, a composite floor plan). Leave it out when "
-    "there's no shape to show, or when the picture would reveal what the student is asked to find or decide."
+    "- MUST have a figure: the problem refers to a figure, or its answer depends on how named parts are "
+    "arranged (proofs, angle pairs, transversals, circle chords and tangents, composite shapes).",
+    "- SHOULD have a figure: a real-world layout a textbook would picture (a ladder against a wall, a ramp, "
+    "a floor plan). Write it as plain geometry with named points (see below), not as a story.",
+    "- OPTIONAL: a shape problem answered by a formula alone (a polygon's angle sum).",
+    "- NO figure: when the task is for the student to draw, construct or sketch it; when there is no shape; "
+    "when an exact drawing would reveal what is asked (acute or obtuse, \"are the lines parallel?\"); graphs "
+    "and 3D solids (the tool can't draw them).",
+    "- Every problem with a figure names its points, and names each line by two of its points.",
 )
 NAME_THE_POINTS = (
     "When a problem gets a figure, its text names every point the figure shows, so the figure can be "
@@ -58,9 +64,11 @@ READING = FigureFacts(
 # ── The prompts ────────────────────────────────────────────────────────
 
 
-def test_the_question_prompt_has_bens_paragraph_and_the_naming_sentence() -> None:
+def test_the_question_prompt_has_bens_rule_and_the_naming_sentence() -> None:
     prompt = assignment_generation._build_question_generation_prompt("math")
-    assert WHEN_TO_DRAW in prompt
+    for case in WHEN_TO_DRAW:
+        assert case in prompt, case
+    assert "When to draw. Add a figure when" not in prompt  # the first paragraph, replaced
     assert NAME_THE_POINTS in prompt
     assert '"shape": "construction"' in prompt
 

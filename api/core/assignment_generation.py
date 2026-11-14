@@ -103,15 +103,28 @@ FIGURE_PROBLEM_WORDING = (
     'a diagonal"): "$ABCD$ is a rectangle." "$\\triangle CDE$ has a right angle at $D$."\n'
 )
 
+# When a problem gets a figure (Ben, 2026-11-14; replaces the first
+# "When to draw" paragraph). TODO(text auditor): a separate PR may let a
+# real-world layout keep its story words once code can account for them;
+# until then the SHOULD case is written as plain geometry with named points.
+WHEN_TO_DRAW = (
+    "When to draw.\n"
+    "- MUST have a figure: the problem refers to a figure, or its answer depends on how named parts "
+    "are arranged (proofs, angle pairs, transversals, circle chords and tangents, composite shapes).\n"
+    "- SHOULD have a figure: a real-world layout a textbook would picture (a ladder against a wall, a "
+    "ramp, a floor plan). Write it as plain geometry with named points (see below), not as a story.\n"
+    "- OPTIONAL: a shape problem answered by a formula alone (a polygon's angle sum).\n"
+    "- NO figure: when the task is for the student to draw, construct or sketch it; when there is no "
+    "shape; when an exact drawing would reveal what is asked (acute or obtuse, \"are the lines "
+    "parallel?\"); graphs and 3D solids (the tool can't draw them).\n"
+    "- Every problem with a figure names its points, and names each line by two of its points.\n"
+)
+
 _CONSTRUCTION_FIGURES_SECTION = (
     '# Figures (diagrams)\n'
     '\n'
-    'When to draw. Add a figure when seeing it helps a student understand or solve the problem: the '
-    'problem names points, lines or shapes; it refers to a figure; or it describes a layout a '
-    'teacher would sketch on the board (a ladder against a wall, a composite floor plan). Leave it '
-    "out when there's no shape to show, or when the picture would reveal what the student is asked "
-    'to find or decide.\n'
-    '\n'
+    + WHEN_TO_DRAW
+    + '\n'
     'When a problem gets a figure, its text names every point the figure shows, so the figure can '
     "be checked; a figure whose points the problem doesn't name is not shown.\n"
     '\n'
