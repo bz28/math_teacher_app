@@ -66,14 +66,33 @@ def test_a_longer_command_is_refused_not_read_as_a_symbol(label: str) -> None:
         plain_label(label)
 
 
+# Review round 3 of the label fix (#989): one spacing rule after every
+# conversion, not a rule per symbol.
+@pytest.mark.parametrize(("label", "shown"), [
+    ("$2\\cdot x$", "2·x"), ("$2 \\cdot x$", "2·x"), ("$(2\\cdot x + 10)°$", "(2·x + 10)°"),
+    ("$2\\pi r$", "2πr"), ("$2 \\pi r$", "2πr"), ("$2\\pi + 1$", "2π + 1"), ("$\\pi = 3.14$", "π = 3.14"),
+    ("$3 + 4$", "3 + 4"), ("$3+ 4$", "3 + 4"), ("$(3x+14)°$", "(3x+14)°"), ("$(3x + 14) °$", "(3x + 14)°"),
+    ("$a_1 + a_2$", "a₁ + a₂"), ("$a_1 +a_2$", "a₁ + a₂"), ("$x = -5$", "x = -5"), ("$3 \\times 4$", "3×4"),
+    ("$\\angle ABC \\cong \\angle DEF$", "∠ABC ≅ ∠DEF"), ("$m\\angle C = 50^{\\circ}$", "m∠C = 50°"),
+])
+def test_one_spacing_rule_for_every_label(label: str, shown: str) -> None:
+    assert plain_label(label) == shown
+
+
+def test_a_square_root_keeps_its_reach() -> None:
+    """Review round 3 (#989): "\\sqrt{x+1}" and "\\sqrt{x}+1" differ, so
+    they are drawn differently."""
+    assert plain_label("$\\sqrt{x+1}$") == "√(x+1)"
+    assert plain_label("$\\sqrt{x}+1$") == "√x+1"
+    assert plain_label("$3\\sqrt{2}$") == "3√2"
+    assert plain_label("$\\sqrt{34}$") == "√34"
+
+
 @pytest.mark.parametrize(("label", "shown"), [
     ("$a_1$", "a₁"), ("$a_{1}$", "a₁"), ("$x^2$", "x²"), ("$x^{2}$", "x²"), ("$x_{12}$", "x₁₂"),
     ("$(x^2 + 3)$", "(x² + 3)"),
     # Without braces a script takes one digit, as TeX does.
     ("$a_12$", "a₁2"), ("$x^23$", "x²3"),
-    # A command's trailing space ends it.
-    ("$(2\\cdot x + 10)°$", "(2·x + 10)°"), ("$3 \\times 4$", "3×4"), ("$2\\pi r$", "2πr"),
-    ("$\\angle ABC \\cong \\angle DEF$", "∠ABC≅∠DEF"),
 ])
 def test_a_digit_script_is_its_character(label: str, shown: str) -> None:
     """One rule for "_" and "^": a digit becomes its sub/superscript."""
@@ -164,6 +183,26 @@ async def test_an_unreadable_question_figure_gets_no_redraw() -> None:
     with patch.object(qbg, "redraw_figure", redraw):
         spec, svg, issues, _ = await qbg._resolve_figure_with_retry(
             MOVED, AREA, mode="m", user_id=None, step_text=STEP, base=unreadable, facts=AREA_FACTS,
+        )
+    assert (spec, svg, issues) == (None, None, [_BASE_UNREADABLE])
+    redraw.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_a_step_with_the_question_figures_bad_label_gets_no_redraw() -> None:
+    """Review round 3 (#989): the question's figure is read first, so a
+    step figure that copies its unreadable label is refused for that
+    reason, not as malformed, and gets no redraw."""
+    from unittest.mock import AsyncMock, patch
+
+    import api.core.question_bank_generation as qbg
+
+    bad = {"AB": "$5\\text{ cm}$"}
+    redraw = AsyncMock(return_value=MOVED)
+    with patch.object(qbg, "redraw_figure", redraw):
+        spec, svg, issues, _ = await qbg._resolve_figure_with_retry(
+            {**MOVED, "side_labels": bad}, AREA, mode="m", user_id=None, step_text=STEP,
+            base={**BASE, "side_labels": bad}, facts=AREA_FACTS,
         )
     assert (spec, svg, issues) == (None, None, [_BASE_UNREADABLE])
     redraw.assert_not_awaited()

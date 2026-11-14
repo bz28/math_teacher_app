@@ -487,18 +487,26 @@ _POINT_NAME = re.compile(r"_[a-z0-9]+|[A-Z][0-9]*'*")
 # "$x^\\circ$") would be printed as it is. The few symbols labels use are
 # turned into their characters; anything else in markup is refused. Each
 # command ends at a non-letter, so "\cdots" or "\triangleq" is refused,
-# not read as "\cdot" + "s".
+# not read as "\cdot" + "s". Spacing is not set here: `_label_spacing`
+# sets it once, for every symbol alike.
 _END = r"(?![A-Za-z])"
 _LABEL_SYMBOLS = [
     (re.compile(rf"\^\s*\{{?\s*\\circ{_END}\s*\}}?|\\circ{_END}|\\degree{_END}"), "°"),
-    # A command's trailing space only ends it: "2\pi r" is "2πr". The
-    # operators are drawn tight on both sides: "2\cdot x" is "2·x".
-    (re.compile(rf"\s*\\cdot{_END}\s*"), "·"), (re.compile(rf"\s*\\times{_END}\s*"), "×"),
-    (re.compile(rf"\s*\\cong{_END}\s*"), "≅"), (re.compile(rf"\\pi{_END}\s*"), "π"),
-    (re.compile(rf"\\angle{_END}\s*"), "∠"), (re.compile(rf"\\triangle{_END}\s*"), "△"),
-    (re.compile(rf"\\sqrt{_END}\s*\{{([^{{}}]*)\}}"), r"√\1"), (re.compile(rf"\\(?:left|right){_END}"), ""),
-    (re.compile(r"\\[,;! ]"), " "),
+    (re.compile(rf"\\cdot{_END}"), "·"), (re.compile(rf"\\times{_END}"), "×"),
+    (re.compile(rf"\\cong{_END}"), "≅"), (re.compile(rf"\\pi{_END}"), "π"),
+    (re.compile(rf"\\angle{_END}"), "∠"), (re.compile(rf"\\triangle{_END}"), "△"),
+    (re.compile(rf"\\(?:left|right){_END}"), ""), (re.compile(r"\\[,;! ]"), " "),
 ]
+# √ keeps its reach: a single number or letter is "√2", "√34", "√x";
+# anything longer is grouped, "√(x+1)", so it never reads as "√x+1".
+_SQRT = re.compile(rf"\\sqrt{_END}\s*\{{\s*([^{{}}]*?)\s*\}}")
+
+
+def _sqrt(m: re.Match[str]) -> str:
+    arg = m.group(1)
+    return "√" + (arg if re.fullmatch(r"\d+(?:\.\d+)?|[A-Za-z]", arg) else f"({arg})")
+
+
 # One rule for "_" and "^": digits become their subscript or superscript
 # characters ("a_1" and "a_{1}" are both "a₁", "x^2" and "x^{2}" both
 # "x²"); anything else after "_" or "^" is refused. Without braces a
@@ -519,14 +527,35 @@ def digit_scripts(text: str) -> str:
     return _SCRIPT.sub(_script, text)
 
 
+# One spacing rule for every label, after all conversions: these symbols
+# sit tight against what they join ("2·x", "2πr", "(3x+14)°", "∠ABC",
+# "a₁"); + − = < > get one space on each side when the label spaces them
+# at all ("3 + 4", "a₁ + a₂"), and none when it doesn't ("3x+14"); a sign
+# ("-5", "= -5") is left alone; runs of spaces become one.
+_TIGHT = "·×√π°∠△" + SUBSCRIPTS + SUPERSCRIPTS
+_TIGHT_NEIGHBOUR = rf"[\w()\[\].{_TIGHT}]"
+_OPERATORS = "+−=<>-"  # "-" last: literal in a character class
+_OPERAND_END = rf"[\w)\]{_TIGHT}]"
+
+
+def _label_spacing(text: str) -> str:
+    out = " ".join(text.split())
+    out = re.sub(rf"(?<=[{_TIGHT}]) (?={_TIGHT_NEIGHBOUR})|(?<={_TIGHT_NEIGHBOUR}) (?=[{_TIGHT}])", "", out)
+    return re.sub(
+        rf"(?<={_OPERAND_END})( ?)([{_OPERATORS}])( ?)(?=\S)",
+        lambda m: f" {m.group(2)} " if m.group(1) or m.group(3) else m.group(2),
+        out,
+    )
+
+
 def plain_label(text: str) -> str:
     """`text` as the drawing shows it: no "$", TeX symbols as characters.
     Raises ValueError for markup that can't be shown as plain text."""
     out = text.replace("$", "")
     for pattern, repl in _LABEL_SYMBOLS:
         out = pattern.sub(repl, out)
-    out = digit_scripts(out)
-    out = " ".join(out.split())
+    out = _SQRT.sub(_sqrt, digit_scripts(out))
+    out = _label_spacing(out)
     if any(c in out for c in "\\{}_^"):
         raise ValueError(f"the label {text!r} is math markup that can't be shown as plain text")
     return out

@@ -254,6 +254,16 @@ def _check_figure(
         facts = as_facts(facts)
         if facts is None:
             return None, None, [_NOT_READ]
+        # The question's figure first: a step figure is checked against it,
+        # so when it can't be read (a stored figure whose labels a later rule
+        # refuses, say) the step's is refused, whatever it looks like, and
+        # no redraw can help. Fail closed.
+        base_fig = None
+        if _is_construction(base):
+            try:
+                base_fig = ConstructionFigure.model_validate(base)
+            except ValidationError:
+                return None, None, [_BASE_UNREADABLE]
         raw_spec = with_arc_sides(_without_empty_mark_groups(raw_spec), f"{text}\n{request}\n{step_text or ''}")
         try:
             fig = ConstructionFigure.model_validate(raw_spec)
@@ -271,15 +281,6 @@ def _check_figure(
         except Exception:
             logger.exception("unexpected error rendering construction figure; spec=%r", raw_spec)
             return None, None, ["the figure couldn't be drawn"]
-        base_fig = None
-        if _is_construction(base):
-            try:
-                base_fig = ConstructionFigure.model_validate(base)
-            except ValidationError:
-                # Fail closed: without the question's figure the step's
-                # can't be checked against it (a stored figure whose labels
-                # a later rule refuses, say), so the step's is refused.
-                return None, None, [_BASE_UNREADABLE]
         try:
             issues = [
                 i.message for i in check_construction(
