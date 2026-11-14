@@ -38,6 +38,19 @@ class Settings(BaseSettings):
     # Empty disables service-key auth (admin JWT still works); rotate to revoke.
     improver_api_key: str = ""
 
+    # Student homework photos (api/core/photo_store.py) — an S3-compatible
+    # bucket (Railway Storage Bucket in production; private, presigned
+    # reads). Unset PHOTO_BUCKET in development/test stores pages on local
+    # disk under `photo_local_dir` instead, served by a signed dev route at
+    # `photo_local_base_url`. Production refuses uploads without a bucket.
+    photo_bucket: str = ""
+    photo_bucket_endpoint: str = ""
+    photo_bucket_region: str = "auto"
+    photo_bucket_access_key_id: str = ""
+    photo_bucket_secret_access_key: str = ""
+    photo_local_dir: str = ""
+    photo_local_base_url: str = "http://localhost:8000"
+
     # Sentry
     sentry_dsn: str = ""
 
