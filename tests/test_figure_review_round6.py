@@ -355,11 +355,27 @@ def test_a_method_accounts_only_for_its_own_name(text: str) -> None:
 @pytest.mark.parametrize("text", [
     r"In $\triangle ABC$, $m\angle A = 40^\circ$. Find $m\angle B$ by the Triangle Sum Theorem.",
     r"In $\triangle ABC$, $m\angle A = 40^\circ$. Use the Corollary to the Triangle Sum Theorem to find $m\angle B$.",
-    r"In $\triangle ABC$, $m\angle A = 40^\circ$. Find $m\angle B$ using SAS and the corresponding angles postulate.",
-    r"In $\triangle ABC$, $m\angle A = 40^\circ$. Find $m\angle B$ by the definition of angle bisector.",
+    r"In $\triangle ABC$, $m\angle A = 40^\circ$. Find $m\angle B$ using SAS and the Reflexive Property.",
+    r"In $\triangle ABC$, $m\angle A = 40^\circ$. Find $m\angle B$ using the SAS Congruence Postulate.",
 ])
 def test_a_methods_name_is_accounted_for(text: str) -> None:
     assert coverage_gaps(text, METHOD_FACTS) == [], text
+
+
+@pytest.mark.parametrize("text, word", [
+    # Review round 7: applying these asserts a relation about the figure.
+    (r"In $\triangle ABC$, $m\angle A = 40^\circ$. Find $m\angle B$ using the corresponding angles postulate.",
+     "corresponding"),
+    (r"In $\triangle ABC$, $m\angle A = 40^\circ$. Find $m\angle B$ by the definition of angle bisector.",
+     "bisector"),
+    (r"In $\triangle ABC$, $m\angle A = 40^\circ$. Find $m\angle B$ by the Base Angles Theorem.", "Base"),
+    (r"In $\triangle ABC$, $m\angle A = 40^\circ$. Find $m\angle B$ by the Pythagorean Theorem.", "Pythagorean"),
+    (r"In $\triangle ABC$, $m\angle A = 40^\circ$. Find $m\angle B$ using the Vertical Angles Theorem.", "Vertical"),
+    (r"In $\triangle ABC$, $m\angle A = 40^\circ$. Find $m\angle B$ using properties of parallel lines.", "parallel"),
+    (r"In $\triangle ABC$, $m\angle A = 40^\circ$. Find $m\angle B$ using HL.", "HL"),
+])
+def test_a_method_that_asserts_a_relation_is_a_gap(text: str, word: str) -> None:
+    assert any(word in g for g in coverage_gaps(text, METHOD_FACTS)), text
 
 
 # ── 8. Exact rules for words that need more than one fact ────────────
@@ -519,9 +535,8 @@ def test_legs_with_their_lengths_and_an_altitude_drawn_to_the_hypotenuse() -> No
     "Clearly state each statement and its corresponding reason.", "State the theorem you used.",
     "State which theorem you used.", "Leave answers in simplest radical form.",
     "Express each answer in simplest radical form.",
-    "You may use the definition of angle bisector, the definition of perpendicular lines, AAS or ASA congruence, "
-    "and CPCTC.",
-    "You may use the Parallel Postulate, the Corresponding Angles Postulate, and properties of supplementary angles.",
+    "You may use AAS or ASA congruence, and CPCTC.",
+    "You may use the Parallel Postulate and the Reflexive Property.",
     "Write a two-column proof using triangle congruence (SSS or SAS) and CPCTC.",
     "Set up and solve a proportion using the similarity ratio.",
 ])

@@ -36,6 +36,8 @@ _TRAP = {"A": [0, 0], "B": [6, 0], "C": [5, 3], "D": [1, 3]}  # one pair of para
 _SIDES = ["AB", "BC", "CD", "DA"]
 _TRI = ["AB", "BC", "CA"]
 _CIRCLE = [{"center": "O", "through": "A"}]
+_TWO_ISO_50 = {"B": [0, 0], "C": [4, 0], "A": [2, 2.384], "E": [6, 0], "F": [10, 0], "D": [8, 2.384]}
+_TWO_ISO_70 = {**_TWO_ISO_50, "D": [8, 5.495]}  # DEF's base angles 70°
 _EF_LINES = [{"through": ["A", "B"]}, {"through": ["C", "D"]}, {"through": ["E", "F"]}]
 _P1 = {"A": [0, 0], "B": [8, 0], "C": [0, 3], "D": [8, 3], "E": [2, -1], "F": [6, 4], "X": [2.8, 0], "Y": [5.2, 3]}
 _GIVEN_T = (r"Given: $\overline{AB} \parallel \overline{CD}$ and transversal $\overline{EF}$ meets them at "
@@ -634,6 +636,59 @@ CASES: list[dict[str, Any]] = [
                   parallel_groups=[["AB", "CD"]],
                  angle_labels={"BGF": "65°"}),
      "why": "G is on CD and H on AB: the other way round"},
+    # Review round 7: the reviewer's six wordings (code derives the facts).
+    {"id": "r8-base-named-tri",
+     "text": r"Isosceles $\triangle ABC$ has $AB = AC$ and isosceles $\triangle DEF$ has $DE = DF$. "
+             r"Each base angle of $\triangle DEF$ measures $50^\circ$. Find $m\angle D$.",
+     "good": _fig(_TWO_ISO_50, segments=["AB", "BC", "CA", "DE", "EF", "FD"],
+                  tick_groups=[["AB", "AC"], ["DE", "DF"]], angle_labels={"DEF": "50°", "DFE": "50°"}),
+     "bad": _fig(_TWO_ISO_70, segments=["AB", "BC", "CA", "DE", "EF", "FD"],
+                 tick_groups=[["AB", "AC"], ["DE", "DF"]], angle_labels={"ABC": "50°", "ACB": "50°"}),
+     "why": "DEF's base angles are 70°; the 50° marks are on ABC's"},
+    {"id": "r8-base-two", "expect_declined": True,
+     "text": r"Isosceles $\triangle ABC$ has $AB = AC$ and isosceles $\triangle DEF$ has $DE = DF$. "
+             r"Each base angle measures $50^\circ$. Find $m\angle D$.",
+     "good": _fig(_TWO_ISO_50, segments=["AB", "BC", "CA", "DE", "EF", "FD"],
+                  tick_groups=[["AB", "AC"], ["DE", "DF"]],
+                  angle_labels={"ABC": "50°", "ACB": "50°", "DEF": "50°", "DFE": "50°"}),
+     "bad": _fig(_TWO_ISO_70, segments=["AB", "BC", "CA", "DE", "EF", "FD"],
+                 tick_groups=[["AB", "AC"], ["DE", "DF"]], angle_labels={"ABC": "50°", "ACB": "50°"}),
+     "why": "DEF's base angles are 70°"},
+    {"id": "r8-respectively-order",
+     "text": r"$\overleftrightarrow{AB} \parallel \overleftrightarrow{CD}$, with transversal "
+             r"$\overleftrightarrow{EF}$ cutting both lines at points $G$ and $H$ respectively.",
+     "good": _fig({"A": [0, 0], "B": [6, 0], "C": [0, 3], "D": [6, 3], "E": [1, -1], "F": [4, 4], "G": [1.6, 0],
+                   "H": [3.4, 3]}, lines=_EF_LINES, parallel_groups=[["AB", "CD"]]),
+     "bad": _fig({"A": [0, 0], "B": [6, 0], "C": [0, 3], "D": [6, 3], "E": [1, -1], "F": [4, 4], "G": [3.4, 3],
+                  "H": [1.6, 0]}, lines=_EF_LINES, parallel_groups=[["AB", "CD"]]),
+     "why": "G is on CD and H on AB"},
+    {"id": "r8-intersects-subject",
+     "text": r"In $\triangle PQR$, ray $QT$ bisects $\angle PQR$, with $QS = 5$, and intersects $\overline{PR}$ "
+             r"at point $S$. Find $PS$.",
+     "good": _fig({"Q": [0, 0], "P": [7.071, 0], "R": [0, 7.071], "S": [3.536, 3.536], "T": [2, 2]},
+                  segments=["PQ", "QR", "RP", "QS"], rays=["QT"], arc_groups=[["PQT", "TQR"]], side_labels={"QS": "5"}),
+     "bad": _fig({"Q": [0, 0], "P": [7.071, 0], "R": [0, 7.071], "S": [5, 2.071], "T": [2, 2]},
+                 segments=["PQ", "QR", "RP", "QS"], rays=["QT"], arc_groups=[["PQT", "TQR"]], side_labels={"QS": "5"}),
+     "why": "S is not on ray QT"},
+    {"id": "r8-exterior-at-p",
+     "text": r"In $\triangle PQR$, an exterior angle is formed at vertex $P$ by extending side $\overline{RP}$ "
+             r"beyond $P$ to point $T$. The exterior angle at $P$ measures $110^\circ$. Find $m\angle Q$.",
+     "good": _fig({"P": [0, 0], "R": [-5, 0], "T": [3, 0], "Q": [-1.368, 3.759]}, segments=["PQ", "QR", "RP", "PT"],
+                  angle_labels={"QPT": "110°"}),
+     "bad": _fig({"P": [0, 0], "R": [-5, 0], "T": [3, 0], "Q": [1.368, 3.759]}, segments=["PQ", "QR", "RP", "PT"],
+                 angle_labels={"QPR": "110°"}),
+     "why": "the interior angle at P is 110°, so the exterior angle is 70°"},
+    {"id": "r8-props-parallel", "expect_declined": True,
+     "text": r"$\overleftrightarrow{EF}$ intersects $\overleftrightarrow{AB}$ at $G$ and "
+             r"$\overleftrightarrow{CD}$ at $H$, and $m\angle AGH = 70^\circ$. Using properties of parallel "
+             r"lines, find $m\angle GHD$.",
+     "good": _fig({"A": [3, 0], "B": [-3, 0], "C": [-2.316, 1.879], "D": [3.684, 1.879], "E": [-0.684, -1.879],
+                   "F": [1.368, 3.759], "G": [0, 0], "H": [0.684, 1.879]}, lines=_EF_LINES,
+                  angle_labels={"AGH": "70°"}),
+     "bad": _fig({"A": [3, 0], "B": [-3, 0], "C": [-2.316, 0.679], "D": [3.684, 3.079], "E": [-0.684, -1.879],
+                  "F": [1.368, 3.759], "G": [0, 0], "H": [0.684, 1.879]}, lines=_EF_LINES,
+                 angle_labels={"AGH": "70°"}),
+     "why": "AB and CD are not parallel"},
 ]
 
 

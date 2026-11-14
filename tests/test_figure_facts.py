@@ -346,9 +346,12 @@ def test_a_method_named_is_not_a_fact() -> None:
         givens=[Fact(kind="parallel", items=["AB", "CD"], quote="AB ∥ CD")],
         prove=[Fact(kind="congruent_angles", items=["1", "2"], quote="∠1 ≅ ∠2")],
     )
-    # Review round 6: only the method's name is accounted for; "justify a
-    # step" is instruction wording, not on the inert list.
-    assert coverage_gaps(text, reading) == ["“justify”", "“step”"]
+    # Review round 7: a method's name is accounted for only from a reviewed
+    # list of names that assert nothing about the figure; the Perpendicular
+    # Bisector Theorem and the definition of midpoint assert a bisector and a
+    # midpoint, so they are gaps (and "justify a step" is instruction wording).
+    gaps = coverage_gaps(text, reading)
+    assert any("Perpendicular Bisector" in g for g in gaps) and any("midpoint" in g for g in gaps), gaps
 
 
 def test_messages_are_written_by_code_not_quoted() -> None:
@@ -486,13 +489,14 @@ def test_a_transversal_alone_does_not_account_for_where_two_angles_sit() -> None
     assert coverage_gaps(_SAME_SIDE_TEXT, _same_side_reading()) != []
     pair = Fact(kind="same_side_interior", items=["1", "2"], quote="∠1 and ∠2 are same-side interior angles")
     assert coverage_gaps(_SAME_SIDE_TEXT, _same_side_reading(pair)) == []
-    # A theorem's name is a method, not a fact about the figure.
+    # Review round 7: applying an angle-pair theorem asserts where angles
+    # sit, so its name is a gap, not a method accounted for.
     for text in ("Lines AB ∥ CD. Prove ∠1 ≅ ∠2 by the Alternate Interior Angles Theorem.",
                  "Lines AB ∥ CD. Justify with the corresponding angles postulate.",
                  "Lines AB ∥ CD. Use the Converse of the Same-Side Interior Angles Theorem."):
         gaps = coverage_gaps(text, FigureFacts(points=list("ABCD"), givens=[
             Fact(kind="parallel", items=["AB", "CD"], quote="AB ∥ CD")]))
-        assert not [g for g in gaps if "interior" in g or "corresponding" in g], text
+        assert [g for g in gaps if "nterior" in g or "orresponding" in g], text
 
 
 def test_the_angles_must_sit_where_the_problem_says() -> None:

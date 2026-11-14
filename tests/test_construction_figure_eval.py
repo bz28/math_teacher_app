@@ -49,7 +49,12 @@ KNOWN_WRONG_PASSED = {"77195d48-step1"}
 # dee52ce7, 18ce1004: reference words stay off the list), readings that
 # disagree (7d8e403c, bac5ea12, 2d8021e3, dd7ab4c1-step), and wordings no
 # fact verifies (d5a862d3, 430894a4, 6c5008f2, 95c727b2).
-DRAWN_FLOOR = 29
+# Review round 7 (a special wording counts only through facts code derives
+# from it; a method's name only from a reviewed list): 26. Lost: 2d01d709
+# and afee316c ("Use the Vertical Angles Theorem" asserts vertical angles;
+# afee316c also "the definition of midpoint") and dd7ab4c1 ("Use the
+# Alternate Interior Angles Theorem" asserts parallel lines).
+DRAWN_FLOOR = 26
 
 
 @pytest.mark.asyncio

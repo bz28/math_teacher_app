@@ -6143,6 +6143,72 @@
       ]
     }
   },
+  "33428c84e289560bc4750b6ff00fd057": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle PQR$, ray $QT$ bisects $\\angle PQR$, with $QS = 5$, and intersects $\\overline{PR}$ at point $",
+      "recorded_at": 1794652210.928202
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "PS",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "QT",
+            "PQR"
+          ],
+          "kind": "bisects_angle",
+          "quote": "ray QT bisects \u2220PQR"
+        },
+        {
+          "items": [
+            "QS"
+          ],
+          "kind": "equal_length",
+          "quote": "QS = 5",
+          "value": 5
+        },
+        {
+          "items": [
+            "QT",
+            "PR"
+          ],
+          "kind": "intersect",
+          "point": "S",
+          "quote": "intersects $\\overline{PR}$ at point S"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "P",
+        "Q",
+        "R",
+        "S",
+        "T"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [
+        "QT"
+      ],
+      "requested": [],
+      "segments": [
+        "QS",
+        "PR"
+      ],
+      "triangles": [
+        "PQR"
+      ]
+    }
+  },
   "3363aeaaebed61259f4eaa7f0197a95c": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -6948,6 +7014,65 @@
       "segments": [],
       "triangles": [
         "ADC"
+      ]
+    }
+  },
+  "39fa19ecc2b32fe0ec9dcf6040aa3cc0": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle PQR$, an exterior angle is formed at vertex $P$ by extending side $\\overline{RP}$ beyond $P$ ",
+      "recorded_at": 1794652217.0257
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "Q",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "circle": null,
+          "expr": null,
+          "items": [
+            "RP",
+            "P",
+            "T"
+          ],
+          "kind": "other",
+          "point": null,
+          "quote": "extending side RP beyond P to point T",
+          "value": null
+        },
+        {
+          "circle": null,
+          "expr": null,
+          "items": [
+            "QPT"
+          ],
+          "kind": "angle_measure",
+          "point": null,
+          "quote": "The exterior angle at P measures 110\u00b0",
+          "value": 110
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "P",
+        "Q",
+        "R",
+        "T"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": [
+        "PQR"
       ]
     }
   },
@@ -7936,6 +8061,108 @@
       "rays": [],
       "requested": [],
       "segments": [],
+      "triangles": [
+        "ABC",
+        "DEF"
+      ]
+    }
+  },
+  "45fafb3bb48b9891dcacf01f7a50d305": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIsosceles $\\triangle ABC$ has $AB = AC$ and isosceles $\\triangle DEF$ has $DE = DF$. Each base angle measur",
+      "recorded_at": 1794652198.187201
+    },
+    "response": {
+      "find": [
+        {
+          "item": "D",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "isosceles",
+          "point": "A",
+          "quote": "Isosceles \u25b3ABC has AB = AC"
+        },
+        {
+          "items": [
+            "AB",
+            "AC"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB = AC"
+        },
+        {
+          "items": [
+            "DEF"
+          ],
+          "kind": "isosceles",
+          "point": "D",
+          "quote": "isosceles \u25b3DEF has DE = DF"
+        },
+        {
+          "items": [
+            "DE",
+            "DF"
+          ],
+          "kind": "congruent_segments",
+          "quote": "DE = DF"
+        },
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "angle_measure",
+          "quote": "Each base angle measures 50\u00b0",
+          "value": 50
+        },
+        {
+          "items": [
+            "ACB"
+          ],
+          "kind": "angle_measure",
+          "quote": "Each base angle measures 50\u00b0",
+          "value": 50
+        },
+        {
+          "items": [
+            "DEF"
+          ],
+          "kind": "angle_measure",
+          "quote": "Each base angle measures 50\u00b0",
+          "value": 50
+        },
+        {
+          "items": [
+            "DFE"
+          ],
+          "kind": "angle_measure",
+          "quote": "Each base angle measures 50\u00b0",
+          "value": 50
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "AC",
+        "DE",
+        "DF"
+      ],
       "triangles": [
         "ABC",
         "DEF"
@@ -9283,6 +9510,92 @@
       "segments": [],
       "triangles": [
         "ABC"
+      ]
+    }
+  },
+  "521d6bf55187723f844e35dc48bb2efa": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIsosceles $\\triangle ABC$ has $AB = AC$ and isosceles $\\triangle DEF$ has $DE = DF$. Each base angle of $\\t",
+      "recorded_at": 1794652189.841036
+    },
+    "response": {
+      "find": [
+        {
+          "item": "D",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "isosceles",
+          "point": "A",
+          "quote": "Isosceles \u25b3ABC has AB = AC"
+        },
+        {
+          "items": [
+            "AB",
+            "AC"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB = AC"
+        },
+        {
+          "items": [
+            "DEF"
+          ],
+          "kind": "isosceles",
+          "point": "D",
+          "quote": "isosceles \u25b3DEF has DE = DF"
+        },
+        {
+          "items": [
+            "DE",
+            "DF"
+          ],
+          "kind": "congruent_segments",
+          "quote": "DE = DF"
+        },
+        {
+          "items": [
+            "E"
+          ],
+          "kind": "angle_measure",
+          "quote": "Each base angle of \u25b3DEF measures 50\u00b0",
+          "value": 50
+        },
+        {
+          "items": [
+            "F"
+          ],
+          "kind": "angle_measure",
+          "quote": "Each base angle of \u25b3DEF measures 50\u00b0",
+          "value": 50
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "AC",
+        "DE",
+        "DF"
+      ],
+      "triangles": [
+        "ABC",
+        "DEF"
       ]
     }
   },
@@ -11492,6 +11805,61 @@
       ]
     }
   },
+  "6495739f285f44b4a8bb7ffeb33a1ce4": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle PQR$, an exterior angle is formed at vertex $P$ by extending side $\\overline{RP}$ beyond $P$ ",
+      "recorded_at": 1794652216.1791518
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "Q",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "RP",
+            "P",
+            "T"
+          ],
+          "kind": "other",
+          "quote": "extending side RP beyond P to point T"
+        },
+        {
+          "items": [
+            "TPQ"
+          ],
+          "kind": "angle_measure",
+          "quote": "The exterior angle at P measures 110\u00b0",
+          "value": 110
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "P",
+        "Q",
+        "R",
+        "T"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "RP",
+        "PT"
+      ],
+      "triangles": [
+        "PQR"
+      ]
+    }
+  },
   "64c0ceaa254ace8db5a27f6e0a34d20a": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -13300,6 +13668,97 @@
       "segments": [],
       "triangles": [
         "ABC"
+      ]
+    }
+  },
+  "70a5758e968b76a3c49513bb1f625283": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIsosceles $\\triangle ABC$ has $AB = AC$ and isosceles $\\triangle DEF$ has $DE = DF$. Each base angle of $\\t",
+      "recorded_at": 1794652191.095544
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "D",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "isosceles",
+          "point": "A",
+          "quote": "Isosceles \u25b3ABC has AB = AC"
+        },
+        {
+          "items": [
+            "AB",
+            "AC"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB = AC"
+        },
+        {
+          "items": [
+            "DEF"
+          ],
+          "kind": "isosceles",
+          "point": "D",
+          "quote": "isosceles \u25b3DEF has DE = DF"
+        },
+        {
+          "items": [
+            "DE",
+            "DF"
+          ],
+          "kind": "congruent_segments",
+          "quote": "DE = DF"
+        },
+        {
+          "items": [
+            "E"
+          ],
+          "kind": "angle_measure",
+          "quote": "Each base angle of \u25b3DEF measures 50\u00b0",
+          "value": 50
+        },
+        {
+          "items": [
+            "F"
+          ],
+          "kind": "angle_measure",
+          "quote": "Each base angle of \u25b3DEF measures 50\u00b0",
+          "value": 50
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "AC",
+        "DE",
+        "DF"
+      ],
+      "triangles": [
+        "ABC",
+        "DEF"
       ]
     }
   },
@@ -15543,6 +16002,82 @@
       ]
     }
   },
+  "8633241005450130d6da37ea7ba7d0f1": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\n$\\overleftrightarrow{EF}$ intersects $\\overleftrightarrow{AB}$ at $G$ and $\\overleftrightarrow{CD}$ at $H$,",
+      "recorded_at": 1794652223.616776
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "GHD",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "EF",
+            "AB"
+          ],
+          "kind": "intersect",
+          "point": "G",
+          "quote": "\u2194EF intersects \u2194AB at G"
+        },
+        {
+          "items": [
+            "EF",
+            "CD"
+          ],
+          "kind": "intersect",
+          "point": "H",
+          "quote": "\u2194EF intersects \u2194CD at H"
+        },
+        {
+          "items": [
+            "AGH"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220AGH = 70\u00b0",
+          "value": 70
+        },
+        {
+          "items": [
+            "EF",
+            "AB",
+            "CD"
+          ],
+          "kind": "transversal",
+          "quote": "\u2194EF intersects \u2194AB at G and \u2194CD at H"
+        }
+      ],
+      "lines": [],
+      "named_lines": [
+        "EF",
+        "AB",
+        "CD"
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": []
+    }
+  },
   "86e87911d34295dbf569657dfc70a5d9": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -16999,6 +17534,71 @@
           ],
           "kind": "angle_measure",
           "quote": "m\u22202 = (2x + 3)\u00b0"
+        }
+      ],
+      "lines": [
+        "AB",
+        "CD",
+        "EF"
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H"
+      ],
+      "prove": [],
+      "requested": []
+    }
+  },
+  "91b586250dd84563a8884f2c7fb5ddd5": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n$\\overleftrightarrow{AB} \\parallel \\overleftrightarrow{CD}$, with transversal $\\overleftrightarrow{EF}$ cut",
+      "recorded_at": 1794652204.031279
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "\u2194AB \u2225 \u2194CD"
+        },
+        {
+          "items": [
+            "EF",
+            "AB",
+            "CD"
+          ],
+          "kind": "transversal",
+          "quote": "transversal \u2194EF cutting both lines at points G and H respectively"
+        },
+        {
+          "items": [
+            "EF",
+            "AB"
+          ],
+          "kind": "intersect",
+          "point": "G",
+          "quote": "cutting both lines at points G and H respectively"
+        },
+        {
+          "items": [
+            "EF",
+            "CD"
+          ],
+          "kind": "intersect",
+          "point": "H",
+          "quote": "cutting both lines at points G and H respectively"
         }
       ],
       "lines": [
@@ -21623,6 +22223,81 @@
       ]
     }
   },
+  "bb5fde29302d06ec2f09353a72fbe455": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle PQR$, ray $QT$ bisects $\\angle PQR$, with $QS = 5$, and intersects $\\overline{PR}$ at point $",
+      "recorded_at": 1794652210.890265
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "PS",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "QT",
+            "PQR"
+          ],
+          "kind": "bisects_angle",
+          "quote": "ray QT bisects \u2220PQR"
+        },
+        {
+          "items": [
+            "QS"
+          ],
+          "kind": "equal_length",
+          "quote": "QS = 5",
+          "value": 5
+        },
+        {
+          "items": [
+            "QT",
+            "PR"
+          ],
+          "kind": "intersect",
+          "point": "S",
+          "quote": "intersects $\\overline{PR}$ at point S"
+        },
+        {
+          "items": [
+            "PR"
+          ],
+          "kind": "on_segment",
+          "point": "S",
+          "quote": "intersects $\\overline{PR}$ at point S"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "P",
+        "Q",
+        "R",
+        "S",
+        "T"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [
+        "QT"
+      ],
+      "requested": [],
+      "segments": [
+        "QS",
+        "PR",
+        "PS"
+      ],
+      "triangles": [
+        "PQR"
+      ]
+    }
+  },
   "bb6c2b03e375101e582a2caa285c8961": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -22773,6 +23448,71 @@
       ]
     }
   },
+  "c79c74557b658a41b7304206388450a1": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\n$\\overleftrightarrow{AB} \\parallel \\overleftrightarrow{CD}$, with transversal $\\overleftrightarrow{EF}$ cut",
+      "recorded_at": 1794652204.3821282
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "\u2194AB \u2225 \u2194CD"
+        },
+        {
+          "items": [
+            "EF",
+            "AB",
+            "CD"
+          ],
+          "kind": "transversal",
+          "quote": "transversal \u2194EF cutting both lines at points G and H respectively"
+        },
+        {
+          "items": [
+            "EF",
+            "AB"
+          ],
+          "kind": "intersect",
+          "point": "G",
+          "quote": "cutting both lines at points G and H respectively"
+        },
+        {
+          "items": [
+            "EF",
+            "CD"
+          ],
+          "kind": "intersect",
+          "point": "H",
+          "quote": "cutting both lines at points G and H respectively"
+        }
+      ],
+      "named_lines": [
+        "AB",
+        "CD",
+        "EF"
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H"
+      ],
+      "prove": [],
+      "requested": []
+    }
+  },
   "c8bacf6ca457ff0d6bba260c8fa02dd9": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -22811,6 +23551,108 @@
       "segments": [],
       "triangles": [
         "ABC"
+      ]
+    }
+  },
+  "c8f3179c72eceb716d6a04796b5ecfab": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIsosceles $\\triangle ABC$ has $AB = AC$ and isosceles $\\triangle DEF$ has $DE = DF$. Each base angle measur",
+      "recorded_at": 1794652199.070654
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "D",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "isosceles",
+          "point": "A",
+          "quote": "Isosceles \u25b3ABC has AB = AC"
+        },
+        {
+          "items": [
+            "AB",
+            "AC"
+          ],
+          "kind": "congruent_segments",
+          "quote": "Isosceles \u25b3ABC has AB = AC"
+        },
+        {
+          "items": [
+            "DEF"
+          ],
+          "kind": "isosceles",
+          "point": "D",
+          "quote": "isosceles \u25b3DEF has DE = DF"
+        },
+        {
+          "items": [
+            "DE",
+            "DF"
+          ],
+          "kind": "congruent_segments",
+          "quote": "isosceles \u25b3DEF has DE = DF"
+        },
+        {
+          "items": [
+            "B"
+          ],
+          "kind": "angle_measure",
+          "quote": "Each base angle measures 50\u00b0",
+          "value": 50
+        },
+        {
+          "items": [
+            "C"
+          ],
+          "kind": "angle_measure",
+          "quote": "Each base angle measures 50\u00b0",
+          "value": 50
+        },
+        {
+          "items": [
+            "E"
+          ],
+          "kind": "angle_measure",
+          "quote": "Each base angle measures 50\u00b0",
+          "value": 50
+        },
+        {
+          "items": [
+            "F"
+          ],
+          "kind": "angle_measure",
+          "quote": "Each base angle measures 50\u00b0",
+          "value": 50
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": [
+        "ABC",
+        "DEF"
       ]
     }
   },
@@ -23835,6 +24677,81 @@
         "AB",
         "OA"
       ]
+    }
+  },
+  "d5291b6f557f5bad8e68a858951ac89c": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n$\\overleftrightarrow{EF}$ intersects $\\overleftrightarrow{AB}$ at $G$ and $\\overleftrightarrow{CD}$ at $H$,",
+      "recorded_at": 1794652223.720444
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "m\u2220GHD",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "EF",
+            "AB"
+          ],
+          "kind": "intersect",
+          "point": "G",
+          "quote": "\\overleftrightarrow{EF} intersects \\overleftrightarrow{AB} at G"
+        },
+        {
+          "items": [
+            "EF",
+            "CD"
+          ],
+          "kind": "intersect",
+          "point": "H",
+          "quote": "\\overleftrightarrow{EF} intersects \\overleftrightarrow{CD} at H"
+        },
+        {
+          "items": [
+            "AGH"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\\angle AGH = 70^\\circ",
+          "value": 70
+        },
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "properties of parallel lines"
+        }
+      ],
+      "lines": [
+        "AB",
+        "CD",
+        "EF"
+      ],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "H"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": []
     }
   },
   "d529f920a5fac63b496623f75c61b1c2": {
