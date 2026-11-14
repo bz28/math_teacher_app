@@ -19,7 +19,7 @@ import os
 from types import SimpleNamespace
 from typing import Any
 
-from api.core.geometry.dsl import ConstructionFigure
+from api.core.geometry.dsl import ConstructionFigure, plain_label
 from api.core.geometry.facts import Fact, FigureFacts, Part, Target, coverage_gaps, unverifiable
 from api.core.geometry.figure_check import check_construction, unbacked_marks
 
@@ -181,7 +181,8 @@ def test_the_answer_on_its_angle_is_caught_however_it_is_written() -> None:
     for label in ("50°", "m∠C = 50°", "∠C = 50°", "50 °", "$50^\\circ$", "m\\angle C = 50^{\\circ}"):
         f = fig(**FIND_C_BASE, angle_labels={"BAC": "50°", "ACB": label})
         out = check(f, FIND_C, FIND_C_FACTS, final_answer="50°")
-        assert f"the label {label!r} on ∠ACB gives away the answer (the problem asks for it)" in out, label
+        shown = plain_label(label)  # as the drawing shows it: "$50^\\circ$" is 50°
+        assert f"the label {shown!r} on ∠ACB gives away the answer (the problem asks for it)" in out, label
     f = fig(**FIND_C_BASE, angle_labels={"BAC": "50°", "ACB": "x = 50°"})
     out = check(f, FIND_C, FIND_C_FACTS, final_answer="50°")
     assert "the label 'x = 50°' on ∠ACB names x, which the problem doesn't call that angle" in out

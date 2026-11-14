@@ -489,6 +489,7 @@ _POINT_NAME = re.compile(r"_[a-z0-9]+|[A-Z][0-9]*'*")
 _LABEL_SYMBOLS = [
     (re.compile(r"\^\s*\{?\s*\\circ\s*\}?|\\circ|\\degree"), "°"),
     (re.compile(r"\\cdot"), "·"), (re.compile(r"\\times"), "×"), (re.compile(r"\\pi"), "π"),
+    (re.compile(r"\\angle\s*"), "∠"), (re.compile(r"\\triangle\s*"), "△"), (re.compile(r"\\cong"), "≅"),
     (re.compile(r"\\sqrt\s*\{([^{}]*)\}"), r"√\1"), (re.compile(r"\\(?:left|right)\b"), ""),
     (re.compile(r"\\[,;! ]"), " "),
 ]

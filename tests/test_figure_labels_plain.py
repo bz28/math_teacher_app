@@ -30,6 +30,7 @@ SPEC = {
     ("$3\\sqrt{2}$", "3√2"),
     ("$5\\pi$", "5π"),
     ("40°", "40°"),
+    ("$m\\angle C = 50^{\\circ}$", "m∠C = 50°"),
 ])
 def test_a_label_is_shown_as_plain_text(label: str, shown: str) -> None:
     assert plain_label(label) == shown
