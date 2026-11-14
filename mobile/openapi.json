@@ -19762,7 +19762,7 @@
     },
     "/v1/teacher/question-bank/{item_id}/graph-checklist/rewrite": {
       "post": {
-        "description": "Write the checklist again from the question and answer key,\nreplacing the teacher's edits. Awaited, like regenerate: the teacher\nasked for it and is waiting for it. On failure her checklist stays.",
+        "description": "Write the checklist again from the question, answer key and solution,\nreplacing the teacher's edits. Awaited, like regenerate: the teacher\nasked for it and is waiting for it. On failure her checklist stays.",
         "operationId": "rewrite_graph_checklist_v1_teacher_question_bank__item_id__graph_checklist_rewrite_post",
         "parameters": [
           {
