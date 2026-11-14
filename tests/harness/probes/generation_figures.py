@@ -65,16 +65,17 @@ COUNT = 8
 # "set1-p3-step2", with the figure's fingerprint: a figure that changes must
 # be looked at again. "right", "wrong: …", "unwanted: …".
 BY_EYE: dict[str, tuple[str, str]] = {
-    "set1-p1": ("1e9f3db3c4a8", "right"),  # M on AC and BD, each half ticked
-    "set1-p2": ("e9ec91284b26", "right"),  # lines AB ∥ CD; E the midpoint of BC, ticked. (The problem leaves
-    # out that A, E, D are collinear, which the proof needs; the figure draws AD through E. See the PR notes.)
-    "set1-p3": ("c06e08851ead", "right"),  # BD bisects ∠ABC (arcs); right angles at A and C
-    "set1-p4": ("fe2ab557aacb", "right"),  # WX ≅ YZ ticks; right angles at X and Z
-    "set1-p6": ("0755cf302342", "right"),  # lines AC and BD meet at E; AB ∥ CD arrows; AE ≅ CE ticks
-    "set2-p1": ("23597993c040", "right"),  # AB ∥ CD, transversal EF; both labeled angles 48° at x = 11
-    "set2-p2": ("3466941e0b7d", "right"),  # PQ ∥ RS, transversal TU; both 49° at x = 10 (R and U labels crowd)
-    "set2-p5": ("129dad383359", "right"),  # AB ∥ CD, transversal EF; both 69° at x = 18
-    "set2-p6": ("5237fe49f692", "right"),  # right angle at C; AB = 15, BC = 9 labeled, in proportion
+    "set1-p1": ("cadc98edaf93", "right"),  # M on AC and BD, each half ticked
+    "set1-p2": ("c7e0c0288895", "right"),  # P, Q, R on circle O; inscribed ∠QPR = 37° labeled; radii OQ, OR
+    "set1-p4": ("644f0bb674c3", "right"),  # M on AC and BD, each half ticked (the same text as p1: a duplicate)
+    "set1-p5": ("a63ab3896207", "right"),  # AB ∥ DE arrows, AC ≅ DC ticks, ∠ABC = 54° labeled. (The problem
+    # needs A, C, D in a row and more to fix ∠CDE; the figure draws A, C, D in a row. See the PR notes.)
+    "set1-p6": ("28bb32464626", "right"),  # A, B, C on circle O; central ∠AOC = 112° labeled
+    "set2-p1": ("a498817f5848", "right"),  # AB ∥ CD, transversal EF with G past F; ∠AEG = 112° as drawn
+    "set2-p3": ("b055008a90f7", "right"),  # right angle at C; AB = 17, AC = 8 labeled, in proportion
+    "set2-p4": ("6d04048ad83d", "right"),  # AB ∥ CD, transversal EF; both labeled angles 60° at x = 15
+    "set2-p5": ("9aa9b3c0e9e3", "right"),  # PQ ∥ RS, transversal TU; ∠PTU = 128° as drawn
+    "set2-p6": ("c4849d4db27f", "right"),  # right angle at C; AB = 15, BC = 9 labeled, in proportion
 }
 
 # Per problem (by the fingerprint of its text), whether a figure should be
@@ -82,29 +83,34 @@ BY_EYE: dict[str, tuple[str, str]] = {
 # api/core/assignment_generation.py): "figure" (MUST or SHOULD), "optional"
 # (a formula-only shape problem) or "none" (NOT).
 EXPECTED: dict[str, str] = {
-    "6612b38f698e": "figure", "50782dc510ea": "figure", "800d407c83ba": "figure", "4d47c9775d58": "figure",
-    "9c5c37736c53": "figure", "c2f20351d916": "figure", "58d3315ceeab": "figure", "4f978a21eaa1": "figure",
-    "6cd0d1f8c203": "figure",
-    "bab4038ca4f5": "none",  # set1-p5: two triangles given only by their side lengths (SSS): nothing to see
-    "b3bdbbfcac92": "figure",  # set1-p7: two right-triangle plots sharing a hypotenuse (a board sketch); no points
-    "e75ad1992fbd": "figure",  # set1-p8: a triangle on a clock face (a board sketch); no points
-    "736e73e740f6": "none", "dca1f378d22b": "none",  # set2-p3, p4: polygon angle sums
-    "cf50c2c88b2d": "figure",  # set2-p7: parallel lines cut by a transversal; no points
-    "e08339b6cc38": "figure",  # set2-p8: a floor plan; no points
+    # set 1
+    "6612b38f698e": "figure",  # p1, p4: a proof about a named arrangement (MUST)
+    "4d009383ce43": "figure", "90c4257b3f45": "figure",  # p2, p6: inscribed and central angles (MUST)
+    "5938d4e5dcfa": "figure",  # p5: parallel lines and a named arrangement (MUST)
+    "df3b2e3390c3": "figure",  # p3: a ladder against a wall (SHOULD); written as a story, no points
+    "611892ad8251": "figure",  # p7: a chord, central and inscribed angles (MUST); no points
+    "1c5a9d0d3766": "figure",  # p8: two garden beds sharing a side (SHOULD); written as a story, no points
+    # set 2
+    "ad8560639f80": "figure", "cdbf49b38718": "figure", "a127a188848a": "figure",  # p1, p4, p5: transversals
+    "e5511552fced": "optional", "6cd0d1f8c203": "optional",  # p3, p6: a right triangle by its formula
+    "ae3590ba66ef": "optional",  # p2: a polygon's angle sum
+    "9a77578b0c06": "figure",  # p7: a transversal and co-interior angles (MUST); no points
+    "f2098d666245": "figure",  # p8: a floor plan (SHOULD); written as a story, no points
 }
 
 # A known-wrong version of each drawn question figure (keyed like BY_EYE),
 # which the checker must reject: {"move": {"D": [x, y]}}, {"drop": ["BD"]},
 # {"label": {"ABC": "47°"}}, {"side_label": {"AB": "9"}}.
 NEGATIVES: dict[str, dict[str, Any]] = {
-    "set1-p1": {"move": {"M": [2, 1]}},  # M no longer the midpoint of AC or BD
-    "set1-p2": {"move": {"E": [4.5, 2.25]}},  # E on BC but not its midpoint
-    "set1-p3": {"move": {"A": [1, 4]}},  # ∠BAD no longer right
-    "set1-p4": {"move": {"Y": [5, 4]}},  # YZ no longer ≅ WX
-    "set1-p6": {"move": {"D": [3, -1]}},  # CD no longer ∥ AB
-    "set2-p1": {"move": {"C": [0.5, 1]}},  # line CD no longer ∥ AB
-    "set2-p2": {"move": {"R": [0, 1]}},  # line RS no longer ∥ PQ
-    "set2-p5": {"move": {"C": [0, -1]}},  # line CD no longer ∥ AB
+    "set1-p1": {"move": {"M": [2.5, 2]}},  # M no longer the midpoint of AC or BD
+    "set1-p2": {"move": {"P": [4, 1]}},  # P off circle O
+    "set1-p4": {"move": {"M": [3, 0.5]}},  # M no longer the midpoint
+    "set1-p5": {"move": {"D": [4.5, 5.494]}},  # DC no longer ≅ AC
+    "set1-p6": {"move": {"B": [4, 7]}},  # B off circle O
+    "set2-p1": {"move": {"C": [0, 1]}},  # line CD no longer ∥ AB
+    "set2-p3": {"move": {"B": [0, 10]}},  # AB = 17, AC = 8 out of proportion
+    "set2-p4": {"move": {"C": [0, 1]}},  # line CD no longer ∥ AB
+    "set2-p5": {"move": {"R": [0, 1]}},  # line RS no longer ∥ PQ
     "set2-p6": {"move": {"A": [0, 8]}},  # AB = 15, BC = 9 out of proportion
 }
 

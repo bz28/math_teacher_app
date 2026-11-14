@@ -20,13 +20,14 @@ import pytest
 
 from tests.harness.probes import generation_figures as gf
 
-# Figures drawn in the recorded run (set 1: 5, set 2: 4). A change that
+# Figures drawn in the recorded run (set 1: 5, set 2: 5). A change that
 # draws fewer fails here.
-DRAWN_FLOOR = 9
-# Problems a teacher would sketch that got no figure, because they name no
-# points (a figure whose points the problem doesn't name can't be checked):
-# the "unnamed figures" to-do of PR #989. Shown as plain text problems.
-KNOWN_MISSING = {"set1-p7", "set1-p8", "set2-p7", "set2-p8"}
+DRAWN_FLOOR = 10
+# Problems that should have a figure by Ben's rule but got none: each is
+# written as a story or names no points, so its figure can't be checked.
+# A target to bring down (a text auditor PR may let story layouts keep
+# their words); a change that misses more fails here.
+KNOWN_MISSING = {"set1-p3", "set1-p7", "set1-p8", "set2-p7", "set2-p8"}
 
 
 @pytest.mark.asyncio
