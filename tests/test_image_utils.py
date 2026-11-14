@@ -312,9 +312,37 @@ class TestPreparePageForReader:
         w, h = _decoded(out).size
         assert h > w  # turned upright, then enlarged
 
-    def test_transparency_is_flattened_for_jpeg(self) -> None:
-        out, media = prepare_page_for_reader(_encode(Image.new("RGBA", (400, 300), (0, 0, 0, 0)), "PNG"), "image/png")
-        assert media == "image/jpeg" and _decoded(out).mode == "RGB"
+    @pytest.mark.parametrize("mode", ["RGBA", "LA", "P"])
+    def test_transparency_is_painted_onto_white_paper(self, mode: str) -> None:
+        # Black ink on a transparent background: a bare convert("RGB")
+        # made the whole page black. The paper must come out white and the
+        # ink stay dark.
+        page = Image.new("RGBA", (800, 600), (0, 0, 0, 0))
+        page.paste((0, 0, 0, 255), (300, 250, 500, 350))
+        if mode == "LA":
+            page = page.convert("LA")
+        elif mode == "P":
+            # A palette page whose index 0 (black) is the transparent one.
+            page = Image.new("P", (800, 600), 0)
+            page.putpalette([0, 0, 0, 0, 0, 0])
+            page.paste(1, (300, 250, 500, 350))
+            page.info["transparency"] = 0
+        out, media = prepare_page_for_reader(_encode(page, "PNG"), "image/png")
+        img = _decoded(out).convert("RGB")
+        assert media == "image/jpeg"  # 800 px: enlarged
+        w, h = img.size
+        assert all(v > 240 for v in img.getpixel((20, 20)))
+        assert all(v > 240 for v in img.getpixel((w - 20, h - 20)))
+        assert all(v < 20 for v in img.getpixel((w // 2, h // 2)))
+
+    def test_a_png_with_alpha_that_stays_png_is_flattened_too(self) -> None:
+        page = Image.new("RGBA", (3000, 4000), (0, 0, 0, 0))
+        page.paste((0, 0, 0, 255), (1400, 1900, 1600, 2100))
+        out, media = prepare_page_for_reader(_encode(page, "PNG"), "image/png")
+        img = _decoded(out)
+        assert media == "image/png" and img.mode == "RGB"
+        assert img.getpixel((20, 20)) == (255, 255, 255)
+        assert all(v < 20 for v in img.getpixel((img.width // 2, img.height // 2)))
 
     def test_non_images_and_junk_come_back_untouched(self) -> None:
         pdf_b64 = base64.b64encode(b"%PDF-1.4\nstuff").decode("ascii")

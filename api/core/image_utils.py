@@ -312,6 +312,23 @@ def reader_page_size(width: int, height: int) -> tuple[int, int]:
     return max(1, int(width * scale)), max(1, int(height * scale))
 
 
+def _flatten_onto_white(img: Image.Image) -> Image.Image:
+    """`img` as RGB or L, any transparency painted onto white paper.
+    A bare `convert("RGB")` turns transparent pixels black, so a page of
+    ink on a transparent background became a solid black JPEG
+    (web/src/lib/image-resize.ts paints white first for the same reason).
+    Done before resampling: LANCZOS needs a non-palette image, and alpha
+    edges resampled unpremultiplied would halo."""
+    if img.mode in ("RGB", "L"):
+        return img
+    if img.mode in ("RGBA", "LA", "PA") or "transparency" in img.info:
+        rgba = img.convert("RGBA")
+        paper = Image.new("RGB", rgba.size, (255, 255, 255))
+        paper.paste(rgba, mask=rgba.getchannel("A"))
+        return paper
+    return img.convert("RGB")
+
+
 def prepare_page_for_reader(data_base64: str, media_type: str) -> tuple[str, str]:
     """A homework page as the reader gets it: EXIF-oriented and resampled
     (LANCZOS) to `reader_page_size` — shrunk if large, ENLARGED if small.
@@ -319,6 +336,7 @@ def prepare_page_for_reader(data_base64: str, media_type: str) -> tuple[str, str
     room the model reads: on a 551px prod page the reader added a radical
     and wrote the key's answer; the same page enlarged read as written.
 
+    Transparency is painted onto white (`_flatten_onto_white`).
     Returns `(base64, media_type)`. A PNG stays PNG when it wasn't
     enlarged and fits `_READER_PAGE_MAX_BYTES`; everything else goes as
     JPEG, stepping quality down until it fits, so no page passes the
@@ -329,7 +347,7 @@ def prepare_page_for_reader(data_base64: str, media_type: str) -> tuple[str, str
         return data_base64, media_type
     try:
         with _open_bounded(base64.b64decode(data_base64)) as opened:
-            img = ImageOps.exif_transpose(opened)
+            img = _flatten_onto_white(ImageOps.exif_transpose(opened))
             size = reader_page_size(*img.size)
             enlarged = size[0] > img.width
             if size != img.size:
@@ -339,8 +357,6 @@ def prepare_page_for_reader(data_base64: str, media_type: str) -> tuple[str, str
                 img.save(buf, format="PNG")
                 if buf.tell() <= _READER_PAGE_MAX_BYTES:
                     return base64.b64encode(buf.getvalue()).decode("ascii"), "image/png"
-            if img.mode not in ("RGB", "L"):
-                img = img.convert("RGB")
             for quality in (90, 80, 70, 60):
                 buf = io.BytesIO()
                 img.save(buf, format="JPEG", quality=quality)
