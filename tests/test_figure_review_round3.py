@@ -96,21 +96,17 @@ def test_every_clause_and_number_is_accounted_for(text: str, fact: Fact | None) 
 
 
 def test_a_clause_with_names_and_no_fact_is_a_gap() -> None:
-    """The structural rule on its own: no signal word, but the clause holds
-    a number and names a part ("twice", "times" are signals too)."""
-    from api.core.geometry.facts import _clause_gaps
-    from api.core.geometry.figure_check import _clean
-
-    text = _clean(r"In $\triangle ABC$, $BC$ is three times as long as $AB$.")
-    assert _clause_gaps(text, TRI, [], []) == ["“BC is three times as long as AB”"]
+    """The structural rule on its own: words no fact accounts for are a gap
+    (review round 6: tokens, not clauses)."""
+    text = r"In $\triangle ABC$, $BC$ is three times as long as $AB$."
+    assert any("three times" in g for g in coverage_gaps(text, TRI))
     named = TRI.model_copy(update={"givens": [F("other", ["BC", "AB"], quote="BC is three times as long as AB")]})
-    assert _clause_gaps(text, named, [], []) == []
-    # A clause that only names the figure needs nothing; one that says
-    # something of a named part does.
-    assert _clause_gaps(_clean(r"In $\triangle ABC$, AB is a leg."), TRI, [], []) == ["“AB is a leg”"]
+    assert coverage_gaps(text, named) != []  # an "other" fact accounts for nothing
+    # Naming the figure needs nothing; saying something of a named part does.
+    assert coverage_gaps(r"In $\triangle ABC$, AB is a leg.", TRI) == ["“AB”", "“leg”"]
     # A number no fact holds.
-    assert "the number 7" in _clause_gaps(_clean("AB = 7."), FigureFacts(points=["A", "B"], givens=[
-        F("equal_length", ["AB"], value=5, quote="AB = 7")]), [], [])
+    assert "the number 7" in coverage_gaps("AB = 7.", FigureFacts(points=["A", "B"], givens=[
+        F("equal_length", ["AB"], value=5, quote="AB = 7")]))
 
 
 def test_a_figure_contradicting_an_unread_clause_is_never_checked() -> None:
@@ -315,7 +311,8 @@ AREA_FACTS = FigureFacts(points=list("ABC"), triangles=["ABC"], givens=[
 STEP = (r"Altitude: Draw altitude $\overline{AD} \perp \overline{BC}$ with $D$ the midpoint of $\overline{BC}$. "
         r"Then $BD = 3$ and $AD = 4$.")
 STEP_FACTS = FigureFacts(points=list("ABCD"), segments=["AD"], givens=[
-    F("perpendicular", ["AD", "BC"], quote="AD ⊥ BC"), F("midpoint", ["BC"], point="D", quote="D the midpoint of BC"),
+    F("perpendicular", ["AD", "BC"], quote="altitude AD ⊥ BC"),
+    F("midpoint", ["BC"], point="D", quote="D the midpoint of BC"),
     F("equal_length", ["BD"], value=3, quote="BD = 3"), F("equal_length", ["AD"], value=4, quote="AD = 4")])
 AREA_BASE = fig(points={"A": (3, 4), "B": (0, 0), "C": (6, 0)}, segments=["AB", "BC", "CA"])
 STEP_GOOD = fig(points={"A": (3, 4), "B": (0, 0), "C": (6, 0), "D": (3, 0)}, segments=["AB", "BC", "CA", "AD"],
@@ -599,7 +596,7 @@ def test_a_relation_word_needs_a_fact_of_its_kind(text: str, quote: str) -> None
 
 
 def test_a_shading_statement_needs_no_fact() -> None:
-    text = r"$\triangle ABC$ and $\triangle ABD$ share side $\overline{AB}$, and $\triangle ABD$ is shaded."
+    text = r"In $\triangle ABC$ and $\triangle ABD$, $\triangle ABD$ is shaded."
     facts = FigureFacts(points=list("ABCD"), segments=["AB"], triangles=["ABC", "ABD"])
     assert coverage_gaps(text, facts) == []
     assert coverage_gaps(text.replace("is shaded", "is obtuse"), facts) != []

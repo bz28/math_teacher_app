@@ -810,6 +810,62 @@
       "triangles": []
     }
   },
+  "1329c33df6f9c048f559ce046351d060": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn acute $\\triangle ABC$ with $AB$ the longest side, find $m\\angle C$ if $m\\angle A = 70^\\circ$.\n\nThe teach",
+      "recorded_at": 1794644087.6581829
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "C",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "other",
+          "quote": "acute \u25b3ABC"
+        },
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "other",
+          "quote": "AB the longest side"
+        },
+        {
+          "items": [
+            "A"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220A = 70\u00b0",
+          "value": 70
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
   "1467374241917c535276a3598c103b45": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -1310,6 +1366,67 @@
         "AC"
       ],
       "triangles": []
+    }
+  },
+  "242ca77b4e705e6dcb78aace4383f0b1": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, the hypotenuse $AB = 10$ and the leg $BC = 6$. Find $AC$.\n\nThe teacher's message:\n(none",
+      "recorded_at": 1794644098.8830621
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "AC",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "right_triangle",
+          "quote": "the hypotenuse AB"
+        },
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "the hypotenuse AB = 10",
+          "value": 10
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "equal_length",
+          "quote": "the leg BC = 6",
+          "value": 6
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "BC",
+        "AC"
+      ],
+      "triangles": [
+        "ABC"
+      ]
     }
   },
   "24eb1372e9e9aaed31c7bcc468b07810": {
@@ -2927,6 +3044,68 @@
       ]
     }
   },
+  "50590d567c4a2e2dcb953caa8898aa56": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nRight $\\triangle ABC$ has its right angle at $C$. The hypotenuse $AB = 13$ and $AC = 5$. Find $BC$.\n\nThe te",
+      "recorded_at": 1794644093.653256
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "BC",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "right_triangle",
+          "point": "C",
+          "quote": "Right \u25b3ABC has its right angle at C"
+        },
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "The hypotenuse AB = 13",
+          "value": 13
+        },
+        {
+          "items": [
+            "AC"
+          ],
+          "kind": "equal_length",
+          "quote": "AC = 5",
+          "value": 5
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "AC",
+        "BC"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
   "518432870bd18565ef4bd4abf08f8139": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -3969,6 +4148,102 @@
       "triangles": []
     }
   },
+  "6696c06cd7fb20479aa0449d9b34c2e8": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn circle $O$, find the length of the diameter, $\\overline{AB}$, if $OA = 5$.\n\nThe teacher's message:\n(none",
+      "recorded_at": 1794644092.278472
+    },
+    "response": {
+      "circles": [
+        "O"
+      ],
+      "find": [
+        {
+          "item": "AB",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "circle": "O",
+          "items": [
+            "AB"
+          ],
+          "kind": "diameter",
+          "quote": "find the length of the diameter, AB"
+        },
+        {
+          "items": [
+            "OA"
+          ],
+          "kind": "equal_length",
+          "quote": "OA = 5",
+          "value": 5
+        }
+      ],
+      "points": [
+        "O",
+        "A",
+        "B"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "OA"
+      ]
+    }
+  },
+  "682cefdb71b6fe93bc290a24099e9064": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn circle $O$, find the length of the diameter, $\\overline{AB}$, if $OA = 5$.\n\nThe teacher's message:\n(none",
+      "recorded_at": 1794644092.21362
+    },
+    "response": {
+      "circles": [
+        "O"
+      ],
+      "find": [
+        {
+          "item": "AB",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "circle": "O",
+          "items": [
+            "AB"
+          ],
+          "kind": "diameter",
+          "quote": "find the length of the diameter, AB"
+        },
+        {
+          "items": [
+            "OA"
+          ],
+          "kind": "equal_length",
+          "quote": "OA = 5",
+          "value": 5
+        }
+      ],
+      "points": [
+        "O",
+        "A",
+        "B"
+      ],
+      "prove": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "OA"
+      ]
+    }
+  },
   "687e20587c210ce360da083f4b96c8fc": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -4480,6 +4755,68 @@
       ]
     }
   },
+  "767c5eb6c63ceae8d75d827a83be7658": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, the hypotenuse $AB = 10$ and the leg $BC = 6$. Find $AC$.\n\nThe teacher's message:\n(none",
+      "recorded_at": 1794644099.126268
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "AC",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "right_triangle",
+          "point": "C",
+          "quote": "the hypotenuse AB"
+        },
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "the hypotenuse AB = 10",
+          "value": 10
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "equal_length",
+          "quote": "the leg BC = 6",
+          "value": 6
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "BC",
+        "AC"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
   "7927e32b73bce7756b9cd03f23214079": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -4875,6 +5212,68 @@
           "kind": "equal_length",
           "quote": "BC = 6",
           "value": 6
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "AC",
+        "BC"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
+  "81e266210f95ea07893f84f3eb75b903": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nRight $\\triangle ABC$ has its right angle at $C$. The hypotenuse $AB = 13$ and $AC = 5$. Find $BC$.\n\nThe te",
+      "recorded_at": 1794644093.409259
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "BC",
+          "kind": "segment"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "right_triangle",
+          "point": "C",
+          "quote": "Right \u25b3ABC has its right angle at C"
+        },
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "the hypotenuse AB = 13",
+          "value": 13
+        },
+        {
+          "items": [
+            "AC"
+          ],
+          "kind": "equal_length",
+          "quote": "AC = 5",
+          "value": 5
         }
       ],
       "lines": [],
@@ -6002,6 +6401,67 @@
       ]
     }
   },
+  "a3b669cdcffbe0f10814f6a65f86b203": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn isosceles $\\triangle ABC$ with $AB = AC$, the vertex angle measures $40^\\circ$. Find $m\\angle B$.\n\nThe t",
+      "recorded_at": 1794644077.113287
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "B",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "isosceles",
+          "point": "A",
+          "quote": "isosceles \u25b3ABC with AB = AC"
+        },
+        {
+          "items": [
+            "AB",
+            "AC"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB = AC"
+        },
+        {
+          "items": [
+            "BAC"
+          ],
+          "kind": "angle_measure",
+          "quote": "the vertex angle measures 40\u00b0",
+          "value": 40
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "AC"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
   "a49baa6b019b0b07bab02e8c4fe9dce8": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -6374,6 +6834,35 @@
       "requested": []
     }
   },
+  "b1634b0c7cfab457da129f5b6406e69e": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nTriangle $ABC$ is shaded, save for its middle third. Find the shaded area.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794644085.699177
+    },
+    "response": {
+      "find": [
+        {
+          "item": "shaded area",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "items": [],
+          "kind": "other",
+          "quote": "Triangle ABC is shaded, save for its middle third"
+        }
+      ],
+      "points": [],
+      "prove": [],
+      "requested": [],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
   "b4841c0b2a03c106340fb2cca45d9bf7": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -6422,6 +6911,68 @@
       "requested": [],
       "segments": [],
       "triangles": []
+    }
+  },
+  "b67d86b5249fe1c5822608da14c9466b": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn $\\triangle ABC$, $AB = 5$ and $AC = 6$. Find $m\\angle A$ opposite side $BC = 7$.\n\nThe teacher's message:",
+      "recorded_at": 1794644077.001856
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "BAC",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "AB = 5",
+          "value": 5
+        },
+        {
+          "items": [
+            "AC"
+          ],
+          "kind": "equal_length",
+          "quote": "AC = 6",
+          "value": 6
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "equal_length",
+          "quote": "BC = 7",
+          "value": 7
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "AC",
+        "BC"
+      ],
+      "triangles": [
+        "ABC"
+      ]
     }
   },
   "be7baa62886e96fac7c58eb03bdc70c3": {
@@ -6638,6 +7189,63 @@
       "triangles": []
     }
   },
+  "c761aa861af5e2cc79dcb648ef3b104e": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn acute $\\triangle ABC$ with $AB$ the longest side, find $m\\angle C$ if $m\\angle A = 70^\\circ$.\n\nThe teach",
+      "recorded_at": 1794644088.0808058
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "C",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "right_triangle",
+          "point": null,
+          "quote": "acute \u25b3ABC"
+        },
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "other",
+          "quote": "AB the longest side"
+        },
+        {
+          "items": [
+            "A"
+          ],
+          "kind": "angle_measure",
+          "quote": "m\u2220A = 70\u00b0",
+          "value": 70
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
   "ca9bb994cf2c2949d12c5effd54524d0": {
     "meta": {
       "mode": "bank_chat_facts_b",
@@ -6770,6 +7378,68 @@
       "requested": [],
       "segments": [],
       "triangles": []
+    }
+  },
+  "cfe46c67f48522801117cf800d144809": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn $\\triangle ABC$, $AB = 5$ and $AC = 6$. Find $m\\angle A$ opposite side $BC = 7$.\n\nThe teacher's message:",
+      "recorded_at": 1794644077.084821
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "A",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "AB"
+          ],
+          "kind": "equal_length",
+          "quote": "AB = 5",
+          "value": 5
+        },
+        {
+          "items": [
+            "AC"
+          ],
+          "kind": "equal_length",
+          "quote": "AC = 6",
+          "value": 6
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "equal_length",
+          "quote": "BC = 7",
+          "value": 7
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "AC",
+        "BC"
+      ],
+      "triangles": [
+        "ABC"
+      ]
     }
   },
   "d16a96eec93334217b4b0755dc08c578": {
@@ -7703,6 +8373,67 @@
       ]
     }
   },
+  "eb9680d84846e96c0c47df51ccdf6ed0": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn isosceles $\\triangle ABC$ with $AB = AC$, the vertex angle measures $40^\\circ$. Find $m\\angle B$.\n\nThe t",
+      "recorded_at": 1794644077.401951
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "B",
+          "kind": "angle"
+        }
+      ],
+      "givens": [
+        {
+          "items": [
+            "ABC"
+          ],
+          "kind": "isosceles",
+          "point": "A",
+          "quote": "isosceles \u25b3ABC with AB = AC"
+        },
+        {
+          "items": [
+            "AB",
+            "AC"
+          ],
+          "kind": "congruent_segments",
+          "quote": "AB = AC"
+        },
+        {
+          "items": [
+            "BAC"
+          ],
+          "kind": "angle_measure",
+          "quote": "the vertex angle measures 40\u00b0",
+          "value": 40
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C"
+      ],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "AC"
+      ],
+      "triangles": [
+        "ABC"
+      ]
+    }
+  },
   "ec7c49d4b6a13fd237c9de7e0409e1a6": {
     "meta": {
       "mode": "bank_chat_facts_a",
@@ -8060,6 +8791,47 @@
         "CD"
       ],
       "triangles": []
+    }
+  },
+  "f783bfa40b367fd2c9c9c4b153e739e3": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nTriangle $ABC$ is shaded, save for its middle third. Find the shaded area.\n\nThe teacher's message:\n(none)",
+      "recorded_at": 1794644087.5594292
+    },
+    "response": {
+      "circles": [],
+      "find": [
+        {
+          "item": "shaded area of triangle ABC",
+          "kind": "other"
+        }
+      ],
+      "givens": [
+        {
+          "circle": null,
+          "expr": null,
+          "items": [
+            "ABC"
+          ],
+          "kind": "other",
+          "point": null,
+          "quote": "Triangle ABC is shaded, save for its middle third.",
+          "value": null
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [],
+      "polygons": [],
+      "prove": [],
+      "rays": [],
+      "requested": [],
+      "segments": [],
+      "triangles": [
+        "ABC"
+      ]
     }
   },
   "f99a3f219b6264119b2c63010d1ac1aa": {

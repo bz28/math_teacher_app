@@ -42,7 +42,14 @@ KNOWN_WRONG_PASSED = {"77195d48-step1"}
 # were drawn right: df891226 (an exterior angle "formed … by extending side
 # RP", more than the extension fact says), 9d6733ba ("meeting AB at point M"
 # has no fact of its own) and 0511d648 ("… at points G and H respectively").
-DRAWN_FLOOR = 40
+# Review round 6 (coverage is an allowlist: every word is accounted for by a
+# verified fact, a target, or a short inert list) declines 36 more: most for
+# instruction wording ("Write a complete two-column proof", "Leave answers in
+# simplest radical form", "State the theorem you used", "Using the given
+# information"), the rest for words no fact verifies ("each base angle",
+# "arc BC", "them", "both"). Which wording words join the inert list is
+# Ben's decision (PR description, "Review round 6").
+DRAWN_FLOOR = 4
 
 
 @pytest.mark.asyncio
@@ -113,6 +120,11 @@ def test_the_claim_pattern_catches_claims_about_parts() -> None:
                  "I've added a diagram."):
         assert cf._CLAIM.search(said), said
     assert not cf._CLAIM.search("I tightened the wording; the answer is 12.")
+    # The problem's own words quoted back in a refusal are not a claim.
+    refusal = ("I couldn't draw a correct diagram: the reading of the problem missed “drawn”, so the figure "
+               "can't be checked.")
+    assert cf._CLAIM.search(refusal) and not cf.claims_figure(refusal)
+    assert cf.claims_figure("I drew the figure.")
 
 
 @pytest.mark.asyncio

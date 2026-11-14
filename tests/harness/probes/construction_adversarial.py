@@ -533,7 +533,73 @@ CASES: list[dict[str, Any]] = [
      "good": _fig({"A": [6, 0], "B": [0, 0], "C": [2.298, 1.928]}, segments=_TRI, angle_labels={"ABC": "40°"}),
      "bad": _fig({"A": [6, 0], "B": [0, 0], "C": [2.298, 1.928]}, segments=_TRI, angle_labels={"ABC": "40°"}),
      "why": "no triangle has a 40° largest angle; ∠C is about 112°"},
+    # Review round 6: coverage is an allowlist. A word that says something
+    # about the figure needs a fact that verifies it; a fact's quote must
+    # name the part the fact is about.
+    {"id": "r6-vertex-angle", "expect_declined": True,
+     "text": r"In isosceles $\triangle ABC$ with $AB = AC$, the vertex angle measures $40^\circ$. Find $m\angle B$.",
+     "good": _fig({"A": [2, 5.495], "B": [0, 0], "C": [4, 0]}, segments=_TRI, tick_groups=[["AB", "CA"]],
+                  angle_labels={"BAC": "40°"}),
+     "bad": _fig({"A": [2, 1.678], "B": [0, 0], "C": [4, 0]}, segments=_TRI, tick_groups=[["AB", "CA"]],
+                 angle_labels={"ABC": "40°"}),
+     "why": "40° on a base angle; the vertex angle is at A"},
+    {"id": "r6-opposite-side", "expect_declined": True,
+     "text": r"In $\triangle ABC$, $AB = 5$ and $AC = 6$. Find $m\angle A$ opposite side $BC = 7$.",
+     "good": _fig({"A": [0, 0], "B": [5, 0], "C": [1.2, 5.879]}, segments=_TRI,
+                  side_labels={"AB": "5", "CA": "6", "BC": "7"}),
+     "bad": _fig({"A": [0, 0], "B": [5, 0], "C": [4.5, 3.969]}, segments=_TRI, side_labels={"AB": "5", "CA": "6"}),
+     "why": "BC is 4, not 7"},
+    {"id": "r6-shade-save-for", "expect_declined": True,
+     "text": r"Triangle $ABC$ is shaded, save for its middle third. Find the shaded area.",
+     "good": _fig({"A": [0, 0], "B": [6, 0], "C": [2, 4]}, segments=_TRI),
+     "bad": _fig({"A": [0, 0], "B": [6, 0], "C": [2, 4]}, segments=_TRI, shaded=[{"polygon": ["A", "B", "C"]}]),
+     "why": "the whole triangle shaded, middle third included"},
+    {"id": "r6-acute-with-longest", "expect_declined": True,
+     "text": r"In acute $\triangle ABC$ with $AB$ the longest side, find $m\angle C$ if $m\angle A = 70^\circ$.",
+     "good": _fig({"A": [0, 0], "B": [5, 0], "C": [1.015, 2.79]}, segments=_TRI, angle_labels={"CAB": "70°"}),
+     "bad": _fig({"A": [0, 0], "B": [4, 0], "C": [1.642, 4.511]}, segments=_TRI, angle_labels={"CAB": "70°"}),
+     "why": "BC is the longest side"},
+    {"id": "r6-diameter-comma",
+     "text": r"In circle $O$, find the length of the diameter, $\overline{AB}$, if $OA = 5$.",
+     "good": _fig({"O": [0, 0], "A": [5, 0], "B": [-5, 0]}, circles=[{"center": "O", "through": "A"}],
+                  segments=["AB"], side_labels={"OA": "5"}),
+     "bad": _fig({"O": [0, 0], "A": [5, 0], "B": [-2.081, 4.546]}, circles=[{"center": "O", "through": "A"}],
+                 segments=["AB", "OA"], side_labels={"OA": "5"}),
+     "why": "AB is a chord that misses the centre"},
+    {"id": "r6-hypotenuse-named",
+     "text": r"Right $\triangle ABC$ has its right angle at $C$. The hypotenuse $AB = 13$ and $AC = 5$. Find $BC$.",
+     "good": _fig({"C": [0, 0], "A": [5, 0], "B": [0, 12]}, segments=_TRI, right_angles=["ACB"],
+                  side_labels={"AB": "13", "CA": "5"}),
+     "bad": _fig({"C": [0, 0], "A": [5, 0], "B": [2.743, 12.802]}, segments=_TRI, right_angles=["ACB"],
+                 side_labels={"AB": "13", "CA": "5"}),
+     "why": "∠C is not right"},
+    # "hypotenuse" says ∠C is right, but no fact the reading has states it.
+    {"id": "r6-hypotenuse-implied", "expect_declined": True,
+     "text": r"In $\triangle ABC$, the hypotenuse $AB = 10$ and the leg $BC = 6$. Find $AC$.",
+     "good": _fig({"C": [0, 0], "B": [6, 0], "A": [0, 8]}, segments=_TRI, right_angles=["ACB"],
+                  side_labels={"AB": "10", "BC": "6"}),
+     "bad": _fig({"C": [0, 0], "B": [6, 0], "A": [1, 8.66]}, segments=_TRI, side_labels={"AB": "10", "BC": "6"}),
+     "why": "no right angle at C, so AB is no hypotenuse"},
 ]
+
+
+# Review round 6 (coverage is an allowlist): correct figures that are now
+# declined, each for a word no fact the reading has verifies. Refusing is
+# allowed; passing a wrong figure is not. Each is a candidate for a fact
+# kind or an exact rule, not for the inert list.
+ROUND6_DECLINED: dict[str, str] = {
+    "square": "“has side 6” (no length word) and “diagonal”",
+    "prove-prove": "“meets them at X and Y”: “them” and “meets” are no fact's",
+    "prove-show": "“them”", "prove-explain": "“them”", "prove-lowercase": "“them”",
+    "prove-perp-marked": "“diagonals”",
+    "r3-extension": "“exterior” in the target",
+    "r3-arc-centre": "“arc AB” in the target",
+    "r3-shading": "“share side AB”",
+    "r4-scalene": "“longest” in the target",
+    "r4-unnamed-right": "“right”, “legs”, “hypotenuse” name no part",
+    "r5-which": "“which”, “opposite”",
+    "r5-major-arc": "“major arc ACB” in the target",
+}
 
 
 async def run_case(case: dict[str, Any]) -> dict[str, Any]:
@@ -577,7 +643,7 @@ async def run_case(case: dict[str, Any]) -> dict[str, Any]:
         facts = facts.model_dump()
     return {
         "id": case["id"], "error": "", "reading": why, "facts": facts,
-        "expect_declined": bool(case.get("expect_declined")),
+        "expect_declined": bool(case.get("expect_declined")) or case["id"] in ROUND6_DECLINED,
         "good": good, "bad": bad, "bad_caught": caught,
         "bad_fixed_by_removing_marks": not bad and caught,
     }

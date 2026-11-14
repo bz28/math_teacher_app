@@ -309,8 +309,9 @@ def test_a_relation_the_reading_has_is_no_gap() -> None:
     )
     reading = FigureFacts(
         points=["A", "B", "C", "D", "M"],
-        givens=[Fact(kind="parallel", items=["AB", "CD"]), Fact(kind="midpoint", items=["AB"], point="M")],
-        prove=[Fact(kind="congruent_segments", items=["AD", "BC"])],
+        givens=[Fact(kind="parallel", items=["AB", "CD"], quote="AB ∥ CD"),
+                Fact(kind="midpoint", items=["AB"], point="M", quote="M is the midpoint of AB")],
+        prove=[Fact(kind="congruent_segments", items=["AD", "BC"], quote="AD ≅ BC")],
     )
     assert coverage_gaps(text, reading) == []
     # A fact of the right kind about other names doesn't account for it
@@ -318,17 +319,20 @@ def test_a_relation_the_reading_has_is_no_gap() -> None:
     # and by the check on the drawing instead).
     wrong = reading.model_copy(update={
         "points": [*reading.points, "E", "F", "G", "H"],
-        "givens": [Fact(kind="parallel", items=["EF", "GH"]), Fact(kind="midpoint", items=["AB"], point="M")],
+        "givens": [Fact(kind="parallel", items=["EF", "GH"], quote="AB ∥ CD"),
+                   Fact(kind="midpoint", items=["AB"], point="M", quote="M is the midpoint of AB")],
     })
-    assert coverage_gaps(text, wrong) == ["“∥” (about A, B, C, D)"]
+    # Review round 6: a quote names its fact's parts or accounts for nothing.
+    assert coverage_gaps(text, wrong) == ["“AB ∥ CD”"]
 
 
 def test_a_point_the_reading_leaves_out_is_a_gap() -> None:
     text = "M is the midpoint of AB and N is on BC."
     reading = FigureFacts(points=["A", "B", "C", "M"], givens=[
-        Fact(kind="midpoint", items=["AB"], point="M"), Fact(kind="on_segment", items=["BC"], point="N"),
+        Fact(kind="midpoint", items=["AB"], point="M", quote="M is the midpoint of AB"),
+        Fact(kind="on_segment", items=["BC"], point="N", quote="N is on BC"),
     ])
-    assert coverage_gaps(text, reading) == ["point N"]
+    assert coverage_gaps(text, reading)[0] == "point N"
 
 
 def test_a_method_named_is_not_a_fact() -> None:
@@ -339,10 +343,12 @@ def test_a_method_named_is_not_a_fact() -> None:
             "then justify a step by the definition of midpoint.")
     reading = FigureFacts(
         points=["A", "B", "C", "D"],
-        givens=[Fact(kind="parallel", items=["AB", "CD"])],
-        prove=[Fact(kind="congruent_angles", items=["1", "2"])],
+        givens=[Fact(kind="parallel", items=["AB", "CD"], quote="AB ∥ CD")],
+        prove=[Fact(kind="congruent_angles", items=["1", "2"], quote="∠1 ≅ ∠2")],
     )
-    assert coverage_gaps(text, reading) == []
+    # Review round 6: only the method's name is accounted for; "justify a
+    # step" is instruction wording, not on the inert list.
+    assert coverage_gaps(text, reading) == ["“justify”", "“step”"]
 
 
 def test_messages_are_written_by_code_not_quoted() -> None:
@@ -463,10 +469,12 @@ _SAME_SIDE_TEXT = ("Lines AB and CD are parallel, cut by transversal EF at G and
 
 def _same_side_reading(*pair: Fact) -> FigureFacts:
     return FigureFacts(points=list("ABCDEFGH"), givens=[
-        Fact(kind="parallel", items=["AB", "CD"]), Fact(kind="transversal", items=["EF", "AB", "CD"]),
-        Fact(kind="on_line", items=["AB"], point="G"), Fact(kind="on_line", items=["CD"], point="H"),
-        Fact(kind="on_line", items=["EF"], point="G"), Fact(kind="on_line", items=["EF"], point="H"),
-        Fact(kind="angle_measure", items=["1"], value=63), Fact(kind="angle_measure", items=["2"], expr="2x + 3"),
+        Fact(kind="parallel", items=["AB", "CD"], quote="Lines AB and CD are parallel"),
+        Fact(kind="transversal", items=["EF", "AB", "CD"], quote="cut by transversal EF at G and H"),
+        Fact(kind="intersect", items=["EF", "AB"], point="G", quote="cut by transversal EF at G"),
+        Fact(kind="intersect", items=["EF", "CD"], point="H", quote="EF at G and H"),
+        Fact(kind="angle_measure", items=["1"], value=63, quote="m∠1 = 63°"),
+        Fact(kind="angle_measure", items=["2"], expr="2x + 3", quote="m∠2 = (2x + 3)°"),
         *pair,
     ], find=[Target(kind="other", item="x")])
 
@@ -476,14 +484,15 @@ def test_a_transversal_alone_does_not_account_for_where_two_angles_sit() -> None
     the alternate position pass (∠2 drawn 63°, where the problem makes it
     117°). The words now need their own fact."""
     assert coverage_gaps(_SAME_SIDE_TEXT, _same_side_reading()) != []
-    pair = Fact(kind="same_side_interior", items=["1", "2"])
+    pair = Fact(kind="same_side_interior", items=["1", "2"], quote="∠1 and ∠2 are same-side interior angles")
     assert coverage_gaps(_SAME_SIDE_TEXT, _same_side_reading(pair)) == []
     # A theorem's name is a method, not a fact about the figure.
     for text in ("Lines AB ∥ CD. Prove ∠1 ≅ ∠2 by the Alternate Interior Angles Theorem.",
                  "Lines AB ∥ CD. Justify with the corresponding angles postulate.",
                  "Lines AB ∥ CD. Use the Converse of the Same-Side Interior Angles Theorem."):
-        assert not [g for g in coverage_gaps(text, FigureFacts(points=list("ABCD"), givens=[
-            Fact(kind="parallel", items=["AB", "CD"])])) if "interior" in g or "corresponding" in g], text
+        gaps = coverage_gaps(text, FigureFacts(points=list("ABCD"), givens=[
+            Fact(kind="parallel", items=["AB", "CD"], quote="AB ∥ CD")]))
+        assert not [g for g in gaps if "interior" in g or "corresponding" in g], text
 
 
 def test_the_angles_must_sit_where_the_problem_says() -> None:
@@ -576,9 +585,10 @@ async def test_numbers_that_make_an_impossible_angle_say_so(monkeypatch: pytest.
     text = (r"$\overrightarrow{KM}$ bisects $\angle JKL$, and $\overrightarrow{KN}$ bisects $\angle MKL$. "
             r"If $m\angle JKL = 10x - 4$ and $m\angle NKL = 2x + 13$, find $m\angle JKM$.")
     r = FigureFacts(points=list("JKLMN"), rays=["KM", "KN"], givens=[
-        Fact(kind="bisects_angle", items=["KM", "JKL"]), Fact(kind="bisects_angle", items=["KN", "MKL"]),
-        Fact(kind="angle_measure", items=["JKL"], expr="10x - 4"),
-        Fact(kind="angle_measure", items=["NKL"], expr="2x + 13"),
+        Fact(kind="bisects_angle", items=["KM", "JKL"], quote="KM bisects ∠JKL"),
+        Fact(kind="bisects_angle", items=["KN", "MKL"], quote="KN bisects ∠MKL"),
+        Fact(kind="angle_measure", items=["JKL"], expr="10x - 4", quote="m∠JKL = 10x - 4"),
+        Fact(kind="angle_measure", items=["NKL"], expr="2x + 13", quote="m∠NKL = 2x + 13"),
     ], find=[Target(kind="angle", item="JKM")])
     _stub_readings(monkeypatch, r, r)
     facts, why = await _why(text)
@@ -638,17 +648,18 @@ async def test_the_reading_step_sets_circle_facts_aside(monkeypatch: pytest.Monk
     """Prod 6d780084, through the reading step: the readings agree once the
     made-up diameter is set aside, and the agreed facts carry the note.
     (Prod wrote "with right angles at A and D respectively"; "D respectively"
-    has no fact of its own, so that wording is declined: review round 5.)"""
+    has no fact of its own, so that wording is declined: review round 5. And
+    "share", "Write a complete congruence statement" are words no fact
+    accounts for: review round 6.)"""
     right = "∠A and ∠D are right angles"
     common = [Fact(kind="right_triangle", items=["ABC"], point="A", quote=right),
               Fact(kind="right_triangle", items=["DBC"], point="D", quote=right),
               Fact(kind="congruent_segments", items=["AB", "DB"], quote="AB = DB")]
     a = FigureFacts(points=list("ABCD"), triangles=["ABC", "DBC"], givens=common,
-                    prove=[Fact(kind="congruent_triangles", items=["ABC", "DBC"])])
+                    prove=[Fact(kind="congruent_triangles", items=["ABC", "DBC"], quote="△ABC ≅ △DBC")])
     b = a.model_copy(update={"givens": [*common, Fact(kind="diameter", items=["BC"])]})
     _stub_readings(monkeypatch, a, b)
-    facts, why = await _why("△ABC and △DBC share hypotenuse BC, ∠A and ∠D are right angles, "
-                            "and AB = DB. Write a complete congruence statement.")
+    facts, why = await _why("In △ABC and △DBC, ∠A and ∠D are right angles, and AB = DB. Prove △ABC ≅ △DBC.")
     assert why == []
     assert facts.dropped == ["set aside from givens: BC is a diameter of the circle (the problem names no circle)"]
     assert all(f.kind != "diameter" for f in facts.givens)
@@ -725,11 +736,15 @@ def test_an_altitude_is_accounted_for_by_its_own_perpendicular() -> None:
     accounts for it."""
     text = ("In right triangle PQR with the right angle at Q, altitude $\\overline{QS}$ is drawn to hypotenuse "
             "$\\overline{PR}$. If PS = 4 and SR = 9, find QS.")
-    base = [Fact(kind="right_triangle", items=["PQR"], point="Q"), Fact(kind="on_segment", items=["PR"], point="S")]
-    with_alt = FigureFacts(points=list("PQRS"), givens=[*base, Fact(kind="perpendicular", items=["QS", "PR"])])
-    other_perp = FigureFacts(points=list("PQRS"), givens=[*base, Fact(kind="perpendicular", items=["PQ", "QR"])])
+    base = [Fact(kind="right_triangle", items=["PQR"], point="Q", quote="right triangle PQR with the right angle at Q"),
+            Fact(kind="on_segment", items=["PR"], point="S", quote="altitude QS is drawn to hypotenuse PR")]
+    alt = "altitude QS is drawn to hypotenuse PR"
+    with_alt = FigureFacts(points=list("PQRS"), givens=[*base, Fact(kind="perpendicular", items=["QS", "PR"],
+                                                                     quote=alt)])
+    other_perp = FigureFacts(points=list("PQRS"), givens=[*base, Fact(kind="perpendicular", items=["PQ", "QR"],
+                                                                       quote=alt)])
     assert not [g for g in coverage_gaps(text, with_alt) if "altitude" in g]
-    assert [g for g in coverage_gaps(text, other_perp) if "altitude" in g]
+    assert [g for g in coverage_gaps(text, other_perp) if "QS" in g]
     # An altitude with no name has nothing to check against.
     assert [g for g in coverage_gaps("Draw an altitude of the triangle ABC.", FigureFacts(points=list("ABC")))
             if "altitude" in g]

@@ -232,6 +232,13 @@ _CLAIM = re.compile(
 )
 
 
+def claims_figure(reply: str) -> bool:
+    """The reply claims a figure. Words in “…” are the problem's own, quoted
+    back (“the reading of the problem missed “drawn”, so the figure can't be
+    checked”), not a claim."""
+    return bool(_CLAIM.search(re.sub(r"“[^”]*”", "“”", reply)))
+
+
 def fingerprint(spec: dict[str, Any] | None) -> str:
     """Twelve hex digits that change whenever the figure does."""
     import hashlib
@@ -274,7 +281,7 @@ async def run_case(case: dict[str, Any]) -> dict[str, Any]:
         id=uuid.uuid4(), course_id=uuid.uuid4(), unit_id=None, source_doc_ids=None,
         question=case["question"], solution_steps=case["solution_steps"] or None,
         final_answer=case["final_answer"], generation_prompt=None, chat_messages=[],
-        figure_spec=None, figure_svg=None,
+        figure_spec=None, figure_svg=None, figure_facts=None, requires_drawing=False,
     )
     course = SimpleNamespace(subject="math", name="Geometry Honors/Trig")
     db = MagicMock()
@@ -408,7 +415,7 @@ def _outcome_ok(result: dict[str, Any], expected: str) -> bool:
     must draw nothing."""
     drew = bool(result["figure_svg"])
     if expected == "figure":
-        return drew or not _CLAIM.search(result["reply"])
+        return drew or not claims_figure(result["reply"])
     return not drew
 
 
@@ -423,7 +430,7 @@ def checks(result: dict[str, Any]) -> list[CheckResult]:
         CheckResult("the case ran", not result["error"], result["error"]),
         CheckResult(
             "no reply claims a figure that wasn't drawn",
-            drew or not _CLAIM.search(result["reply"]),
+            drew or not claims_figure(result["reply"]),
             result["reply"][:160],
         ),
         CheckResult(f"by-eye verdict holds ({expected})", _outcome_ok(result, expected), result["reply"][:160]),
@@ -466,7 +473,7 @@ def summarize(results: list[dict[str, Any]], redraws: dict[str, int]) -> dict[st
         "not_looked_at": sum(1 for r in results for k, spec in drawn_figures(r) if not verdict(k, spec)),
         "negatives_rejected": sum(1 for r in results if negative_rejected(r) is True),
         "false_claims": sum(
-            1 for r in results if not (r["figure_svg"] or r["step_figures"]) and _CLAIM.search(r["reply"])
+            1 for r in results if not (r["figure_svg"] or r["step_figures"]) and claims_figure(r["reply"])
         ),
         "step_figures": sum(len(r["step_figures"]) for r in results),
         "step_figures_moved": moved,

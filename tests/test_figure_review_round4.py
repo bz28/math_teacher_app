@@ -113,7 +113,8 @@ def test_only_the_target_phrase_is_a_question() -> None:
     text = r"In $\triangle PQR$, $S$ lies on $\overline{PR}$, $PS = 4$ and $SR = 9$. Find $QS$, $PQ$, and $QR$."
     facts = FigureFacts(points=list("PQRS"), triangles=["PQR"], givens=[
         F("on_segment", ["PR"], point="S", quote="S lies on PR"), F("equal_length", ["PS"], value=4, quote="PS = 4"),
-        F("equal_length", ["SR"], value=9, quote="SR = 9")])
+        F("equal_length", ["SR"], value=9, quote="SR = 9")],
+        find=[Target(kind="segment", item=x) for x in ("QS", "PQ", "QR")])
     assert coverage_gaps(text, facts) == []
 
 
@@ -138,7 +139,10 @@ def test_an_acute_angle_of_a_right_triangle_is_its_fact() -> None:
     facts = FigureFacts(points=list("ABC"), triangles=["ABC"], givens=[
         right, F("angle_measure", ["A"], expr="3x+4", quote="one acute angle measures (3x + 4)°"),
         F("angle_measure", ["B"], expr="6x-13", quote="the other measures (6x - 13)°")])
-    assert coverage_gaps(text, facts) == []
+    # Review round 6: "one acute angle", "the other", "each acute angle" are
+    # words no fact verifies (the measure facts don't check "acute"), so this
+    # wording is now declined.
+    assert any("acute" in g for g in coverage_gaps(text, facts))
     # "∠C is acute" (no "angle" after the word) is not stated by a right triangle.
     text = r"In right $\triangle ABC$, $\angle C$ is acute."
     said = F("right_triangle", ["ABC"], point="A", quote=r"In right △ABC, ∠C is acute")
@@ -149,7 +153,8 @@ def test_right_triangle_with_its_right_angle_is_one_statement() -> None:
     text = r"In right $\triangle ABC$ with the right angle at $C$, $AC = 9$ and $BC = 40$. Find $AB$."
     facts = FigureFacts(points=list("ABC"), triangles=["ABC"], givens=[
         F("right_triangle", ["ABC"], point="C", quote="right △ABC with the right angle at C"),
-        F("equal_length", ["AC"], value=9, quote="AC = 9"), F("equal_length", ["BC"], value=40, quote="BC = 40")])
+        F("equal_length", ["AC"], value=9, quote="AC = 9"), F("equal_length", ["BC"], value=40, quote="BC = 40")],
+        find=[Target(kind="segment", item="AB")])
     assert coverage_gaps(text, facts) == []
     # A second right angle elsewhere still needs its own fact.
     two = text.replace("Find $AB$.", r"$\angle D$ is a right angle.")
@@ -258,8 +263,10 @@ SECTOR_SHADED = fig(points={"O": (0, 0), "A": (3, 0), "B": (0, 3)}, segments=["O
 ])
 def test_complement_shading_is_never_the_named_region(tail: str) -> None:
     text = r"Points $A$ and $B$ lie on circle $O$ and $m\angle AOB = 90^\circ$. " + tail
-    assert coverage_gaps(text, CIRCLE_FACTS)  # no fact says it: the reading fails closed
-    assert any("shading" in m for m in check(SECTOR_SHADED, text, CIRCLE_FACTS))
+    # No fact says it: the reading fails closed. (Review round 6: the words
+    # around the shading are accounted for like any others, so this is the
+    # guard; there is no list of complement words.)
+    assert coverage_gaps(text, CIRCLE_FACTS)
 
 
 def test_the_named_region_shaded_still_passes() -> None:
@@ -282,7 +289,11 @@ def test_a_leg_label_on_the_hypotenuse_is_caught() -> None:
                right_angles=["_b_a_c"], side_labels={"_a_b": "4", "_c_a": "3"})
     wrong = fig(points={"_a": (0, 0), "_b": (math.sqrt(7) * k, 0), "_c": (0, 3 * k)},
                 segments=["_a_b", "_b_c", "_c_a"], right_angles=["_b_a_c"], side_labels={"_b_c": "4", "_c_a": "3"})
-    assert coverage_gaps(LEGS, LEG_FACTS) == [] and unverifiable(LEG_FACTS) == []
+    # Review round 6: "hypotenuse" in the question is a domain word no fact
+    # accounts for, so the reading is declined; the checker still catches
+    # the label on the wrong side.
+    # (Its quotes name no part either, so they account for nothing.)
+    assert "“hypotenuse”" in coverage_gaps(LEGS, LEG_FACTS) and unverifiable(LEG_FACTS) == []
     assert check(good, LEGS, LEG_FACTS, final_answer="5") == []
     assert check(wrong, LEGS, LEG_FACTS, final_answer="5")
 
@@ -381,7 +392,7 @@ def test_a_decimal_point_is_not_a_clause_end(text: str) -> None:
 def test_after_an_abbreviation_a_statement_is_still_covered() -> None:
     text = r"In $\triangle ABC$, $AB = 5$, e.g. $BC$ is longer than $AC$."
     facts = T(givens=[F("equal_length", ["AB"], value=5, quote="AB = 5")])
-    assert any("BC is longer than AC" in g for g in coverage_gaps(text, facts))
+    assert any("longer" in g for g in coverage_gaps(text, facts))
 
 
 # ── 9. What a quote accounts for ──────────────────────────────────────
@@ -391,23 +402,26 @@ LONGEST = r"In $\triangle ABC$, $AB = 5$ and $BC$ is the longest side. Find $m\a
 
 def test_a_quote_over_two_clauses_does_not_cover_the_other() -> None:
     facts = T(givens=[F("equal_length", ["AB"], value=5, quote="AB = 5 and BC is the longest side")])
-    assert any("BC is the longest side" in g for g in coverage_gaps(LONGEST, facts))
+    assert any("longest" in g for g in coverage_gaps(LONGEST, facts))
 
 
 def test_a_name_only_quote_covers_nothing() -> None:
     facts = T(givens=[F("equal_length", ["AB"], value=5, quote="AB = 5"),
                       F("equal_length", ["AB"], value=5, quote="BC")])
-    assert any("BC is the longest side" in g for g in coverage_gaps(LONGEST, facts))
+    assert any("longest" in g for g in coverage_gaps(LONGEST, facts))
 
 
 def test_a_quote_over_clauses_covers_the_clause_stating_its_relation() -> None:
     text = r"In isosceles $\triangle ABC$, $AB = AC$. Find $m\angle B$."
     givens = [F("isosceles", ["ABC"], point="A", quote="isosceles △ABC, AB = AC"),
               F("congruent_segments", ["AB", "AC"], quote="AB = AC")]
-    assert coverage_gaps(text, FigureFacts(points=list("ABC"), givens=givens)) == []
-    # Without the one-clause fact, "AB = AC" is a second clause stating the
-    # isosceles relation's kind: which clause the quote states is unclear.
-    assert coverage_gaps(text, FigureFacts(points=list("ABC"), givens=givens[:1])) != []
+    asked = [Target(kind="angle", item="B")]
+    assert coverage_gaps(text, FigureFacts(points=list("ABC"), givens=givens, find=asked)) == []
+    # Review round 6: the isosceles fact with apex A states AB = AC itself,
+    # so its quote accounts for both; with another apex it doesn't.
+    assert coverage_gaps(text, FigureFacts(points=list("ABC"), givens=givens[:1], find=asked)) == []
+    other_apex = [F("isosceles", ["ABC"], point="B", quote="isosceles △ABC, AB = AC")]
+    assert coverage_gaps(text, FigureFacts(points=list("ABC"), givens=other_apex, find=asked)) != []
 
 
 @pytest.mark.parametrize(("text", "givens"), [

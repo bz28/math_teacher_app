@@ -365,38 +365,46 @@ def test_each_stated_relation_needs_its_own_fact() -> None:
     cases = [
         (r"In $\triangle ABC$, $D$ is a point on $\overline{BC}$ and $\overline{AD} \perp \overline{BC}$.",
          FigureFacts(points=list("ABCD"), triangles=["ABC"], segments=["AD"],
-                     givens=[F("perpendicular", ["AD", "BC"], point="D")]),
-         F("on_segment", ["BC"], point="D")),
+                     givens=[F("perpendicular", ["AD", "BC"], point="D", quote="AD ⊥ BC")]),
+         F("on_segment", ["BC"], point="D", quote="D is a point on BC")),
         (r"In $\triangle ABC$, $m\angle A = 40^\circ$ and $\overline{AB} \cong \overline{AC}$.",
-         FigureFacts(points=list("ABC"), triangles=["ABC"], givens=[F("congruent_segments", ["AB", "AC"])]),
-         F("angle_measure", ["A"], value=40)),
+         FigureFacts(points=list("ABC"), triangles=["ABC"], givens=[F("congruent_segments", ["AB", "AC"],
+                                                                      quote="AB ≅ AC")]),
+         F("angle_measure", ["A"], value=40, quote="m∠A = 40°")),
         (r"In quadrilateral $ABCD$, $AB = CD$ and $\overline{AB} \parallel \overline{CD}$.",
-         FigureFacts(points=list("ABCD"), polygons=["ABCD"], givens=[F("parallel", ["AB", "CD"])]),
-         F("congruent_segments", ["AB", "CD"])),
+         FigureFacts(points=list("ABCD"), polygons=["ABCD"], givens=[F("parallel", ["AB", "CD"], quote="AB ∥ CD")]),
+         F("congruent_segments", ["AB", "CD"], quote="AB = CD")),
         (r"$E$ is the intersection of $\overline{AC}$ and $\overline{BD}$, and "
          r"$\overline{AB} \parallel \overline{CD}$.",
-         FigureFacts(points=list("ABCDE"), segments=["AC", "BD", "AB", "CD"], givens=[F("parallel", ["AB", "CD"])]),
-         F("intersect", ["AC", "BD"], point="E")),
+         FigureFacts(points=list("ABCDE"), segments=["AC", "BD", "AB", "CD"],
+                     givens=[F("parallel", ["AB", "CD"], quote="AB ∥ CD")]),
+         F("intersect", ["AC", "BD"], point="E", quote="E is the intersection of AC and BD")),
         (r"$D$ is between $A$ and $B$, and $\overline{CD} \perp \overline{AB}$.",
-         FigureFacts(points=list("ABCD"), segments=["CD", "AB"], givens=[F("perpendicular", ["CD", "AB"])]),
-         F("on_segment", ["AB"], point="D")),
+         FigureFacts(points=list("ABCD"), segments=["CD", "AB"], givens=[F("perpendicular", ["CD", "AB"],
+                                                                           quote="CD ⊥ AB")]),
+         F("on_segment", ["AB"], point="D", quote="D is between A and B")),
         (r"Given $\overline{AB} \parallel \overline{CD}$ and $\overline{EF} \parallel \overline{GH}$.",
-         FigureFacts(points=list("ABCDEFGH"), segments=["AB", "CD", "EF", "GH"], givens=[F("parallel", ["AB", "CD"])]),
-         F("parallel", ["EF", "GH"])),
+         FigureFacts(points=list("ABCDEFGH"), segments=["AB", "CD", "EF", "GH"],
+                     givens=[F("parallel", ["AB", "CD"], quote="AB ∥ CD")]),
+         F("parallel", ["EF", "GH"], quote="EF ∥ GH")),
         # One fact can't stand for two occurrences.
         (r"$D$ is a point on $\overline{BC}$ and $E$ is a point on $\overline{BC}$.",
-         FigureFacts(points=list("BCDE"), segments=["BC"], givens=[F("on_segment", ["BC"], point="D")]),
-         F("on_segment", ["BC"], point="E")),
+         FigureFacts(points=list("BCDE"), segments=["BC"], givens=[F("on_segment", ["BC"], point="D",
+                                                                       quote="D is a point on BC")]),
+         F("on_segment", ["BC"], point="E", quote="E is a point on BC")),
         # "AB ∥ EF" needs a fact about both sides, not one about AB alone.
         (r"$\overline{AB} \parallel \overline{EF}$.",
-         FigureFacts(points=list("ABCDEF"), segments=["AB", "CD", "EF"], givens=[F("parallel", ["AB", "CD"])]),
-         F("parallel", ["AB", "EF"])),
+         FigureFacts(points=list("ABCDEF"), segments=["AB", "CD", "EF"],
+                     givens=[F("parallel", ["AB", "CD"], quote="AB ∥ EF")]),
+         F("parallel", ["AB", "EF"], quote="AB ∥ EF")),
         (r"In $\triangle ABC$, $m\angle A = 2x + 5$ and $\overline{AB} \cong \overline{AC}$.",
-         FigureFacts(points=list("ABC"), triangles=["ABC"], givens=[F("congruent_segments", ["AB", "AC"])]),
-         F("angle_measure", ["A"], expr="2x + 5")),
+         FigureFacts(points=list("ABC"), triangles=["ABC"], givens=[F("congruent_segments", ["AB", "AC"],
+                                                                      quote="AB ≅ AC")]),
+         F("angle_measure", ["A"], expr="2x + 5", quote="m∠A = 2x + 5")),
         (r"In $\triangle ABC$, $\angle ABC$ measures $40^\circ$ and $\overline{AB} \cong \overline{AC}$.",
-         FigureFacts(points=list("ABC"), triangles=["ABC"], givens=[F("congruent_segments", ["AB", "AC"])]),
-         F("angle_measure", ["ABC"], value=40)),
+         FigureFacts(points=list("ABC"), triangles=["ABC"], givens=[F("congruent_segments", ["AB", "AC"],
+                                                                      quote="AB ≅ AC")]),
+         F("angle_measure", ["ABC"], value=40, quote="∠ABC measures 40°")),
     ]
     for text, facts, missing in cases:
         assert coverage_gaps(text, facts) != [], text
@@ -408,14 +416,19 @@ def test_a_hint_states_no_fact() -> None:
     text = (r"Given $\angle QRT \cong \angle SRT$, $\angle RQT \cong \angle RST$. Prove $\overline{QT} \cong "
             r"\overline{ST}$. (*Hint:* First prove that $\triangle QRT \cong \triangle SRT$ using AAS.)")
     facts = FigureFacts(points=list("QRST"), triangles=["QRT", "SRT"], givens=[
-        F("congruent_angles", ["QRT", "SRT"]), F("congruent_angles", ["RQT", "RST"])],
-        prove=[F("congruent_segments", ["QT", "ST"])])
-    assert coverage_gaps(text, facts) == []
+        F("congruent_angles", ["QRT", "SRT"], quote="∠QRT ≅ ∠SRT"),
+        F("congruent_angles", ["RQT", "RST"], quote="∠RQT ≅ ∠RST")],
+        prove=[F("congruent_segments", ["QT", "ST"], quote="QT ≅ ST")])
+    # Review round 6: a hint is read like the rest of the text. Its claim
+    # (△QRT ≅ △SRT) is a statement no fact reads, so it is a gap: skipping a
+    # hint could pass a figure that breaks it ("Hint: the triangle is
+    # isosceles"). Only its method ("using AAS") is accounted for.
+    assert coverage_gaps(text, facts) == ["“Hint”", "“First”", "“≅”"]
 
 
 def test_a_chain_is_one_fact_for_each_link() -> None:
     text = r"$\overline{AB} \parallel \overline{CD} \parallel \overline{EF}$."
-    facts = FigureFacts(points=list("ABCDEF"), givens=[F("parallel", ["AB", "CD", "EF"])])
+    facts = FigureFacts(points=list("ABCDEF"), givens=[F("parallel", ["AB", "CD", "EF"], quote="AB ∥ CD ∥ EF")])
     assert coverage_gaps(text, facts) == []
 
 

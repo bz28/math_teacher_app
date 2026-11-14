@@ -3265,6 +3265,67 @@
       ]
     }
   },
+  "353748b12485e891c87fff52c5843765": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\nIn the diagram below, $\\overline{AB} \\parallel \\overline{CD}$ and $M$ is the midpoint of $\\overline{BC}$. U",
+      "recorded_at": 1794644510.655562
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "midpoint",
+          "point": "M",
+          "quote": "M is the midpoint of BC"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "M"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "ABM",
+            "DCM"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "prove that \u25b3ABM \u2245 \u25b3DCM by identifying the three pairs of congruent parts and naming the appropriate congruence postulate"
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD",
+        "BC"
+      ],
+      "triangles": [
+        "ABM",
+        "DCM"
+      ]
+    }
+  },
   "355218aa04d0bf93aa9d170b4c20829f": {
     "meta": {
       "mode": "bank_chat",
@@ -6573,6 +6634,61 @@
         "solution_steps": null
       },
       "reply": "Here's the figure with all segments including WM and ZM drawn in. M is placed exactly at the midpoint of XY, WX \u22a5 XY, and ZY \u22a5 XY, with WX = ZY as given."
+    }
+  },
+  "6d8edfb9e5337f77a631f6d40bf1ff6d": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\n**Given:** $\\overline{BC} \\cong \\overline{DA}$, $\\overline{BC} \\parallel \\overline{AD}$\n\n**Prove:** $\\trian",
+      "recorded_at": 1794644124.820621
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "BC",
+            "DA"
+          ],
+          "kind": "congruent_segments",
+          "quote": "BC \u2245 DA"
+        },
+        {
+          "items": [
+            "BC",
+            "AD"
+          ],
+          "kind": "parallel",
+          "quote": "BC \u2225 AD"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [
+        {
+          "items": [
+            "ABC",
+            "CDA"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "\u25b3ABC \u2245 \u25b3CDA"
+        }
+      ],
+      "requested": [],
+      "segments": [
+        "BC",
+        "DA",
+        "AC"
+      ],
+      "triangles": [
+        "ABC",
+        "CDA"
+      ]
     }
   },
   "6e17ef6c5e1d8c8e8c5abef329197f3a": {
@@ -15213,6 +15329,67 @@
       }
     }
   },
+  "dd7bb4d4ab00a429188881ccad5afcf5": {
+    "meta": {
+      "mode": "bank_chat_facts_b",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You are auditing a geometry problem before a diagram is drawn for it. Go through || Problem:\nIn the diagram below, $\\overline{AB} \\parallel \\overline{CD}$ and $M$ is the midpoint of $\\overline{BC}$. U",
+      "recorded_at": 1794644510.5541928
+    },
+    "response": {
+      "circles": [],
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "AB",
+            "CD"
+          ],
+          "kind": "parallel",
+          "quote": "AB \u2225 CD"
+        },
+        {
+          "items": [
+            "BC"
+          ],
+          "kind": "midpoint",
+          "point": "M",
+          "quote": "M is the midpoint of BC"
+        }
+      ],
+      "lines": [],
+      "named_lines": [],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "M"
+      ],
+      "polygons": [],
+      "prove": [
+        {
+          "items": [
+            "ABM",
+            "DCM"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "prove that \u25b3ABM \u2245 \u25b3DCM by identifying the three pairs of congruent parts and naming the appropriate congruence postulate"
+        }
+      ],
+      "rays": [],
+      "requested": [],
+      "segments": [
+        "AB",
+        "CD",
+        "BC"
+      ],
+      "triangles": [
+        "ABM",
+        "DCM"
+      ]
+    }
+  },
   "ddc7f477b21852c86b02f5bfd7c0db1e": {
     "meta": {
       "mode": "bank_chat",
@@ -15260,6 +15437,61 @@
         ],
         "type": "geometry"
       }
+    }
+  },
+  "de88c3654e6ccc4779983075334ef5c5": {
+    "meta": {
+      "mode": "bank_chat_facts_a",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You read geometry problems for a figure checker. List what the problem STATES\nab || Problem:\n**Given:** $\\overline{BC} \\cong \\overline{DA}$, $\\overline{BC} \\parallel \\overline{AD}$\n\n**Prove:** $\\trian",
+      "recorded_at": 1794644124.794943
+    },
+    "response": {
+      "find": [],
+      "givens": [
+        {
+          "items": [
+            "BC",
+            "DA"
+          ],
+          "kind": "congruent_segments",
+          "quote": "BC \u2245 DA"
+        },
+        {
+          "items": [
+            "BC",
+            "AD"
+          ],
+          "kind": "parallel",
+          "quote": "BC \u2225 AD"
+        }
+      ],
+      "points": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "prove": [
+        {
+          "items": [
+            "ABC",
+            "CDA"
+          ],
+          "kind": "congruent_triangles",
+          "quote": "\u25b3ABC \u2245 \u25b3CDA"
+        }
+      ],
+      "requested": [],
+      "segments": [
+        "BC",
+        "DA",
+        "AC"
+      ],
+      "triangles": [
+        "ABC",
+        "CDA"
+      ]
     }
   },
   "e00650384772bd73b283edfbf4b88cb3": {

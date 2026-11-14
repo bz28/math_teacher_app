@@ -25,6 +25,10 @@ declined instead, and fewer figures are drawn.
    and C") is part of that statement: a fact must quote and name it.
 8. "draw AD", exactly, is accounted for by the part the figure is checked
    to draw.
+
+Review round 6 replaced rules 1, 4, 5 and 7 with token accounting (see
+test_figure_review_round6.py); the tests here still hold, some now
+expecting a refusal where the earlier rule accepted.
 """
 
 from __future__ import annotations
@@ -34,6 +38,7 @@ from typing import Any
 
 import pytest
 
+from api.core.geometry.coverage import _target_spans
 from api.core.geometry.dsl import ConstructionFigure
 from api.core.geometry.facts import (
     Fact,
@@ -104,8 +109,9 @@ def test_a_word_with_no_name_after_it_is_what_is_asked() -> None:
     facts = FigureFacts(points=list("ABC"), triangles=["ABC"], find=[Target(kind="angle", item="A")],
                         givens=[F("angle_measure", ["B"], value=100, quote=r"m\angle B = 100^\circ"),
                                 F("congruent_segments", ["AB", "BC"], quote="AB = BC")])
-    assert coverage_gaps(r"In $\triangle ABC$, $m\angle B = 100^\circ$. Find the acute angle.", facts) == []
-    # "the acute angle at A" names A: it says ∠A is acute, which needs a fact.
+    # Review round 6: "acute" is a domain word, never exempt, even with no
+    # name after it.
+    assert coverage_gaps(r"In $\triangle ABC$, $m\angle B = 100^\circ$. Find the acute angle.", facts) == ["“acute”"]
     assert any("acute" in g for g in coverage_gaps(text, facts))
 
 
@@ -122,7 +128,7 @@ def test_a_relative_which_clause_is_a_statement() -> None:
     text = r"In $\triangle ABC$, $\angle B$, which is a right angle, is opposite side $AC = 10$. Find $AB$."
     facts = FigureFacts(points=list("ABC"), triangles=["ABC"], find=[Target(kind="segment", item="AB")])
     gaps = coverage_gaps(text, facts)
-    assert any("right angle" in g for g in gaps) and "the number 10" in gaps
+    assert any("right" in g for g in gaps) and "“AC = 10”" in gaps
 
 
 DRAW_PERP = (r"In $\triangle ABC$, $AB = 6$. Draw $\overline{AD} \perp \overline{BC}$ with $D$ on $\overline{BC}$. "
@@ -156,10 +162,13 @@ def test_a_question_target_ends_at_its_clause() -> None:
     target is asked too."""
     text = r"In $\triangle XYZ$, $YZ = 8$. Find the value of $k$ and the length of $\overline{YZ}$."
     facts = FigureFacts(points=list("XYZ"), triangles=["XYZ"],
+                        find=[Target(kind="other", item="k"), Target(kind="segment", item="YZ")],
                         givens=[F("equal_length", ["YZ"], value=8, quote="YZ = 8")])
     assert coverage_gaps(text, facts) == []
     t = _clean(text)
-    assert [t[a:b] for a, b in _question_spans(t)][-1].strip().endswith("YZ}")
+    # Review round 6: the target list runs to the sentence end; only its
+    # target tokens are exempt.
+    assert [t[a:b] for a, b in _target_spans(t)][-1].strip().endswith("YZ}")
     # A further clause that says something is a statement.
     stated = r"In $\triangle XYZ$, $YZ = 8$. Find $k$, and $\overline{XY} \perp \overline{YZ}$."
     assert any("⊥" in g for g in coverage_gaps(stated, facts))
@@ -240,7 +249,7 @@ def test_a_spanning_quote_leaves_its_other_clause() -> None:
     facts = FigureFacts(points=list("ABC"), triangles=["ABC"], find=[Target(kind="angle", item="C")],
                         givens=[F("angle_measure", ["ABC"], value=40,
                                   quote=r"m\angle ABC = 40^\circ, and \angle ABC is the largest angle")])
-    assert any("largest angle" in g for g in coverage_gaps(text, facts))
+    assert any("largest" in g for g in coverage_gaps(text, facts))
 
 
 # ── 5. Complement shading anywhere in the sentence ───────────────────
@@ -256,14 +265,13 @@ def test_a_spanning_quote_leaves_its_other_clause() -> None:
 ])
 def test_a_complement_after_the_shading_leaves_it_unread(text: str) -> None:
     """Reviewer h_c2: only the words before the shading were looked at, so
-    "△ABC is shaded, except the middle third" passed a fully shaded △ABC."""
-    t = _clean(text)
-    assert shaded_regions(t) == []
+    "△ABC is shaded, except the middle third" passed a fully shaded △ABC.
+
+    Review round 6: there is no list of complement words any more; a
+    shading fact accounts only for "X is shaded" / "shade X", so whatever
+    follows it is unaccounted for and the reading is declined."""
     facts = FigureFacts(points=list("ABC"), triangles=["ABC"], find=[Target(kind="other", item="shaded area")])
     assert coverage_gaps(text, facts) != []
-    full = fig(points={"A": (0, 0), "B": (6, 0), "C": (2, 4)}, segments=["AB", "BC", "CA"],
-               shaded=[{"polygon": ["A", "B", "C"]}])
-    assert check(full, text, facts) != []
 
 
 def test_a_plain_shading_is_still_read() -> None:
@@ -310,7 +318,7 @@ def test_a_word_asked_then_stated_needs_its_fact() -> None:
     it is a statement and needs its fact (it is not a repeat: the words
     differ)."""
     facts = FigureFacts(points=list("ABC"), triangles=["ABC"])
-    assert coverage_gaps(r"In $\triangle ABC$, find the acute angle.", facts) == []
+    assert coverage_gaps(r"In $\triangle ABC$, find the acute angle.", facts) == ["“acute”"]  # round 6
     assert any("acute" in g for g in coverage_gaps(r"In $\triangle ABC$, find the acute angle. The acute angle.",
                                                     facts))
 
@@ -320,10 +328,10 @@ def test_a_word_asked_then_stated_needs_its_fact() -> None:
 def test_the_last_name_of_a_plural_statement_needs_a_fact() -> None:
     """Found in round 5: "right angles at A and C" with one right angle (at
     A) passed, since "C" alone was read as only naming the figure."""
-    for text in (r"In quadrilateral $ABCD$, there are right angles at $A$ and $C$. Find $BD$.",
+    for text in (r"Quadrilateral $ABCD$ has right angles at $A$ and $C$. Find $BD$.",
                  r"Quadrilateral $ABCD$ has right angles at $A$ and $C$, and $AB = 3$. Find $BD$."):
         at_a = F("right_angle", ["DAB"], quote="right angles at A")
-        facts = FigureFacts(points=list("ABCD"), polygons=["ABCD"],
+        facts = FigureFacts(points=list("ABCD"), polygons=["ABCD"], find=[Target(kind="segment", item="BD")],
                             givens=[at_a, F("equal_length", ["AB"], value=3, quote="AB = 3")])
         assert "“C”" in coverage_gaps(text, facts), text
         both = facts.model_copy(update={"givens": [
@@ -336,7 +344,7 @@ def test_the_last_name_of_a_plural_statement_needs_a_fact() -> None:
 def test_points_on_two_sides_each_need_their_fact() -> None:
     text = r"In $\triangle ABC$, $D$ and $E$ lie on $\overline{AB}$ and $\overline{AC}$. Find $DE$."
     q = "D and E lie on AB and AC"
-    wrong = FigureFacts(points=list("ABCDE"), triangles=["ABC"],
+    wrong = FigureFacts(points=list("ABCDE"), triangles=["ABC"], find=[Target(kind="segment", item="DE")],
                         givens=[F("on_segment", ["AB"], point="D", quote=q),
                                 F("on_segment", ["AB"], point="E", quote=q)])
     assert "“AC”" in coverage_gaps(text, wrong)
@@ -347,7 +355,8 @@ def test_points_on_two_sides_each_need_their_fact() -> None:
 
 def test_the_second_point_of_a_relation_is_its_facts() -> None:
     text = r"$D$ is between $A$ and $B$. Find $AB$."
-    facts = FigureFacts(points=list("ABD"), givens=[F("on_segment", ["AB"], point="D", quote="D is between A and B")])
+    facts = FigureFacts(points=list("ABD"), givens=[F("on_segment", ["AB"], point="D", quote="D is between A and B")],
+                        find=[Target(kind="segment", item="AB")])
     assert coverage_gaps(text, facts) == []
 
 
