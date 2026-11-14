@@ -66,17 +66,14 @@ def test_a_longer_command_is_refused_not_read_as_a_symbol(label: str) -> None:
         plain_label(label)
 
 
-# Review round 3 of the label fix (#989): one spacing rule after every
-# conversion, not a rule per symbol.
+# Review rounds 3-5 of the label fix (#989): one spacing rule after every
+# conversion. It tidies only around symbols that are never signs; + − = < >
+# keep the source's spacing, so spacing never changes what a label means.
 @pytest.mark.parametrize(("label", "shown"), [
-    ("$2\\cdot x$", "2·x"), ("$2 \\cdot x$", "2·x"), ("$(2\\cdot x + 10)°$", "(2·x + 10)°"),
-    ("$2\\pi r$", "2πr"), ("$2 \\pi r$", "2πr"), ("$2\\pi + 1$", "2π + 1"), ("$\\pi = 3.14$", "π = 3.14"),
-    ("$3 + 4$", "3 + 4"), ("$3+ 4$", "3 + 4"), ("$(3x+14)°$", "(3x+14)°"), ("$(3x + 14) °$", "(3x + 14)°"),
-    ("$a_1 + a_2$", "a₁ + a₂"), ("$a_1 +a_2$", "a₁ + a₂"), ("$x = -5$", "x = -5"), ("$3 \\times 4$", "3×4"),
-    ("$\\angle ABC \\cong \\angle DEF$", "∠ABC ≅ ∠DEF"), ("$m\\angle C = 50^{\\circ}$", "m∠C = 50°"),
-    # Review round 4 (#989): a sign after · or × is a sign, not a minus.
-    ("$3\\cdot -x$", "3·-x"), ("$2\\times -3$", "2×-3"), ("$(40 - 3 \\cdot -x)^\\circ$", "(40 - 3·-x)°"),
-    ("$3 \\cdot - x$", "3·-x"), ("$x = - 5$", "x = -5"), ("$- 5$", "-5"),
+    ("$3\\cdot -x$", "3·-x"), ("$2\\times -3$", "2×-3"), ("$|AB| - 3$", "|AB| - 3"), ("$x' - 5$", "x' - 5"),
+    ("$x = -5$", "x = -5"), ("$2\\pi r$", "2πr"), ("$(3x+14)^\\circ$", "(3x+14)°"), ("$a_1 + a_2$", "a₁ + a₂"),
+    ("$2 \\cdot x$", "2·x"), ("$2\\pi + 1$", "2π + 1"), ("$(40 - 3 \\cdot -x)^\\circ$", "(40 - 3·-x)°"),
+    ("$m\\angle C = 50^{\\circ}$", "m∠C = 50°"),
 ])
 def test_one_spacing_rule_for_every_label(label: str, shown: str) -> None:
     assert plain_label(label) == shown
@@ -209,3 +206,17 @@ async def test_a_step_with_the_question_figures_bad_label_gets_no_redraw() -> No
         )
     assert (spec, svg, issues) == (None, None, [_BASE_UNREADABLE])
     redraw.assert_not_awaited()
+
+
+@pytest.mark.parametrize(("measure", "label"), [
+    ("(3x+14)", "$(3x+14)^\\circ$"), ("(2 \\cdot x + 10)", "$(2 \\cdot x + 10)^\\circ$"),
+    ("(40 - 3 \\cdot -x)", "$(40 - 3 \\cdot -x)^\\circ$"), ("(2x - 5)", "$(2x - 5)^\\circ$"),
+])
+def test_the_label_check_accepts_the_converted_form(measure: str, label: str) -> None:
+    """Review round 5 (#989): the label drawn after conversion and spacing
+    is still the problem's own expression for its angle."""
+    problem = f"In $\\triangle ABC$, $m\\angle B = {measure}^\\circ$. Find $x$."
+    facts = FigureFacts(points=list("ABC"), triangles=["ABC"], givens=[
+        F("angle_measure", ["ABC"], expr=measure.strip("()"), quote=f"m∠B = {measure}°")])
+    _spec, svg, issues = _check_figure({**SEQ_FIG, "angle_labels": {"ABC": label}}, problem, facts=facts)
+    assert issues == [] and svg and plain_label(label) in svg
