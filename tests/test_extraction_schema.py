@@ -9,12 +9,13 @@ drop any field the producers write. These tests assert:
 - An extraction carrying UNFORESEEN extra keys (top-level and per-step)
   round-trips them intact — `extra="allow"` is the no-data-loss guarantee
   the pass-through slicer/overlay rely on (they spread `{**extraction}`).
-- A submission file round-trips, `filename` defaults to None (never set by
-  the backend today), and extra keys survive.
+- A submission file is served as a URL (never its bytes), and `filename`
+  defaults to None (never set by the backend today).
 """
 
 from __future__ import annotations
 
+from api.core import photo_store
 from api.schemas.extraction import ExtractionOut, SubmissionFileOut
 
 
@@ -88,22 +89,23 @@ def test_extraction_preserves_unforeseen_extra_keys() -> None:
     assert dumped == {**raw, "visual_work": []}
 
 
-def test_submission_file_round_trips_and_filename_defaults_none() -> None:
-    # Exactly what submit writes: {data, media_type}, no filename.
-    raw = {"data": "aGVsbG8=", "media_type": "image/jpeg"}
-    dumped = SubmissionFileOut.model_validate(raw).model_dump()
-    assert dumped["data"] == "aGVsbG8="
+def test_submission_file_is_a_url_never_the_bytes() -> None:
+    # Exactly what submit stores now: {key, media_type}, no filename.
+    out = photo_store.page_out({"key": "submissions/abc/0123abcd.jpg", "media_type": "image/jpeg"})
+    dumped = SubmissionFileOut.model_validate(out).model_dump()
+    assert dumped["url"]
+    assert "data" not in dumped
     assert dumped["media_type"] == "image/jpeg"
+    assert dumped["id"] == "0123abcd"
+    assert dumped["expires_in"] == photo_store.PRESIGN_SECONDS
     assert dumped["filename"] is None
 
 
-def test_submission_file_preserves_filename_and_extra_keys() -> None:
-    raw = {
-        "data": "aGVsbG8=",
-        "media_type": "application/pdf",
-        "filename": "page1.pdf",
-        "page_count": 3,  # unforeseen key
-    }
-    dumped = SubmissionFileOut.model_validate(raw).model_dump()
+def test_inline_submission_file_is_served_as_a_data_url_with_its_filename() -> None:
+    # INLINE: a row the backfill hasn't moved yet.
+    out = photo_store.page_out({"data": "aGVsbG8=", "media_type": "application/pdf", "filename": "page1.pdf"})
+    dumped = SubmissionFileOut.model_validate(out).model_dump()
+    assert dumped["url"] == "data:application/pdf;base64,aGVsbG8="
     assert dumped["filename"] == "page1.pdf"
-    assert dumped["page_count"] == 3
+    assert dumped["id"] is None
+    assert dumped["expires_in"] is None
