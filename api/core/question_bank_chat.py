@@ -378,14 +378,19 @@ async def chat_with_bank_item(
         # construction is checked against the problem (and the teacher's
         # request), with one retry on the checker's errors.
         top_construction = _is_construction(top_spec_raw)
+        # A problem written from its fact card (source "author"), question
+        # unchanged: a new figure is held to that card, never to readings of
+        # code's words (which would miss what the student constructs).
+        stored = None if rewrites_question else getattr(item, "figure_facts", None)
+        author_card = stored if isinstance(stored, dict) and stored.get("source") == "author" else None
         if top_construction:
             answer = str(proposal_raw.get("final_answer") or ("" if rewrites_question else item.final_answer or ""))
             top_figure_spec, top_figure_svg, top_issues, top_facts = await _resolve_figure_with_retry(
                 top_spec_raw, top_text, mode=LLMMode.BANK_CHAT, user_id=str(user_id),
-                final_answer=answer, request=teacher_message,
+                final_answer=answer, request=teacher_message, facts=author_card,
             )
         else:
-            top_figure_spec, top_figure_svg = _resolve_figure(top_spec_raw, top_text)
+            top_figure_spec, top_figure_svg = _resolve_figure(top_spec_raw, top_text, facts=author_card)
             if isinstance(top_spec_raw, dict) and top_figure_svg is None:
                 figure_drop = f"I couldn't draw the diagram. {_figure_drop_reason(top_spec_raw, top_text)}"
 

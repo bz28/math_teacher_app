@@ -265,6 +265,13 @@ def _check_figure(
     """
     if not isinstance(raw_spec, dict):
         return None, None, []
+    if not _is_construction(raw_spec) and facts is not None:
+        # A problem written from a fact card is held to the card, which only
+        # the construction form is checked against: a shape-form figure
+        # ("triangle" with side labels) would skip it. Fail closed.
+        author = as_facts(facts)
+        if author is not None and author.source == "author":
+            return None, None, [_NOT_CONSTRUCTION]
     if _is_construction(raw_spec):
         card = as_facts(facts)
         if card is None:
@@ -366,6 +373,7 @@ def _without_empty_mark_groups(raw_spec: dict[str, Any]) -> dict[str, Any]:
 
 _CHECK_CRASHED = "the figure checker hit an error on this figure, so it can't confirm it"
 _NOT_READ = "the problem wasn't read for checking, so the figure can't be confirmed"
+_NOT_CONSTRUCTION = "a figure for a problem written from its fact card must be a construction, so it can be checked"
 
 
 def _without_unbacked_marks(
@@ -424,6 +432,11 @@ async def _resolve_figure_with_retry(
     if raw_spec is None and fresh and reading is not None:
         return await _draw_fresh(text, reading, [], mode=mode, user_id=user_id, final_answer=final_answer,
                                  generation_job_id=generation_job_id)
+    if fresh and reading is not None and isinstance(raw_spec, dict) and not _is_construction(raw_spec):
+        # A shape-form figure can't be held to the card (_check_figure
+        # refuses it): the card's own fresh drawing instead.
+        return await _draw_fresh(text, reading, [_NOT_CONSTRUCTION], mode=mode, user_id=user_id,
+                                 final_answer=final_answer, generation_job_id=generation_job_id)
     if _is_construction(raw_spec) and reading is None:
         reading, why = await read_figure_facts(
             text, final_answer=final_answer, request=request, mode=mode, user_id=user_id,

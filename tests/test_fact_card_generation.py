@@ -11,6 +11,7 @@
 """
 from __future__ import annotations
 
+import uuid
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -106,7 +107,7 @@ async def test_a_construction_shows_its_givens_and_never_the_constructed_part() 
     out, _ = await _generate([[_written(BISECTOR, TRIANGLE), PLAIN]])
     assert out[0]["figure_svg"] and "D" not in out[0]["figure_spec"]["points"]
     assert out[0]["requires_drawing"] is True  # the student constructs AD
-    assert "Construct the figure so that" in out[0]["text"]
+    assert "Make a construction so that" in out[0]["text"]
 
 
 @pytest.mark.asyncio
@@ -246,3 +247,70 @@ async def test_regenerate_says_why_a_card_was_refused() -> None:
     bad = dict(MEDIAN, givens=[{"kind": "other", "items": ["AB"]}])
     with pytest.raises(RuntimeError, match="couldn't be written.*kind the checker can't hold a figure to: other"):
         await _regenerate({"question": "", "figure_facts": bad, "figure_spec": MEDIAN_FIGURE})
+
+
+# ── Review round 1 ─────────────────────────────────────────────────────
+
+RIGHT = {"points": list("ABC"), "triangles": ["ABC"],
+         "givens": [F("equal_length", ["AB"], value=7), F("right_angle", ["ACB"])],
+         "find": [{"kind": "segment", "item": "BC"}]}
+# The shape form, with a label the card contradicts and no right angle.
+SHAPE = {"type": "geometry", "shape": "triangle", "vertices": ["A", "B", "C"],
+         "side_lengths": {"AB": 12, "BC": 4, "CA": 9}, "labels": {"AB": "12"}}
+
+
+@pytest.mark.asyncio
+async def test_a_shape_form_figure_is_never_shown_for_a_card() -> None:
+    """The shape form skips the card's check, so it is never shown with a
+    card: the card's fresh drawing instead (here none, so it is replaced)."""
+    out, m = await _generate([[_written(RIGHT, SHAPE), PLAIN], [dict(PLAIN, text="Solve 5x = 20.")]])
+    assert [q["text"] for q in out] == ["Solve 2x + 3 = 11.", "Solve 5x = 20."]
+    m["fresh"].assert_awaited_once()
+    m["read"].assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_regenerate_a_construction_the_teacher_says_the_student_draws() -> None:
+    """The text points at no figure, so the version with no figure stands."""
+    item, draw = await _regenerate({"question": "", "figure_facts": BISECTOR, "figure_spec": TRIANGLE},
+                                   teacher=True)
+    assert item.question.startswith(r"Draw $\triangle ABC$.") and "Make a construction so that" in item.question
+    assert item.figure_svg is None and item.requires_drawing is True
+    draw.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_a_chat_figure_edit_is_held_to_the_author_card() -> None:
+    """A teacher asks the chat for a new figure on a problem written from
+    its card: the figure is checked against the card (never readings of
+    code's words), so one drawing the student's D is never proposed."""
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    import api.core.question_bank_chat as qbc
+    from api.core.geometry.fact_card import card_text, read_card
+
+    card, why = read_card(BISECTOR)
+    assert card is not None, why
+    item = SimpleNamespace(
+        id=uuid.uuid4(), course_id=uuid.uuid4(), unit_id=None, source_doc_ids=None,
+        question=card_text(card), solution_steps=None, final_answer="", generation_prompt=None,
+        chat_messages=[], figure_spec=TRIANGLE, figure_svg="<svg/>", figure_facts=card.model_dump(),
+        requires_drawing=True,
+    )
+    db = MagicMock()
+    db.commit = AsyncMock()
+    reply = {"reply": "Here it is.", "proposal": {"figure_spec": WITH_D}}
+    read = AsyncMock(return_value=(None, ["no reading"]))
+    with (
+        patch.object(qbc, "call_claude_json", AsyncMock(return_value=reply)),
+        patch.object(qbg, "read_figure_facts", read),
+        patch.object(qbg, "redraw_figure", AsyncMock(return_value=WITH_D)),
+    ):
+        msg = await qbc.chat_with_bank_item(
+            db, item, SimpleNamespace(subject="math", name="Geometry"),  # type: ignore[arg-type]
+            teacher_message="redraw the figure", user_id=uuid.UUID(int=0),
+        )
+    read.assert_not_awaited()
+    proposal = msg.get("proposal") or {}
+    assert not proposal.get("figure_svg"), proposal

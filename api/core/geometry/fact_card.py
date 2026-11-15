@@ -27,6 +27,7 @@ a problem without a card gets no figure.
 
 from __future__ import annotations
 
+import math
 import re
 from typing import Any
 
@@ -178,13 +179,78 @@ def _fact_names(f: Fact) -> tuple[set[str], list[str]]:
 
 def read_card(raw: Any) -> tuple[FigureFacts | None, list[str]]:
     """(the card, []) or (None, why it can't be held to). Plain code; the
-    card the AI wrote is never trusted further than this checks."""
+    card the AI wrote is never trusted further than this checks. Anything
+    unexpected (a crash included) refuses the card: fail closed."""
+    try:
+        return _read_card(raw)
+    except Exception as e:  # noqa: BLE001 — a card code can't read is refused, never used
+        return None, [f"the fact card couldn't be read ({type(e).__name__})"]
+
+
+# What a fact must carry for its phrase to say it in full.
+_MIN_ITEMS = {
+    "parallel": 2, "perpendicular": 2, "congruent_segments": 2, "congruent_angles": 2, "congruent_triangles": 2,
+    "similar_triangles": 2, "bisects_segment": 2, "bisects_angle": 2, "numbered_angle": 2, "intersect": 2,
+    "transversal": 2, "opposite_rays": 2, "vertical_angles": 2, "linear_pair": 2, "supplementary": 2,
+    "complementary": 2, "collinear": 3, **{k: 2 for k in PAIRS},
+}
+# Its phrase states only the first two items (a ⊥ b ⊥ c says nothing clear).
+_EXACT_ITEMS = {"perpendicular": 2, "bisects_segment": 2, "bisects_angle": 2, "numbered_angle": 2}
+_NEEDS_POINT = ("midpoint", "on_segment", "on_line", "intersect")
+_NEEDS_CIRCLE = ("on_circle", "tangent", "chord", "diameter", "radius", "central_angle", "inscribed_angle")
+_LENGTH_KINDS = ("equal_length", "chord", "diameter", "radius")
+_ANGLE_KINDS = ("angle_measure", "central_angle", "inscribed_angle")
+_MAX_LENGTH = 10_000.0
+
+
+def _incomplete(f: Fact) -> list[str]:
+    """Why a fact can't be phrased in full (empty when it can)."""
+    out: list[str] = []
+    it = [x.strip() for x in f.items]
+    if len(it) < _MIN_ITEMS.get(f.kind, 1) or (f.kind in _EXACT_ITEMS and len(it) != _EXACT_ITEMS[f.kind]):
+        out.append(f"a fact has the wrong number of parts: {f.kind} {f.items}")
+    if any(len(set(split_names(x))) != len(split_names(x)) for x in it):
+        out.append(f"a fact names a part with a repeated point: {f.kind} {f.items}")
+    if f.kind in _NEEDS_POINT and not (f.point or "").strip():
+        out.append(f"a fact needs its point: {f.kind} {f.items}")
+    if f.kind in _NEEDS_CIRCLE and not (f.circle or "").strip():
+        out.append(f"a fact needs its circle: {f.kind} {f.items}")
+    if (f.kind == "angle_measure" or (f.kind == "equal_length" and len(it) == 1)) \
+            and f.value is None and not (f.expr or "").strip():
+        out.append(f"a fact needs its measure: {f.kind} {f.items}")
+    if f.value is not None:
+        v = float(f.value)
+        if f.kind in _LENGTH_KINDS and not (math.isfinite(v) and 0 < v <= _MAX_LENGTH):
+            out.append(f"a length must be a positive number: {f.kind} {f.items} = {f.value}")
+        if f.kind in _ANGLE_KINDS and not (math.isfinite(v) and 0 < v < 360):
+            out.append(f"an angle must be between 0° and 360°: {f.kind} {f.items} = {f.value}")
+    return out
+
+
+def _has_bool_value(raw: dict[str, Any]) -> bool:
+    """A `true`/`false` where a number goes (pydantic would read it as 1/0)."""
+    return any(isinstance(f, dict) and isinstance(f.get("value"), bool)
+               for section in ("givens", "prove", "constructs") for f in (raw.get(section) or [])
+               if isinstance(raw.get(section), list))
+
+
+# The letters a written problem shows as variables: LaTeX commands and the
+# m of m∠ taken out first.
+def _shown_variables(texts: list[str], card: FigureFacts) -> set[str]:
+    joined = re.sub(r"m\\angle|\\[A-Za-z]+", " ", " ".join(texts))
+    named = {line_key(x) for x in card.named_lines}
+    return {v for v in re.findall(r"(?<![A-Za-z])[a-z](?![A-Za-z])", joined)} - named
+
+
+def _read_card(raw: Any) -> tuple[FigureFacts | None, list[str]]:
     if not isinstance(raw, dict):
         return None, ["no fact card"]
     allowed = set(CARD_SCHEMA["properties"])
     extra = sorted(set(raw) - allowed)
     if extra:
         return None, [f"the fact card has fields it can't have: {', '.join(extra)}"]
+    if _has_bool_value(raw):
+        return None, ["the fact card gives true/false where a number goes"]
     try:
         card = FigureFacts.model_validate({**raw, "source": "author", "requested": [], "dropped": []})
     except (ValidationError, ValueError) as e:
@@ -226,17 +292,25 @@ def read_card(raw: Any) -> tuple[FigureFacts | None, list[str]]:
         if not f.items:
             why.append(f"a fact names no part: {f.kind}")
     for f in card.constructs:
-        _names, bad = _fact_names(f)
+        names, bad = _fact_names(f)
         if bad or not f.items:
             why.append(f"a construction step names no part it can place: {f.kind} {f.items}")
-    variables = {v for f in every for v in re.findall(r"[a-z]", f.expr or "")}
+        elif f.circle is not None and f.circle.strip() not in {c.strip() for c in card.circles}:
+            why.append(f"a construction step names a circle the card doesn't list: {f.circle!r}")
+        elif not (names - shown) and not any(
+                _is_line_name(x) and not split_names(x) and line_key(x) not in named for x in f.items):
+            # Everything it names is shown: the figure would show the
+            # student's construction (or the step makes nothing).
+            why.append(f"a construction step makes nothing the figure doesn't show: {f.kind} {f.items}")
+    for f in every:
+        why += _incomplete(f)
     for t in card.find:
         if t.kind == "angle" and not (split_names(t.item) and set(split_names(t.item)) <= shown | made
                                       and len(split_names(t.item)) in (1, 3) or t.item.strip().isdigit()):
             why.append(f"the card asks for an angle it doesn't show: {t.item!r}")
         if t.kind == "segment" and not (len(split_names(t.item)) == 2 and set(split_names(t.item)) <= shown | made):
             why.append(f"the card asks for a segment it doesn't show: {t.item!r}")
-        if t.kind == "other" and not (_VARIABLE.fullmatch(t.item.strip()) and t.item.strip() in variables):
+        if t.kind == "other" and not _VARIABLE.fullmatch(t.item.strip()):
             why.append(f"the card asks for something code can't phrase: {t.item!r}")
     if not (card.prove or card.find or card.constructs):
         why.append("the fact card asks nothing: no prove, find or construct")
@@ -247,6 +321,16 @@ def read_card(raw: Any) -> tuple[FigureFacts | None, list[str]]:
         section: [f.model_copy(update={"quote": sentence(f, card)}) for f in getattr(card, section)]
         for section in ("givens", "prove", "constructs")
     })
+    written = [f.quote for section in ("givens", "prove", "constructs") for f in getattr(card, section)]
+    if any(re.search(r"\$\s*\$|=\s*\$|\{\s*\}", q) for q in written):
+        return None, ["a fact's sentence came out incomplete"]
+    variables = _shown_variables(written, card)
+    for t in card.find:
+        if t.kind == "other" and t.item.strip() not in variables:
+            # "Find x" with no x in the problem.
+            why.append(f"the card asks for {t.item.strip()!r}, which its words never show")
+    if why:
+        return None, why
     cant = unverifiable(card)
     if cant:
         return None, [f"the checker can't verify “{c}”" for c in cant[:3]]
@@ -575,7 +659,7 @@ def card_text(card: FigureFacts, *, context: str = "", hint: str = "", figure: b
     elif givens:
         out += [f"{_cap(g)}." for g in givens]
     if card.constructs:
-        out.append(f"Construct the figure so that {_and([sentence(f, card) for f in card.constructs])}.")
+        out.append(f"Make a construction so that {_and([sentence(f, card) for f in card.constructs])}.")
     if card.prove:
         out.append(f"Prove: {_and([sentence(f, card) for f in card.prove])}.")
     if card.find:

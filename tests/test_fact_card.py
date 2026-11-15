@@ -137,12 +137,43 @@ def test_each_kind_has_one_fixed_phrase_that_says_only_its_fact(kind: str) -> No
     (_card({}, F("on_circle", ["A"], circle="Q")), "circle"),
     (_card({"segments": ["AZ"]}, F("parallel", ["AB", "CD"])), "segment"),
     (_card({}, F("angle_measure", ["ABC"], value=200)), "more than a straight angle"),
-    (_card({}, F("angle_measure", ["ABC"])), "can't verify"),  # a measure with no value checks nothing
+    (_card({}, F("angle_measure", ["ABC"])), "needs its measure"),  # a measure with no value checks nothing
     (_card({}, F("parallel", []), ), "names no part"),
     ({"points": POINTS, "givens": [F("parallel", ["AB", "CD"])]}, "asks nothing"),
     ({**_card({}, F("parallel", ["AB", "CD"])), "find": [{"kind": "other", "item": "the area of ABCD"}]},
      "can't phrase"),
-    ({**_card({}, F("parallel", ["AB", "CD"])), "find": [{"kind": "other", "item": "y"}]}, "can't phrase"),
+    ({**_card({}, F("parallel", ["AB", "CD"])), "find": [{"kind": "other", "item": "y"}]}, "never show"),
+    # Review round 1: "Find x" where the words never show x (an expr the
+    # phrase leaves out: a parallel's, or one beside a value).
+    ({**_card({}, F("parallel", ["AB", "CD"], expr="2x+1")), "find": [{"kind": "other", "item": "x"}]},
+     "never show"),
+    ({**_card({}, F("angle_measure", ["ABC"], value=40, expr="3x+1")), "find": [{"kind": "other", "item": "x"}]},
+     "never show"),
+    # Review round 1: facts whose phrase would drop a part, or come out empty.
+    (_card({}, F("perpendicular", ["AB", "BC", "CD"])), "wrong number of parts"),
+    (_card({"circles": ["D"]}, F("on_circle", ["A", "B"])), "needs its circle"),
+    (_card({"circles": ["D"]}, F("tangent", ["AB"], point="B")), "needs its circle"),
+    (_card({}, F("midpoint", ["AB"])), "needs its point"),
+    (_card({}, F("bisects_segment", ["AD"])), "wrong number of parts"),
+    (_card({}, F("numbered_angle", ["1"])), "wrong number of parts"),
+    (_card({}, F("isosceles", ["ABB"], point="B")), "repeated point"),
+    (_card({}, F("equal_length", ["AB"], value=-5)), "positive number"),
+    (_card({}, F("equal_length", ["AB"], value=0)), "positive number"),
+    (_card({}, F("equal_length", ["AB"], value=1e21)), "positive number"),
+    (_card({}, F("angle_measure", ["ABC"], value=True)), "true/false"),
+    ({"points": list("ABC"), "triangles": ["ABC"], "constructs": [F("midpoint", ["AB"])]}, "needs its point"),
+    ({"points": list("ABC"), "triangles": ["ABC"], "constructs": [F("angle_measure", ["ABD"])]},
+     "needs its measure"),
+    ({"points": list("ABC"), "triangles": ["ABC"], "constructs": [F("bisects_segment", ["AB"])]},
+     "wrong number of parts"),
+    # Review round 1: a construction step whose every point the figure
+    # shows (D listed as a point): the figure would show the construction.
+    ({"points": list("ABCD"), "segments": ["AD"], "givens": [F("congruent_segments", ["AB", "AC"])],
+      "constructs": [F("bisects_angle", ["AD", "BAC"]), F("on_segment", ["BC"], point="D")],
+      "prove": [F("congruent_segments", ["BD", "DC"])]}, "makes nothing the figure doesn't show"),
+    ({"points": list("ABCD"), "givens": [F("congruent_segments", ["AB", "AC"])],
+      "constructs": [F("bisects_angle", ["AD", "BAC"]), F("on_segment", ["BC"], point="D")],
+      "prove": [F("congruent_triangles", ["ABD", "ACD"])]}, "makes nothing the figure doesn't show"),
     ({**_card({}, F("parallel", ["AB", "CD"])), "find": [{"kind": "angle", "item": "XYZ"}]}, "doesn't show"),
     ({**_card({}, F("parallel", ["AB", "CD"])), "quote": "AB ∥ CD"}, "fields it can't have"),
     ({**_card({}, F("parallel", ["AB", "CD"])), "source": "reading"}, "fields it can't have"),
@@ -210,7 +241,7 @@ def test_a_construction_says_what_the_student_constructs() -> None:
     assert student_constructs(card)
     assert card_text(card) == (
         r"The figure shows $\triangle ABC$. Given: $\overline{AB} \cong \overline{AC}$. "
-        r"Construct the figure so that $\overrightarrow{AD}$ bisects $\angle BAC$ and $D$ is on $\overline{BC}$. "
+        r"Make a construction so that $\overrightarrow{AD}$ bisects $\angle BAC$ and $D$ is on $\overline{BC}$. "
         r"Prove: $\triangle ABD \cong \triangle ACD$.")
     # The construction's own parts are not among what the figure shows.
     assert card.triangles == ["ABC"] and "D" not in card.points
@@ -294,3 +325,53 @@ def test_a_step_read_from_its_words_makes_the_step_facts_a_reading() -> None:
     step = FigureFacts(points=["A"], givens=[])
     assert with_step(card, step).source == "reading"
     assert with_step(card, card).source == "author"
+
+
+def test_read_card_refuses_rather_than_crashes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Review round 1: a fact the phrases can't handle killed the whole job.
+    Anything unexpected refuses the card (fail closed), never raises."""
+    import api.core.geometry.fact_card as fc
+
+    odd: list[Any] = [
+        {"points": POINTS, "givens": [{"kind": "parallel", "items": [["AB"], "CD"]}], "find": []},
+        {"points": POINTS, "givens": "AB ∥ CD", "find": [{"kind": "segment", "item": "AB"}]},
+        {"points": None, "find": [{"kind": "segment", "item": "AB"}]},
+        {"points": POINTS, "givens": [None], "find": [{"kind": "segment", "item": "AB"}]},
+        {"points": POINTS, "find": [{"kind": "angle", "item": None}]},
+    ]
+    for raw in odd:
+        card, why = read_card(raw)
+        assert card is None and why, raw
+
+    def boom(*_a: Any, **_k: Any) -> str:
+        raise IndexError("list index out of range")
+
+    monkeypatch.setattr(fc, "sentence", boom)
+    card, why = read_card(_card({}, F("parallel", ["AB", "CD"])))
+    assert card is None and "couldn't be read (IndexError)" in why[0]
+
+
+def test_a_construction_says_make_a_construction_not_the_figure() -> None:
+    """Review round 1: "Construct the figure so that …" points at a figure,
+    so a teacher's "the student draws it" (no figure) could never be met."""
+    from api.core.question_bank_generation import _FIGURE_REFERENCE
+
+    card, why = read_card({"points": list("ABC"), "triangles": ["ABC"],
+                           "givens": [F("congruent_segments", ["AB", "AC"])],
+                           "constructs": [F("bisects_angle", ["AD", "BAC"]), F("on_segment", ["BC"], point="D")],
+                           "prove": [F("congruent_triangles", ["ABD", "ACD"])]})
+    assert card is not None, why
+    for figure in (True, False):
+        text = card_text(card, figure=figure)
+        assert "Make a construction so that" in text
+        assert not _FIGURE_REFERENCE.search(card_text(card, figure=False))
+
+
+def test_a_sentence_that_comes_out_empty_is_refused_even_past_the_field_checks(
+        monkeypatch: pytest.MonkeyPatch) -> None:
+    """The backstop under _incomplete: an empty `$$` or `= $` in a phrase."""
+    import api.core.geometry.fact_card as fc
+
+    monkeypatch.setattr(fc, "_incomplete", lambda f: [])
+    card, why = read_card(_card({}, F("midpoint", ["AB"])))
+    assert card is None and why == ["a fact's sentence came out incomplete"]
