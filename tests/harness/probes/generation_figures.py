@@ -44,11 +44,14 @@ What it measures (the bars):
     who-draws-it cases: auxiliary-line proofs (shown) and constructions.
 
 Record one set at a time, each under its spending cap, and render every
-figure to PNG (the shared ledger keeps the total under the limit):
-    HARNESS_LLM_MODE=auto HARNESS_EVAL_LEDGER=<ledger> HARNESS_EVAL_TOTAL_USD=25 \
+figure to PNG. The shared eval budget comes from ~/.veradic/evals/budget.env
+(its ledger and total), sourced first:
+    source ~/.veradic/evals/budget.env && HARNESS_LLM_MODE=auto \
         python -m tests.harness.probes.generation_figures --set set4 --cap 0.75 --png-dir /tmp/g
 then set3 (--cap 0.25), set2 (--cap 1.25), set1 (--cap 1.5). Look at every
 PNG and fill BY_EYE, EXPECTED and NEGATIVES before the CI test can pass.
+A real job's brief (Eval 1): export it to JSON (see `load_brief`), then
+    ... --brief briefs/job-bd113585.json --set job-bd113585 --cap 0.5
 Replay ($0):
     HARNESS_LLM_MODE=replay python -m tests.harness.probes.generation_figures
 """
@@ -57,6 +60,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
 import hashlib
 import json
 import math
@@ -102,6 +106,31 @@ SETS: dict[str, dict[str, Any]] = {
     },
 }
 COUNT = 8  # problems per set unless the set gives its own "count"
+
+
+def load_brief(path: Path) -> str:
+    """Register a set from a real generation job's brief (a JSON file), so
+    Eval 1 can re-run prod jobs. The probe never reads a database: the
+    brief is exported by whoever runs the eval. Fields:
+      {"name": "job-bd113585", "course_name": "...", "unit_name": "...",
+       "assignment_title": "...", "constraint": "...", "count": 8,
+       "source_docs": [{"filename": "ws.pdf", "media_type": "application/pdf",
+                        "path": "docs/ws.pdf"}]}
+    `path` in a source doc is relative to the brief's folder; a doc may give
+    "base64" instead. Returns the set's name."""
+    raw = json.loads(Path(path).read_text())
+    name = str(raw["name"])
+    docs: list[dict[str, str]] = []
+    for d in raw.get("source_docs") or []:
+        data = d.get("base64") or base64.b64encode((Path(path).parent / d["path"]).read_bytes()).decode()
+        docs.append({"filename": str(d.get("filename") or d.get("path") or "doc"),
+                     "media_type": str(d["media_type"]), "base64": data})
+    SETS[name] = {
+        "unit_name": str(raw["unit_name"]), "course_name": str(raw.get("course_name") or "Geometry"),
+        "assignment_title": raw.get("assignment_title"), "brief": raw.get("constraint") or "",
+        "count": int(raw.get("count") or COUNT), "images": docs or None,
+    }
+    return name
 
 
 def count_of(name: str) -> int:
@@ -152,9 +181,9 @@ async def run_set(name: str, only: list[int] | None = None) -> list[dict[str, An
     s = SETS[name]
     step_decomposition._cache.clear()  # replay must not depend on what ran before
     request = qbg.ProblemRequest(
-        unit_name=s["unit_name"], course_name="Geometry", subject="math",
-        user_id="00000000-0000-0000-0000-000000000000", constraint_text=s["brief"],
-        assignment_title=s["assignment_title"],
+        unit_name=s["unit_name"], course_name=s.get("course_name", "Geometry"), subject="math",
+        user_id="00000000-0000-0000-0000-000000000000", constraint_text=s["brief"] or None,
+        assignment_title=s["assignment_title"], images=s.get("images"),
     )
     readings: list[str] = []
     real_read = qbg.read_figure_facts
@@ -381,12 +410,17 @@ def main() -> None:
     from tests.harness.budget import ledger_from_env, spending_cap
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--set", choices=sorted(SETS))
+    parser.add_argument("--set", help=f"one of {sorted(SETS)}, or the name a --brief registers")
+    parser.add_argument("--brief", type=Path, action="append", default=[],
+                        help="a real job's brief as JSON (see load_brief); repeatable")
     parser.add_argument("--only", nargs="*", type=int)
     parser.add_argument("--cap", type=float, default=2.5)
     parser.add_argument("--png-dir", type=Path)
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
+    briefs = [load_brief(b) for b in args.brief]
+    if args.set and args.set not in SETS:
+        parser.error(f"unknown set {args.set!r}")
     ledger, total = ledger_from_env()
     prev = os.environ.get("HARNESS_CASSETTE_DIR")
     os.environ["HARNESS_CASSETTE_DIR"] = str(CASSETTE_DIR)
@@ -396,7 +430,7 @@ def main() -> None:
             if args.set:
                 results = asyncio.run(run_set(args.set, args.only))
             else:
-                results = asyncio.run(run_all())
+                results = asyncio.run(run_all(briefs or None))
     finally:
         if prev is None:
             os.environ.pop("HARNESS_CASSETTE_DIR", None)

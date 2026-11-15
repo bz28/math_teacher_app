@@ -17,6 +17,8 @@ BY_EYE, EXPECTED and NEGATIVES, or the not_looked_at / not_expected bars fail.
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from tests.harness.probes import generation_figures as gf
@@ -80,3 +82,37 @@ def test_the_construction_bar_reads_the_spec_and_the_card() -> None:
     assert gf.constructed_drawn(p) == ["D"]
     p["figure_spec"]["points"].pop("D")
     assert gf.constructed_drawn(p) == []
+
+
+@pytest.mark.asyncio
+async def test_a_real_jobs_brief_runs_as_a_set(tmp_path: Any) -> None:
+    """Eval 1 re-runs prod jobs: a job's course, unit, constraint and source
+    docs (exported to JSON) become the set's generation request."""
+    import base64
+    import json
+    from unittest.mock import AsyncMock, patch
+
+    import api.core.question_bank_generation as qbg
+
+    (tmp_path / "ws.png").write_bytes(b"\x89PNG fake")
+    brief = tmp_path / "job.json"
+    brief.write_text(json.dumps({
+        "name": "job-test", "course_name": "Geometry Honors", "unit_name": "Unit 5", "assignment_title": "HW 5.2",
+        "constraint": "Isosceles triangle proofs", "count": 8,
+        "source_docs": [{"filename": "ws.png", "media_type": "image/png", "path": "ws.png"}],
+    }))
+    name = gf.load_brief(brief)
+    try:
+        gen = AsyncMock(return_value=[])
+        with (patch.object(qbg, "generate_checked_problems", gen),
+              patch.object(qbg, "solve_checked_problems", AsyncMock(return_value=([], [])))):
+            out = await gf.run_set(name)
+        request = gen.await_args.args[0]
+        assert (request.course_name, request.unit_name, request.assignment_title) == (
+            "Geometry Honors", "Unit 5", "HW 5.2")
+        assert request.constraint_text == "Isosceles triangle proofs" and gen.await_args.kwargs["count"] == 8
+        assert request.images == [{"filename": "ws.png", "media_type": "image/png",
+                                   "base64": base64.b64encode(b"\x89PNG fake").decode()}]
+        assert out == []
+    finally:
+        gf.SETS.pop(name, None)
