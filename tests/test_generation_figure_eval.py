@@ -123,10 +123,29 @@ async def test_a_real_jobs_brief_runs_as_a_set(tmp_path: Any) -> None:
 async def test_an_unrecorded_eval_says_so_and_never_passes(
         monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
     """The scorecard (#1002) replays this probe: with no recording it gets
-    NotRecordedError (shown "not recorded"), not a cassette miss mid-run and not
-    an empty run that reads as PASS."""
+    NotRecordedError, a CassetteMissError naming the sets (shown "not
+    recorded"), not a miss mid-run and not an empty run that reads as PASS."""
+    from tests.harness.cassette import CassetteMissError
+
     monkeypatch.setattr(gf, "CASSETTE_DIR", tmp_path)
     monkeypatch.setenv("HARNESS_LLM_MODE", "replay")
     assert not gf.recorded()
-    with pytest.raises(gf.NotRecordedError, match="not recorded"):
+    with pytest.raises(gf.NotRecordedError, match="not recorded") as e:
         await gf.run_all()
+    assert isinstance(e.value, CassetteMissError) and e.value.missing == list(gf.SETS)
+
+
+@pytest.mark.asyncio
+async def test_one_recorded_set_is_not_all_of_them(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+    """Independent review round 2: sets are recorded one run at a time into
+    one cassette file, so its existence says nothing per set. The manifest
+    does: with set4 recorded, the others are still "not recorded"."""
+    monkeypatch.setattr(gf, "CASSETTE_DIR", tmp_path)
+    monkeypatch.setenv("HARNESS_LLM_MODE", "replay")
+    (tmp_path / "call_claude_json.json").write_text("{}")
+    gf.mark_recorded(["set4"])
+    assert gf.recorded(["set4"]) and not gf.recorded()
+    assert gf.missing_sets() == [n for n in gf.SETS if n != "set4"]
+    with pytest.raises(gf.NotRecordedError) as e:
+        await gf.run_all()
+    assert e.value.missing == [n for n in gf.SETS if n != "set4"]

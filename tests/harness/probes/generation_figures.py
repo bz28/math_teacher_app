@@ -69,6 +69,8 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+from tests.harness.cassette import CassetteMissError
+
 _HERE = Path(__file__).resolve().parent.parent
 CASSETTE_DIR = _HERE / "_cassettes" / "generation_figures_cards"
 
@@ -108,14 +110,47 @@ SETS: dict[str, dict[str, Any]] = {
 COUNT = 8  # problems per set unless the set gives its own "count"
 
 
-class NotRecordedError(RuntimeError):
-    """Replay asked for a mode with no recording yet. A caller that reports
-    the eval (the scorecard) shows "not recorded" for it, never PASS."""
+class NotRecordedError(CassetteMissError):
+    """Replay asked for sets with no recording yet. A CassetteMissError, so a
+    caller that already treats a cassette miss as "not recorded" (the
+    scorecard) does the same here, and never reports PASS."""
+
+    def __init__(self, missing: list[str]) -> None:
+        self.missing = missing
+        super().__init__(
+            f"generation_figures (fact-card mode) is not recorded yet for {', '.join(missing)}: see the "
+            "probe's docstring for the record command (Eval 1 records it)"
+        )
 
 
-def recorded() -> bool:
-    """The fact-card mode's recording is in place (Eval 1 records it)."""
-    return (CASSETTE_DIR / "call_claude_json.json").exists()
+def _manifest() -> Path:
+    """Which sets are recorded: the cassette file holds every call of every
+    set, so set by set is kept here (a set is recorded one run at a time)."""
+    return CASSETTE_DIR / "recorded_sets.json"
+
+
+def missing_sets(sets: list[str] | None = None) -> list[str]:
+    """The sets (default: all) with no recording."""
+    want = list(sets or SETS)
+    try:
+        done = set(json.loads(_manifest().read_text())) if (CASSETTE_DIR / "call_claude_json.json").exists() else set()
+    except (OSError, ValueError):
+        done = set()
+    return [name for name in want if name not in done]
+
+
+def recorded(sets: list[str] | None = None) -> bool:
+    """Every requested set (default: all) is recorded."""
+    return not missing_sets(sets)
+
+
+def mark_recorded(sets: list[str]) -> None:
+    """After a recording run finishes: these sets are now in the cassette."""
+    try:
+        done = set(json.loads(_manifest().read_text()))
+    except (OSError, ValueError):
+        done = set()
+    _manifest().write_text(json.dumps(sorted(done | set(sets)), indent=1) + "\n")
 
 
 def load_brief(path: Path) -> str:
@@ -264,11 +299,9 @@ async def run_all(sets: list[str] | None = None) -> list[dict[str, Any]]:
     """Every set (or `sets`) through the real path. In replay with nothing
     recorded it raises NotRecordedError rather than a cassette miss mid-run, so a
     report reads "not recorded" and an empty result never reads as a pass."""
-    if os.environ.get("HARNESS_LLM_MODE", "off") == "replay" and not recorded():
-        raise NotRecordedError(
-            "generation_figures (fact-card mode) is not recorded yet: see the probe's docstring for the "
-            "record command (Eval 1 records it)"
-        )
+    missing = missing_sets(sets)
+    if os.environ.get("HARNESS_LLM_MODE", "off") == "replay" and missing:
+        raise NotRecordedError(missing)
     prev = os.environ.get("HARNESS_CASSETTE_DIR")
     os.environ["HARNESS_CASSETTE_DIR"] = str(CASSETTE_DIR)
     try:
@@ -449,6 +482,8 @@ def main() -> None:
                 results = asyncio.run(run_set(args.set, args.only))
             else:
                 results = asyncio.run(run_all(briefs or None))
+        if os.environ.get("HARNESS_LLM_MODE") in ("auto", "record") and not args.only:
+            mark_recorded([args.set] if args.set else (briefs or list(SETS)))
     finally:
         if prev is None:
             os.environ.pop("HARNESS_CASSETTE_DIR", None)
