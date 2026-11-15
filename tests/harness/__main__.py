@@ -870,8 +870,8 @@ def main(argv: list[str]) -> int:
     args = _parse(argv)
 
     if args.cmd == "scorecard":
-        # Sets its own env (replay only, a key that can't spend, a scratch DB
-        # or none) before any api.* import.
+        # Sets its own env (replay only, a key that can't spend, no database)
+        # before any api.* import.
         from tests.harness.scorecard import run_cli
         return run_cli(args)
 

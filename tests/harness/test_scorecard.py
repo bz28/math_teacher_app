@@ -61,7 +61,7 @@ def _row(**kw: object) -> sc.Row:
     return sc.Row(**(base | kw))  # type: ignore[arg-type]
 
 
-_BASE = {"grading / p": {"how_good": 0.9, "cases": 10, "cassette_misses": 0}}
+_BASE = {"grading / p": {"how_good": 0.9, "cases": 10, "cassette_misses": ["call_claude_json known (bank_chat)"]}}
 
 
 def test_judge_passes_a_clean_row() -> None:
@@ -74,7 +74,8 @@ def test_judge_passes_a_clean_row() -> None:
     ({"how_good": 0.8}, "below baseline"),
     ({"cases": 9}, "a case went missing"),
     ({"error": "CassetteMissError: no cassette"}, "could not run"),
-    ({"cassette_misses": 1}, "swallowed cassette misses"),
+    ({"cassette_misses": ["call_claude_json ab12 (decompose)"]}, "new swallowed cassette miss"),
+    ({"how_good": None}, "how-good is gone"),
 ])
 def test_judge_fails(change: dict[str, object], why: str) -> None:
     rows = [_row(**change)]
@@ -115,3 +116,78 @@ async def test_the_scorecard_fails_when_the_checker_is_off(monkeypatch: pytest.M
     assert not sc.judge(broken, baseline, only)
     never = {r.probe: r.never for r in broken}
     assert never["construction-adversarial"] and never["construction-figures"], sc.render(broken)
+
+
+def test_a_known_cassette_miss_passes_and_its_id_is_parsed() -> None:
+    rows = [_row(cassette_misses=["call_claude_json known (bank_chat)"])]
+    assert sc.judge(rows, _BASE), rows[0].failures
+    msg = ("no cassette for call_claude_json key=54d7fb6b in replay mode (model=claude-sonnet-4-6, "
+           "mode=decompose). Re-run with HARNESS_LLM_MODE=record or auto to record it.")
+    assert sc._miss_id(msg) == "call_claude_json 54d7fb6b (decompose)"
+
+
+def test_a_missing_baseline_file_is_an_error(tmp_path: Path) -> None:
+    """A mistyped --baseline must not judge against nothing (every how-good
+    and case check would pass)."""
+    import argparse
+
+    args = argparse.Namespace(baseline=tmp_path / "nope.json", write_baseline=False, only=None, json=None)
+    with pytest.raises(SystemExit, match="no baseline"):
+        sc.run_cli(args)
+
+
+@pytest.mark.asyncio
+async def test_a_wrong_or_unwanted_step_figure_counts_on_the_step_row(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A step figure judged wrong or unwanted by eye is a step-row never,
+    not a homework-row one (it used to count on no row)."""
+    from tests.harness.probes import generation_figures as gf
+
+    monkeypatch.setenv("HARNESS_LLM_MODE", "replay")
+    real = gf.summarize
+
+    def with_bad_steps(results: list[dict[str, object]]) -> dict[str, object]:
+        s = real(results)
+        s["wrong"] = [*s["wrong"], "set1-p1-step2: wrong: B moved"]
+        s["unwanted"] = [*s["unwanted"], "set1-p1-step1: unwanted: prints the answer"]
+        return s
+
+    monkeypatch.setattr(gf, "summarize", with_bad_steps)
+    rows = {r.probe: r for r in await sc._generation_figures(sc.Env(has_recorded_font=False))}
+    assert rows["generation-figures (steps)"].never_parts == {"wrong_step_figure": 1, "unwanted_step_figure": 1}
+    assert rows["generation-figures"].never == 0
+
+
+def _items(raws: list[dict[str, object]]) -> list[object]:
+    from tests.harness.types import GeneratedItem
+
+    return [GeneratedItem(id=f"i{n}", label="", problem_text="", figure_svg=None, figure_spec=None, raw=r)
+            for n, r in enumerate(raws)]
+
+
+@pytest.mark.asyncio
+async def test_an_ai_drawing_flag_miss_not_on_the_known_list_is_a_never(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The stored flag is right (the regex saves it), but the AI call alone
+    missed a question not on AI_KNOWN_MISSES: that fails, as in the probe."""
+    from tests.harness.probes.drawing_flag import DrawingFlagProbe
+
+    q = "Graph $y = 3x - 2$ and label the y-intercept."
+
+    async def gen(self: object, ctx: object, constraint: str | None = None) -> list[object]:
+        return _items([{"question": q, "truth": True, "llm": False, "regex": True, "stored": True}])
+
+    monkeypatch.setattr(DrawingFlagProbe, "generate", gen)
+    (row,) = await sc._drawing_flag(sc.Env(has_recorded_font=False))
+    assert row.never_parts == {"ai_miss_not_on_known_list": 1}
+
+
+@pytest.mark.asyncio
+async def test_a_no_for_a_drawn_graph_feature_is_a_never(monkeypatch: pytest.MonkeyPatch) -> None:
+    from tests.harness.probes.graph_check import GraphCheckProbe
+
+    async def gen(self: object, ctx: object, constraint: str | None = None) -> list[object]:
+        return _items([{"draw_graph": True, "truth": ["yes", "no"],
+                        "items": [{"verdict": "no"}, {"verdict": "no"}]}])
+
+    monkeypatch.setattr(GraphCheckProbe, "generate", gen)
+    (row,) = await sc._graph_check(sc.Env(has_recorded_font=True))
+    assert row.never_parts == {"no_for_drawn_feature": 1}

@@ -29,6 +29,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import sys
 from collections import Counter
 from collections.abc import Awaitable, Callable
@@ -73,7 +74,8 @@ class Row:
     cases: int = 0
     skipped: str = ""  # "needs <x>" when it can't run here
     error: str = ""
-    cassette_misses: int = 0  # replay misses the app swallowed (see collect)
+    # Replay misses the app swallowed (see collect), as "<fn> <key> (<mode>)".
+    cassette_misses: list[str] = field(default_factory=list)
     failures: list[str] = field(default_factory=list)  # filled by judge()
     notes: list[str] = field(default_factory=list)
 
@@ -148,9 +150,12 @@ async def _generation_figures(env: Env) -> list[Row]:
              "a drafted figure shipped unchecked, a known-wrong figure the checker passed, "
              "a figure nobody looked at",
              "problems that should have a figure (Ben's rule) that got one")
+    def is_step(entry: str) -> bool:  # "set1-p3-step2: wrong ..." / "set1-p3: unwanted ..."
+        return "-step" in entry.split(":")[0]
+
     hw.never, hw.never_parts = _parts(
-        wrong_figure=len(s["wrong"]),
-        unwanted_figure=len([u for u in s["unwanted"] if "-step" not in u.split(":")[0]]),
+        wrong_figure=len([w for w in s["wrong"] if not is_step(w)]),
+        unwanted_figure=len([u for u in s["unwanted"] if not is_step(u)]),
         refers_to_missing_figure=len(s["missing_reference"]),
         drafted_figure_shipped_unchecked=len(s["rule_broken"]),
         known_wrong_passed=sum(1 for v in q_neg.values() if v is False),
@@ -163,10 +168,12 @@ async def _generation_figures(env: Env) -> list[Row]:
     hw.notes.append(f"{s['question_figures']} figures drawn; missing: {', '.join(s['missing_figures']) or 'none'}")
 
     st = Row("step diagrams", "generation-figures (steps)",
-             "a shown step figure that moves the problem's points or drops its parts, "
-             "a known-wrong step figure passed, a shown step figure nobody looked at",
+             "a shown step figure judged wrong or unwanted by eye, one that moves the problem's "
+             "points or drops its parts, a known-wrong step figure passed, one nobody looked at",
              "step figures the solver drew that are shown")
     st.never, st.never_parts = _parts(
+        wrong_step_figure=len([w for w in s["wrong"] if is_step(w)]),
+        unwanted_step_figure=len([u for u in s["unwanted"] if is_step(u)]),
         step_inconsistent=len(s["steps_inconsistent"]),
         known_wrong_passed=sum(1 for v in s_neg.values() if v is False),
         not_looked_at=len([k for k in unseen if "-step" in k]),
@@ -256,10 +263,15 @@ async def _drawing_flag(env: Env) -> list[Row]:
     row = Row("reading student work", "drawing-flag",
               "a question whose stored requires-drawing flag (AI or regex) is wrong",
               "questions the AI call alone labels right")
-    row.never, row.never_parts = _parts(stored_flag_wrong=sum(1 for it in items if it.raw["stored"] != it.raw["truth"]))
+    # The AI is gated on its own too (the probe's rule): the regex was tuned
+    # on this corpus, so the stored flag alone would hide a broken AI call.
+    new_misses = [it.id for it, names in _failed_check_names(p, items) if any(n.startswith("AI alone") for n in names)]
+    row.never, row.never_parts = _parts(
+        stored_flag_wrong=sum(1 for it in items if it.raw["stored"] != it.raw["truth"]),
+        ai_miss_not_on_known_list=len(new_misses),
+    )
     row.how_good = _share(sum(1 for it in items if it.raw["llm"] is it.raw["truth"]), len(items))
     row.cases = len(items)
-    new_misses = [it.id for it, names in _failed_check_names(p, items) if any(n.startswith("AI alone") for n in names)]
     if new_misses:
         row.notes.append(f"AI misses not on the known list: {new_misses}")
     return [row]
@@ -269,7 +281,8 @@ async def _graph_check(env: Env) -> list[Row]:
     from tests.harness.probes.graph_check import GraphCheckProbe
 
     row = Row("grading", "graph-check",
-              "'yes' for a graph feature that isn't drawn, a verdict on a page with no graph",
+              "'yes' for a graph feature that isn't drawn, 'no' for one that is, "
+              "a verdict on a page with no graph",
               "checklist verdicts that match the drawing exactly ('unclear' counts as a miss)")
     if not env.has_recorded_font:
         row.skipped = f"needs the font the pages were recorded with ({Path(_RECORDED_FONT).name}, macOS)"
@@ -281,15 +294,15 @@ async def _graph_check(env: Env) -> list[Row]:
                     if t == "no" and i["verdict"] == "yes")
     no_graph = sum(1 for it in items if not it.raw["draw_graph"]
                    if any(i["verdict"] != "unclear" for i in it.raw["items"]))
+    false_no = sum(1 for it in items if it.raw["draw_graph"]
+                   for t, i in zip(it.raw["truth"], it.raw["items"], strict=False)
+                   if t == "yes" and i["verdict"] == "no")
     wrong_count = sum(1 for it in items if len(it.raw["items"]) != len(it.raw["truth"]))
-    row.never, row.never_parts = _parts(yes_for_undrawn_feature=false_yes, verdict_with_no_graph=no_graph,
-                                        wrong_number_of_verdicts=wrong_count)
+    row.never, row.never_parts = _parts(yes_for_undrawn_feature=false_yes, no_for_drawn_feature=false_no,
+                                        verdict_with_no_graph=no_graph, wrong_number_of_verdicts=wrong_count)
     scored = [(t, i["verdict"]) for it in items for t, i in zip(it.raw["truth"], it.raw["items"], strict=False) if t]
     row.how_good = _share(sum(1 for t, v in scored if t == v), len(scored))
     row.cases = len(items)
-    false_no = [it.id for it, names in _failed_check_names(p, items) if any(n.startswith("never no") for n in names)]
-    if false_no:
-        row.notes.append(f"'no' for a drawn feature: {false_no}")
     return [row]
 
 
@@ -360,7 +373,7 @@ async def collect(env: Env, only: list[str] | None = None) -> list[Row]:
     real_init = CassetteMissError.__init__
 
     def counting_init(self: CassetteMissError, *args: Any) -> None:
-        misses.append(str(args[0]) if args else "")
+        misses.append(_miss_id(str(args[0]) if args else ""))
         real_init(self, *args)
 
     CassetteMissError.__init__ = counting_init  # type: ignore[method-assign,assignment]
@@ -376,14 +389,21 @@ async def collect(env: Env, only: list[str] | None = None) -> list[Row]:
             # A miss the app's own error handling swallowed (a failed redraw,
             # a failed solve) means replay took a different path than the
             # recording did. Counted on the source's first row.
-            got[0].cassette_misses = len(misses)
+            got[0].cassette_misses = sorted(misses)
             if misses:
-                modes = sorted({m.split("mode=")[-1].split(")")[0] for m in misses if "mode=" in m})
-                got[0].notes.append(f"{len(misses)} cassette miss(es) swallowed by the app (modes: {', '.join(modes)})")
+                listed = ", ".join(sorted(misses))
+                got[0].notes.append(f"{len(misses)} cassette miss(es) swallowed by the app: {listed}")
             rows += got
     finally:
         CassetteMissError.__init__ = real_init  # type: ignore[method-assign]
     return rows
+
+
+def _miss_id(message: str) -> str:
+    """'no cassette for call_claude_json key=ab12 in replay mode (model=m, mode=x). ...'
+    → 'call_claude_json ab12 (x)': which recording is missing, stable across runs."""
+    m = re.search(r"no cassette for (\S+) key=(\S+) .*?mode=([^)]*)\)", message)
+    return f"{m.group(1)} {m.group(2)} ({m.group(3)})" if m else message[:120]
 
 
 def _feature_of(source: str) -> str:
@@ -410,13 +430,16 @@ def judge(rows: list[Row], baseline: dict[str, Any], only: list[str] | None = No
         if base is None:
             r.notes.append("no baseline yet")
             continue
-        if r.how_good is not None and base.get("how_good") is not None and r.how_good < base["how_good"] - 1e-9:
-            r.failures.append(f"how-good {r.how_good} below baseline {base['how_good']}")
+        if base.get("how_good") is not None:
+            if r.how_good is None:
+                r.failures.append(f"how-good is gone (nothing to measure), baseline {base['how_good']}")
+            elif r.how_good < base["how_good"] - 1e-9:
+                r.failures.append(f"how-good {r.how_good} below baseline {base['how_good']}")
         if r.cases < base.get("cases", 0):
             r.failures.append(f"{r.cases} cases, baseline has {base['cases']} (a case went missing)")
-        if r.cassette_misses > base.get("cassette_misses", 0):
-            r.failures.append(f"{r.cassette_misses} swallowed cassette misses, baseline has "
-                              f"{base.get('cassette_misses', 0)}: replay no longer follows the recording")
+        new = sorted(set(r.cassette_misses) - set(base.get("cassette_misses", [])))
+        if new:
+            r.failures.append(f"new swallowed cassette miss(es) {new}: replay no longer follows the recording")
     if not only:
         for key in baseline:
             if key not in seen:
@@ -479,6 +502,10 @@ def add_parser(sub: Any) -> None:
 
 
 def run_cli(args: argparse.Namespace) -> int:
+    # Checked before anything else: a mistyped path must not judge against an
+    # empty baseline (every how-good and case check would silently pass).
+    if not args.baseline.exists() and not args.write_baseline:
+        raise SystemExit(f"no baseline at {args.baseline} (pass --write-baseline to create one)")
     _configure_env()
     logging.disable(logging.WARNING)  # the checkers log every dropped figure
     env = Env(has_recorded_font=Path(_RECORDED_FONT).exists())

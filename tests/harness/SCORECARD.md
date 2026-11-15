@@ -11,9 +11,11 @@ python -m tests.harness scorecard
   full credit for broken work, "yes" for an undrawn graph feature...). Above 0 → FAIL.
 - **how good**: a share from 0 to 1 (figures drawn, cases graded as labelled...).
   Below the committed baseline (`scorecard_baseline.json`) → FAIL.
-- Also FAIL: a probe that crashes or misses a cassette, a case count below the
-  baseline, more cassette misses swallowed by the app than the baseline, or a
-  baseline row that produced nothing.
+- Also FAIL: a probe that crashes or misses a cassette; a case count below the
+  baseline; a how-good number that the baseline has but this run can't compute;
+  a cassette miss swallowed by the app that isn't already listed (by call and
+  key) in the baseline; a baseline row that produced nothing; a missing
+  baseline file (unless `--write-baseline`).
 - A probe that can't run here prints `skipped: needs <x>`. It is never dropped.
 
 It is replay only. The command sets `HARNESS_LLM_MODE=replay` and a fake API
@@ -54,7 +56,7 @@ homework diagrams
 chat diagrams
   construction-figures               0     0.364     69  PASS
                                    - readings agreed 26/69
-                                   - 2 cassette miss(es) swallowed by the app (modes: bank_chat, decompose)
+                                   - 2 cassette miss(es) swallowed by the app: call_claude_json 54d7fb6b1a406d9377a746359297c268 (decompose), call_claude_json fcc0b3f7f8f6d52dd6608e763fb0af88 (bank_chat)
   construction-adversarial           0     1.000    106  PASS
 step diagrams
   generation-figures (steps)         0     0.000     23  PASS
@@ -108,8 +110,8 @@ Notes:
    replay. The app catches the error, so replay takes a different path than
    the recording did. `77195d48` is the case behind
    `test_a_rewritten_problem_without_a_figure_gets_no_step_figures`, which may
-   pass only because the solve call failed. The scorecard pins the count at 2
-   (more fails). The fix is a paid re-record of those two cases.
+   pass only because the solve call failed. The baseline lists exactly these
+   two misses; any other miss fails. The fix is a paid re-record of those two cases.
 3. **Problem generation has no $0 correctness measure.** The correctness judge
    (`generation`) and the LaTeX guard (`latex`) are live only. The only offline
    row is the set-level count and repeat check.
