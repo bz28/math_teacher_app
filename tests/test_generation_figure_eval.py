@@ -149,3 +149,16 @@ async def test_one_recorded_set_is_not_all_of_them(monkeypatch: pytest.MonkeyPat
     with pytest.raises(gf.NotRecordedError) as e:
         await gf.run_all()
     assert e.value.missing == [n for n in gf.SETS if n != "set4"]
+
+
+def test_a_run_the_spending_cap_stopped_is_not_marked_recorded() -> None:
+    """Coordinator, Eval 1 recording: the cap refuses a call mid-run, the app
+    swallows the error, and the run ends normally with problems missing their
+    figures or steps. Marking that run recorded would let replay score the
+    cut-short run as the real one."""
+    stopped = "SPENDING CAP: set 'generation-set4' stopped at $0.24 of $0.75"
+    assert not gf.finished_recording("auto", None, stopped)
+    assert not gf.finished_recording("record", None, stopped)
+    assert not gf.finished_recording("auto", [1], "")
+    assert not gf.finished_recording("replay", None, "")
+    assert gf.finished_recording("auto", None, "") and gf.finished_recording("record", [], "")

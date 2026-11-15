@@ -144,6 +144,15 @@ def recorded(sets: list[str] | None = None) -> bool:
     return not missing_sets(sets)
 
 
+def finished_recording(mode: str | None, only: list[int] | None, stopped: str) -> bool:
+    """A run may mark its sets recorded only when it recorded (auto/record),
+    ran every problem, and the spending cap never stopped a call: a stopped
+    call is swallowed by the app, so the run "finishes" with problems that
+    lost their figure or steps, and replaying it would score a cut-short
+    run as the real one."""
+    return mode in ("auto", "record") and not only and not stopped
+
+
 def mark_recorded(sets: list[str]) -> None:
     """After a recording run finishes: these sets are now in the cassette."""
     try:
@@ -482,7 +491,7 @@ def main() -> None:
                 results = asyncio.run(run_set(args.set, args.only))
             else:
                 results = asyncio.run(run_all(briefs or None))
-        if os.environ.get("HARNESS_LLM_MODE") in ("auto", "record") and not args.only:
+        if finished_recording(os.environ.get("HARNESS_LLM_MODE"), args.only, spend.stopped):
             mark_recorded([args.set] if args.set else (briefs or list(SETS)))
     finally:
         if prev is None:
