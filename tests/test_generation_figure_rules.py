@@ -79,8 +79,8 @@ def test_both_generation_prompts_ask_for_a_fact_card() -> None:
     assert w in assignment_generation._build_question_generation_prompt("math")
     assert "FACT_CARD_RULES" in inspect.getsource(qbg.regenerate_one)  # the regenerate prompt
     assert "FIGURE_PROBLEM_WORDING" not in inspect.getsource(qbg)
-    for phrase in ("fill in its fact card", "leave `text` empty", "constructs: what the STUDENT constructs",
-                   "context: optional", "hint: optional"):
+    for phrase in ("fill in its fact card", "text (`text`, or `question` when revising) empty",
+                   "constructs: what the STUDENT constructs", "context: optional", "hint: optional"):
         assert phrase in w, phrase
 
 

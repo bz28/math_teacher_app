@@ -131,8 +131,9 @@ CONTEXT_FIELD: dict[str, Any] = {
 HINT_FIELD: dict[str, Any] = {
     "type": "string",
     "description": (
-        "Optional, only with figure_facts: a hint on method or theorem ('Look for a pair of congruent "
-        "triangles.'). No point names, no numbers, no math, and no instruction to draw or construct."
+        "Optional, only with figure_facts: a hint on method ('Use SAS.', 'Work backward from what you "
+        "need to prove.'). No point names, no numbers, no math, no relation words (parallel, congruent, "
+        "right…), and no instruction to draw or construct."
     ),
 }
 
@@ -275,23 +276,64 @@ def _incomplete(f: Fact) -> list[str]:
     return out
 
 
+def _angle_key(x: str, labels: dict[str, str]) -> str:
+    """One angle, however it is written: ∠ABC = ∠CBA (vertex in the
+    middle), ∠1 = the angle it labels, ∠B = its vertex alone."""
+    x = labels.get(x.strip(), x.strip())
+    n = split_names(x)
+    if len(n) == 3:
+        return n[1] + ":" + "".join(sorted((n[0], n[2])))
+    return "".join(n) or x
+
+
+def _item_key(kind: str, x: str, labels: dict[str, str]) -> str:
+    if kind in _ANGLE_ITEM_KINDS or kind == "bisects_angle" and len(split_names(x)) != 2:
+        return _angle_key(x, labels)
+    n = split_names(x)
+    if len(n) == 2:
+        return "".join(sorted(n))  # a segment or line either way round
+    return "".join(n) or x.strip()
+
+
 def _already_given(card: FigureFacts) -> list[str]:
-    """An ask the givens already answer: "m∠ABC = 50°. Find m∠ABC."."""
-    def key(f: Fact) -> tuple[str, tuple[str, ...]]:
-        return f.kind, tuple(sorted("".join(sorted(split_names(x))) or x.strip() for x in f.items))
+    """An ask the givens already answer: "m∠ABC = 50°. Find m∠CBA.", or a
+    statement to prove that is a given. Angles compare however written
+    (vertex in the middle, or by the number that labels them); segments
+    either way round."""
+    every = [*card.givens, *card.prove, *card.constructs]
+    labels = {f.items[0].strip(): f.items[1].strip() for f in every
+              if f.kind == "numbered_angle" and len(f.items) == 2}
+
+    def key(f: Fact) -> tuple[str, frozenset[str] | tuple[str, ...]]:
+        items = [_item_key(f.kind, x, labels) for x in f.items]
+        ordered = f.kind in ("congruent_triangles", "similar_triangles", "bisects_segment", "bisects_angle",
+                             "transversal", "numbered_angle")
+        return f.kind, tuple(items) if ordered else frozenset(items)
 
     given = {key(f) for f in card.givens}
     out = [f"the card asks to prove a given: {f.kind} {f.items}" for f in card.prove if key(f) in given]
-    lengths = {frozenset(split_names(f.items[0])) for f in card.givens
-               if f.kind == "equal_length" and len(f.items) == 1 and f.value is not None}
-    angles = {"".join(split_names(f.items[0])) for f in card.givens
-              if f.kind == "angle_measure" and f.items and f.value is not None}
+    lengths: set[str] = set()
+    angles: set[str] = set()
+    for f in card.givens:
+        if f.value is None and not (f.kind == "equal_length" and len(f.items) > 1 and f.expr):
+            continue
+        if f.kind in _LENGTH_KINDS:
+            lengths |= {_item_key("segment", x, labels) for x in f.items}
+        if f.kind in _ANGLE_KINDS:
+            angles |= {_angle_key(x, labels) for x in f.items}
     for t in card.find:
-        if t.kind == "segment" and frozenset(split_names(t.item)) in lengths:
+        if t.kind == "segment" and _item_key("segment", t.item, labels) in lengths:
             out.append(f"the card asks for a length it gives: {t.item!r}")
-        if t.kind == "angle" and "".join(split_names(t.item)) in angles:
+        if t.kind == "angle" and _angle_key(t.item, labels) in angles:
             out.append(f"the card asks for an angle it gives: {t.item!r}")
     return out
+
+
+def _blank_to_none(f: Any) -> Any:
+    """A fact's empty optional field ("circle": "") read as absent."""
+    if not isinstance(f, dict):
+        return f
+    return {k: (None if k in ("point", "circle", "expr", "value") and v == "" else v) for k, v in f.items()}
 
 
 def _has_bool_value(raw: dict[str, Any]) -> bool:
@@ -304,7 +346,9 @@ def _has_bool_value(raw: dict[str, Any]) -> bool:
 # The letters a written problem shows as variables: LaTeX commands and the
 # m of m∠ taken out first.
 def _shown_variables(texts: list[str], card: FigureFacts) -> set[str]:
-    joined = re.sub(r"m\\angle|\\[A-Za-z]+", " ", " ".join(texts))
+    # Only inside the math: code's English ("is a right angle") has a's too.
+    math_parts = " ".join(m for t in texts for m in re.findall(r"\$([^$]*)\$", t))
+    joined = re.sub(r"m\\angle|\\[A-Za-z]+", " ", math_parts)
     named = {line_key(x) for x in card.named_lines}
     return {v for v in re.findall(r"(?<![A-Za-z])[a-z](?![A-Za-z])", joined)} - named
 
@@ -316,6 +360,8 @@ def _read_card(raw: Any) -> tuple[FigureFacts | None, list[str]]:
     extra = sorted(set(raw) - allowed)
     if extra:
         return None, [f"the fact card has fields it can't have: {', '.join(extra)}"]
+    raw = {**raw, **{section: [_blank_to_none(f) for f in raw[section]]
+                     for section in ("givens", "prove", "constructs") if isinstance(raw.get(section), list)}}
     if _has_bool_value(raw):
         return None, ["the fact card gives true/false where a number goes"]
     try:
@@ -757,7 +803,6 @@ _STATES = re.compile(
 )
 # A congruence theorem's initials: a hint may name one ("Use SAS.").
 _THEOREMS = re.compile(r"\b(?:SSS|SAS|ASA|AAS|HL|CPCTC|AA)\b")
-_ASSERTS = re.compile(r"\b(?:is|are|was|were|has|have|equals?|makes?|forms?)\b", re.IGNORECASE)
 _DRAWS = re.compile(r"\b(?:draw\w*|construct\w*|sketch\w*|graph\w*|plot\w*|shade\w*)\b", re.IGNORECASE)
 
 
@@ -777,6 +822,10 @@ def clean_context(context: Any) -> tuple[str, str]:
         return "", ""
     if _names_a_point(s) or _STATES.search(s):
         return "", "the context named a point or stated something about the figure"
+    if _DRAWS.search(s):
+        # "Engineers plan to construct a bridge." would read as the student's
+        # drawing (who draws it is on the card).
+        return "", "the context spoke of drawing or constructing"
     if not s.endswith((".", "!", "?")):
         s += "."
     return s, ""
@@ -789,9 +838,9 @@ def clean_hint(hint: Any) -> tuple[str, str]:
         return "", ""
     if _names_a_point(_THEOREMS.sub(" ", s)) or re.search(r"[=≅∥⊥∼≈°$\\∠△⊙]|\d", s):
         return "", "the hint named a point or gave a number"
-    if _STATES.search(_THEOREMS.sub(" ", s)) and _ASSERTS.search(s):
-        # "The lines are parallel." states a fact code can't check; "Look
-        # for a pair of congruent triangles." names a method.
+    if _STATES.search(_THEOREMS.sub(" ", s)):
+        # "Use the parallel lines." says something code can't check (and may
+        # give the proof away): a hint names a method or a theorem's initials.
         return "", "the hint stated something about the figure"
     if _DRAWS.search(s):
         return "", "the hint asked the student to draw"

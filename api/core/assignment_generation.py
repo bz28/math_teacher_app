@@ -76,8 +76,9 @@ student level — NOT absolute math/science difficulty:
 # card and checks the figure against the card, so nothing is read back from
 # the AI's wording. Shared with the regenerate prompt (question_bank_generation).
 FACT_CARD_RULES = (
-    'How to write a problem that gets a figure: fill in its fact card (`figure_facts`) and leave `text` '
-    'empty. Code writes the problem from the card, one fixed phrase per fact ("$\\overline{AB} \\parallel '
+    'How to write a problem that gets a figure: fill in its fact card (`figure_facts`) and leave the '
+    'problem\'s text (`text`, or `question` when revising) empty. Code writes the problem from the '
+    'card, one fixed phrase per fact ("$\\overline{AB} \\parallel '
     '\\overline{CD}$", "$M$ is the midpoint of $\\overline{BC}$"), then the question ("Prove: …", "Find '
     '$m\\angle ABC$."), and checks the figure against the card. So every given, everything to prove or '
     'find, and everything the student constructs is a fact on the card; nothing else reaches the student.\n'
@@ -90,10 +91,11 @@ FACT_CARD_RULES = (
     '- constructs: what the STUDENT constructs or draws themselves, as facts the construction makes true '
     '("Construct the bisector of angle A meeting BC at D": bisects_angle ["AD", "BAC"] and on_segment ["BC"] '
     'point "D"). The figure never shows these parts, and a point only the construction makes (D) is not '
-    'under points.\n'
+    'under points. Such a problem gets a figure of its givens only (the triangle the student starts '
+    'from); this overrides "draw every point and segment the problem names" for what is under constructs.\n'
     '- context: optional, one sentence of setting with no point names, numbers or relations ("A carpenter is '
     'building a roof truss."). The geometry is all on the card.\n'
-    '- hint: optional, a method or theorem to try, with no point names or numbers.\n'
+    '- hint: optional, a method to try ("Use SAS."), with no point names, numbers or relation words.\n'
     '- The figure_spec draws exactly the card\'s points and parts, every given true.\n'
     'Fact kinds (angles "ABC" with the vertex in the middle, or "1" for a numbered angle):\n'
     '- parallel [l1, l2]; perpendicular [l1, l2] (point: where they meet); congruent_segments [s1, s2]; '
@@ -365,7 +367,7 @@ async def generate_questions(
 
         normalized = []
         for q in questions:
-            if not isinstance(q, dict) or ("text" not in q and q.get("figure_facts") is None):
+            if not isinstance(q, dict) or ("text" not in q and not q.get("figure_facts")):
                 continue
             entry: dict[str, Any] = {
                 "title": str(q.get("title") or "")[:120],
@@ -381,7 +383,7 @@ async def generate_questions(
                 entry["figure_spec"] = q["figure_spec"]
             # The fact card, as the AI wrote it: read (and the text written
             # from it) by question_bank_generation.apply_card.
-            if q.get("figure_facts") is not None:
+            if q.get("figure_facts"):
                 entry["figure_card"] = q["figure_facts"]
                 entry["context"] = str(q.get("context") or "")
                 entry["hint"] = str(q.get("hint") or "")

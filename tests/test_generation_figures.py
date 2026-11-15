@@ -29,6 +29,22 @@ RIGHT_TRIANGLE = {"type": "geometry", "shape": "triangle", "vertices": ["A", "B"
                   "right_angle_at": ["C"], "side_labels": {"AC": "9", "BC": "40", "AB": "c"}}
 
 
+# A figure problem written as its fact card (this PR: no card, no figure).
+HYPOTENUSE_CARD = {"points": ["A", "B", "C"], "triangles": ["ABC"],
+                   "givens": [{"kind": "equal_length", "items": ["AC"], "value": 9},
+                              {"kind": "equal_length", "items": ["BC"], "value": 40},
+                              {"kind": "right_angle", "items": ["ACB"]}],
+                   "find": [{"kind": "segment", "item": "AB"}]}
+HYPOTENUSE_FIGURE = {"type": "geometry", "shape": "construction",
+                     "points": {"A": [0, 9], "B": [40, 0], "C": [0, 0]}, "segments": ["AB", "BC", "CA"],
+                     "right_angles": ["ACB"], "side_labels": {"AC": "9", "BC": "40"}}
+
+
+def _carded() -> dict[str, Any]:
+    return {"title": "hypotenuse", "text": "", "difficulty": "easy",
+            "figure_card": HYPOTENUSE_CARD, "figure_spec": HYPOTENUSE_FIGURE}  # as generate_questions hands it on
+
+
 def _q(text: str, spec: dict[str, Any] | None = None) -> dict[str, Any]:
     q: dict[str, Any] = {"title": text[:20], "text": text, "difficulty": "easy"}
     if spec is not None:
@@ -125,10 +141,10 @@ BROKEN = _q("In the figure below, AB = DE and BC = EF. Name the postulate.")
 
 @pytest.mark.asyncio
 async def test_a_problem_citing_a_lacks_figure_is_replaced() -> None:
-    drawn = _q("Find the hypotenuse c in the right triangle below.", RIGHT_TRIANGLE)
+    drawn = _carded()
     items, gen, job = await _run([[GOOD, BROKEN], [drawn]])
     assert gen.await_count == 2 and gen.await_args_list[1].kwargs["count"] == 1
-    assert [i.question for i in items] == [GOOD["text"], drawn["text"]]
+    assert [i.question for i in items][0] == GOOD["text"] and r"Find $AB$." in items[1].question
     assert items[1].figure_svg  # the replacement shipped with its figure
 
 
@@ -149,15 +165,13 @@ async def test_a_replacement_with_the_same_flaw_is_left_out() -> None:
 
 @pytest.mark.asyncio
 async def test_a_full_set_has_no_note() -> None:
-    drawn = _q("Find c in the right triangle below.", RIGHT_TRIANGLE)
-    _items, _gen, job = await _run([[GOOD, drawn]])
+    _items, _gen, job = await _run([[GOOD, _carded()]])
     assert job.status == "done" and job.error_message is None
 
 
 @pytest.mark.asyncio
 async def test_a_batch_with_every_figure_drawn_makes_no_extra_call() -> None:
-    drawn = _q("Find c in the right triangle below.", RIGHT_TRIANGLE)
-    items, gen, job = await _run([[GOOD, drawn]])
+    items, gen, job = await _run([[GOOD, _carded()]])
     assert gen.await_count == 1 and len(items) == 2
 
 

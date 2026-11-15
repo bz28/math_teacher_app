@@ -154,9 +154,8 @@ async def test_a_context_that_names_a_point_is_left_out() -> None:
     assert out[0]["text"] == MEDIAN_TEXT
     kept, _ = await _generate([[
         _written(MEDIAN, MEDIAN_FIGURE, context="A carpenter is building a roof truss.",
-                 hint="Look for two congruent triangles."), PLAIN]])
-    assert kept[0]["text"] == ("A carpenter is building a roof truss. " + MEDIAN_TEXT
-                               + " Hint: Look for two congruent triangles.")
+                 hint="Use SAS."), PLAIN]])
+    assert kept[0]["text"] == ("A carpenter is building a roof truss. " + MEDIAN_TEXT + " Hint: Use SAS.")
 
 
 @pytest.mark.asyncio
@@ -344,14 +343,18 @@ async def test_without_a_card_the_students_own_drawing_is_never_drawn(text: str,
 
 
 def test_the_figure_never_shows_the_value_asked_for() -> None:
+    """A right drawing (AB = 7, right angle at C) that prints BC's value:
+    refused for giving the answer away, and only for that."""
     from api.core.geometry.fact_card import card_text, read_card
 
     card, why = read_card(RIGHT)
     assert card is not None, why
-    spec = {"type": "geometry", "shape": "construction", "points": {"A": [0, 4], "B": [3, 0], "C": [0, 0]},
-            "segments": ["AB", "BC", "CA"], "side_labels": {"AB": "7", "BC": "5"}, "right_angles": ["ACB"]}
-    _, svg, issues = qbg._check_figure(spec, card_text(card), final_answer="5", facts=card)
-    assert svg is None and issues
+    spec = {"type": "geometry", "shape": "construction", "points": {"A": [0, 5.6], "B": [4.2, 0], "C": [0, 0]},
+            "segments": ["AB", "BC", "CA"], "side_labels": {"AB": "7"}, "right_angles": ["ACB"]}
+    assert qbg._check_figure(spec, card_text(card), final_answer="4.2", facts=card)[1]  # right: shown
+    spec["side_labels"] = {"AB": "7", "BC": "4.2"}
+    _, svg, issues = qbg._check_figure(spec, card_text(card), final_answer="4.2", facts=card)
+    assert svg is None and any("gives away the answer" in i for i in issues), issues
 
 
 def test_a_shape_form_figure_is_refused_for_an_author_card_by_the_check_itself() -> None:
@@ -390,3 +393,32 @@ async def test_a_chat_shape_form_figure_for_an_author_card_is_never_proposed() -
             teacher_message="add a figure", user_id=uuid.UUID(int=0),
         )
     assert not (msg.get("proposal") or {}).get("figure_svg")
+
+
+
+@pytest.mark.asyncio
+async def test_a_shape_form_figure_without_a_card_is_never_shown() -> None:
+    """Review round 3: no card means nothing to hold the figure to (the
+    AI's words are never read back): the slot is replaced."""
+    text = "In triangle ABC, AB = 7 and BC = 5. Find AC."
+    out, m = await _generate([[dict(PLAIN, text=text, figure_spec=SHAPE), PLAIN],
+                              [dict(PLAIN, text="Solve 5x = 20.")]])
+    assert [q["text"] for q in out] == ["Solve 2x + 3 = 11.", "Solve 5x = 20."]
+    m["read"].assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_an_empty_card_is_no_card() -> None:
+    """Review round 3: `figure_facts: {}` on a plain problem is not a card
+    (it would be refused, and the good problem replaced)."""
+    out, _ = await _generate([[dict(PLAIN, figure_facts={}), dict(PLAIN, text="Solve 5x = 20.")]])
+    assert [q["text"] for q in out] == ["Solve 2x + 3 = 11.", "Solve 5x = 20."]
+
+
+def test_the_prompt_says_a_construction_shows_only_its_givens() -> None:
+    """Review round 3: the figure rules say "draw every point the problem
+    names"; for what is under constructs the card's rule overrides them."""
+    from api.core.assignment_generation import FACT_CARD_RULES
+
+    assert "gets a figure of its givens only" in FACT_CARD_RULES
+    assert 'overrides "draw every point and segment the problem names"' in FACT_CARD_RULES

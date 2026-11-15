@@ -184,6 +184,24 @@ def test_each_kind_has_one_fixed_phrase_that_says_only_its_fact(kind: str) -> No
       "find": [{"kind": "angle", "item": "ABC"}]}, "angle it gives"),
     (_card({}, F("equal_length", ["AB"], value=3))  # _card finds AB
      , "length it gives"),
+    # Review round 3: the same ask, written another way.
+    ({"points": list("ABC"), "triangles": ["ABC"], "givens": [F("angle_measure", ["ABC"], value=50)],
+      "find": [{"kind": "angle", "item": "CBA"}]}, "angle it gives"),
+    ({"points": list("ABC"), "triangles": ["ABC"], "givens": [F("equal_length", ["AB", "AC"], value=5)],
+      "find": [{"kind": "segment", "item": "CA"}]}, "length it gives"),
+    ({"points": list("OAB"), "circles": ["O"], "givens": [F("radius", ["OA"], circle="O", value=3)],
+      "find": [{"kind": "segment", "item": "OA"}]}, "length it gives"),
+    ({"points": list("OAB"), "circles": ["O"], "segments": ["OA", "OB"],
+      "givens": [F("central_angle", ["AOB"], circle="O", value=80)],
+      "find": [{"kind": "angle", "item": "BOA"}]}, "angle it gives"),
+    ({"points": list("ABCDE"), "segments": ["AB", "CD"],
+      "givens": [F("intersect", ["AB", "CD"], point="E"), F("numbered_angle", ["1", "AEC"]),
+                 F("angle_measure", ["1"], value=50)],
+      "find": [{"kind": "angle", "item": "CEA"}]}, "angle it gives"),
+    # "Find a" where only code's English ("is a right angle") has an a.
+    ({"points": list("ABC"), "triangles": ["ABC"],
+      "givens": [F("right_angle", ["ACB"]), F("equal_length", ["AB"], value=5)],
+      "find": [{"kind": "other", "item": "a"}]}, "never show"),
     ({"points": list("ABC"), "triangles": ["ABC"], "givens": [F("congruent_segments", ["AB", "AC"])],
       "prove": [F("congruent_segments", ["AC", "AB"])]}, "prove a given"),
     # Review round 1: a construction step whose every point the figure
@@ -291,7 +309,12 @@ def test_the_context_is_kept_only_when_it_states_nothing(context: str, kept: str
 
 
 @pytest.mark.parametrize(("hint", "kept"), [
-    ("Look for a pair of congruent triangles", "Look for a pair of congruent triangles."),
+    ("Work backward from what you need to prove", "Work backward from what you need to prove."),
+    # Review round 3: a relation word with no verb still says something.
+    ("Look for a pair of congruent triangles", ""),
+    ("Use the parallel lines.", ""),
+    ("Notice the right angle.", ""),
+    ("Focus on the midpoint.", ""),
     ("Use SAS on triangles ABD and ACD.", ""),  # names points
     # Review round 2: a theorem's initials are not a point; a hint that
     # states a relation is a fact code can't check.
@@ -407,3 +430,32 @@ def test_a_sentence_that_comes_out_empty_is_refused_even_past_the_field_checks(
     monkeypatch.setattr(fc, "_incomplete", lambda f: [])
     card, why = read_card(_card({}, F("midpoint", ["AB"])))
     assert card is None and why == ["a fact's sentence came out incomplete"]
+
+
+
+@pytest.mark.parametrize("raw", [
+    # Review round 3: ordinary problems the "already given" rule refused.
+    {"points": list("ABCDE"), "segments": ["AB", "CD"],
+     "givens": [F("intersect", ["AB", "CD"], point="E"), F("numbered_angle", ["1", "AEC"]),
+                F("numbered_angle", ["2", "BED"]), F("angle_measure", ["1"], value=50)],
+     "find": [{"kind": "angle", "item": "2"}]},
+    {"points": list("ABCD"), "triangles": ["ABC"], "segments": ["AD"],
+     "givens": [F("on_segment", ["BC"], point="D"), F("congruent_angles", ["BAD", "CAD"]),
+                F("congruent_segments", ["AB", "AC"])],
+     "prove": [F("congruent_angles", ["ABD", "ACD"])]},
+    # Empty optional fields read as absent ("circle": "", "expr": "").
+    _card({}, F("parallel", ["AB", "CD"], circle="", expr="", point="")),
+])
+def test_an_ordinary_card_is_accepted(raw: dict[str, Any]) -> None:
+    card, why = read_card(raw)
+    assert card is not None, why
+
+
+@pytest.mark.parametrize("context", [
+    "Engineers plan to construct a bridge.", "An architect will sketch a floor plan.",
+    "A hiker will graph the path she walks.",
+])
+def test_a_context_that_speaks_of_drawing_is_left_out(context: str) -> None:
+    """Review round 3: the words would read as the student drawing (who
+    draws it is on the card)."""
+    assert clean_context(context) == ("", "the context spoke of drawing or constructing")

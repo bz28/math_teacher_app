@@ -653,9 +653,9 @@ async def _draw_figures(
                 q.get("text") or "", q.get("requires_drawing")))
         # The AI's own choice, kept after a failed check drops the spec.
         q["figure_wanted"] = bool(q.get("figure_spec")) or _has_card(q)
-        if card is None and q.get("figure_spec") and (_has_card(q) or _is_construction(q.get("figure_spec"))):
-            # A refused card (its problem has no words code could write) or a
-            # construction with no card: nothing to hold the figure to.
+        if card is None and q.get("figure_spec"):
+            # No card, or a refused one: nothing to hold the figure to (an
+            # AI-written problem's words are never read back), so no figure.
             logger.warning("Job %s: a figure came without a fact card it can be checked against: %.80s",
                            generation_job_id, q.get("text"))
             q["figure_spec"] = None
@@ -1499,7 +1499,7 @@ async def regenerate_one(
     # A version with a fact card: its text is code's, written from the card
     # (apply_card); without one, the AI's words, and no figure.
     drafted: dict[str, Any] = {"text": str(result.get("question") or ""), "figure_spec": result.get("figure_spec")}
-    if result.get("figure_facts") is not None:
+    if result.get("figure_facts"):
         drafted.update(figure_card=result["figure_facts"], context=result.get("context"), hint=result.get("hint"))
     apply_card(drafted)
     new_question = drafted["text"]
