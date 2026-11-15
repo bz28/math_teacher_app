@@ -157,7 +157,7 @@ async def test_a_context_that_names_a_point_is_left_out() -> None:
                  hint="Work backward from what you need to prove."), PLAIN]])
     assert kept[0]["text"] == ("A carpenter is building a roof frame. " + MEDIAN_TEXT
                                + " Hint: Work backward from what you need to prove.")
-    # A theorem hint the card isn't about (MEDIAN proves angles, not triangles) is left out.
+    # A theorem's name is not a hint (independent round 3): left out.
     no_sas, _ = await _generate([[_written(MEDIAN, MEDIAN_FIGURE, hint="Use SAS."), PLAIN]])
     assert no_sas[0]["text"] == MEDIAN_TEXT
 
@@ -427,6 +427,9 @@ def test_the_prompt_says_a_construction_shows_only_its_givens() -> None:
     assert "gets a figure of its givens only" in FACT_CARD_RULES
     assert 'overrides "draw every point and segment the problem names"' in FACT_CARD_RULES
     assert "point P (required: where they meet)" in FACT_CARD_RULES  # independent round 2
+    # Independent round 3: no theorem names in hints; "work backward" only with a prove.
+    assert "Never put a theorem\'s name in a fact, the context or the hint." in FACT_CARD_RULES
+    assert "only when the card has something to prove" in FACT_CARD_RULES
 
 
 

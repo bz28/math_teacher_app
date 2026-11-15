@@ -373,9 +373,12 @@ def test_the_context_is_kept_only_when_it_states_nothing(context: str, kept: str
 
 
 @pytest.mark.parametrize(("hint", "kept"), [
-    ("Work backward from what you need to prove", "Work backward from what you need to prove."),
-    ("Use SAS.", ""),  # a theorem hint needs the card (see the card test below)
-    ("Work backward from what you need to prove.", "Work backward from what you need to prove."),
+    ("List what you know, then what you need", "List what you know, then what you need."),
+    ("Look for a theorem that links the givens to what you need.",
+     "Look for a theorem that links the givens to what you need."),
+    ("Work backward from what you need to prove.", ""),  # speaks of proving: needs a card with a prove
+    # Independent round 3: a theorem's name claims the givens support it; none is listed.
+    ("Use SAS.", ""), ("Use SSS.", ""), ("Use ASA.", ""), ("Use AAS.", ""), ("Use HL.", ""), ("Use CPCTC.", ""),
     # Anything not on the list is dropped: free text can't be checked.
     ("Try CPCTC", ""),
     ("Use SAS on triangles ABD and ACD.", ""),
@@ -572,30 +575,6 @@ ANSWERED = {
     "measured angle, collinear in order": _ask(
         [F("angle_measure", ["ABC"], value=50), F("collinear", ["B", "D", "C"])], {"kind": ANGLE, "item": "ABD"},
         "ABCD", triangles=["ABC"]),
-    "equilateral side": _ask(
-        [F("equilateral", ["ABC"]), F("equal_length", ["AB"], value=5)], {"kind": SEGMENT, "item": "BC"},
-        "ABC", triangles=["ABC"]),
-    "square side": _ask(
-        [F("square", ["ABCD"]), F("equal_length", ["AB"], value=5)], {"kind": SEGMENT, "item": "CD"},
-        "ABCD", polygons=["ABCD"]),
-    "rhombus side": _ask(
-        [F("rhombus", ["ABCD"]), F("equal_length", ["AB"], value=5)], {"kind": SEGMENT, "item": "BC"},
-        "ABCD", polygons=["ABCD"]),
-    "congruent segments": _ask(
-        [F("congruent_segments", ["AB", "CD"]), F("equal_length", ["AB"], value=5)], {"kind": SEGMENT, "item": "DC"},
-        "ABCD", segments=["AB", "CD"]),
-    "congruent angles": _ask(
-        [F("congruent_angles", ["ABC", "DEF"]), F("angle_measure", ["ABC"], value=40)],
-        {"kind": ANGLE, "item": "FED"}, triangles=["ABC", "DEF"]),
-    "isosceles legs, apex given": _ask(
-        [F("isosceles", ["ABC"], point="A"), F("equal_length", ["AB"], value=6)], {"kind": SEGMENT, "item": "AC"},
-        "ABC", triangles=["ABC"]),
-    "midpoint halves": _ask(
-        [F("midpoint", ["AB"], point="M"), F("equal_length", ["AM"], value=4)], {"kind": SEGMENT, "item": "MB"},
-        "ABM", segments=["AB"]),
-    "radii of one circle": {"points": list("OAB"), "circles": ["O"],
-                            "givens": [F("radius", ["OA"], circle="O", value=3), F("radius", ["OB"], circle="O")],
-                            "find": [{"kind": SEGMENT, "item": "OB"}]},
     "rectangle corner by vertex": _ask(
         [F("rectangle", ["ABCD"])], {"kind": ANGLE, "item": "BCD"}, "ABCD", polygons=["ABCD"]),
     "measured angle, a point on the ray from the far end": _ask(
@@ -610,9 +589,19 @@ ANSWERED = {
         [F("angle_measure", ["ABC"], value=50)], {"kind": ANGLE, "item": "B"}, "ABC", triangles=["ABC"]),
     "angle ABC asked, angle B given": _ask(
         [F("angle_measure", ["B"], value=50)], {"kind": ANGLE, "item": "ABC"}, "ABC", triangles=["ABC"]),
-    "congruent angles, the value on the other one": _ask(
-        [F("congruent_angles", ["ABC", "DEF"]), F("angle_measure", ["DEF"], value=40)],
-        {"kind": ANGLE, "item": "CBA"}, triangles=["ABC", "DEF"]),
+    "a rectangle's corner asked by its vertex": _ask(
+        [F("rectangle", ["ABCD"])], {"kind": ANGLE, "item": "B"}, "ABCD", polygons=["ABCD"]),
+    "a length the givens state, written backwards": _ask(
+        [F("equal_length", ["AB"], value=5)], {"kind": SEGMENT, "item": "BA"}, "AB", segments=["AB"]),
+    "a radius the givens state": {"points": list("OA"), "circles": ["O"],
+                                  "givens": [F("radius", ["OA"], circle="O", value=3)],
+                                  "find": [{"kind": SEGMENT, "item": "AO"}]},
+    "right angle written as its vertex, one angle named there": _ask(
+        [F("right_angle", ["B"])], {"kind": ANGLE, "item": "ABC"}, "ABC", triangles=["ABC"]),
+    "the angle a given measures, through a numbered label": {
+        "points": list("ABC"), "triangles": ["ABC"],
+        "givens": [F("angle_measure", ["1"], value=50), F("numbered_angle", ["1", "ABC"])],
+        "find": [{"kind": ANGLE, "item": "CBA"}]},
 }
 DERIVED = {  # one theorem step: the student's work, so the card is kept
     "alternate interior angles": _ask(
@@ -639,6 +628,45 @@ DERIVED = {  # one theorem step: the student's work, so the card is kept
     "the opposite ray is a different angle": _ask(
         [F("angle_measure", ["ABC"], value=50), F("on_segment", ["AD"], point="B")], {"kind": ANGLE, "item": "DBC"},
         "ABCD", triangles=["ABC"], segments=["AD"]),
+    # Independent round 3 (the rule narrowed): an equal partner's value is
+    # one step, an exercise in its own right, not an answer a given states.
+    "equilateral side": _ask(
+        [F("equilateral", ["ABC"]), F("equal_length", ["AB"], value=5)], {"kind": SEGMENT, "item": "BC"},
+        "ABC", triangles=["ABC"]),
+    "square side": _ask(
+        [F("square", ["ABCD"]), F("equal_length", ["AB"], value=5)], {"kind": SEGMENT, "item": "CD"},
+        "ABCD", polygons=["ABCD"]),
+    "rhombus side": _ask(
+        [F("rhombus", ["ABCD"]), F("equal_length", ["AB"], value=5)], {"kind": SEGMENT, "item": "BC"},
+        "ABCD", polygons=["ABCD"]),
+    "congruent segments": _ask(
+        [F("congruent_segments", ["AB", "CD"]), F("equal_length", ["AB"], value=5)], {"kind": SEGMENT, "item": "DC"},
+        "ABCD", segments=["AB", "CD"]),
+    "congruent angles": _ask(
+        [F("congruent_angles", ["ABC", "DEF"]), F("angle_measure", ["ABC"], value=40)],
+        {"kind": ANGLE, "item": "FED"}, triangles=["ABC", "DEF"]),
+    "isosceles legs, apex given": _ask(
+        [F("isosceles", ["ABC"], point="A"), F("equal_length", ["AB"], value=6)], {"kind": SEGMENT, "item": "AC"},
+        "ABC", triangles=["ABC"]),
+    "midpoint halves": _ask(
+        [F("midpoint", ["AB"], point="M"), F("equal_length", ["AM"], value=4)], {"kind": SEGMENT, "item": "MB"},
+        "ABM", segments=["AB"]),
+    "radii of one circle": {"points": list("OAB"), "circles": ["O"],
+                            "givens": [F("radius", ["OA"], circle="O", value=3), F("radius", ["OB"], circle="O")],
+                            "find": [{"kind": SEGMENT, "item": "OB"}]},
+    "congruent angles, the value on the other one": _ask(
+        [F("congruent_angles", ["ABC", "DEF"]), F("angle_measure", ["DEF"], value=40)],
+        {"kind": ANGLE, "item": "CBA"}, triangles=["ABC", "DEF"]),
+    "complementary part, right angle written as its vertex": _ask(
+        [F("right_angle", ["B"]), F("angle_measure", ["ABD"], value=30)], {"kind": ANGLE, "item": "DBC"},
+        "ABCD", rays=["BA", "BC", "BD"]),
+    "complementary part, inside a perpendicular's right angle": _ask(
+        [F("perpendicular", ["AB", "CD"], point="E"), F("on_segment", ["AB"], point="E"),
+         F("on_segment", ["CD"], point="E"), F("angle_measure", ["AEF"], value=35)], {"kind": ANGLE, "item": "FEC"},
+        "ABCDEF", segments=["AB", "CD"], rays=["EF"]),
+    "angle B with two angles named at B": _ask(
+        [F("angle_measure", ["ABD"], value=30), F("angle_measure", ["DBC"], value=40)], {"kind": ANGLE, "item": "B"},
+        "ABCD", rays=["BA", "BC", "BD"]),
 }
 
 
@@ -653,6 +681,33 @@ def test_proving_a_given_congruence_written_the_other_way_round_is_refused() -> 
                            "givens": [F("congruent_triangles", ["ABD", "CBD"])],
                            "prove": [F("congruent_triangles", ["CBD", "ABD"])]})
     assert card is None and any("prove a given" in w for w in why), why
+
+
+PROVE_GIVEN = {  # independent round 3: a statement to prove is the given only when it says the same
+    "AB bisects CD; prove CD bisects AB": ({"points": list("ABCDM"), "segments": ["AB", "CD", "AC", "DB"],
+                                            "givens": [F("bisects_segment", ["AB", "CD"], point="M"),
+                                                       F("parallel", ["AC", "DB"])],
+                                            "prove": [F("bisects_segment", ["CD", "AB"], point="M")]}, True),
+    "right angle ACB; prove right angle BAC": ({"points": list("ABC"), "triangles": ["ABC"],
+                                                "givens": [F("right_angle", ["ACB"])],
+                                                "prove": [F("right_angle", ["BAC"])]}, True),
+    "right angle ABC, angle 1 labels it; prove angle 1 right": ({
+        "points": list("ABC"), "triangles": ["ABC"],
+        "givens": [F("right_angle", ["ABC"]), F("numbered_angle", ["1", "ABC"])],
+        "prove": [F("right_angle", ["1"])]}, False),
+    "AB parallel CD; prove DC parallel BA": ({"points": list("ABCD"), "segments": ["AB", "CD"],
+                                              "givens": [F("parallel", ["AB", "CD"])],
+                                              "prove": [F("parallel", ["DC", "BA"])]}, False),
+}
+
+
+@pytest.mark.parametrize("name", sorted(PROVE_GIVEN))
+def test_proving_a_given_is_refused_and_only_that(name: str) -> None:
+    raw, kept = PROVE_GIVEN[name]
+    card, why = read_card(raw)
+    assert (card is not None) is kept, (name, why)
+    if not kept:
+        assert any("prove a given" in w for w in why), why
 
 
 @pytest.mark.parametrize("name", sorted(DERIVED))
@@ -682,24 +737,21 @@ def test_every_listed_setting_and_hint_is_kept_and_the_schema_lists_them() -> No
 PROVE_TRIANGLES = {"points": list("ABCD"), "triangles": ["ABD", "CBD"],
                    "givens": [F("congruent_segments", ["AB", "CB"]), F("congruent_segments", ["AD", "CD"])],
                    "prove": [F("congruent_triangles", ["ABD", "CBD"])]}
-PROVE_RIGHT = {**PROVE_TRIANGLES, "givens": [*PROVE_TRIANGLES["givens"], F("right_angle", ["ADB"])]}
-PROVE_PART = {**PROVE_TRIANGLES, "givens": [*PROVE_TRIANGLES["givens"], F("congruent_triangles", ["ABD", "CBD"])],
-              "prove": [F("congruent_angles", ["BAD", "BCD"])]}
 FIND_ANGLE = {"points": list("ABC"), "triangles": ["ABC"], "givens": [F("angle_measure", ["BAC"], value=40)],
               "find": [{"kind": "angle", "item": "ABC"}]}
 
 
 @pytest.mark.parametrize(("raw", "hint", "kept"), [
-    # Independent review round 2: a theorem hint is a claim about the figure.
-    (PROVE_TRIANGLES, "Use SSS.", True),
-    (PROVE_TRIANGLES, "Use HL.", False),  # no right angle
-    (PROVE_RIGHT, "Use HL.", True),
-    (PROVE_PART, "Use CPCTC.", True),
-    (FIND_ANGLE, "Use SAS.", False),  # nothing to prove congruent
-    (FIND_ANGLE, "Use CPCTC.", False),
-    (FIND_ANGLE, "Work backward from what you need to prove.", True),  # a method: always
+    # Independent round 3: no theorem's name is a hint (it claims the givens
+    # support it); a hint about proving needs something to prove.
+    (PROVE_TRIANGLES, "Work backward from what you need to prove.", True),
+    (FIND_ANGLE, "Work backward from what you need to prove.", False),
+    (FIND_ANGLE, "List what you know, then what you need.", True),
+    (FIND_ANGLE, "Look for a theorem that links the givens to what you need.", True),
+    (PROVE_TRIANGLES, "Use SSS.", False),
+    (PROVE_TRIANGLES, "Use CPCTC.", False),
 ])
-def test_a_theorem_hint_is_kept_only_when_the_card_is_about_it(raw: dict[str, Any], hint: str, kept: bool) -> None:
+def test_a_hint_makes_no_claim_about_the_figure(raw: dict[str, Any], hint: str, kept: bool) -> None:
     card, why = read_card(raw)
     assert card is not None, why
     assert (clean_hint(hint, card)[0] == hint) is kept

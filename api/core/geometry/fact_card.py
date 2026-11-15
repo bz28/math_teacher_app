@@ -288,25 +288,25 @@ class _Classes:
 
 
 class _Measures:
-    """What a card's givens state outright about its angles and lengths: one
-    model, so "an ask the givens already answer" is closed by construction
-    rather than by a list of cases.
+    """What a card's givens state outright: the angles and lengths a given
+    names itself, with a value. A find is refused only when a given states
+    that very quantity; one written differently but the same is the same:
 
     - Rays: a ray is its vertex and a point on it. Every point the card puts
       on the same ray from a vertex (on_segment, midpoint, collinear in its
       listed order) maps to one representative, so ∠ABD is ∠ABC when D is on
-      BC.
-    - Angles and segments fall into equivalence classes by what the givens
-      state equal by definition: congruent_*, equal_length, an equilateral
-      triangle's, square's or rhombus's sides, an isosceles triangle's legs
-      (apex given), a midpoint's halves, the radii of one circle. A theorem
-      step (alternate interior, vertical angles, a linear pair) is NOT an
-      equality here: deriving it is the student's work.
-    - Values: a number given for any member (angle_measure, equal_length,
-      radius…), or fixed with no number (a right angle, ⊥ at its point, a
-      right triangle's right angle, an equilateral's 60°, a square's or
+      BC, and ∠CBA is ∠ABC.
+    - A numbered angle is the angle it labels.
+    - ∠B is ∠ABC only when the card names exactly one angle at B; with two
+      (∠ABD and ∠DBC) ∠B is only itself.
+    - Values: a number on the fact (angle_measure, equal_length, radius…), or
+      fixed with no number (a right angle, ⊥ at its point, a right
+      triangle's right angle, an equilateral's 60°, a square's or
       rectangle's corners).
-    A find is answered when its class holds a value."""
+
+    Deliberately NOT here: equality reasoning (∠ABC ≅ ∠DEF with m∠DEF given;
+    an equilateral's other side; a midpoint's other half). Finding those is
+    one step, an exercise in its own right, not an answer the givens show."""
 
     def __init__(self, card: FigureFacts) -> None:
         every = [*card.givens, *card.prove, *card.constructs]
@@ -317,73 +317,62 @@ class _Measures:
             for a, m, b in _betweens(f):
                 self.rays.union((a, m), (a, b))
                 self.rays.union((b, m), (b, a))
-        self.angles, self.segments = _Classes(), _Classes()
-        valued_angles: list[Any] = []
-        valued_segments: list[Any] = []
-        radii: dict[str, list[str]] = {}
+        named: dict[str, set[Any]] = {}
+        for x in _named_angles(card):
+            k = self._three(x)
+            if k is not None:
+                named.setdefault(k[1], set()).add(k)
+        self.only = {v: next(iter(ks)) for v, ks in named.items() if len(ks) == 1}
+        self.known_angles: set[Any] = set()
+        self.known_segments: set[frozenset[str]] = set()
         for f in card.givens:
             it = [x.strip() for x in f.items]
-            p = (f.point or "").strip()
-            if f.kind == "congruent_angles":
-                for x in it[1:]:
-                    self.angles.union(self.angle(it[0]), self.angle(x))
-            if f.kind in ("congruent_segments", "equal_length"):
-                for x in it[1:]:
-                    self.segments.union(_seg_key(it[0]), _seg_key(x))
             if f.value is not None and f.kind in _ANGLE_KINDS:
-                valued_angles += [self.angle(x) for x in it]
+                self.known_angles |= {self.angle(x) for x in it}
             if f.value is not None and f.kind in _LENGTH_KINDS:
-                valued_segments += [_seg_key(x) for x in it]
-            if f.kind == "radius" and f.circle:
-                radii.setdefault(f.circle.strip(), []).extend(it)
-            if f.kind == "midpoint" and it and p and len(split_names(it[0])) == 2:
-                x, y = split_names(it[0])
-                self.segments.union(frozenset((x, p)), frozenset((p, y)))
-            sides = _sides(it[0]) if it and (f.kind in ("equilateral", "square", "rhombus")) else []
-            for side in sides[1:]:
-                self.segments.union(sides[0], side)
-            if f.kind == "isosceles" and it and p in split_names(it[0]) and len(set(split_names(it[0]))) == 3:
-                o1, o2 = (v for v in split_names(it[0]) if v != p)
-                self.segments.union(frozenset((p, o1)), frozenset((p, o2)))
-            valued_angles += [self.angle(x) for x in _fixed_angles(f)]
-        for legs in radii.values():
-            for x in legs[1:]:
-                self.segments.union(_seg_key(legs[0]), _seg_key(x))
-        self.known_angles = {self.angles.find(k) for k in valued_angles}
-        self.known_vertices = {k[1] for k in valued_angles if k[0] in ("A", "V")}
-        self.known_segments = {self.segments.find(k) for k in valued_segments}
+                self.known_segments |= {frozenset(split_names(x)) for x in it}
+            self.known_angles |= {self.angle(x) for x in _fixed_angles(f)}
 
-    def angle(self, x: str) -> tuple[str, ...] | tuple[str, str, frozenset[Any]]:
-        """∠ABC as (vertex, its two rays); ∠B as its vertex; ∠1 as the angle
-        it labels."""
+    def _three(self, x: str) -> tuple[str, str, frozenset[Any]] | None:
+        n = split_names(self.labels.get(x.strip(), x.strip()))
+        if len(n) != 3:
+            return None
+        v = n[1]
+        return "A", v, frozenset((self.rays.find((v, n[0])), self.rays.find((v, n[2]))))
+
+    def angle(self, x: str) -> Any:
+        """One key per angle however it is written: ∠ABC as its vertex and
+        two rays, ∠1 as the angle it labels, ∠B as the one angle the card
+        names at B (else ∠B itself)."""
+        k = self._three(x)
+        if k is not None:
+            return k
         x = self.labels.get(x.strip(), x.strip())
         n = split_names(x)
-        if len(n) == 3:
-            v = n[1]
-            return "A", v, frozenset((self.rays.find((v, n[0])), self.rays.find((v, n[2]))))
         if len(n) == 1:
-            return "V", n[0]
+            return self.only.get(n[0], ("V", n[0]))
         return "N", x
 
     def angle_known(self, x: str) -> bool:
-        k = self.angle(x)
-        if k[0] == "V":
-            return k[1] in self.known_vertices  # ∠B: any measured angle at B may be it
-        if self.angles.find(k) in self.known_angles:
-            return True
-        return k[0] == "A" and self.angles.find(("V", k[1])) in self.known_angles
+        return self.angle(x) in self.known_angles
 
     def segment_known(self, x: str) -> bool:
-        return self.segments.find(_seg_key(x)) in self.known_segments
+        return frozenset(split_names(x)) in self.known_segments
 
 
-def _seg_key(x: str) -> frozenset[str]:
-    return frozenset(split_names(x))
-
-
-def _sides(poly: str) -> list[frozenset[str]]:
-    v = split_names(poly)
-    return [frozenset((v[i], v[(i + 1) % len(v)])) for i in range(len(v))] if len(v) >= 3 else []
+def _named_angles(card: FigureFacts) -> list[str]:
+    """Every three-letter angle the card names (in its facts, its asks, and
+    the corners its value-less facts fix)."""
+    out: list[str] = []
+    for f in [*card.givens, *card.prove, *card.constructs]:
+        it = [x.strip() for x in f.items]
+        if f.kind in _ANGLE_ITEM_KINDS:
+            out += it
+        if f.kind in ("bisects_angle", "numbered_angle") and len(it) == 2:
+            out.append(it[1])
+        out += _fixed_angles(f)
+    out += [t.item for t in card.find if t.kind == "angle"]
+    return out
 
 
 def _corners(poly: str) -> list[str]:
@@ -424,24 +413,32 @@ def _fixed_angles(f: Fact) -> list[str]:
     return []
 
 
-def _same_statement(card: FigureFacts, m: _Measures, f: Fact) -> bool:
-    """A statement to prove that a given already states."""
-    it = [x.strip() for x in f.items]
-    if f.kind == "congruent_angles" and len(it) > 1:
-        return len({m.angles.find(m.angle(x)) for x in it}) == 1
-    if f.kind == "congruent_segments" and len(it) > 1:
-        return len({m.segments.find(_seg_key(x)) for x in it}) == 1
-    def key(g: Fact) -> tuple[str, frozenset[str]]:
-        return g.kind, frozenset("".join(sorted(split_names(x))) or x.strip() for x in g.items) \
-            if g.kind not in ("congruent_triangles", "similar_triangles") else frozenset(x.strip() for x in g.items)
-    return key(f) in {key(g) for g in card.givens}
+# Kinds whose items say different things in a different order (AB bisects CD
+# is not CD bisects AB); every other kind's items are a set.
+_ORDERED_KINDS = ("bisects_segment", "bisects_angle", "transversal", "numbered_angle")
+
+
+def _statement_key(m: _Measures, f: Fact) -> tuple[Any, ...]:
+    """One key per statement however it is written: each angle through the
+    same canonicaliser as the asks (labels resolved, vertex kept), each
+    segment by its ends, triangles as written (their order is the
+    correspondence)."""
+    def item(i: int, x: str) -> Any:
+        if f.kind in _ANGLE_ITEM_KINDS or (f.kind in ("bisects_angle", "numbered_angle") and i == 1):
+            return m.angle(x)
+        n = split_names(x)
+        return frozenset(n) if len(n) == 2 and f.kind not in _TRIANGLE_KINDS else x
+    items = [item(i, x.strip()) for i, x in enumerate(f.items)]
+    body: Any = tuple(items) if f.kind in _ORDERED_KINDS else frozenset(items)
+    return f.kind, body, (f.point or "").strip(), f.value, (f.expr or "").strip()
 
 
 def _already_given(card: FigureFacts) -> list[str]:
-    """An ask the givens already answer (see _Measures), or a statement to
+    """An ask a given states outright (see _Measures), or a statement to
     prove that is a given."""
     m = _Measures(card)
-    out = [f"the card asks to prove a given: {f.kind} {f.items}" for f in card.prove if _same_statement(card, m, f)]
+    givens = {_statement_key(m, g) for g in card.givens}
+    out = [f"the card asks to prove a given: {f.kind} {f.items}" for f in card.prove if _statement_key(m, f) in givens]
     for t in card.find:
         if t.kind == "segment" and m.segment_known(t.item):
             out.append(f"the card asks for a length it gives: {t.item!r}")
@@ -987,40 +984,27 @@ def clean_context(context: Any) -> tuple[str, str]:
 
 
 # The hints a problem may carry: a closed list (the schema's enum), kept by
-# membership. Free text can't be checked, and a hint that says a relation
-# ("the two triangles match") gives the proof away or claims what the card
-# doesn't.
+# membership. Each is a method that makes no claim about the figure: a
+# theorem's name ("Use SAS.") claims the givens support it, which code can't
+# check, so none is listed. Free text can't be checked at all.
 HINTS: tuple[str, ...] = (
-    "Use SSS.", "Use SAS.", "Use ASA.", "Use AAS.", "Use HL.", "Use CPCTC.",
     "Work backward from what you need to prove.",
     "List what you know, then what you need.",
     "Look for a theorem that links the givens to what you need.",
 )
 HINT_FIELD["enum"] = ["", *HINTS]
-
-
-_CONGRUENCE_HINTS = ("Use SSS.", "Use SAS.", "Use ASA.", "Use AAS.")
-_RIGHT_KINDS = ("right_angle", "right_triangle", "perpendicular")
+_PROVE_HINTS = ("Work backward from what you need to prove.",)
 
 
 def clean_hint(hint: Any, card: FigureFacts | None = None) -> tuple[str, str]:
-    """(the hint to keep, why it was left out): one of HINTS, and a
-    theorem hint only when the card is about what the theorem is for: a
-    congruence postulate when it proves triangles congruent, HL when one of
-    them is a right triangle too, CPCTC when it has congruent triangles to
-    take parts from. A general method hint is always kept. Without the card
-    no theorem hint is kept (fail closed)."""
+    """(the hint to keep, why it was left out): one of HINTS, and one that
+    speaks of proving only on a card with something to prove. Without the
+    card such a hint isn't kept (fail closed)."""
     if not " ".join(str(hint or "").split()):
         return "", ""
     kept = _one_of(hint, HINTS)
     if not kept:
         return "", "the hint isn't one of the fixed method hints"
-    if kept in (*_CONGRUENCE_HINTS, "Use HL.", "Use CPCTC."):
-        proves_triangles = card is not None and any(f.kind == "congruent_triangles" for f in card.prove)
-        has_triangles = card is not None and any(
-            f.kind == "congruent_triangles" for f in [*card.givens, *card.prove])
-        right = card is not None and any(f.kind in _RIGHT_KINDS for f in card.givens)
-        backed = {"Use HL.": proves_triangles and right, "Use CPCTC.": has_triangles}.get(kept, proves_triangles)
-        if not backed:
-            return "", "the hint names a theorem the problem isn't about"
+    if kept in _PROVE_HINTS and not (card is not None and card.prove):
+        return "", "the hint speaks of proving, and the problem has nothing to prove"
     return kept, ""

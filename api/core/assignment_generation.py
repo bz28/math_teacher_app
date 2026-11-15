@@ -96,9 +96,8 @@ FACT_CARD_RULES = (
     'from); this overrides "draw every point and segment the problem names" for what is under constructs.\n'
     '- context: optional, one of the fixed settings the schema lists ("A carpenter is building a roof '
     'frame."), or empty. The geometry is all on the card.\n'
-    '- hint: optional, one of the fixed method hints the schema lists, or empty. A theorem hint only '
-    'when the problem is about it: SSS/SAS/ASA/AAS when it proves triangles congruent, HL when one is a '
-    'right triangle too, CPCTC when it has congruent triangles.\n'
+    '- hint: optional, one of the fixed method hints the schema lists, or empty. "Work backward from '
+    'what you need to prove." only when the card has something to prove.\n'
     '- The figure_spec draws exactly the card\'s points and parts, every given true.\n'
     'Fact kinds (angles "ABC" with the vertex in the middle, or "1" for a numbered angle):\n'
     '- parallel [l1, l2]; perpendicular [l1, l2] point P (required: where they meet); congruent_segments [s1, s2]; '
@@ -116,7 +115,7 @@ FACT_CARD_RULES = (
     '- on_circle [P, Q] circle O; tangent [l] circle O point P; chord / diameter / radius [s] circle O; '
     'central_angle / inscribed_angle [a] circle O (value)\n'
     '- numbered_angle ["1", angle it labels]; transversal [t, l1, l2]\n'
-    'Never put a theorem\'s name in a fact or the context; it may go in the hint.\n'
+    'Never put a theorem\'s name in a fact, the context or the hint.\n'
 )
 
 # When a problem gets a figure (Ben, 2026-11-14; replaces the first
