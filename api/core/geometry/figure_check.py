@@ -2488,11 +2488,25 @@ def _given_lengths(parts: ProblemParts, side: frozenset[str]) -> set[float]:
 
 
 # A value the answer states as a bare number: nothing after it but a
-# degree sign, a sentence's full stop, a space or the end of the statement
-# ("55°", "83^\circ", "x = 12.").
-_BARE = re.compile(r"\s*(-?\d+(?:\.\d+)?)\s*(?:\^\s*\\circ|°|degrees?)?\s*\.?\s*")
+# degree sign, a space or the end of the statement ("55°", "83^\circ").
+_BARE = re.compile(r"\s*(-?\d+(?:\.\d+)?)\s*(?:\^\s*\\circ|°|degrees?)?\s*")
 # Where one statement of an answer ends.
 _STATEMENT_END = re.compile(r",|;|\\quad|\\qquad|\\\\|\n|\\text\{|\band\b|\bso\b")
+# A sentence's full stop (never the point in "12.5").
+_SENTENCE_END = re.compile(r"\.(?!\d)")
+
+
+def _statements(final_answer: str) -> list[str]:
+    """The answer's statements that hold an "=": each $…$ span is read on its
+    own (two spans side by side are two statements, "$m∠A = 83°$ $m∠B = 97°$"),
+    then split at commas, "and", "so", line breaks and full stops."""
+    out = []
+    for span in re.split(r"\$+", final_answer):
+        for chunk in _STATEMENT_END.split(_clean(span)):
+            out += [p for p in _SENTENCE_END.split(chunk) if "=" in p]
+    return out
+
+
 # What may come before the name on the left of "=": only a part label
 # ("(a)", "**(b)**", "ii)") and a lead-in word ("Therefore"). Anything else (a
 # sum, a difference, a coefficient: "m∠A + m∠B", "180 - x", "2x") means the
@@ -2515,13 +2529,16 @@ def _answer_value(d: _Drawing, key: Any, exprs: list[str], final_answer: str) ->
     "2x = 38", "m∠A + m∠B = 180°", "x = 198/13") can never refuse a right
     figure. A statement like "m∠BGH = 4x + 7" says nothing plainly, so the
     search goes on to the rest of the answer."""
-    text = _clean(final_answer)
-    statements = [p for chunk in _STATEMENT_END.split(text) for p in [chunk] if "=" in p]
+    statements = _statements(final_answer)
     stated: set[float] = set()
     for st in statements:
         sides = st.split("=")
         last = _BARE.fullmatch(sides[-1])
-        if not last:
+        # A middle side is another name for the same size ("m∠A = m∠B = 55°") or
+        # working for it ("4x + 7", "180° - 83°"); anything else naming a point
+        # or an angle means two statements ran together.
+        if not last or any(re.search(r"\\angle|[A-Z]", side) and not _ANGLE_SIDE.fullmatch(side)
+                           for side in sides[1:-1]):
             continue
         for side in sides[:-1]:
             m = _ANGLE_SIDE.fullmatch(side)

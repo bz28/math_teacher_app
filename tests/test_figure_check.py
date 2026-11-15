@@ -671,6 +671,9 @@ SAME_SIDE_FIG = dict(points={"A": [0, 4], "B": [8, 4], "C": [0, 0], "D": [8, 0],
     r"$x = 12$, $m\angle BGH = 55°$",
     r"Therefore $m\angle BGH = 55°$.",
     r"$x = 12$.",
+    r"$m\angle BGH = 55°$. $m\angle GHD = 83°$.",
+    r"$x = 12$. Therefore $m\angle BGH = 55°$.",
+    r"x = 12. m∠BGH = 55°.",
 ])
 def test_an_answer_the_figure_contradicts_is_refused(answer: str) -> None:
     """Eval 1 set2: ∠BGH and ∠GHD are same-side interior (they sum to 180°,
@@ -694,6 +697,12 @@ def test_an_answer_the_figure_contradicts_is_refused(answer: str) -> None:
     r"$10x = 190$, $180 - x = 161$",
     r"$4x + x = 95$",
     r"$-x = -19$",
+    # Review round 3 (#989): two statements not split by a comma are still two statements.
+    r"$m\angle BGH = 83°$. $m\angle GHD = 97°$.",
+    r"$m\angle BGH = 83°$ $m\angle GHD = 97°$",
+    r"$m\angle BGH = 83°$ or $m\angle GHD = 97°$",
+    r"m∠BGH = 83° m∠GHD = 97°",
+    r"$x = 19.0$",
     r"$x = 19$; check: $10x = 190$",
     r"$x = 19 \quad m\angle BGH = 83^\circ$",
 ])
