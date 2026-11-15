@@ -422,3 +422,59 @@ def test_the_prompt_says_a_construction_shows_only_its_givens() -> None:
 
     assert "gets a figure of its givens only" in FACT_CARD_RULES
     assert 'overrides "draw every point and segment the problem names"' in FACT_CARD_RULES
+
+
+
+# ── Review round 4 ─────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("card", [{}, None, {"points": [], "givens": []}])
+async def test_a_problem_with_no_words_and_no_card_is_replaced(card: Any) -> None:
+    """The prompt says leave the text empty for a card; with the card empty
+    or missing there is nothing to show: replaced, never stored as ""."""
+    blank = {"title": "t", "text": "", "difficulty": "easy", **({"figure_facts": card} if card is not None else {})}
+    out, _ = await _generate([[blank, PLAIN], [dict(PLAIN, text="Solve 5x = 20.")]])
+    assert [q["text"] for q in out] == ["Solve 2x + 3 = 11.", "Solve 5x = 20."]
+
+
+@pytest.mark.asyncio
+async def test_a_skeleton_card_on_a_plain_problem_is_no_card() -> None:
+    out, _ = await _generate([[dict(PLAIN, figure_facts={"points": [], "givens": []}),
+                               dict(PLAIN, text="Solve 5x = 20.")]])
+    assert [q["text"] for q in out] == ["Solve 2x + 3 = 11.", "Solve 5x = 20."]
+
+
+def test_the_construction_under_another_letter_is_never_shown() -> None:
+    """E at the exact foot of the bisector, with BE and EC: the student's D
+    renamed. The card lists every point the figure shows, so E is refused."""
+    from api.core.geometry.fact_card import card_text, read_card
+
+    card, why = read_card(BISECTOR)
+    assert card is not None, why
+    renamed = {**TRIANGLE, "points": {**TRIANGLE["points"], "E": [3, 0]},
+               "segments": ["AB", "CA", "BE", "EC"]}
+    _, svg, issues = qbg._check_figure(renamed, card_text(card), facts=card)
+    assert svg is None and any("draws E" in i for i in issues), issues
+    assert qbg._check_figure(TRIANGLE, card_text(card), facts=card)[1]  # the givens alone: shown
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("question", "flag"), [
+    ("Graph the line y = 2x + 1 and give its intercepts.", True),
+    ("Construct triangle ABC with AB = 12, BC = 4, CA = 9 using a compass and straightedge.", None),
+])
+async def test_regenerate_without_a_card_keeps_the_students_own_drawing_undrawn(
+        question: str, flag: bool | None) -> None:
+    """As in generation: the figure is dropped, the new version kept."""
+    reply: dict[str, Any] = {"question": question, "figure_spec": SHAPE}
+    if flag is not None:
+        reply["requires_drawing"] = flag
+    item, _ = await _regenerate(reply)
+    assert item.question == question and item.figure_svg is None and item.requires_drawing is True
+
+
+@pytest.mark.asyncio
+async def test_regenerate_reads_a_blank_card_as_no_card() -> None:
+    item, _ = await _regenerate({"question": "Solve 2x + 3 = 11.", "figure_facts": {"points": [], "givens": []}})
+    assert item.question == "Solve 2x + 3 = 11." and item.figure_svg is None

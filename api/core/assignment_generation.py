@@ -8,6 +8,7 @@ from typing import Any
 from api.core.constants import SOLUTION_FAILED_SENTINEL
 from api.core.construction_figures import CONSTRUCTION_FIGURE_RULES
 from api.core.document_vision import build_vision_content
+from api.core.geometry.fact_card import is_blank_card
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
 from api.core.llm_schemas import GENERATE_QUESTIONS_CONSTRUCTION_SCHEMA
 from api.core.step_decomposition import StepFigures, decompose_problem
@@ -367,7 +368,9 @@ async def generate_questions(
 
         normalized = []
         for q in questions:
-            if not isinstance(q, dict) or ("text" not in q and not q.get("figure_facts")):
+            card_given = q.get("figure_facts") is not None and not is_blank_card(q.get("figure_facts")) \
+                if isinstance(q, dict) else False
+            if not isinstance(q, dict) or ("text" not in q and not card_given):
                 continue
             entry: dict[str, Any] = {
                 "title": str(q.get("title") or "")[:120],
@@ -383,7 +386,7 @@ async def generate_questions(
                 entry["figure_spec"] = q["figure_spec"]
             # The fact card, as the AI wrote it: read (and the text written
             # from it) by question_bank_generation.apply_card.
-            if q.get("figure_facts"):
+            if card_given:
                 entry["figure_card"] = q["figure_facts"]
                 entry["context"] = str(q.get("context") or "")
                 entry["hint"] = str(q.get("hint") or "")

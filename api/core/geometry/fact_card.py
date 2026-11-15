@@ -306,8 +306,9 @@ def _already_given(card: FigureFacts) -> list[str]:
 
     def key(f: Fact) -> tuple[str, frozenset[str] | tuple[str, ...]]:
         items = [_item_key(f.kind, x, labels) for x in f.items]
-        ordered = f.kind in ("congruent_triangles", "similar_triangles", "bisects_segment", "bisects_angle",
-                             "transversal", "numbered_angle")
+        if f.kind in ("congruent_triangles", "similar_triangles"):
+            return f.kind, frozenset(x.strip() for x in f.items)  # △DEF ≅ △ABC is △ABC ≅ △DEF
+        ordered = f.kind in ("bisects_segment", "bisects_angle", "transversal", "numbered_angle")
         return f.kind, tuple(items) if ordered else frozenset(items)
 
     given = {key(f) for f in card.givens}
@@ -321,11 +322,16 @@ def _already_given(card: FigureFacts) -> list[str]:
             lengths |= {_item_key("segment", x, labels) for x in f.items}
         if f.kind in _ANGLE_KINDS:
             angles |= {_angle_key(x, labels) for x in f.items}
+    # ∠B and ∠ABC may be the same angle: an angle named by its vertex alone
+    # matches any measured angle at that vertex, and the other way round.
+    vertices = {k.split(":")[0] for k in angles}
     for t in card.find:
         if t.kind == "segment" and _item_key("segment", t.item, labels) in lengths:
             out.append(f"the card asks for a length it gives: {t.item!r}")
-        if t.kind == "angle" and _angle_key(t.item, labels) in angles:
-            out.append(f"the card asks for an angle it gives: {t.item!r}")
+        if t.kind == "angle":
+            k = _angle_key(t.item, labels)
+            if k in angles or (":" not in k and k in vertices) or (":" in k and k.split(":")[0] in angles):
+                out.append(f"the card asks for an angle it gives: {t.item!r}")
     return out
 
 
@@ -445,7 +451,9 @@ def _read_card(raw: Any) -> tuple[FigureFacts | None, list[str]]:
     written = [f.quote for section in ("givens", "prove", "constructs") for f in getattr(card, section)]
     if any(re.search(r"\$\s*\$|=\s*\$|\{\s*\}", q) for q in written):
         return None, ["a fact's sentence came out incomplete"]
-    variables = _shown_variables(written, card)
+    # A variable to find must be in the givens: one only in a statement to
+    # prove or a construction step leaves nothing to solve from.
+    variables = _shown_variables([f.quote for f in card.givens], card)
     for t in card.find:
         if t.kind == "other" and t.item.strip() not in variables:
             # "Find x" with no x in the problem.
@@ -490,6 +498,23 @@ def _with_shown_parts(card: FigureFacts) -> FigureFacts:
                 if len(split_names(x)) == 2 and frozenset(split_names(x)) not in straight:
                     add(segments, x)
     return card.model_copy(update={"triangles": triangles, "polygons": polygons, "segments": segments})
+
+
+def is_blank_card(raw: Any) -> bool:
+    """A card with nothing in it (`{}`, or every field empty): no card at
+    all, so a plain problem that came with one keeps its own words."""
+    return isinstance(raw, dict) and all(v in (None, "", [], {}) for v in raw.values())
+
+
+def unlisted_points(fig: Any, card: FigureFacts) -> list[str]:
+    """Points the figure labels that the card doesn't list. The card lists
+    every point the figure shows, so this catches the student's
+    construction drawn under another letter (E at the bisector's foot)."""
+    from api.core.geometry.dsl import is_hidden
+
+    shown = {p.strip() for p in card.points}
+    return [f"the figure draws {n}, which the problem doesn't have" for n in fig.points
+            if n not in shown and not is_hidden(n)]
 
 
 def made_points(card: FigureFacts) -> set[str]:

@@ -45,8 +45,10 @@ from api.core.geometry.fact_card import (
     clean_context,
     clean_hint,
     constructed_drawn,
+    is_blank_card,
     read_card,
     student_constructs,
+    unlisted_points,
 )
 from api.core.geometry.facts import FigureFacts, as_facts
 from api.core.geometry.figure_check import check_construction, unbacked_marks, with_arc_sides
@@ -316,7 +318,7 @@ def _check_figure(
             # Who draws what is on an author card: what the student
             # constructs is never in the figure.
             if card.source == "author":
-                issues += constructed_drawn(fig, card)
+                issues += constructed_drawn(fig, card) + unlisted_points(fig, card)
         except Exception:
             # A checker bug must never pass a figure, nor crash generation,
             # the chat or accept: the figure is dropped with a reason.
@@ -609,6 +611,10 @@ def apply_card(q: dict[str, Any]) -> None:
     without a card is left as it is."""
     if "figure_card" not in q:
         q.setdefault("card", None)
+        if not str(q.get("text") or "").strip():
+            # No words and no card (the prompt says leave the text empty for
+            # a card): nothing to show, so it is replaced like a refused card.
+            q["card_refused"] = ["the problem came with no words and no fact card"]
         return
     raw = q.pop("figure_card")
     context, hint = q.pop("context", ""), q.pop("hint", "")
@@ -1499,7 +1505,7 @@ async def regenerate_one(
     # A version with a fact card: its text is code's, written from the card
     # (apply_card); without one, the AI's words, and no figure.
     drafted: dict[str, Any] = {"text": str(result.get("question") or ""), "figure_spec": result.get("figure_spec")}
-    if result.get("figure_facts"):
+    if result.get("figure_facts") is not None and not is_blank_card(result.get("figure_facts")):
         drafted.update(figure_card=result["figure_facts"], context=result.get("context"), hint=result.get("hint"))
     apply_card(drafted)
     new_question = drafted["text"]
@@ -1524,7 +1530,10 @@ async def regenerate_one(
         else combine_requires_drawing(new_question, drafted.get("requires_drawing", result.get("requires_drawing")))
     )
     teacher_draws = item.requires_drawing if item.requires_drawing_teacher_set else None
-    _drop_unwanted_figure(drafted, teacher_draws=teacher_draws)
+    # With a card, only the teacher's own choice drops the figure (the card
+    # says who draws what); without one, the stored flag does, as in
+    # generation: "graph y = …" keeps no figure and is kept.
+    _drop_unwanted_figure(drafted, teacher_draws=teacher_draws if card is not None else stored_flag)
     if card is not None and teacher_draws is True:
         # No figure goes with it, so its words can't say "the figure shows".
         context, hint = drafted["card_words"]
@@ -1541,7 +1550,8 @@ async def regenerate_one(
             user_id=str(user_id), final_answer=new_final, facts=card, fresh=teacher_draws is not True,
         )
     # The AI's choice of a figure, unless the teacher's "the student draws it" stands.
-    drafted["figure_wanted"] = (bool(result.get("figure_spec")) or _has_card(drafted)) and teacher_draws is not True
+    # (A figure the student draws was dropped above, so it isn't wanted.)
+    drafted["figure_wanted"] = (bool(drafted["figure_spec"]) or _has_card(drafted)) and teacher_draws is not True
     if _lacks_figure({**drafted, "figure_svg": new_figure_svg}):
         reason = "; ".join(figure_issues) or "no figure was drawn"
         logger.warning("Regenerated item %s needs a figure it doesn't have: %s", item.id, reason)

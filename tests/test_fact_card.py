@@ -198,6 +198,17 @@ def test_each_kind_has_one_fixed_phrase_that_says_only_its_fact(kind: str) -> No
       "givens": [F("intersect", ["AB", "CD"], point="E"), F("numbered_angle", ["1", "AEC"]),
                  F("angle_measure", ["1"], value=50)],
       "find": [{"kind": "angle", "item": "CEA"}]}, "angle it gives"),
+    # Review round 4: ∠B is ∠ABC in the triangle; △DEF ≅ △ABC is △ABC ≅ △DEF;
+    # an x only in a statement to prove or a construction step.
+    ({"points": list("ABC"), "triangles": ["ABC"], "givens": [F("angle_measure", ["ABC"], value=50)],
+      "find": [{"kind": "angle", "item": "B"}]}, "angle it gives"),
+    ({"points": list("ABC"), "triangles": ["ABC"],
+      "givens": [F("numbered_angle", ["1", "ABC"]), F("angle_measure", ["1"], value=40)],
+      "find": [{"kind": "angle", "item": "B"}]}, "angle it gives"),
+    ({"points": list("ABCDEF"), "triangles": ["ABC", "DEF"], "givens": [F("congruent_triangles", ["DEF", "ABC"])],
+      "prove": [F("congruent_triangles", ["ABC", "DEF"])]}, "prove a given"),
+    ({"points": list("ABC"), "triangles": ["ABC"], "givens": [F("congruent_segments", ["AB", "AC"])],
+      "prove": [F("equal_length", ["AB"], expr="x")], "find": [{"kind": "other", "item": "x"}]}, "never show"),
     # "Find a" where only code's English ("is a right angle") has an a.
     ({"points": list("ABC"), "triangles": ["ABC"],
       "givens": [F("right_angle", ["ACB"]), F("equal_length", ["AB"], value=5)],
@@ -459,3 +470,11 @@ def test_a_context_that_speaks_of_drawing_is_left_out(context: str) -> None:
     """Review round 3: the words would read as the student drawing (who
     draws it is on the card)."""
     assert clean_context(context) == ("", "the context spoke of drawing or constructing")
+
+
+
+def test_a_blank_card_is_no_card() -> None:
+    from api.core.geometry.fact_card import is_blank_card
+
+    assert is_blank_card({}) and is_blank_card({"points": [], "givens": [], "context": ""})
+    assert not is_blank_card({"points": ["A"]}) and not is_blank_card(None) and not is_blank_card("card")
