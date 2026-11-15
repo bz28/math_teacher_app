@@ -135,10 +135,7 @@ def test_each_kind_has_one_fixed_phrase_that_says_only_its_fact(kind: str) -> No
     (_card({}, F("other", ["AB"])), "kind"),
     (_card({}, F("extension", ["BC"], point="D")), "kind"),  # code writes it from a reading's words
     (_card({}, F("obtuse_angle", ["ABC"])), "kind"),
-    (_card({}, F("parallel", ["AB", "XY"])), "names a point the card doesn't show"),
-    (_card({}, F("midpoint", ["AB"], point="Z")), "names a point the card doesn't show"),
     (_card({}, F("on_circle", ["A"], circle="Q")), "circle"),
-    (_card({"segments": ["AZ"]}, F("parallel", ["AB", "CD"])), "segment"),
     (_card({}, F("angle_measure", ["ABC"], value=200)), "more than a straight angle"),
     (_card({}, F("angle_measure", ["ABC"])), "needs its measure"),  # a measure with no value checks nothing
     (_card({}, F("parallel", []), ), "names no part"),
@@ -998,3 +995,23 @@ def test_an_angle_pair_given_with_parallel_lines_to_prove_is_kept() -> None:
         F("alternate_interior", ["AEF", "DFE"]), F("congruent_angles", ["AEF", "DFE"])],
         "prove": [F("parallel", ["AB", "CD"])]})
     assert card is not None, why
+
+
+@pytest.mark.parametrize(("raw", "added"), [
+    # Eval 1 set1/set2: "BC ≅ EF" and "EF meets AB at G" with E, F, G off the point list.
+    (_card({}, F("parallel", ["AB", "XY"])), {"X", "Y"}),
+    (_card({}, F("midpoint", ["AB"], point="Z")), {"Z"}),
+    (_card({"segments": ["AZ"]}, F("parallel", ["AB", "CD"])), {"Z"}),
+])
+def test_a_point_the_givens_or_parts_name_is_a_point_of_the_card(raw: dict[str, Any], added: set[str]) -> None:
+    card, why = read_card({**raw, "points": ["A", "B", "C", "D"]})
+    assert card is not None, why
+    assert added <= set(card.points)
+
+
+def test_a_point_only_the_construction_makes_is_still_refused_in_a_given() -> None:
+    card, why = read_card({"points": ["A", "B", "C"], "triangles": ["ABC"],
+                           "givens": [F("isosceles", ["ABC"], point="A"), F("on_segment", ["BC"], point="D")],
+                           "constructs": [F("bisects_angle", ["AD", "BAC"]), F("on_segment", ["BC"], point="D")],
+                           "prove": [F("congruent_triangles", ["ABD", "ACD"])]})
+    assert card is None and any("names a point the card doesn't show" in w for w in why), why

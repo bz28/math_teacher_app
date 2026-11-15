@@ -619,6 +619,31 @@ def _shown_variables(texts: list[str], card: FigureFacts) -> set[str]:
     return {v for v in re.findall(r"(?<![A-Za-z])[a-z](?![A-Za-z])", joined)} - named
 
 
+def _with_named_points(card: FigureFacts) -> FigureFacts:
+    """The card's point list with every point its givens and parts name: the
+    AI often names E and F in "BC ≅ EF" and leaves them off `points` (Eval 1:
+    3 of 5 problems left out of the made-up sets). A named point is a point
+    of the figure; the figure is still checked against every fact, so this
+    never passes a wrong drawing. A point a construction step names is never
+    added (only the student's construction makes it; a given that names it
+    is still refused), nor one only a statement to prove names."""
+    listed = [p.strip() for p in card.points]
+    made: set[str] = set()
+    for f in card.constructs:
+        made |= _fact_names(f)[0]
+    used: set[str] = set()
+    for f in card.givens:
+        names, bad = _fact_names(f)
+        if not bad:
+            used |= names
+    for section in ("segments", "rays", "lines", "triangles", "polygons"):
+        for x in getattr(card, section):
+            used |= set(split_names(x))
+    used |= {c.strip() for c in card.circles}
+    missing = sorted(n for n in used - set(listed) - made if _NAME.fullmatch(n))
+    return card.model_copy(update={"points": [*listed, *missing]}) if missing else card
+
+
 def _read_card(raw: Any) -> tuple[FigureFacts | None, list[str]]:
     if not isinstance(raw, dict):
         return None, ["no fact card"]
@@ -634,6 +659,7 @@ def _read_card(raw: Any) -> tuple[FigureFacts | None, list[str]]:
         card = FigureFacts.model_validate({**raw, "source": "author", "requested": [], "dropped": []})
     except (ValidationError, ValueError) as e:
         return None, [f"the fact card is malformed ({str(e).splitlines()[0][:120]})"]
+    card = _with_named_points(card)
     why: list[str] = []
     every = [*card.givens, *card.prove, *card.constructs]
     for f in every:
