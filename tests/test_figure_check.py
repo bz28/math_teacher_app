@@ -672,6 +672,44 @@ def test_an_answer_the_figure_contradicts_is_refused(answer: str) -> None:
     assert any("∠BGH 55°" in m for m in got), got
 
 
-def test_an_answer_the_figure_agrees_with_is_kept() -> None:
-    answer = r"$x = 19$, $m\angle BGH = 83°$, $m\angle GHD = 97°$"
+@pytest.mark.parametrize("answer", [
+    r"$x = 19$, $m\angle BGH = 83°$, $m\angle GHD = 97°$",
+    # Review round 1 (#989): working shown in a right answer must not be read as its value.
+    r"$10x - 10 = 180$, $x = 19$, $m\angle BGH = 4(19) + 7 = 83°$, $m\angle GHD = 6(19) - 17 = 97°$",
+    r"$m\angle BGH = 4x + 7 = 83°$",
+    r"$x=19$, $m\angle BGH = 83°$, $m\angle GHD = 180° - 83° = 97°$",
+    r"$x = 19$, so $2x = 38$",
+    r"$x = 19$; check: $10x = 190$",
+    r"$x = 19 \quad m\angle BGH = 83^\circ$",
+])
+def test_an_answer_the_figure_agrees_with_is_kept(answer: str) -> None:
     assert not [m for m in messages(SAME_SIDE, fig(**SAME_SIDE_FIG), final_answer=answer) if "the answer makes" in m]
+
+
+def test_an_answer_whose_variable_is_a_fraction_checks_nothing() -> None:
+    """Review round 1 (#989): "x = 198/13" was read as x = 198."""
+    assert not [m for m in messages(SAME_SIDE, fig(**SAME_SIDE_FIG), final_answer=r"$x = 198/13$")
+                if "the answer makes" in m]
+
+
+def test_a_short_label_on_a_thin_angle_the_problem_gives_is_kept() -> None:
+    """Review round 1 (#989): a 15° angle the problem gives must stay drawable;
+    "15°" sits by its vertex (looked at by eye), a long expression doesn't."""
+    import math as m
+
+    problem = r"In right $\triangle ABC$, $m\angle C = 90^\circ$ and $m\angle A = 15^\circ$. Find $m\angle B$."
+    pts = {"A": [0, 0], "C": [10, 0], "B": [10, 10 * m.tan(m.radians(15))]}
+    f = fig(points=pts, segments=["AB", "BC", "CA"], right_angles=["ACB"], angle_labels={"BAC": "15°"})
+    assert not [x for x in messages(problem, f) if "too thin" in x]
+    pts10 = {"A": [0, 0], "C": [10, 0], "B": [10, 10 * m.tan(m.radians(10))]}
+    f10 = fig(points=pts10, segments=["AB", "BC", "CA"], right_angles=["ACB"], angle_labels={"BAC": "10°"})
+    assert [x for x in messages(problem.replace("15", "10"), f10) if "too thin" in x]
+
+
+def test_an_answer_with_part_labels_is_still_read() -> None:
+    """Review round 1 fix: "**(a)** $y = 11$" must still give y (chat case 218c4a7a)."""
+    answer = "**(a)** $x = 12$\n\n**(b)** both are $55°$"
+    got = [m for m in messages(SAME_SIDE, fig(**SAME_SIDE_FIG), final_answer=answer) if "the answer makes" in m]
+    assert any("∠BGH 55°" in m for m in got), got
+    assert [m for m in messages(SAME_SIDE, fig(**SAME_SIDE_FIG), final_answer=r"(b) $m\angle BGH = 55°$")
+            if "the answer makes" in m]
