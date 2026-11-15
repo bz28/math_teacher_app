@@ -618,6 +618,16 @@ def apply_card(q: dict[str, Any]) -> None:
         return
     raw = q.pop("figure_card")
     context, hint = q.pop("context", ""), q.pop("hint", "")
+    if isinstance(raw, dict) and ({"context", "hint"} & set(raw)):
+        # The AI often nests the problem's own context or hint inside the
+        # card (Eval 1: 27 cards refused for that alone). They are the
+        # problem's fields, not the card's: lift them out, keeping a
+        # top-level value when both are given, and they still go through
+        # the closed lists below like any other context or hint.
+        raw = dict(raw)
+        nested_context, nested_hint = raw.pop("context", ""), raw.pop("hint", "")
+        context = context or nested_context
+        hint = hint or nested_hint
     card, why = read_card(raw)
     q["card"] = card
     if card is None:

@@ -163,6 +163,24 @@ async def test_a_context_that_names_a_point_is_left_out() -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_hint_or_context_nested_in_the_card_is_the_problems_not_a_refusal() -> None:
+    """Eval 1 (coordinator): the AI often puts the problem's hint or context
+    inside the card; 27 cards were refused for that alone, and the Unit 5
+    job came back with 2 of 8 problems. They are lifted out and still pass
+    only through the closed lists."""
+    nested = {**MEDIAN, "hint": "Work backward from what you need to prove.",
+              "context": "A carpenter is building a roof frame."}
+    out, _ = await _generate([[_written(nested, MEDIAN_FIGURE), PLAIN]])
+    assert out[0]["figure_svg"]
+    assert out[0]["text"] == ("A carpenter is building a roof frame. " + MEDIAN_TEXT
+                              + " Hint: Work backward from what you need to prove.")
+    # Still only the closed lists: a nested theorem name or story is dropped.
+    loose = {**MEDIAN, "hint": "Use SAS.", "context": "A ladder twelve feet long leans on a wall."}
+    out, _ = await _generate([[_written(loose, MEDIAN_FIGURE), PLAIN]])
+    assert out[0]["figure_svg"] and out[0]["text"] == MEDIAN_TEXT
+
+
+@pytest.mark.asyncio
 async def test_two_card_problems_with_the_same_card_are_one() -> None:
     """Set distinctness holds for code-written words: the repeat is replaced."""
     out, m = await _generate([[_written(MEDIAN, MEDIAN_FIGURE), _written(MEDIAN, MEDIAN_FIGURE)], [PLAIN]])
