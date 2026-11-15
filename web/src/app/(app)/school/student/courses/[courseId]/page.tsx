@@ -56,14 +56,17 @@ function ClassDetailInner() {
   // Which class this is. The page had no heading, so a student in two
   // classes saw two identical-looking lists. The same call as the
   // sidebar's class list; if it fails, the page works without a title.
-  const [cls, setCls] = useState<StudentClassSummary | null>(null);
+  // Keyed by course so moving to another class never shows the last
+  // class's name while the list reloads.
+  const [found, setFound] = useState<{ courseId: string; cls: StudentClassSummary | null } | null>(null);
+  const cls = found?.courseId === courseId ? found.cls : null;
   useEffect(() => {
     if (!courseId) return;
     let live = true;
     schoolStudent
       .listClasses()
       .then((all) => {
-        if (live) setCls(all.find((c) => c.course_id === courseId) ?? null);
+        if (live) setFound({ courseId, cls: all.find((c) => c.course_id === courseId) ?? null });
       })
       .catch(() => {});
     return () => {
