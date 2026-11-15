@@ -31,7 +31,6 @@ import logging
 import os
 import re
 import sys
-from collections import Counter
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -101,9 +100,122 @@ def _share(num: int, den: int) -> float | None:
     return round(num / den, 4) if den else None
 
 
-def _parts(**counts: int) -> tuple[int, dict[str, int]]:
+# Every never part each row counts, with the plain words that name it. A
+# row's never_what is built from these, SCORECARD.md's never column quotes
+# them (tests/harness/test_scorecard.py checks), and _parts refuses a set of
+# counts that doesn't match, so the code, the row text and the doc can't drift.
+NEVER: dict[str, dict[str, str]] = {
+    "problem generation / generation-figures (sets)": {
+        "short_of_count": "a set short of the count asked",
+        "repeated_problem": "a problem repeated in its set",
+    },
+    "homework diagrams / generation-figures": {
+        "wrong_figure": "a figure judged wrong by eye",
+        "unwanted_figure": "a figure on a problem that should have none",
+        "refers_to_missing_figure": "a problem that says 'the figure' and has none",
+        "drafted_figure_shipped_unchecked": "a drafted figure shipped without a checked figure",
+        "known_wrong_passed": "a known-wrong figure the checker passed",
+        "known_wrong_missing": "a drawn figure with no known-wrong version to test the checker",
+        "not_looked_at": "a figure nobody looked at",
+        "no_verdict_for_problem": "a problem with no figure/none verdict by Ben's rule",
+    },
+    "step diagrams / generation-figures (steps)": {
+        "wrong_step_figure": "a shown step figure judged wrong by eye",
+        "unwanted_step_figure": "a shown step figure judged unwanted by eye",
+        "step_inconsistent": "a shown step figure that moves the problem's points or drops its parts",
+        "known_wrong_passed": "a known-wrong step figure the checker passed",
+        "not_looked_at": "a shown step figure nobody looked at",
+        "dropped_without_reason": "a step figure dropped with no reason given",
+    },
+    "chat diagrams / construction-figures": {
+        "crashed": "a case that crashed",
+        "claims_undrawn_figure": "a reply claiming a figure that wasn't drawn",
+        "verdict_not_held": "a case that ended against its by-eye verdict (a 'decline' case drawn)",
+        "not_looked_at": "a figure nobody looked at",
+        "wrong_figure_passed": "a figure judged wrong by eye that passed the checker",
+        "known_wrong_passed": "a known-wrong figure the checker passed",
+        "names_undrawn_point": "a reply naming a point that isn't drawn",
+    },
+    "step diagrams / construction-figures (steps)": {
+        "step_moved_a_point": "a step figure that moves a point of the question's figure",
+    },
+    "chat diagrams / construction-adversarial": {
+        "wrong_figure_passed": "a reviewer's known-wrong figure the checker passed",
+        "wrong_caught_only_as_unmarked": "a wrong figure caught only because a given isn't marked",
+        "crashed": "a case that crashed",
+        "expected_decline_drawn": "a wording that can't be checked that was drawn anyway",
+    },
+    "reading student work / drawing-eval": {
+        "drawing_lost": "a student's drawing lost before the grader",
+        "false_unconfirmed": "a false \"couldn't confirm\" on a real drawing",
+        "wrong_line_count": "a wrong line count after the second look",
+        "answer_lost": "an answer marked on the drawing lost before final answers",
+    },
+    "reading student work / drawing-flag": {
+        "stored_flag_wrong": "a stored requires-drawing flag (AI or regex) that is wrong",
+        "ai_miss_not_on_known_list": "an AI-alone miss not on the known-miss list",
+        "known_miss_now_right": "a listed known miss the AI now gets right (the list is stale)",
+        "ai_call_failed": "an AI classification call that returned no answer",
+    },
+    "grading / graph-check": {
+        "yes_for_undrawn_feature": "'yes' for a graph feature that isn't drawn",
+        "no_for_drawn_feature": "'no' for a graph feature that is drawn",
+        "verdict_with_no_graph": "a verdict on a page with no graph",
+        "wrong_number_of_verdicts": "a number of verdicts that isn't one per checklist item",
+    },
+    "grading / grading": {
+        "full_credit_not_earned": "full credit on work the label says isn't full",
+        "ledger_does_not_add_up": "a deduction ledger that doesn't add up to the score",
+        "step_ref_out_of_range": "a step reference that points to no step",
+        "rule_id_shown": "a class-rule id shown to the teacher",
+    },
+}
+
+# Rows whose never parts are the probe's own failed checks: each check's name
+# (its start) → the part it counts as. A check not listed here fails the row,
+# so a new probe check must be named before the scorecard counts it.
+_CHECK_PARTS: dict[str, dict[str, str]] = {
+    "chat diagrams / construction-figures": {
+        "the case ran": "crashed",
+        "no reply claims a figure that wasn't drawn": "claims_undrawn_figure",
+        "by-eye verdict holds": "verdict_not_held",
+        "every drawn figure was looked at": "not_looked_at",
+        "no figure judged wrong by eye passed the checker": "wrong_figure_passed",
+        "the checker rejects the case's known-wrong figure": "known_wrong_passed",
+        "the reply names only drawn points": "names_undrawn_point",
+    },
+    "reading student work / drawing-eval": {
+        "the drawing reaches the grader as present": "drawing_lost",
+        "no false \"couldn't confirm\" on a real drawing": "false_unconfirmed",
+        "final inventory has": "wrong_line_count",
+        "the answer on the drawing reaches final_answers": "answer_lost",
+    },
+}
+
+
+def _parts(key: str, **counts: int) -> tuple[int, dict[str, int]]:
+    """(never, its non-zero parts) for row `key`. The parts counted must be
+    exactly the ones NEVER names for that row."""
+    if set(counts) != set(NEVER[key]):
+        raise ValueError(f"{key}: counted {sorted(counts)}, NEVER names {sorted(NEVER[key])}")
     nonzero = {k: v for k, v in counts.items() if v}
     return sum(counts.values()), nonzero
+
+
+def _check_parts(key: str, failed_names: list[str]) -> tuple[int, dict[str, int]]:
+    """Count failed probe checks as the row's never parts (see _CHECK_PARTS)."""
+    counts = dict.fromkeys(NEVER[key], 0)
+    for name in failed_names:
+        part = next((p for start, p in _CHECK_PARTS[key].items() if name.startswith(start)), None)
+        if part is None:
+            raise ValueError(f"{key}: probe check {name!r} has no never part; name it in NEVER/_CHECK_PARTS")
+        counts[part] += 1
+    return _parts(key, **counts)
+
+
+def _new(feature: str, probe: str, how_good_what: str) -> Row:
+    """A row whose never_what is its NEVER phrases."""
+    return Row(feature, probe, "; ".join(NEVER[f"{feature} / {probe}"].values()), how_good_what)
 
 
 def _failed_check_names(probe: Any, items: list[Any]) -> list[tuple[Any, list[str]]]:
@@ -136,24 +248,19 @@ async def _generation_figures(env: Env) -> list[Row]:
     want = [p for p in results if expected[p["key"]] == "figure"]
     asked = sum(map(gf.count_of, gf.SETS))
 
-    gen = Row("problem generation", "generation-figures (sets)",
-              "a set short of the count asked, a problem repeated in its set", "")
-    gen.never, gen.never_parts = _parts(
+    gen = _new("problem generation", "generation-figures (sets)", "")
+    gen.never, gen.never_parts = _parts(gen.key,
         short_of_count=max(0, asked - s["problems"]),
         repeated_problem=s["problems"] - s["distinct_problems"],
     )
     gen.cases = s["problems"]
     gen.notes.append("no $0 correctness measure: the correctness judge (generation probe) is live-only")
 
-    hw = Row("homework diagrams", "generation-figures",
-             "a wrong figure, a figure on a no-figure problem, 'the figure' with none, "
-             "a drafted figure shipped unchecked, a known-wrong figure the checker passed, "
-             "a figure nobody looked at",
-             "problems that should have a figure (Ben's rule) that got one")
+    hw = _new("homework diagrams", "generation-figures", "problems that should have a figure (Ben's rule) that got one")
     def is_step(entry: str) -> bool:  # "set1-p3-step2: wrong ..." / "set1-p3: unwanted ..."
         return "-step" in entry.split(":")[0]
 
-    hw.never, hw.never_parts = _parts(
+    hw.never, hw.never_parts = _parts(hw.key,
         wrong_figure=len([w for w in s["wrong"] if not is_step(w)]),
         unwanted_figure=len([u for u in s["unwanted"] if not is_step(u)]),
         refers_to_missing_figure=len(s["missing_reference"]),
@@ -167,11 +274,8 @@ async def _generation_figures(env: Env) -> list[Row]:
     hw.cases = s["problems"]
     hw.notes.append(f"{s['question_figures']} figures drawn; missing: {', '.join(s['missing_figures']) or 'none'}")
 
-    st = Row("step diagrams", "generation-figures (steps)",
-             "a shown step figure judged wrong or unwanted by eye, one that moves the problem's "
-             "points or drops its parts, a known-wrong step figure passed, one nobody looked at",
-             "step figures the solver drew that are shown")
-    st.never, st.never_parts = _parts(
+    st = _new("step diagrams", "generation-figures (steps)", "step figures the solver drew that are shown")
+    st.never, st.never_parts = _parts(st.key,
         wrong_step_figure=len([w for w in s["wrong"] if is_step(w)]),
         unwanted_step_figure=len([u for u in s["unwanted"] if is_step(u)]),
         step_inconsistent=len(s["steps_inconsistent"]),
@@ -191,26 +295,16 @@ async def _construction_figures(env: Env) -> list[Row]:
 
     results, redraws = await cf.run_all()
     s = cf.summarize(results, redraws)
-    failed: Counter[str] = Counter()
-    for r in results:
-        for c in cf.checks(r):
-            if not c.passed:
-                # "by-eye verdict holds (figure)" and "(decline)" are one bar.
-                failed[c.name.split(" (")[0]] += 1
-
-    chat = Row("chat diagrams", "construction-figures",
-               "failed bar checks on 69 real prod problems: a wrong figure passed, a reply "
-               "claiming a figure that wasn't drawn, a known-wrong figure the checker passed, "
-               "a figure nobody looked at, a 'decline' case drawn, a crashed case",
-               "problems that should get a figure that got one (drawn and checked)")
-    chat.never, chat.never_parts = sum(failed.values()), dict(failed)
+    chat = _new("chat diagrams", "construction-figures",
+                "problems that should get a figure that got one (drawn and checked)")
+    chat.never, chat.never_parts = _check_parts(
+        chat.key, [c.name for r in results for c in cf.checks(r) if not c.passed])
     chat.how_good = _share(s["drawn"], s["expect_figure"])
     chat.cases = s["cases"]
     chat.notes.append(f"readings agreed {s['readings_agreed']}/{s['readings']}")
 
-    st = Row("step diagrams", "construction-figures (steps)",
-             "a step figure that moves a point of the question's figure", "")
-    st.never, st.never_parts = _parts(step_moved_a_point=len(s["step_figures_moved"]))
+    st = _new("step diagrams", "construction-figures (steps)", "")
+    st.never, st.never_parts = _parts(st.key, step_moved_a_point=len(s["step_figures_moved"]))
     st.cases = s["step_figures"]
     if not s["step_figures"]:
         st.notes.append("0 step figures drawn on this corpus, so this bar cannot fail yet (gap)")
@@ -221,11 +315,9 @@ async def _construction_adversarial(env: Env) -> list[Row]:
     from tests.harness.probes import construction_adversarial as ca
 
     s = ca.summarize(await ca.run_all())
-    row = Row("chat diagrams", "construction-adversarial",
-              "a reviewer's known-wrong figure the checker passed (or caught only as "
-              "'not marked'), a case that crashed, a can't-check wording that was drawn",
-              "correct figures that pass (of those whose wording can be checked)")
-    row.never, row.never_parts = _parts(
+    row = _new("chat diagrams", "construction-adversarial",
+               "correct figures that pass (of those whose wording can be checked)")
+    row.never, row.never_parts = _parts(row.key,
         wrong_figure_passed=len(s["wrong_passed"]),
         wrong_caught_only_as_unmarked=len(s["wrong_caught_only_as_unmarked"]),
         crashed=len(s["errors"]),
@@ -239,59 +331,54 @@ async def _construction_adversarial(env: Env) -> list[Row]:
 async def _drawing_eval(env: Env) -> list[Row]:
     from tests.harness.probes.drawing_eval import DrawingEvalProbe
 
-    row = Row("reading student work", "drawing-eval",
-              "a student's drawing lost before the grader, a false \"couldn't confirm\", "
-              "a wrong line count after the second look, an answer on the drawing lost",
-              "pages read with every check right")
+    row = _new("reading student work", "drawing-eval", "pages read with every check right")
     if not env.has_recorded_font:
         row.skipped = f"needs the font the pages were recorded with ({Path(_RECORDED_FONT).name}, macOS)"
         return [row]
     p = DrawingEvalProbe()
     per = _failed_check_names(p, await p.generate(_ctx()))
-    failed = Counter(n.split(" (")[0] for _, names in per for n in names)
-    row.never, row.never_parts = sum(failed.values()), dict(failed)
+    row.never, row.never_parts = _check_parts(row.key, [n for _, names in per for n in names])
     row.how_good = _share(sum(1 for _, names in per if not names), len(per))
     row.cases = len(per)
     return [row]
 
 
 async def _drawing_flag(env: Env) -> list[Row]:
-    from tests.harness.probes.drawing_flag import DrawingFlagProbe
+    from tests.harness.probes.drawing_flag import AI_KNOWN_MISSES, DrawingFlagProbe
 
     p = DrawingFlagProbe()
     items = await p.generate(_ctx())
-    row = Row("reading student work", "drawing-flag",
-              "a question whose stored requires-drawing flag (AI or regex) is wrong, an AI-alone "
-              "miss not on the known list, a listed known miss the AI now gets right",
-              "questions the AI call alone labels right")
+    row = _new("reading student work", "drawing-flag", "questions the AI call alone labels right")
     # The AI is gated on its own too (the probe's rule): the regex was tuned
     # on this corpus, so the stored flag alone would hide a broken AI call.
-    # A failed "AI alone" check on a listed known miss means the AI now gets
-    # it right: the list is stale (delete the entry from AI_KNOWN_MISSES).
-    ai_fails = [(it.id, n) for it, names in _failed_check_names(p, items) for n in names if n.startswith("AI alone")]
-    new_misses = [i for i, n in ai_fails if not n.endswith("(listed known miss)")]
-    now_right = [i for i, n in ai_fails if n.endswith("(listed known miss)")]
+    failed_call = [it.id for it in items if it.raw["llm"] is None]
+    now_right = [it.id for it in items if it.raw["question"] in AI_KNOWN_MISSES
+                 and it.raw["llm"] is it.raw["truth"]]
+    new_misses = [it.id for it in items if it.raw["question"] not in AI_KNOWN_MISSES
+                  and isinstance(it.raw["llm"], bool) and it.raw["llm"] is not it.raw["truth"]]
     row.never, row.never_parts = _parts(
+        row.key,
         stored_flag_wrong=sum(1 for it in items if it.raw["stored"] != it.raw["truth"]),
         ai_miss_not_on_known_list=len(new_misses),
         known_miss_now_right=len(now_right),
+        ai_call_failed=len(failed_call),
     )
     row.how_good = _share(sum(1 for it in items if it.raw["llm"] is it.raw["truth"]), len(items))
     row.cases = len(items)
     if new_misses:
         row.notes.append(f"AI misses not on the known list: {new_misses}")
     if now_right:
-        row.notes.append(f"known misses the AI now gets right (delete from AI_KNOWN_MISSES): {now_right}")
+        row.notes.append(f"known misses the AI now gets right (delete them from AI_KNOWN_MISSES): {now_right}")
+    if failed_call:
+        row.notes.append(f"AI classification call returned no answer (the regex alone decided): {failed_call}")
     return [row]
 
 
 async def _graph_check(env: Env) -> list[Row]:
     from tests.harness.probes.graph_check import GraphCheckProbe
 
-    row = Row("grading", "graph-check",
-              "'yes' for a graph feature that isn't drawn, 'no' for one that is, "
-              "a verdict on a page with no graph",
-              "checklist verdicts that match the drawing exactly ('unclear' counts as a miss)")
+    row = _new("grading", "graph-check",
+               "checklist verdicts that match the drawing exactly ('unclear' counts as a miss)")
     if not env.has_recorded_font:
         row.skipped = f"needs the font the pages were recorded with ({Path(_RECORDED_FONT).name}, macOS)"
         return [row]
@@ -306,7 +393,7 @@ async def _graph_check(env: Env) -> list[Row]:
                    for t, i in zip(it.raw["truth"], it.raw["items"], strict=False)
                    if t == "yes" and i["verdict"] == "no")
     wrong_count = sum(1 for it in items if len(it.raw["items"]) != len(it.raw["truth"]))
-    row.never, row.never_parts = _parts(yes_for_undrawn_feature=false_yes, no_for_drawn_feature=false_no,
+    row.never, row.never_parts = _parts(row.key, yes_for_undrawn_feature=false_yes, no_for_drawn_feature=false_no,
                                         verdict_with_no_graph=no_graph, wrong_number_of_verdicts=wrong_count)
     scored = [(t, i["verdict"]) for it in items for t, i in zip(it.raw["truth"], it.raw["items"], strict=False) if t]
     row.how_good = _share(sum(1 for t, v in scored if t == v), len(scored))
@@ -319,11 +406,9 @@ async def _grading(env: Env) -> list[Row]:
 
     p = GradingProbe()
     per = _failed_check_names(p, await p.generate(_ctx()))
-    row = Row("grading", "grading",
-              "full credit on work the label says isn't full, a deduction ledger that doesn't add "
-              "up to the score, a step reference that points nowhere, a rule id shown to the teacher",
-              "hand-labelled cases graded as labelled, with every check right")
+    row = _new("grading", "grading", "hand-labelled cases graded as labelled, with every check right")
     row.never, row.never_parts = _parts(
+        row.key,
         full_credit_not_earned=sum(
             1 for it, _ in per if it.raw["actual_status"] == "full" and "full" not in it.raw["accepts"]),
         ledger_does_not_add_up=sum(1 for _, ns in per for n in ns if n.startswith("deduction ledger")),

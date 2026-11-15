@@ -207,3 +207,93 @@ async def test_a_known_miss_the_ai_now_gets_right_is_its_own_never(monkeypatch: 
     monkeypatch.setattr(DrawingFlagProbe, "generate", gen)
     (row,) = await sc._drawing_flag(sc.Env(has_recorded_font=False))
     assert row.never_parts == {"known_miss_now_right": 1}
+
+
+@pytest.mark.asyncio
+async def test_a_failed_ai_call_on_a_known_miss_is_not_now_right(monkeypatch: pytest.MonkeyPatch) -> None:
+    """llm=None (the call returned nothing) on a listed known miss is a failed
+    call, not "the AI now gets it right, delete it"."""
+    from tests.harness.probes.drawing_flag import AI_KNOWN_MISSES, DrawingFlagProbe
+
+    q = sorted(AI_KNOWN_MISSES)[0]
+
+    async def gen(self: object, ctx: object, constraint: str | None = None) -> list[object]:
+        return _items([{"question": q, "truth": True, "llm": None, "regex": True, "stored": True}])
+
+    monkeypatch.setattr(DrawingFlagProbe, "generate", gen)
+    (row,) = await sc._drawing_flag(sc.Env(has_recorded_font=False))
+    assert row.never_parts == {"ai_call_failed": 1}
+
+
+_DOC = Path(sc.__file__).with_name("SCORECARD.md").read_text().casefold()
+
+
+def _doc_line(key: str) -> str:
+    probe = key.split(" / ")[1].split(" (")[0].replace("-", "_")
+    return next(line for line in _DOC.splitlines() if line.startswith(f"| `{probe}` |"))
+
+
+@pytest.mark.parametrize("key", sorted(sc.NEVER))
+def test_every_never_part_is_named_in_the_row_and_the_doc(key: str) -> None:
+    """Each part the row counts, forced to 1, shows up in never_parts, and its
+    plain words are in the row's never_what and in SCORECARD.md's line for
+    the probe. _parts refuses counts that don't match NEVER, so a part can't
+    be counted without its words."""
+    feature, probe = key.split(" / ", 1)
+    row = sc._new(feature, probe, "")
+    never, parts = sc._parts(key, **dict.fromkeys(sc.NEVER[key], 1))
+    assert never == len(parts) == len(sc.NEVER[key])
+    for part, words in sc.NEVER[key].items():
+        assert part in parts
+        assert words in row.never_what
+        assert words.casefold() in _doc_line(key), (key, words)
+
+
+def test_a_part_without_words_or_words_without_a_part_is_refused() -> None:
+    key = "grading / graph-check"
+    counts = dict.fromkeys(sc.NEVER[key], 0)
+    with pytest.raises(ValueError, match="NEVER names"):
+        sc._parts(key, **counts, unnamed_part=1)
+    counts.pop("no_for_drawn_feature")
+    with pytest.raises(ValueError, match="NEVER names"):
+        sc._parts(key, **counts)
+
+
+@pytest.mark.parametrize("key", sorted(sc._CHECK_PARTS))
+def test_check_counted_rows_name_every_probe_check(key: str) -> None:
+    """Rows that count the probe's failed checks map each check to a named
+    part, cover every part, and refuse a check nobody named."""
+    assert set(sc._CHECK_PARTS[key].values()) == set(sc.NEVER[key])
+    names = list(sc._CHECK_PARTS[key])
+    never, parts = sc._check_parts(key, names)
+    assert never == len(names) and set(parts) == set(sc.NEVER[key])
+    with pytest.raises(ValueError, match="has no never part"):
+        sc._check_parts(key, ["a check added to the probe later"])
+
+
+def _part_of(key: str, name: str) -> str | None:
+    return next((p for start, p in sc._CHECK_PARTS[key].items() if name.startswith(start)), None)
+
+
+@pytest.mark.asyncio
+async def test_every_construction_figures_check_has_a_part(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The real check names (passed or not) all map, so a renamed check
+    can't slip past the prefix table on a day when nothing fails."""
+    from tests.harness.probes import construction_figures as cf
+
+    monkeypatch.setenv("HARNESS_LLM_MODE", "replay")
+    results, _ = await cf.run_all()
+    names = {c.name for r in results for c in cf.checks(r)}
+    key = "chat diagrams / construction-figures"
+    assert {n for n in names if _part_of(key, n) is None} == set()
+    assert {_part_of(key, n) for n in names} == set(sc.NEVER[key])
+
+
+def test_every_drawing_eval_check_has_a_part() -> None:
+    from tests.harness.probes.drawing_eval import DrawingEvalProbe
+
+    item = _items([{"truth": {"guard_line_count": True, "lines": 1, "answer_on_drawing": "(2, 3)"},
+                    "second_look": [{"present": True, "plotted": 1}], "final_answers": ["(2, 3)"]}])[0]
+    names = [c.name for c in DrawingEvalProbe().deterministic_checks(item)]  # type: ignore[arg-type]
+    key = "reading student work / drawing-eval"
+    assert len(names) == 4 and {_part_of(key, n) for n in names} == set(sc.NEVER[key])
