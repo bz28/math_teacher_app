@@ -2,12 +2,20 @@
 
 Each set is one teacher-style generation request (unit, title, brief) run
 through the REAL generation path without a database:
-`generate_checked_problems` (generate, draw each figure, check it against
-the problem's two agreed readings, one redraw, one replacement round) and
-`solve_checked_problems` (solve, drop a figure that prints the answer, read
-and check each step figure against the problem's figure, one redraw).
-Recorded once against the real model; replays at $0 from its own cassette
-dir (tests/test_generation_figure_eval.py runs it in CI).
+`generate_checked_problems` (generate: the AI writes each figure problem as
+a fact card, code writes its words; draw each figure, check it against the
+card, one redraw, one fresh drawing from the card, one replacement round,
+else the slot is left out) and `solve_checked_problems` (solve, drop a
+figure that prints the answer, read and check each step figure against the
+problem's figure, one redraw). Recorded once against the real model;
+replays at $0 from its own cassette dir (tests/test_generation_figure_eval.py
+runs it in CI once recorded).
+
+The fact-card mode (this PR) is NOT recorded yet: its cassette dir
+`_cassettes/generation_figures_cards/` is empty, and the CI test skips until
+it is. #998's recordings (the reading mode) no longer apply: the generation
+schema and prompt changed. Their 8 drawings are kept, checked against hand
+cards at $0, in tests/harness/probes/fact_card_recorded.py.
 
 What it measures (the bars):
   - wrong figures: every drawn figure (question and step) has a by-eye
@@ -27,11 +35,20 @@ What it measures (the bars):
   - missing figures (EXPECTED says "figure", none drawn; a target to bring
     down) and unwanted ones (EXPECTED "none" but drawn, or BY_EYE
     "unwanted: …"); set3 holds Ben's NO-figure cases so that bar can fail;
-  - every problem in a set distinct.
+  - every problem in a set distinct;
+  - fact cards (this PR): no question figure is read back from the words
+    (`question_readings` = 0), every stored card is the author's, no figure
+    draws a part the student constructs (`constructed_drawn`, read straight
+    from the spec and the stored card, not with fact_card's own code), and
+    a slot left out counts as missing (`left_out`). set4 holds the
+    who-draws-it cases: auxiliary-line proofs (shown) and constructions.
 
 Record one set at a time, each under its spending cap, and render every
-figure to PNG:
-    HARNESS_LLM_MODE=auto python -m tests.harness.probes.generation_figures --set set1 --cap 2.5 --png-dir /tmp/g
+figure to PNG (the shared ledger keeps the total under the limit):
+    HARNESS_LLM_MODE=auto HARNESS_EVAL_LEDGER=<ledger> HARNESS_EVAL_TOTAL_USD=25 \
+        python -m tests.harness.probes.generation_figures --set set4 --cap 0.75 --png-dir /tmp/g
+then set3 (--cap 0.25), set2 (--cap 1.25), set1 (--cap 1.5). Look at every
+PNG and fill BY_EYE, EXPECTED and NEGATIVES before the CI test can pass.
 Replay ($0):
     HARNESS_LLM_MODE=replay python -m tests.harness.probes.generation_figures
 """
@@ -49,7 +66,7 @@ from typing import Any
 from unittest.mock import patch
 
 _HERE = Path(__file__).resolve().parent.parent
-CASSETTE_DIR = _HERE / "_cassettes" / "generation_figures"
+CASSETTE_DIR = _HERE / "_cassettes" / "generation_figures_cards"
 
 SETS: dict[str, dict[str, Any]] = {
     "set1": {
@@ -72,6 +89,17 @@ SETS: dict[str, dict[str, Any]] = {
                  "the line y = 2x + 1 and give its intercepts; (4) the volume of a cylinder with radius 3 cm and "
                  "height 5 cm.",
     },
+    # Who draws it (fact cards): auxiliary lines the figure shows, and
+    # constructions the student makes on a figure of the givens.
+    "set4": {
+        "unit_name": "Unit 5", "assignment_title": "Auxiliary Lines & Constructions", "count": 4,
+        "brief": "Exactly four problems, one of each: (1) isosceles triangle ABC with AB = AC; draw the median AD "
+                 "and prove angle B is congruent to angle C; (2) parallelogram ABCD; draw diagonal AC and prove "
+                 "triangle ABC is congruent to triangle CDA; (3) in isosceles triangle ABC, the student constructs "
+                 "the bisector of angle A with a compass and straightedge, meeting BC at D, then proves triangle ABD "
+                 "is congruent to triangle ACD; (4) the student constructs the perpendicular bisector of a given "
+                 "segment AB with a compass and straightedge.",
+    },
 }
 COUNT = 8  # problems per set unless the set gives its own "count"
 
@@ -83,16 +111,7 @@ def count_of(name: str) -> int:
 # "set1-p3-step2", with the figure's fingerprint: a figure that changes must
 # be looked at again. "right", "wrong: …", "unwanted: …".
 BY_EYE: dict[str, tuple[str, str]] = {
-    "set1-p1": ("cadc98edaf93", "right"),  # M on AC and BD, each half ticked
-    "set1-p2": ("c7e0c0288895", "right"),  # P, Q, R on circle O; inscribed ∠QPR = 37° labeled; radii OQ, OR
-    "set1-p5": ("8426f4e6b10c", "right"),  # AB ∥ CD arrows, E the midpoint of BC ticked
-    "set2-p1": ("a498817f5848", "right"),  # AB ∥ CD, transversal EF with G past F; ∠AEG = 112° as drawn
-    "set2-p3": ("b055008a90f7", "right"),  # right angle at C; AB = 17, AC = 8 labeled, in proportion
-    # AB ∥ CD cut by PQ at E, F; ∠BEF and ∠DFE both 50° at x = 12. Its labels were written
-    # "$(3x+14)°$": shown as plain text since #989's label fix.
-    "set2-p4": ("82f926ad1496", "right"),
-    "set2-p5": ("bf30773bbe8f", "right"),  # JK ∥ LM cut by NP; ∠KGN = 67° as drawn
-    "set2-p7": ("81db88718466", "right"),  # right angle at C; AB = 20, BC = 12 labeled, AC drawn 16
+    # Filled in after recording the fact-card mode (none recorded yet).
 }
 
 # Per problem (by the fingerprint of its text), whether a figure should be
@@ -100,40 +119,16 @@ BY_EYE: dict[str, tuple[str, str]] = {
 # api/core/assignment_generation.py): "figure" (MUST or SHOULD), "optional"
 # (a formula-only shape problem) or "none" (NOT).
 EXPECTED: dict[str, str] = {
-    # set 1
-    "6612b38f698e": "figure",  # p1: a proof about a named arrangement (MUST)
-    "4d009383ce43": "figure",  # p2: inscribed and central angles (MUST)
-    "df3b2e3390c3": "figure",  # p3: a ladder against a wall (SHOULD); written as a story, no points
-    "f49005c8cf74": "optional",  # p4: △PQR ≅ △XYZ, solve for x from matching sides (algebra)
-    "4d7eb5d09cc9": "figure",  # p5: parallel lines and a midpoint, a proof (MUST)
-    "3b955a73a7bf": "figure",  # p6: a chord and a tangent in a circular garden (MUST); a story, no points
-    "0716423830b5": "optional",  # p7: congruent triangles by AAS, solve for x (algebra)
-    "19b663157fee": "figure",  # p8: the angle between a chord and a tangent (MUST); no points
-    # set 2
-    "ad8560639f80": "figure",  # p1: parallel lines and a transversal (MUST)
-    "8ebcd1c24cce": "figure", "3b3cc497fc0f": "figure",  # p4, p5: parallel lines and a transversal (MUST)
-    "e5511552fced": "optional", "746d6de49463": "optional",  # p3, p7: a right triangle by its formula
-    "ae3590ba66ef": "optional", "93d21c4d1ace": "optional",  # p2, p6: angle sums
-    "00b4d635f44c": "figure",  # p8: a floor plan (SHOULD); a story, no points
-    # set 3: Ben's NO-figure cases
-    "06652fefc9fc": "none",  # p1: the student constructs the perpendicular bisector
-    "fe7fcabbe857": "none",  # p2: a percent problem, no shape
-    "bdbfe4f4d7bd": "none",  # p3: graph a line (the tool can't draw graphs)
-    "0b20295df45a": "none",  # p4: a cylinder's volume (3D)
+    # Filled in after recording, by Ben's rule; set4 p1, p2 are "figure"
+    # (an auxiliary line shown), p3 "figure" (the givens, never D or AD),
+    # p4 "none" or "optional" (only the segment AB to construct on).
 }
 
 # A known-wrong version of each drawn question figure (keyed like BY_EYE),
 # which the checker must reject: {"move": {"D": [x, y]}}, {"drop": ["BD"]},
 # {"label": {"ABC": "47°"}}, {"side_label": {"AB": "9"}}.
 NEGATIVES: dict[str, dict[str, Any]] = {
-    "set1-p1": {"move": {"M": [2.5, 2]}},  # M no longer the midpoint of AC or BD
-    "set1-p2": {"move": {"P": [4, 1]}},  # P off circle O
-    "set1-p5": {"move": {"E": [4.5, 2.5]}},  # E off BC, no longer its midpoint
-    "set2-p1": {"move": {"C": [0, 1]}},  # line CD no longer ∥ AB
-    "set2-p3": {"move": {"B": [0, 10]}},  # AB = 17, AC = 8 out of proportion
-    "set2-p4": {"move": {"C": [8, 3]}},  # line CD no longer ∥ AB
-    "set2-p5": {"move": {"M": [8, 3]}},  # line LM no longer ∥ JK
-    "set2-p7": {"move": {"A": [0, 8]}},  # AB = 20, BC = 12 out of proportion
+    # Filled in after recording: one known-wrong version per drawn figure.
 }
 
 
@@ -161,7 +156,17 @@ async def run_set(name: str, only: list[int] | None = None) -> list[dict[str, An
         user_id="00000000-0000-0000-0000-000000000000", constraint_text=s["brief"],
         assignment_title=s["assignment_title"],
     )
-    questions = await qbg.generate_checked_problems(request, count=count_of(name))
+    readings: list[str] = []
+    real_read = qbg.read_figure_facts
+
+    async def read(text: str, **kw: Any) -> Any:
+        if kw.get("step_of") is None:
+            readings.append(text)  # a question read back from its words: the card path never should
+        return await real_read(text, **kw)
+
+    with patch.object(qbg, "read_figure_facts", read):
+        questions = await qbg.generate_checked_problems(request, count=count_of(name))
+    left_out = count_of(name) - len(questions)
     if only:
         questions = [q for i, q in enumerate(questions, start=1) if i in only]
     # What the solver emitted, before any step figure is checked (and
@@ -183,11 +188,15 @@ async def run_set(name: str, only: list[int] | None = None) -> list[dict[str, An
         dropped[kw.get("question_text") or ""] = drops
         return out, drops, reading
 
-    with patch.object(qbg, "generate_solutions", solve), patch.object(qbg, "_render_step_figures_with_retry", render):
-        questions, solutions = await qbg.solve_checked_problems(
+    with (
+        patch.object(qbg, "generate_solutions", solve), patch.object(qbg, "_render_step_figures_with_retry", render),
+        patch.object(qbg, "read_figure_facts", read),
+    ):
+        solved, solutions = await qbg.solve_checked_problems(
             questions, subject="math", user_id="00000000-0000-0000-0000-000000000000", job_id=None,
-            request=request,
         )
+    left_out += len(questions) - len(solved)
+    questions = solved
     out = []
     for i, (q, sol) in enumerate(zip(questions, solutions), start=1):
         steps = sol.get("steps") or []
@@ -198,6 +207,9 @@ async def run_set(name: str, only: list[int] | None = None) -> list[dict[str, An
             "figure_svg": q.get("figure_svg"), "figure_facts": q.get("figure_facts"),
             # The AI's own choice (it drafted a figure), for the rule_broken bar.
             "figure_wanted": bool(q.get("figure_wanted")),
+            "requires_drawing": bool(q.get("requires_drawing")),
+            "card_refused": q.get("card_refused") or [],
+            "left_out": left_out if i == 1 else 0, "readings": len(readings) if i == 1 else 0,
             "steps": [
                 {"step": n, "text": f"{st.get('title', '')}: {st.get('description', '')}",
                  "spec": st.get("figure_spec"), "svg": st.get("figure_svg"), "facts": st.get("figure_facts"),
@@ -298,6 +310,19 @@ def negatives(p: dict[str, Any]) -> dict[str, bool | None]:
     return out
 
 
+def constructed_drawn(p: dict[str, Any]) -> list[str]:
+    """Points only the student's construction makes that the problem's
+    figure draws, read straight from the stored card and the spec (not with
+    fact_card's code): a point named in `constructs` and not in `points`."""
+    card, spec = p.get("figure_facts") or {}, p.get("figure_spec") or {}
+    shown = set(card.get("points") or [])
+    made: set[str] = set()
+    for f in card.get("constructs") or []:
+        for x in [*(f.get("items") or []), f.get("point") or ""]:
+            made |= {c for c in x if c.isupper()}
+    return sorted((made - shown) & set(spec.get("points") or {}))
+
+
 def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
     import api.core.question_bank_generation as qbg
 
@@ -327,6 +352,18 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
         "missing_figures": [p["key"] for p in results
                             if EXPECTED.get(fingerprint(p["text"])) == "figure" and not p["figure_svg"]],
         "not_expected": [p["key"] for p in results if fingerprint(p["text"]) not in EXPECTED],
+        # Fact cards (this PR).
+        "question_readings": sum(p.get("readings", 0) for p in results),
+        "left_out": sum(p.get("left_out", 0) for p in results),
+        "missing_total": len([p for p in results if EXPECTED.get(fingerprint(p["text"])) == "figure"
+                              and not p["figure_svg"]]) + sum(p.get("left_out", 0) for p in results),
+        "not_author_cards": [p["key"] for p in results if p["figure_svg"]
+                             and (p.get("figure_facts") or {}).get("source") != "author"],
+        "constructed_drawn": [f"{p['key']}: {constructed_drawn(p)}" for p in results if constructed_drawn(p)],
+        "constructs_without_drawing_flag": [p["key"] for p in results
+                                            if (p.get("figure_facts") or {}).get("constructs")
+                                            and not p.get("requires_drawing")],
+        "cards_refused": {p["key"]: p["card_refused"] for p in results if p.get("card_refused")},
         "negatives_rejected": sum(1 for v in neg.values() if v),
         "negatives_missing": [k for k, v in neg.items() if v is None],
         "negatives_passed": [k for k, v in neg.items() if v is False],
