@@ -194,7 +194,22 @@ def count_of(name: str) -> int:
 # "set1-p3-step2", with the figure's fingerprint: a figure that changes must
 # be looked at again. "right", "wrong: …", "unwanted: …".
 BY_EYE: dict[str, tuple[str, str]] = {
-    # Filled in after recording the fact-card mode (none recorded yet).
+    # Looked at by eye 2026-11-15 (~/.veradic/evals/sheet_sets_v3.png): each figure
+    # shows its card's givens and marks, nothing the student makes, no answer.
+    "set1-p1": ("c02d87ee3ea1", "right"),
+    "set1-p2": ("46f96a1ff547", "right"),
+    "set1-p3": ("813bed6ec8ae", "right"),
+    "set1-p4": ("3a4e90fddb5a", "right"),
+    "set1-p6": ("6b0155b2dbdb", "right"),
+    "set1-p8": ("eb31070a7a2c", "right"),
+    "set2-p1": ("536a3247064b", "right"),
+    "set2-p2": ("06da3c49050e", "right"),
+    "set2-p3": ("97d1dbe007cc", "right"),
+    "set3-p1": ("ba6ff2c86689", "right"),
+    "set4-p1": ("b440b76cf03f", "right"),
+    "set4-p2": ("0ca675994e05", "right"),
+    "set4-p3": ("64da427c1150", "right"),
+    "set4-p4": ("3ccd22dd6242", "right"),
 }
 
 # Per problem (by the fingerprint of its text), whether a figure should be
@@ -202,16 +217,52 @@ BY_EYE: dict[str, tuple[str, str]] = {
 # api/core/assignment_generation.py): "figure" (MUST or SHOULD), "optional"
 # (a formula-only shape problem) or "none" (NOT).
 EXPECTED: dict[str, str] = {
-    # Filled in after recording, by Ben's rule; set4 p1, p2 are "figure"
-    # (an auxiliary line shown), p3 "figure" (the givens, never D or AD),
-    # p4 "none" or "optional" (only the segment AB to construct on).
+    # By the when-to-draw rule, from the text alone (a cold reviewer's labels,
+    # held to the rule where it names the case).
+    "8be81d7ef34a": "figure",  # set1-p1: The figure shows $overline{BE}$ and $overleftrightarrow{AD
+    "371ad5acf021": "figure",  # set1-p2: Points $A$, $B$, and $C$ lie on circle $O$. $angle AOB$ is
+    "1e5a9091c7f0": "figure",  # set1-p3: Given: $angle ABC$ is a right angle, $angle DCB$ is a righ
+    "60ae7b7f3f9a": "figure",  # set1-p4: Points $P$, $Q$, and $R$ lie on circle $O$. $angle PRQ$ is
+    "406e71e7d268": "optional",  # set1-p5: two triangles given by all three sides: the text says everything
+    "c70bfcbf6b7c": "figure",  # set1-p6: Points $A$ and $T$ lie on circle $O$. $overline{BT}$ is ta
+    "c68f586ac7db": "figure",  # set1-p7: a proof about a quadrilateral's diagonals: a MUST in the rule
+    "4c5abfefb96c": "figure",  # set1-p8: A designer is making a logo. Points $A$, $B$, $C$, and $D$
+    "aabc51cdf3fe": "figure",  # set2-p1: $overleftrightarrow{AB} parallel overleftrightarrow{CD}$.
+    "9413287d5da3": "figure",  # set2-p2: $overleftrightarrow{AB} parallel overleftrightarrow{CD}$.
+    "9b52a571beb7": "figure",  # set2-p3: Given: $overleftrightarrow{AB} parallel overleftrightarrow
+    "fbf4e206015a": "optional",  # set2-p4: a polygon's angle sum: OPTIONAL in the rule
+    "f3803d5d005c": "optional",  # set2-p5: a polygon's exterior angles: OPTIONAL in the rule
+    "ffd96bcfe42e": "none",  # set2-p6: the student draws the ladder: NO in the rule
+    "6bafb2065323": "figure",  # set3-p1: the segment AB only; the student constructs MN
+    "aa421302e1a7": "none",  # set3-p2: no shape
+    "23deef828fc5": "none",  # set3-p3: a graph: NO in the rule
+    "b643644fddbd": "none",  # set3-p4: a 3D solid: the tool can't draw it
+    "11afa96b1e1b": "figure",  # set4-p1: The figure shows $triangle ABD$ and $triangle ACD$. Given:
+    "495ea22fec45": "figure",  # set4-p2: Given: $ABCD$ is a parallelogram. Prove: $triangle ABC con
+    "483d5e02bf10": "figure",  # set4-p3: the givens (triangle ABC), never D or AD
+    "3a0e06a1fd8c": "figure",  # set4-p4: the segment AB only; the student constructs MN
 }
 
 # A known-wrong version of each drawn question figure (keyed like BY_EYE),
 # which the checker must reject: {"move": {"D": [x, y]}}, {"drop": ["BD"]},
 # {"label": {"ABC": "47°"}}, {"side_label": {"AB": "9"}}.
 NEGATIVES: dict[str, dict[str, Any]] = {
-    # Filled in after recording: one known-wrong version per drawn figure.
+    # One point moved so a given is false (a dropped side where no move breaks
+    # one); the checker must refuse each. The reason it gave is in the comment.
+    "set1-p1": {"move": {"A": [-2.4, 0.0]}},  # the given AB ∥ DE is not true in the drawing
+    "set1-p2": {"move": {"A": [1.781, 5.026]}},  # the given A, B, C lie on the circle O is not true in the drawing
+    "set1-p3": {"move": {"A": [0.6, 3.0]}},  # the given ∠ABC is a right angle is not true in the drawing
+    "set1-p4": {"move": {"O": [4.6, 4.0]}},  # the given P, Q, R lie on the circle O is not true in the drawing
+    "set1-p6": {"move": {"A": [7.453, 4.927]}},  # the given A, T lie on the circle O is not true in the drawing
+    "set1-p8": {"move": {"A": [3.445, 7.758]}},  # the given A, B, C, D lie on the circle O is not true in the drawing
+    "set2-p1": {"move": {"A": [0.0, 6.6]}},  # the given AB ∥ CD is not true in the drawing
+    "set2-p2": {"move": {"A": [0.0, 6.6]}},  # the given AB ∥ CD is not true in the drawing
+    "set2-p3": {"move": {"A": [0.0, 6.6]}},  # the given AB ∥ CD is not true in the drawing
+    "set3-p1": {"drop": ["AB"]},  # not drawn: AB
+    "set4-p1": {"move": {"A": [4.6, 6.0]}},  # the given △ABC is isosceles is not true in the drawing
+    "set4-p2": {"move": {"A": [0.6, 0.0]}},  # the given parallelogram ABCD (BC ∥ DA) is not true in the drawing
+    "set4-p3": {"move": {"A": [4.6, 6.0]}},  # the given △ABC is isosceles is not true in the drawing
+    "set4-p4": {"drop": ["AB"]},  # not drawn: AB
 }
 
 

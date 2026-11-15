@@ -8,11 +8,11 @@ else left out; then solved. #998's recordings (the reading mode) no longer
 apply (the schema and prompt changed); its 8 drawings are checked against
 hand cards at $0 in tests/test_fact_card_eval.py.
 
-NOT RECORDED YET (the PR's budget is spent): this test skips until
-tests/harness/_cassettes/generation_figures_cards/ holds the recording. The
-bars below were written before recording; the record command is in the
-probe's docstring and the PR. After recording, look at every PNG and fill
-BY_EYE, EXPECTED and NEGATIVES, or the not_looked_at / not_expected bars fail.
+Recorded 2026-11-15 (Eval 1, ~$2.2 of the eval budget); replays at $0. Every
+drawn figure was looked at (BY_EYE, keyed by fingerprint: a figure that
+changes fails `not_looked_at` until it is looked at again), every problem
+has its when-to-draw label (EXPECTED), and every figure has a known-wrong
+version the checker must refuse (NEGATIVES).
 """
 
 from __future__ import annotations
