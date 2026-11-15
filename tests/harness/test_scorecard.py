@@ -435,7 +435,7 @@ def test_the_doc_sample_matches_the_baseline() -> None:
     doc = (Path(sc.__file__).parent / "SCORECARD.md").read_text()
     block = doc.split("## Today's scorecard", 1)[1].split("```", 2)[1]
     base = json.loads(sc.BASELINE_PATH.read_text())
-    feature, checked = "", 0
+    feature, seen = "", set()
     for line in block.splitlines():
         if line and not line.startswith(" "):
             feature = line.strip()
@@ -444,6 +444,9 @@ def test_the_doc_sample_matches_the_baseline() -> None:
         if not m:
             continue
         key = f"{feature} / {m.group(1).strip()}"
+        # A sample that reads like a false pass: a never above 0 beside PASS,
+        # or any FAIL in the committed sample (#1002 review round 3).
+        assert m.group(5) == "PASS" and m.group(2) in ("0", "-"), (key, line)
         if key in base:
             want = base[key]
             got_good = None if m.group(3) == "-" else float(m.group(3))
@@ -451,5 +454,5 @@ def test_the_doc_sample_matches_the_baseline() -> None:
                 assert got_good is not None and abs(got_good - want["how_good"]) < 0.0006, (key, line)
             if m.group(4) != "-":
                 assert int(m.group(4)) == want.get("cases", 0), (key, line)
-            checked += 1
-    assert checked >= 8, checked
+            seen.add(key)
+    assert seen == set(base), sorted(set(base) ^ seen)  # no baseline row may drop out of the sample
