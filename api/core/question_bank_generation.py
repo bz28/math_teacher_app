@@ -1152,7 +1152,7 @@ async def solve_checked_problems(
     if not any(lost):
         return question_dicts, solutions
     logger.warning(
-        "Job %s: left out %d problem(s) whose figure gave away the answer: %s",
+        "Job %s: left out %d problem(s) after solving: %s",
         job_id, sum(map(bool, lost)), " | ".join(w for w in lost if w),
     )
     kept_qs = [q for q, w in zip(question_dicts, lost) if not w]
