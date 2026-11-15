@@ -587,8 +587,6 @@ ANSWERED = {
         "ABC", triangles=["ABC"]),
     "angle B asked, angle ABC given": _ask(
         [F("angle_measure", ["ABC"], value=50)], {"kind": ANGLE, "item": "B"}, "ABC", triangles=["ABC"]),
-    "angle ABC asked, angle B given": _ask(
-        [F("angle_measure", ["B"], value=50)], {"kind": ANGLE, "item": "ABC"}, "ABC", triangles=["ABC"]),
     "a rectangle's corner asked by its vertex": _ask(
         [F("rectangle", ["ABCD"])], {"kind": ANGLE, "item": "B"}, "ABCD", polygons=["ABCD"]),
     "a length the givens state, written backwards": _ask(
@@ -597,7 +595,8 @@ ANSWERED = {
                                   "givens": [F("radius", ["OA"], circle="O", value=3)],
                                   "find": [{"kind": SEGMENT, "item": "AO"}]},
     "right angle written as its vertex, one angle named there": _ask(
-        [F("right_angle", ["B"])], {"kind": ANGLE, "item": "ABC"}, "ABC", triangles=["ABC"]),
+        [F("right_angle", ["B"]), F("numbered_angle", ["1", "ABC"])], {"kind": ANGLE, "item": "ABC"}, "ABC",
+        triangles=["ABC"]),
     "the angle a given measures, through a numbered label": {
         "points": list("ABC"), "triangles": ["ABC"],
         "givens": [F("angle_measure", ["1"], value=50), F("numbered_angle", ["1", "ABC"])],
@@ -628,6 +627,13 @@ DERIVED = {  # one theorem step: the student's work, so the card is kept
     "the opposite ray is a different angle": _ask(
         [F("angle_measure", ["ABC"], value=50), F("on_segment", ["AD"], point="B")], {"kind": ANGLE, "item": "DBC"},
         "ABCD", triangles=["ABC"], segments=["AD"]),
+    # Independent round 4: the asked angle doesn't name itself, so a ∠B
+    # given reads as ∠ABC only when a statement names ∠ABC.
+    "angle ABC asked, angle B given, no statement names ABC": _ask(
+        [F("angle_measure", ["B"], value=50)], {"kind": ANGLE, "item": "ABC"}, "ABC", triangles=["ABC"]),
+    "right angle B, only the ask names an angle at B": _ask(
+        [F("right_angle", ["B"]), F("angle_measure", ["BAD"], value=30)], {"kind": ANGLE, "item": "ABD"}, "ABCD",
+        rays=["BA", "BC", "BD"], segments=["AD"]),
     # Independent round 3 (the rule narrowed): an equal partner's value is
     # one step, an exercise in its own right, not an answer a given states.
     "equilateral side": _ask(
@@ -683,31 +689,124 @@ def test_proving_a_given_congruence_written_the_other_way_round_is_refused() -> 
     assert card is None and any("prove a given" in w for w in why), why
 
 
-PROVE_GIVEN = {  # independent round 3: a statement to prove is the given only when it says the same
-    "AB bisects CD; prove CD bisects AB": ({"points": list("ABCDM"), "segments": ["AB", "CD", "AC", "DB"],
-                                            "givens": [F("bisects_segment", ["AB", "CD"], point="M"),
-                                                       F("parallel", ["AC", "DB"])],
-                                            "prove": [F("bisects_segment", ["CD", "AB"], point="M")]}, True),
-    "right angle ACB; prove right angle BAC": ({"points": list("ABC"), "triangles": ["ABC"],
-                                                "givens": [F("right_angle", ["ACB"])],
-                                                "prove": [F("right_angle", ["BAC"])]}, True),
-    "right angle ABC, angle 1 labels it; prove angle 1 right": ({
-        "points": list("ABC"), "triangles": ["ABC"],
-        "givens": [F("right_angle", ["ABC"]), F("numbered_angle", ["1", "ABC"])],
-        "prove": [F("right_angle", ["1"])]}, False),
-    "AB parallel CD; prove DC parallel BA": ({"points": list("ABCD"), "segments": ["AB", "CD"],
-                                              "givens": [F("parallel", ["AB", "CD"])],
-                                              "prove": [F("parallel", ["DC", "BA"])]}, False),
+def _prove(givens: list[dict[str, Any]], prove: dict[str, Any], points: str = "ABCD", **parts: Any) -> dict[str, Any]:
+    return {"points": list(points), **parts, "givens": givens, "prove": [prove]}
+
+
+GIVEN, SELF = "prove a given", "congruent to itself"
+# Each statement to prove, against its givens: refused (with why) when it says
+# what a given says in other words, kept when it says something new. Every
+# kind's reorderings (independent rounds 3 and 4).
+PROVE_GIVEN: dict[str, tuple[dict[str, Any], str | None]] = {
+    # Ordered kinds: a different order is a different statement.
+    "AB bisects CD; prove CD bisects AB": (_prove(
+        [F("bisects_segment", ["AB", "CD"], point="M"), F("parallel", ["AC", "DB"])],
+        F("bisects_segment", ["CD", "AB"], point="M"), "ABCDM", segments=["AB", "CD", "AC", "DB"]), None),
+    "AB bisects CD; prove BA bisects DC": (_prove(
+        [F("bisects_segment", ["AB", "CD"], point="M")], F("bisects_segment", ["BA", "DC"], point="M"), "ABCDM",
+        segments=["AB", "CD"]), GIVEN),
+    "BD bisects angle ABC; prove BD bisects angle CBA": (_prove(
+        [F("bisects_angle", ["BD", "ABC"])], F("bisects_angle", ["BD", "CBA"]), rays=["BA", "BC", "BD"]), GIVEN),
+    "BD bisects angle ABC; prove BA bisects angle DBC": (_prove(
+        [F("bisects_angle", ["BD", "ABC"])], F("bisects_angle", ["BA", "DBC"]), rays=["BA", "BC", "BD"]), None),
+    # Angles: the vertex is kept, letters are not sorted.
+    "right angle ACB; prove right angle BAC": (_prove(
+        [F("right_angle", ["ACB"])], F("right_angle", ["BAC"]), "ABC", triangles=["ABC"]), None),
+    "right angle ABC, angle 1 labels it; prove angle 1 right": (_prove(
+        [F("right_angle", ["ABC"]), F("numbered_angle", ["1", "ABC"])], F("right_angle", ["1"]), "ABC",
+        triangles=["ABC"]), GIVEN),
+    "angles ABC and DEF congruent; prove FED and CBA congruent": (_prove(
+        [F("congruent_angles", ["ABC", "DEF"])], F("congruent_angles", ["FED", "CBA"]), "ABCDEF",
+        triangles=["ABC", "DEF"]), GIVEN),
+    "angle ABC congruent to DEF; prove ABC congruent to DFE": (_prove(
+        [F("congruent_angles", ["ABC", "DEF"])], F("congruent_angles", ["ABC", "DFE"]), "ABCDEF",
+        triangles=["ABC", "DEF"]), None),
+    "D on BC, angle ABC congruent to DEF... prove ABD congruent to DEF": (_prove(
+        [F("on_segment", ["BC"], point="D"), F("congruent_angles", ["ABC", "EFG"])],
+        F("congruent_angles", ["ABD", "EFG"]), "ABCDEFG", triangles=["ABC", "EFG"]), GIVEN),
+    # Segments and lines: by their ends, either order.
+    "AB congruent to CD; prove DC congruent to BA": (_prove(
+        [F("congruent_segments", ["AB", "CD"])], F("congruent_segments", ["DC", "BA"]), segments=["AB", "CD"]), GIVEN),
+    "AB congruent to CD; prove AC congruent to BD": (_prove(
+        [F("congruent_segments", ["AB", "CD"])], F("congruent_segments", ["AC", "BD"]),
+        segments=["AB", "CD", "AC", "BD"]), None),
+    "AB parallel to CD; prove DC parallel to BA": (_prove(
+        [F("parallel", ["AB", "CD"])], F("parallel", ["DC", "BA"]), segments=["AB", "CD"]), GIVEN),
+    "AB parallel to CD; prove AC parallel to BD": (_prove(
+        [F("parallel", ["AB", "CD"])], F("parallel", ["AC", "BD"]), segments=["AB", "CD", "AC", "BD"]), None),
+    "M midpoint of AB; prove M midpoint of BA": (_prove(
+        [F("midpoint", ["AB"], point="M")], F("midpoint", ["BA"], point="M"), "ABM", segments=["AB"]), GIVEN),
+    "M midpoint of AB; prove M midpoint of AC": (_prove(
+        [F("midpoint", ["AB"], point="M"), F("on_segment", ["AC"], point="B")], F("midpoint", ["AC"], point="M"),
+        "ABCM", segments=["AC"]), None),
+    "EF cuts AB and CD; prove EF cuts CD and AB": (_prove(
+        [F("transversal", ["EF", "AB", "CD"])], F("transversal", ["FE", "CD", "AB"]), "ABCDEF",
+        lines=["AB", "CD", "EF"]), GIVEN),
+    "EF cuts AB and CD; prove AB cuts EF and CD": (_prove(
+        [F("transversal", ["EF", "AB", "CD"])], F("transversal", ["AB", "EF", "CD"]), "ABCDEF",
+        lines=["AB", "CD", "EF"]), None),
+    # One polygon: any rotation or reversal of its name is the same polygon.
+    "equilateral ABC; prove equilateral BCA": (_prove(
+        [F("equilateral", ["ABC"])], F("equilateral", ["BCA"]), "ABC", triangles=["ABC"]), GIVEN),
+    "isosceles ABC apex A; prove isosceles ACB apex A": (_prove(
+        [F("isosceles", ["ABC"], point="A")], F("isosceles", ["ACB"], point="A"), "ABC", triangles=["ABC"]), GIVEN),
+    "isosceles ABC apex A; prove isosceles ABC apex B": (_prove(
+        [F("isosceles", ["ABC"], point="A")], F("isosceles", ["ABC"], point="B"), "ABC", triangles=["ABC"]), None),
+    "right triangle ABC at B; prove right triangle CBA at B": (_prove(
+        [F("right_triangle", ["ABC"], point="B")], F("right_triangle", ["CBA"], point="B"), "ABC",
+        triangles=["ABC"]), GIVEN),
+    "square ABCD; prove square BCDA": (_prove(
+        [F("square", ["ABCD"])], F("square", ["BCDA"]), polygons=["ABCD"]), GIVEN),
+    "parallelogram ABCD; prove parallelogram DCBA": (_prove(
+        [F("parallelogram", ["ABCD"])], F("parallelogram", ["DCBA"]), polygons=["ABCD"]), GIVEN),
+    "parallelogram ABCD; prove parallelogram ACBD (a different quadrilateral)": (_prove(
+        [F("parallelogram", ["ABCD"])], F("parallelogram", ["ACBD"]), polygons=["ABCD"]), None),
+    # Congruent triangles: their correspondence, however listed.
+    "ABC congruent to DEF; prove BCA congruent to EFD": (_prove(
+        [F("congruent_triangles", ["ABC", "DEF"])], F("congruent_triangles", ["BCA", "EFD"]), "ABCDEF",
+        triangles=["ABC", "DEF"]), GIVEN),
+    "ABC congruent to DEF; prove DEF congruent to ABC": (_prove(
+        [F("congruent_triangles", ["ABC", "DEF"])], F("congruent_triangles", ["DEF", "ABC"]), "ABCDEF",
+        triangles=["ABC", "DEF"]), GIVEN),
+    "ABC congruent to DEF; prove ABC congruent to EDF (another correspondence)": (_prove(
+        [F("congruent_triangles", ["ABC", "DEF"])], F("congruent_triangles", ["ABC", "EDF"]), "ABCDEF",
+        triangles=["ABC", "DEF"]), None),
+    # A part congruent to itself says nothing.
+    "prove AB congruent to BA": (_prove(
+        [F("on_segment", ["AB"], point="C")], F("congruent_segments", ["AB", "BA"]), "ABC", segments=["AB"]), SELF),
+    "D on BC; prove ABD congruent to ABC": (_prove(
+        [F("on_segment", ["BC"], point="D")], F("congruent_angles", ["ABD", "ABC"]), triangles=["ABC"]), SELF),
+    "a given that says AB is congruent to BA": (_prove(
+        [F("congruent_segments", ["AB", "BA"]), F("on_segment", ["AB"], point="C")],
+        F("congruent_segments", ["AC", "CB"]), "ABC", segments=["AB"]), SELF),
+    # A value the givens fix, restated.
+    "right triangle ABC at B; prove angle ABC right": (_prove(
+        [F("right_triangle", ["ABC"], point="B")], F("right_angle", ["ABC"]), "ABC", triangles=["ABC"]), GIVEN),
+    "right angle ABC; prove m angle ABC = 90": (_prove(
+        [F("right_angle", ["ABC"])], F("angle_measure", ["ABC"], value=90), "ABC", triangles=["ABC"]), GIVEN),
+    "AB perpendicular to BC at B; prove angle ABC right": (_prove(
+        [F("perpendicular", ["AB", "BC"], point="B")], F("right_angle", ["ABC"]), "ABC", segments=["AB", "BC"]), GIVEN),
+    "right angle ABC; prove AB perpendicular to BC at B": (_prove(
+        [F("right_angle", ["ABC"])], F("perpendicular", ["AB", "BC"], point="B"), "ABC", triangles=["ABC"]), GIVEN),
+    "equilateral ABC; prove m angle BAC = 60": (_prove(
+        [F("equilateral", ["ABC"])], F("angle_measure", ["BAC"], value=60), "ABC", triangles=["ABC"]), GIVEN),
+    "right triangle ABC at C; prove angle ABC right (a different angle)": (_prove(
+        [F("right_triangle", ["ABC"], point="C")], F("right_angle", ["ABC"]), "ABC", triangles=["ABC"]), None),
+    "AB perpendicular to CD at E, AEC right; prove AEC congruent to AED": (_prove(
+        [F("perpendicular", ["AB", "CD"], point="E"), F("on_segment", ["AB"], point="E"),
+         F("on_segment", ["CD"], point="E"), F("right_angle", ["AEC"])], F("congruent_angles", ["AEC", "AED"]),
+        "ABCDE", segments=["AB", "CD"]), None),
 }
 
 
 @pytest.mark.parametrize("name", sorted(PROVE_GIVEN))
 def test_proving_a_given_is_refused_and_only_that(name: str) -> None:
-    raw, kept = PROVE_GIVEN[name]
+    raw, refused = PROVE_GIVEN[name]
     card, why = read_card(raw)
-    assert (card is not None) is kept, (name, why)
-    if not kept:
-        assert any("prove a given" in w for w in why), why
+    if refused is None:
+        assert card is not None, (name, why)
+    else:
+        assert card is None and any(refused in w for w in why), (name, why)
 
 
 @pytest.mark.parametrize("name", sorted(DERIVED))
