@@ -116,8 +116,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       set({ user, loading: false, sessionEnded: false });
       return { mfa_required: false };
     } catch (err) {
+      // A 401 here is a wrong email or password. The API says "Invalid
+      // credentials" (the mobile app and API tests rely on that wording);
+      // the web form says it in words a student or teacher would use.
       const message =
-        (err as ApiError)?.message ?? "Login failed. Please try again.";
+        (err as ApiError)?.status === 401
+          ? "That email and password don't match. Try again, or reset your password."
+          : ((err as ApiError)?.message ?? "Login failed. Please try again.");
       set({ loading: false, error: message });
       throw err;
     }
