@@ -240,6 +240,26 @@ _ANGLE_KINDS = ("angle_measure", "central_angle", "inscribed_angle")
 _MAX_LENGTH = 10_000.0
 
 
+_TWO_LINE_KINDS = ("bisects_segment", "perpendicular", "intersect", "parallel")
+
+
+def _same_line(f: Fact, it: list[str]) -> bool:
+    """The fact's two lines are one line, so its sentence is nonsense (Eval 1:
+    "MB bisects AB at M", with M on AB, is AB bisecting itself). Two lines
+    sharing two points are one line; the fact's point lies on both; parallel
+    lines share no point; an angle bisector isn't one of the angle's sides."""
+    if f.kind in _TWO_LINE_KINDS and len(it) >= 2:
+        p = {(f.point or "").strip()} - {""}
+        a, b = set(split_names(it[0])) | p, set(split_names(it[1])) | p
+        if len(a) < 2 or len(b) < 2:
+            return False
+        return len(a & b) >= (1 if f.kind == "parallel" else 2)
+    if f.kind == "bisects_angle" and len(it) >= 2:
+        ray, angle = split_names(it[0]), split_names(it[1])
+        return len(ray) == 2 and len(angle) == 3 and ray[0] == angle[1] and ray[1] in (angle[0], angle[2])
+    return False
+
+
 def _incomplete(f: Fact) -> list[str]:
     """Why a fact can't be phrased in full (empty when it can)."""
     out: list[str] = []
@@ -256,6 +276,8 @@ def _incomplete(f: Fact) -> list[str]:
         out.append(f"an isosceles triangle's apex isn't one of its vertices: {f.items} {f.point}")
     if f.kind in _NEEDS_POINT and not (f.point or "").strip():
         out.append(f"a fact needs its point: {f.kind} {f.items}")
+    if not out and _same_line(f, it):
+        out.append(f"a fact relates a line to itself: {f.kind} {f.items}")
     if f.kind in _NEEDS_CIRCLE and not (f.circle or "").strip():
         out.append(f"a fact needs its circle: {f.kind} {f.items}")
     if (f.kind == "angle_measure" or (f.kind == "equal_length" and len(it) == 1)) \

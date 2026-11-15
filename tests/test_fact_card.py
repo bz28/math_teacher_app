@@ -879,6 +879,26 @@ def test_a_perpendicular_needs_its_point() -> None:
 
 
 
+@pytest.mark.parametrize(("fact", "same"), [
+    # Eval 1 (set3-p1): "MB bisects AB at M", M on AB, so MB is AB itself.
+    (F("bisects_segment", ["MB", "AB"], point="M"), True),
+    (F("bisects_segment", ["CM", "AB"], point="M"), False),
+    (F("perpendicular", ["AB", "AM"], point="M"), True),
+    (F("perpendicular", ["AB", "CM"], point="M"), False),
+    (F("intersect", ["AB", "BM"], point="M"), True),
+    (F("intersect", ["AB", "CD"], point="M"), False),
+    (F("parallel", ["AB", "BC"]), True),
+    (F("parallel", ["AB", "CD"]), False),
+    (F("bisects_angle", ["AB", "BAC"]), True),
+    (F("bisects_angle", ["AD", "BAC"]), False),
+])
+def test_a_fact_that_relates_a_line_to_itself_is_refused(fact: dict[str, Any], same: bool) -> None:
+    raw = {"points": list("ABC"), "segments": ["AB"], "givens": [F("equal_length", ["AB"], value=6)],
+           "constructs": [fact]}
+    card, why = read_card(raw)
+    assert any("relates a line to itself" in w for w in why) is same, why
+
+
 def test_every_listed_setting_and_hint_is_kept_and_the_schema_lists_them() -> None:
     from api.core.geometry.fact_card import CONTEXT_FIELD, CONTEXTS, HINT_FIELD, HINTS
 
