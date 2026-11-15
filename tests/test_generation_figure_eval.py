@@ -23,7 +23,7 @@ import pytest
 
 from tests.harness.probes import generation_figures as gf
 
-RECORDED = (gf.CASSETTE_DIR / "call_claude_json.json").exists()
+RECORDED = gf.recorded()
 recorded = pytest.mark.skipif(not RECORDED, reason="fact-card generation eval not recorded yet (see the probe)")
 
 # #998's reading mode: 4 of its 10 "should have a figure" problems in sets 1
@@ -116,3 +116,17 @@ async def test_a_real_jobs_brief_runs_as_a_set(tmp_path: Any) -> None:
         assert out == []
     finally:
         gf.SETS.pop(name, None)
+
+
+
+@pytest.mark.asyncio
+async def test_an_unrecorded_eval_says_so_and_never_passes(
+        monkeypatch: pytest.MonkeyPatch, tmp_path: Any) -> None:
+    """The scorecard (#1002) replays this probe: with no recording it gets
+    NotRecordedError (shown "not recorded"), not a cassette miss mid-run and not
+    an empty run that reads as PASS."""
+    monkeypatch.setattr(gf, "CASSETTE_DIR", tmp_path)
+    monkeypatch.setenv("HARNESS_LLM_MODE", "replay")
+    assert not gf.recorded()
+    with pytest.raises(gf.NotRecordedError, match="not recorded"):
+        await gf.run_all()

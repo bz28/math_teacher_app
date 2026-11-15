@@ -108,6 +108,16 @@ SETS: dict[str, dict[str, Any]] = {
 COUNT = 8  # problems per set unless the set gives its own "count"
 
 
+class NotRecordedError(RuntimeError):
+    """Replay asked for a mode with no recording yet. A caller that reports
+    the eval (the scorecard) shows "not recorded" for it, never PASS."""
+
+
+def recorded() -> bool:
+    """The fact-card mode's recording is in place (Eval 1 records it)."""
+    return (CASSETTE_DIR / "call_claude_json.json").exists()
+
+
 def load_brief(path: Path) -> str:
     """Register a set from a real generation job's brief (a JSON file), so
     Eval 1 can re-run prod jobs. The probe never reads a database: the
@@ -251,6 +261,14 @@ async def run_set(name: str, only: list[int] | None = None) -> list[dict[str, An
 
 
 async def run_all(sets: list[str] | None = None) -> list[dict[str, Any]]:
+    """Every set (or `sets`) through the real path. In replay with nothing
+    recorded it raises NotRecordedError rather than a cassette miss mid-run, so a
+    report reads "not recorded" and an empty result never reads as a pass."""
+    if os.environ.get("HARNESS_LLM_MODE", "off") == "replay" and not recorded():
+        raise NotRecordedError(
+            "generation_figures (fact-card mode) is not recorded yet: see the probe's docstring for the "
+            "record command (Eval 1 records it)"
+        )
     prev = os.environ.get("HARNESS_CASSETTE_DIR")
     os.environ["HARNESS_CASSETTE_DIR"] = str(CASSETTE_DIR)
     try:
