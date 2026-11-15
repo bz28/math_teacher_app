@@ -275,11 +275,11 @@ async def _generation_figures(env: Env) -> list[Row]:
     unseen = s["not_looked_at"]
     expected = {p["key"]: gf.EXPECTED.get(gf.fingerprint(p["text"])) for p in results}
     want = [p for p in results if expected[p["key"]] == "figure"]
-    asked = sum(map(gf.count_of, gf.SETS))
 
     gen = _new("problem generation", "generation-figures (sets)", "")
     gen.never, gen.never_parts = _parts(gen.key,
-        short_unexplained=short_unexplained(asked, s["problems"], s["left_out"]),
+        short_unexplained=sum(short_unexplained(gf.count_of(name), sum(1 for p in results if p["set"] == name))
+                              for name in gf.SETS),
         repeated_problem=s["problems"] - s["distinct_problems"],
     )
     gen.cases = s["problems"]
@@ -308,7 +308,7 @@ async def _generation_figures(env: Env) -> list[Row]:
     hw.cases = s["problems"]
     hw.notes.append(f"{s['question_figures']} figures drawn; missing: {', '.join(s['missing_figures']) or 'none'}")
     for k in sorted(set(known) & set(wrong_ids)):
-        hw.notes.append(f"known wrong, fix to build: {k}: {known[k]}")
+        hw.notes.append(f"known wrong: {k}: {known[k]}")
 
     st = _new("step diagrams", "generation-figures (steps)", "step figures the solver drew that are shown")
     st.never, st.never_parts = _parts(st.key,
@@ -559,12 +559,22 @@ def _feature_of(source: str) -> str:
     }.get(source, "problem generation")
 
 
-def short_unexplained(asked: int, problems: int, left_out: int) -> int:
-    """Slots a set is short that nothing explains. A slot left out (no
-    checked figure, or an answer its figure contradicts) comes back with the
-    job's note to the teacher: the agreed fallback, counted as missing under
-    homework diagrams. Only a shortfall with no note is a never."""
-    return max(0, asked - problems - left_out)
+def short_unexplained(asked: int, produced: int) -> int:
+    """Slots a set is short with no note to the teacher. A set left short (no
+    checked figure, or an answer its figure contradicts) is the agreed
+    fallback only when the finished job's note says so: the note is the one
+    the app shows (`job_notice` on that job), so a shortfall it doesn't
+    explain is a never (#1002 review: the old sum of the probe's own
+    left_out could never be nonzero). Left-out slots don't lower the
+    homework how-good share; they show as lost cases."""
+    from types import SimpleNamespace
+
+    from api.core.question_bank_generation import job_notice
+
+    if produced >= asked:
+        return 0
+    job = SimpleNamespace(status="done", mode="generate", requested_count=asked, produced_count=produced)
+    return 0 if job_notice(job) else asked - produced
 
 
 def judge(rows: list[Row], baseline: dict[str, Any], only: list[str] | None = None) -> bool:
@@ -667,6 +677,11 @@ def run_cli(args: argparse.Namespace) -> int:
     if args.write_baseline:
         if args.only:
             raise SystemExit("--write-baseline needs the full run (no --only)")
+        # A row that errored (a probe not recorded) has no numbers to keep: writing
+        # would drop its baseline, and its later drops would pass unchecked.
+        broken = [r.key for r in rows if r.error]
+        if broken:
+            raise SystemExit(f"--write-baseline refused: {', '.join(broken)} errored; fix them first")
         baseline = baseline_of(rows) | {k: v for k, v in baseline.items()
                                         if any(r.key == k and r.skipped for r in rows)}
         args.baseline.write_text(json.dumps(baseline, indent=2, sort_keys=True) + "\n")

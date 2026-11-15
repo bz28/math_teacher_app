@@ -357,14 +357,44 @@ async def test_a_not_recorded_error_fails_the_rows_too(monkeypatch: pytest.Monke
     assert all("not recorded: no recording for set1" in " ".join(r.failures) for r in rows), sc.render(rows)
 
 
-@pytest.mark.parametrize(("asked", "problems", "left_out", "never"), [
-    (24, 22, 2, 0),   # Eval 1 set2: two slots left out, with the note to the teacher
-    (24, 22, 0, 2),   # short with no note
-    (24, 22, 1, 1),
-    (24, 24, 0, 0),
-])
-def test_only_a_shortfall_with_no_note_is_a_never(asked: int, problems: int, left_out: int, never: int) -> None:
-    assert sc.short_unexplained(asked, problems, left_out) == never
+def test_only_a_shortfall_with_no_note_is_a_never(monkeypatch: pytest.MonkeyPatch) -> None:
+    """#1002 review round 1: the note is the app's own (job_notice), so the
+    bar fails when the note goes missing (the old sum of the probe's
+    left_out could never be nonzero)."""
+    import api.core.question_bank_generation as qbg
+
+    assert sc.short_unexplained(12, 10) == 0  # Eval 1 set2: short, with the note
+    assert sc.short_unexplained(12, 12) == 0
+    monkeypatch.setattr(qbg, "job_notice", lambda job: None)
+    assert sc.short_unexplained(12, 10) == 2
+
+
+@pytest.mark.asyncio
+async def test_the_sets_row_counts_a_short_set_whose_note_is_missing(monkeypatch: pytest.MonkeyPatch) -> None:
+    import api.core.question_bank_generation as qbg
+
+    monkeypatch.setenv("HARNESS_LLM_MODE", "replay")
+    rows = {r.probe: r for r in await sc._generation_figures(sc.Env(has_recorded_font=False))}
+    assert rows["generation-figures (sets)"].never_parts.get("short_unexplained", 0) == 0
+    monkeypatch.setattr(qbg, "job_notice", lambda job: None)
+    rows = {r.probe: r for r in await sc._generation_figures(sc.Env(has_recorded_font=False))}
+    assert rows["generation-figures (sets)"].never_parts["short_unexplained"] == 2  # set2: 12 asked, 10 kept
+
+
+def test_write_baseline_is_refused_when_a_row_errored(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """#1002 review round 1: writing then would drop the errored rows' baseline."""
+    import argparse
+
+    async def collect(env: object, only: object) -> list[object]:
+        return [sc.Row("homework diagrams", "generation-figures", "", "", error="not recorded: x")]
+
+    monkeypatch.setattr(sc, "collect", collect)
+    base = tmp_path / "base.json"
+    base.write_text('{"homework diagrams / generation-figures": {"how_good": 0.9, "cases": 22}}')
+    args = argparse.Namespace(baseline=base, write_baseline=True, only=None, json=None)
+    with pytest.raises(SystemExit, match="refused"):
+        sc.run_cli(args)
+    assert "generation-figures" in base.read_text()
 
 
 @pytest.mark.asyncio
@@ -377,7 +407,8 @@ async def test_a_known_wrong_item_is_shown_and_a_new_or_stale_one_counts(monkeyp
     monkeypatch.setenv("HARNESS_LLM_MODE", "replay")
     rows = {r.probe: r for r in await sc._generation_figures(sc.Env(has_recorded_font=False))}
     hw = rows["generation-figures"]
-    assert hw.never == 0 and any(n.startswith("known wrong, fix to build: set1-p1") for n in hw.notes), hw.notes
+    note = next(n for n in hw.notes if n.startswith("known wrong: set1-p1"))
+    assert hw.never == 0 and note.count("fix to build") == 1, hw.notes
 
     real = gf.summarize
 
