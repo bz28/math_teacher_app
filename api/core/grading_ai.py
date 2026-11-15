@@ -1311,6 +1311,34 @@ def _build_breakdown(
     return breakdown, ai_score
 
 
+async def _rewrite_graph_notes(
+    combined: list[dict[str, Any]],
+    by_bid: dict[str, dict[str, Any]],
+    problems: list[dict[str, Any]],
+    checks: dict[str, Any],
+    user_id: str | None,
+    submission_id: uuid.UUID,
+) -> None:
+    """Each graph problem's student note, from both its parts, onto its
+    breakdown entry (`by_bid`). `combined` carries the drawing's item
+    results; a problem at full marks keeps the grader's note."""
+    from api.core.graph_feedback import needs_note, write_graph_note
+
+    by_id = {p["bank_item_id"]: p for p in problems}
+    todo = [c for c in combined if c.get("graph") and c["problem_id"] in by_bid and needs_note(c)]
+
+    async def one(c: dict[str, Any]) -> None:
+        p = by_id.get(c["problem_id"]) or {}
+        check = checks.get(c["problem_id"])
+        by_bid[c["problem_id"]]["feedback"] = await write_graph_note(
+            p.get("question") or "", p.get("final_answer") or "", c, c.get("feedback"),
+            drawn=check is not None and getattr(check, "note", None) != "not_drawn",
+            user_id=user_id, submission_id=str(submission_id),
+        )
+
+    await asyncio.gather(*(one(c) for c in todo))
+
+
 async def _graph_parts(
     db: AsyncSession, problems: list[dict[str, Any]], rules: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -1498,12 +1526,17 @@ async def run_ai_grading_for_submission(
         # The AI's call on a graph problem is the whole problem's grade,
         # not the grader's grade of the work alone (kept as work_percent).
         by_bid = {e["problem_id"]: e for e in breakdown}
+        # The grader wrote its note before the drawing was marked; the
+        # student reads one written from both parts (`graph_feedback`).
+        await _rewrite_graph_notes(combined, by_bid, problems, checks, user_id, submission_id)
         for g in grades:
             e = by_bid.get(pos_to_bid.get(g.get("problem_position")) or "")
             if e and e["problem_id"] in parts:
                 g["work_percent"] = g.get("percent")
+                g["work_feedback"] = g.get("student_feedback")
                 g.update(percent=e["percent"], score_status=e["score_status"],
-                         deductions=[dict(d) for d in e.get("deductions") or []])
+                         deductions=[dict(d) for d in e.get("deductions") or []],
+                         student_feedback=e.get("feedback"))
     # The per-problem percents ai_score weighs, so a later points change
     # can re-weigh the AI's call without regrading (homework_points).
     result["problem_percents"] = {e["problem_id"]: e["percent"] for e in breakdown}

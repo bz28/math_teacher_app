@@ -318,6 +318,13 @@ def _mock_integrity_ai() -> Any:
             new_callable=AsyncMock,
             return_value=[],
         ),
+        # The student's note on a graph problem, written after both parts
+        # are graded (graph_feedback).
+        patch(
+            "api.core.graph_feedback.call_claude_json",
+            new_callable=AsyncMock,
+            return_value={"feedback": "(mock note)"},
+        ),
     ):
         yield
 

@@ -34,6 +34,7 @@ export const LLM_MODES = {
   CLASSIFY_REQUIRES_DRAWING: "classify_requires_drawing",
   GRAPH_CHECKLIST: "graph_checklist",
   DRAWING_CHECK: "drawing_check",
+  GRAPH_FEEDBACK: "graph_feedback",
 } as const;
 
 export type LLMMode = (typeof LLM_MODES)[keyof typeof LLM_MODES];

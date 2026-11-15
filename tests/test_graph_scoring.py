@@ -150,6 +150,10 @@ async def test_a_graph_problem_is_graded_in_two_parts() -> None:
     ai = next(g for g in (row.ai_breakdown or {})["grades"] if g["problem_position"] == 1)
     assert ai["percent"] == pytest.approx(70) and ai["work_percent"] == 100
     assert ai["deductions"] == e["deductions"]
+    # The student reads a note written from both parts, not the grader's
+    # "Right answer." beside 70%; the grader's is kept for the teacher.
+    assert e["feedback"] == ai["student_feedback"] == "(mock note)"
+    assert ai["work_feedback"] == "Right answer."
     assert row.ai_score == pytest.approx(85)
 
 
