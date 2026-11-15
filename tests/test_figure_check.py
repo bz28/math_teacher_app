@@ -703,6 +703,12 @@ def test_an_answer_the_figure_contradicts_is_refused(answer: str) -> None:
     r"$m\angle BGH = 83°$ or $m\angle GHD = 97°$",
     r"m∠BGH = 83° m∠GHD = 97°",
     r"$x = 19.0$",
+    # Review round 4 (#989): an angle and a variable joined by a word are two statements.
+    r"m∠BGH = 83° when x = 19",
+    r"$m\angle BGH = 83^\circ \text{ when } x = 19$",
+    r"$m\angle BGH = 83° \text{ for } x = 19$",
+    r"$m\angle GHD = 97° \text{ if } x = 19$",
+    r"$m\angle BGH = 83° x = 19$",
     r"$x = 19$; check: $10x = 190$",
     r"$x = 19 \quad m\angle BGH = 83^\circ$",
 ])
