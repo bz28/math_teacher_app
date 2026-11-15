@@ -50,6 +50,7 @@ _NOT_FOUND = "Couldn't find the drawing."
 _FAILED = "Couldn't check the graph."
 _NOT_DRAWN = "No drawing for this problem."
 _SIDEWAYS = "The photo looks sideways, so the axes may have been misread."
+_OTHER_DRAWING = "Another drawing for this problem"
 
 
 @dataclass
@@ -208,6 +209,38 @@ def _doubt_noes(results: list[ItemResult], sideways: bool) -> list[ItemResult]:
     ]
 
 
+def _answering_drawing(
+    found: list[DrawingCheck], part: GraphPart, failed: list[DrawingCheck] | None = None
+) -> DrawingCheck:
+    """Of a problem's drawings in view, the one that answers it: the most
+    checklist points "yes", then the fewest "no", then the whole drawing
+    over a cut-off one, then the later in the reader's order: a guide
+    curve or a first try comes before the answer.
+
+    Only its "yes"es count. A "no" it gives on an item another drawing
+    shows ("yes") or can't settle ("unclear") is unclear, for the
+    teacher: a guide curve drawn apart from the graph is often on the
+    checklist, and the other drawing may be the one that shows it. A
+    drawing whose check `failed` is never picked but can't settle any
+    item, so it doubts every "no" the same way."""
+
+    def points(c: DrawingCheck, verdict: str) -> int:
+        return sum(i.points for i, r in zip(part.items, c.items, strict=True) if r.verdict == verdict)
+
+    best = max(reversed(found), key=lambda c: (points(c, "yes"), -points(c, "no"), c.in_view == "whole"))
+    others = [c for c in found if c is not best] + (failed or [])
+    items = []
+    for n, r in enumerate(best.items):
+        other = next((c.items[n] for c in others if c.items[n].verdict == "yes"), None) or next(
+            (c.items[n] for c in others if c.items[n].verdict == "unclear"), None
+        )
+        if r.verdict == "no" and other is not None:
+            doubt = f"{_OTHER_DRAWING}: {other.seen}" if other.seen else f"{_OTHER_DRAWING} may show it."
+            r = ItemResult(r.n, "unclear", f"{r.seen} {doubt}".strip())
+        items.append(r)
+    return DrawingCheck(best.step, best.in_view, items)
+
+
 async def check_problem_drawing(
     extraction: dict[str, Any],
     pages: list[list[Image]],
@@ -223,7 +256,9 @@ async def check_problem_drawing(
     None when the problem is blank (no work, no answer, no drawing, and
     no drawing the reader left untied to a problem): it is
     graded as it always was. A drawing the reader located (a page and a
-    box on a one-image page) is cropped there. Otherwise the check looks
+    box on a one-image page) is cropped there; when the reader located
+    several, each is judged and the one that answers the problem is kept
+    (`_answering_drawing`). When none is in view, the check looks
     at whole pages, the ones the reader tied to this problem first, until
     one shows the drawing. When none does, every item is unclear, except
     when the reader also recorded no drawing: two looks agree it isn't
@@ -261,26 +296,51 @@ async def check_problem_drawing(
             submission_id=submission_id,
         )
 
-    located: int | None = None
+    # Every drawing the reader located is judged: a problem can have more
+    # than one (a guide curve, then the graph asked for), and the first
+    # isn't always the answer. A table is the last place to look for the
+    # graph: it is judged only when the reader located no other drawing;
+    # a located graph not in view sends the check hunting the pages.
+    located_pages: set[int] = set()
+    misses = 0  # located drawings not in view: each looked at its whole page
+    found: list[DrawingCheck] = []
+    failed: list[DrawingCheck] = []
+    graph_located = False
+    for v in drawn:  # tables last
+        if v.get("kind") == "table" and graph_located:
+            break
+        page = _page_number(v.get("page_index"), len(pages)) or (1 if len(pages) == 1 else None)
+        if not (page and isinstance(v.get("bbox"), dict) and len(pages[page - 1]) == 1):
+            continue
+        graph_located = graph_located or v.get("kind") != "table"
+        data, media_type = pages[page - 1][0]
+        try:
+            check = await look(data, media_type, v["bbox"])
+        except Exception:  # noqa: BLE001 — one failed look doesn't discard the others
+            logger.exception("graph check failed submission=%s problem=%s", submission_id, position)
+            failed.append(DrawingCheck("none", "not_found", _all(part.items, "unclear", _FAILED)))
+            continue
+        if check.in_view != "not_found":
+            found.append(check)
+        else:
+            # Not on the page the reader put it on (its crops and that
+            # whole page were looked at): the reader's page can be
+            # wrong, so the hunt looks at the rest.
+            located_pages.add(page)
+            misses += 1
+    if found:
+        best = _answering_drawing(found, part, failed)
+        return ProblemGraphCheck(best.step, best.in_view, _doubt_noes(best.items, sideways))
+    if failed:
+        return ProblemGraphCheck("none", "not_found", _all(part.items, "unclear", _FAILED), note="failed")
     try:
-        for v in drawn:
-            page = _page_number(v.get("page_index"), len(pages)) or (1 if len(pages) == 1 else None)
-            if page and isinstance(v.get("bbox"), dict) and len(pages[page - 1]) == 1:
-                data, media_type = pages[page - 1][0]
-                check = await look(data, media_type, v["bbox"])
-                if check.in_view != "not_found":
-                    return ProblemGraphCheck(check.step, check.in_view, _doubt_noes(check.items, sideways))
-                # Not on the page the reader put it on (its crops and that
-                # whole page): the reader's page can be wrong, so hunt the rest.
-                located = page
-                break
         hinted = [
             n
             for n in dict.fromkeys(_page_number(e.get("page_index"), len(pages)) for e in drawn + steps + finals)
-            if n and n != located
+            if n and n not in located_pages
         ]
-        order = hinted + [n for n in range(1, len(pages) + 1) if n not in hinted and n != located]
-        looks = [img for n in order for img in pages[n - 1]][: _MAX_PAGE_LOOKS - (located is not None)]
+        order = hinted + [n for n in range(1, len(pages) + 1) if n not in hinted and n not in located_pages]
+        looks = [img for n in order for img in pages[n - 1]][: max(_MAX_PAGE_LOOKS - misses, 0)]
         for data, media_type in looks:
             check = await look(data, media_type, None)
             if check.in_view != "not_found":
@@ -288,7 +348,7 @@ async def check_problem_drawing(
     except Exception:  # noqa: BLE001 — a failed check is the teacher's call, never a failed grade
         logger.exception("graph check failed submission=%s problem=%s", submission_id, position)
         return ProblemGraphCheck("none", "not_found", _all(part.items, "unclear", _FAILED), note="failed")
-    step = "page" if looks or located else "none"
+    step = "page" if looks or located_pages else "none"
     if not drawn and any(v.get("present") is False for v in visuals):
         return ProblemGraphCheck(step, "not_found", _all(part.items, "no", _NOT_DRAWN), note="not_drawn")
     return ProblemGraphCheck(step, "not_found", _all(part.items, "unclear", _NOT_FOUND))
