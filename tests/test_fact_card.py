@@ -927,3 +927,48 @@ def test_a_hint_makes_no_claim_about_the_figure(raw: dict[str, Any], hint: str, 
     card, why = read_card(raw)
     assert card is not None, why
     assert (clean_hint(hint, card)[0] == hint) is kept
+
+
+@pytest.mark.parametrize("expr", ["(3x + 5)", "3x + 5", " (3x + 5) "])
+def test_a_measure_reads_with_one_pair_of_parentheses(expr: str) -> None:
+    """Eval 1 job bd113585 p2: the AI wrote expr "(3x + 5)" and the problem
+    read "m∠BAC = ((3x + 5))°"."""
+    card, why = read_card({"points": ["A", "B", "C"], "triangles": ["ABC"], "givens": [
+        F("angle_measure", ["BAC"], expr=expr)], "find": [{"kind": "other", "item": "x"}]})
+    assert card is not None, why
+    assert r"m\angle BAC = (3x + 5)^\circ" in card_text(card)
+
+
+def test_a_measure_keeps_parentheses_that_do_not_wrap_it_all() -> None:
+    card, why = read_card({"points": ["A", "B", "C"], "triangles": ["ABC"], "givens": [
+        F("angle_measure", ["BAC"], expr="(x + 1) + (2x - 1)")], "find": [{"kind": "other", "item": "x"}]})
+    assert card is not None, why
+    assert r"((x + 1) + (2x - 1))^\circ" in card_text(card)
+
+
+@pytest.mark.parametrize("givens, once", [
+    # Eval 1 set4 p1: the isosceles given already says AB ≅ AC.
+    ([F("isosceles", ["ABC"], point="A"), F("congruent_segments", ["AB", "AC"])], r"\overline{AB} \cong \overline{AC}"),
+    ([F("isosceles", ["ABC"], point="A"), F("congruent_segments", ["CA", "BA"])], r"\overline{AB} \cong \overline{AC}"),
+    # Eval 1 set4 p3 / job ea0bcecf p5: the midpoint is on its segment.
+    ([F("midpoint", ["BC"], point="M"), F("on_segment", ["BC"], point="M")], "is the midpoint of"),
+    # The same fact twice.
+    ([F("congruent_segments", ["AB", "AC"]), F("congruent_segments", ["AC", "AB"])], r"\overline{A"),
+])
+def test_a_given_another_one_says_is_said_once(givens: list[dict[str, Any]], once: str) -> None:
+    card, why = read_card({"points": ["A", "B", "C", "M"], "triangles": ["ABC"], "segments": ["AM"],
+                           "givens": givens, "prove": [F("congruent_triangles", ["ABM", "ACM"])]})
+    assert card is not None, why
+    text = card_text(card)
+    given = text.split("Prove:")[0]
+    assert given.count(once) == (2 if once == r"\overline{A" else 1), text
+    assert " is on " not in text, text
+    assert len(card.givens) == len(givens)  # still on the card, so the figure is checked against it
+
+
+def test_a_different_pair_of_congruent_sides_is_still_said() -> None:
+    card, why = read_card({"points": ["A", "B", "C"], "triangles": ["ABC"], "givens": [
+        F("isosceles", ["ABC"], point="A"), F("congruent_segments", ["AB", "BC"])],
+        "prove": [F("equilateral", ["ABC"])]})
+    assert card is not None, why
+    assert r"\overline{AB} \cong \overline{BC}" in card_text(card)

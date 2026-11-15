@@ -878,10 +878,25 @@ def _num(v: float) -> str:
     return f"{v:g}"
 
 
+def _unwrapped(expr: str) -> str:
+    """An expression without one pair of parentheses around all of it: the
+    AI writes "(3x + 5)" as often as "3x + 5", and the phrase adds its own
+    pair, so the problem never reads "((3x + 5))°" (Eval 1 job bd113585 p2)."""
+    e = expr.strip()
+    if not (e.startswith("(") and e.endswith(")")):
+        return e
+    depth = 0
+    for i, ch in enumerate(e):
+        depth += {"(": 1, ")": -1}.get(ch, 0)
+        if depth == 0 and i < len(e) - 1:
+            return e  # "(a) + (b)": the first pair closes early
+    return e[1:-1].strip()
+
+
 def _measure(f: Fact) -> str:
     if f.value is not None:
         return f"{_num(f.value)}^\\circ"
-    return f"({f.expr})^\\circ" if f.expr else ""
+    return f"({_unwrapped(f.expr)})^\\circ" if f.expr else ""
 
 
 def _length(f: Fact) -> str:
@@ -1034,6 +1049,38 @@ def _unnamed_shown(card: FigureFacts) -> list[str]:
     return out
 
 
+def _said_once(card: FigureFacts) -> list[str]:
+    """The givens' sentences, each said once: a given another one already
+    says is left out of the words (it stays on the card, so the figure is
+    still checked against it). Eval 1 set4 read "△ABC is isosceles with
+    AB ≅ AC, AB ≅ AC" and "M is the midpoint of BC, and M is on BC".
+    Restated: the same sentence twice, a point on a segment it is the
+    midpoint of, two segments an isosceles given already marks equal."""
+    def seg(x: str) -> frozenset[str]:
+        return frozenset(split_names(x.strip()))
+
+    midpoints = {((f.point or "").strip(), seg(f.items[0])) for f in card.givens
+                 if f.kind == "midpoint" and f.items}
+    legs = set()
+    for f in card.givens:
+        t, apex = split_names(f.items[0]) if f.kind == "isosceles" and f.items else [], (f.point or "").strip()
+        if apex and apex in t and len(t) == 3:
+            legs.add(frozenset(frozenset((apex, v)) for v in t if v != apex))
+    out: list[str] = []
+    seen: list[object] = []
+    for f in card.givens:
+        if f.kind == "on_segment" and f.items and ((f.point or "").strip(), seg(f.items[0])) in midpoints:
+            continue
+        if f.kind == "congruent_segments" and len(f.items) == 2 and frozenset(seg(x) for x in f.items) in legs:
+            continue
+        same = (f.kind, frozenset(seg(x) for x in f.items), (f.point or "").strip(), f.value, f.expr) \
+            if f.kind in ("congruent_segments", "parallel") else sentence(f, card)
+        if same not in seen:
+            seen.append(same)
+            out.append(sentence(f, card))
+    return out
+
+
 def card_text(card: FigureFacts, *, context: str = "", hint: str = "", figure: bool = True) -> str:
     """The problem the student reads: the context sentence (when kept), what
     the figure shows that no given names, the givens, the ask, the hint.
@@ -1045,7 +1092,7 @@ def card_text(card: FigureFacts, *, context: str = "", hint: str = "", figure: b
     shown = _unnamed_shown(card)
     if shown:
         out.append(f"The figure shows {_and(shown)}." if figure else f"Draw {_and(shown)}.")
-    givens = [sentence(f, card) for f in card.givens]
+    givens = _said_once(card)
     if card.prove and givens:
         out.append(f"Given: {_and(givens)}.")
     elif givens:
