@@ -38,7 +38,7 @@ CI: `tests/harness/test_scorecard.py` runs the command in its own process
 that the scorecard fails when the figure checker is switched off (a revert
 check).
 
-## Today's scorecard (2026-11-14, macOS, replay)
+## Today's scorecard (2026-11-15, macOS, replay)
 
 ```
 AI-feature scorecard (replay, $0)
@@ -47,11 +47,12 @@ AI-feature scorecard (replay, $0)
 problem generation
   generation                         -         -      -  skipped: needs a running API server + Postgres; live-only by design (no cassettes kept)
   latex                              -         -      -  skipped: needs a running API server + Postgres; live-only by design (no cassettes kept)
-  generation-figures (sets)          0         -     20  PASS
+  generation-figures (sets)          0         -     22  PASS
                                    - no $0 correctness measure: the correctness judge (generation probe) is live-only
 homework diagrams
-  generation-figures                 0     0.600     20  PASS
-                                   - 8 figures drawn; missing: set1-p3, set1-p6, set1-p8, set2-p8
+  generation-figures                 0     0.933     22  PASS
+                                   - 14 figures drawn; missing: set1-p7
+                                   - known wrong: set1-p1: a problem true only in its symmetric drawing; fix to build: re-test the statement to prove on a second drawing that keeps the givens (#1003 review round 1)
   geometry                           -         -      -  skipped: needs a running API + web server, Postgres and a browser
 chat diagrams
   construction-figures               0     0.364     69  PASS
@@ -59,7 +60,7 @@ chat diagrams
                                    - 2 cassette miss(es) swallowed by the app: call_claude_json 54d7fb6b1a406d9377a746359297c268 (decompose), call_claude_json fcc0b3f7f8f6d52dd6608e763fb0af88 (bank_chat)
   construction-adversarial           0     1.000    106  PASS
 step diagrams
-  generation-figures (steps)         0     0.000     23  PASS
+  generation-figures (steps)         0     0.000     44  PASS
                                    - 0 step figures shown, so the consistency bar cannot fail yet (gap)
   construction-figures (steps)       0         -      -  PASS
                                    - 0 step figures drawn on this corpus, so this bar cannot fail yet (gap)

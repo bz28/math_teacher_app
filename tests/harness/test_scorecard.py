@@ -424,3 +424,32 @@ async def test_a_known_wrong_item_is_shown_and_a_new_or_stale_one_counts(monkeyp
     monkeypatch.setattr(gf, "KNOWN_WRONG", {**gf.KNOWN_WRONG, "set3-p2": "listed but right"})
     rows = {r.probe: r for r in await sc._generation_figures(sc.Env(has_recorded_font=False))}
     assert rows["generation-figures"].never_parts.get("known_wrong_now_right") == 1
+
+
+def test_the_doc_sample_matches_the_baseline() -> None:
+    """#1002 review round 2: the 'Today's scorecard' block in SCORECARD.md
+    drifted from the recording; each row's how-good and cases must equal
+    scorecard_baseline.json."""
+    import re
+
+    doc = (Path(sc.__file__).parent / "SCORECARD.md").read_text()
+    block = doc.split("## Today's scorecard", 1)[1].split("```", 2)[1]
+    base = json.loads(sc.BASELINE_PATH.read_text())
+    feature, checked = "", 0
+    for line in block.splitlines():
+        if line and not line.startswith(" "):
+            feature = line.strip()
+            continue
+        m = re.match(r"\s{2}(\S.*?)\s{2,}(\d+|-)\s+([\d.]+|-)\s+(\d+|-)\s+(PASS|FAIL)", line)
+        if not m:
+            continue
+        key = f"{feature} / {m.group(1).strip()}"
+        if key in base:
+            want = base[key]
+            got_good = None if m.group(3) == "-" else float(m.group(3))
+            if want.get("how_good") is not None:
+                assert got_good is not None and abs(got_good - want["how_good"]) < 0.0006, (key, line)
+            if m.group(4) != "-":
+                assert int(m.group(4)) == want.get("cases", 0), (key, line)
+            checked += 1
+    assert checked >= 8, checked
