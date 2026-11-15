@@ -68,18 +68,36 @@ def _item(**kw: Any) -> QuestionBankItem:
 
 
 class Checks:
-    """Stands in for check_drawing: records each look, answers from a queue."""
+    """Stands in for check_drawing: records each look, answers from a queue.
+
+    A look that finds the drawing and says "no" is looked at again
+    (`_confirm_noes`). That second look is recorded in `repeats`, not
+    `calls`, and answers from `second` when queued, else repeats the
+    first look's answer (it confirms)."""
 
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
         self.replies: list[DrawingCheck | Exception] = []
+        self.repeats: list[dict[str, Any]] = []
+        self.second: list[DrawingCheck | Exception] = []
+        self._again: DrawingCheck | None = None
 
     def queue(self, *replies: DrawingCheck | Exception) -> None:
         self.replies.extend(replies)
 
     async def __call__(self, page: str, media_type: str, bbox: Any, items: Any, **kw: Any) -> DrawingCheck:
-        self.calls.append({"page": page, "media_type": media_type, "bbox": bbox, **kw})
-        reply = self.replies.pop(0)
+        call = {"page": page, "media_type": media_type, "bbox": bbox, **kw}
+        if self._again is not None:
+            first, self._again = self._again, None
+            self.repeats.append(call)
+            reply = self.second.pop(0) if self.second else first
+        else:
+            self.calls.append(call)
+            reply = self.replies.pop(0)
+            if isinstance(reply, DrawingCheck) and reply.in_view != "not_found" and any(
+                r.verdict == "no" for r in reply.items
+            ):
+                self._again = reply
         if isinstance(reply, Exception):
             raise reply
         return reply
@@ -666,3 +684,69 @@ def test_an_untied_drawing_is_shown_as_a_graph_part_when_every_drawing_is_checke
     ext = {"steps": [], "final_answers": [], "visual_work": [untied]}
     msg = _build_user_message(ext, [{**PROBLEM, "graph_part": PART}])
     assert "(1, 1)" in msg and "b line" not in msg
+
+
+# ── a "no" needs two looks ──
+
+
+async def test_a_no_both_looks_give_stands(checks: Checks) -> None:
+    checks.queue(_found("tight", "yes", "no"))
+    r = await check_problem_drawing(_extraction(visual=[_drawn()]), [[(_jpeg(), "image/jpeg")]], 1, PART)
+    assert len(checks.repeats) == 1 and checks.repeats[0]["bbox"] == checks.calls[0]["bbox"]
+    assert r is not None and [i.verdict for i in r.items] == ["yes", "no"]
+
+
+@pytest.mark.parametrize("second", [
+    _found("tight", "yes", "yes"),
+    _found("tight", "yes", "unclear"),
+    _not_found(),
+    RuntimeError("model"),
+])
+async def test_a_no_the_second_look_doesnt_give_is_unclear(checks: Checks, second: Any) -> None:
+    # The same crop came back yes, unclear and no on three runs (Nov 2026):
+    # one look's "no" alone never takes the points.
+    checks.queue(_found("tight", "yes", "no"))
+    checks.second.append(second)
+    r = await check_problem_drawing(_extraction(visual=[_drawn()]), [[(_jpeg(), "image/jpeg")]], 1, PART)
+    assert r is not None and [i.verdict for i in r.items] == ["yes", "unclear"]
+    assert graph_grading._UNCONFIRMED in r.items[1].seen
+
+
+async def test_a_look_with_no_no_is_not_repeated(checks: Checks) -> None:
+    checks.queue(_found("tight", "yes", "unclear"))
+    await check_problem_drawing(_extraction(visual=[_drawn()]), [[(_jpeg(), "image/jpeg")]], 1, PART)
+    assert checks.repeats == []
+
+
+async def test_the_second_look_never_turns_a_yes_into_a_no(checks: Checks) -> None:
+    checks.queue(_found("tight", "yes", "no"))
+    checks.second.append(_found("tight", "no", "no"))
+    r = await check_problem_drawing(_extraction(visual=[_drawn()]), [[(_jpeg(), "image/jpeg")]], 1, PART)
+    assert r is not None and [i.verdict for i in r.items] == ["yes", "no"]
+
+
+# ── the reader saw no drawing ──
+
+
+async def test_when_the_reader_saw_no_drawing_only_the_problems_own_pages_are_searched(checks: Checks) -> None:
+    p1, p2, p3 = _jpeg((255, 255, 255)), _jpeg((0, 0, 0)), _jpeg((128, 128, 128))
+    checks.queue(_not_found())
+    ext = _extraction(visual=[{"problem_position": 1, "present": False}])
+    ext["steps"] = [{"problem_position": 1, "page_index": 2, "latex": "x = 1"}]
+    pages = [[(p1, "image/jpeg")], [(p2, "image/jpeg")], [(p3, "image/jpeg")]]
+    r = await check_problem_drawing(ext, pages, 1, PART)
+    # Two looks agree there is no drawing: the reader's, and one look at
+    # the page holding the problem's work. The other pages are other
+    # problems' (6 whole-page looks for one student before, Nov 2026).
+    assert [c["page"] for c in checks.calls] == [p2]
+    assert r is not None and r.note == "not_drawn" and {i.verdict for i in r.items} == {"no"}
+
+
+async def test_a_drawing_the_reader_couldnt_place_still_sends_the_search_everywhere(checks: Checks) -> None:
+    p1, p2 = _jpeg((255, 255, 255)), _jpeg((0, 0, 0))
+    checks.queue(_not_found(), _not_found())
+    ext = _extraction(visual=[{"problem_position": 1, "present": False}, {"problem_position": None, "present": True}])
+    ext["steps"] = [{"problem_position": 1, "page_index": 2, "latex": "x = 1"}]
+    await check_problem_drawing(ext, [[(p1, "image/jpeg")], [(p2, "image/jpeg")]], 1, PART)
+    assert [c["page"] for c in checks.calls] == [p2, p1]
+
