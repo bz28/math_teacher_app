@@ -119,8 +119,6 @@ BY_EYE: dict[str, tuple[str, str]] = {
     "6d780084": ("07973af286a5", "right"),  # shared hypotenuse BC, right angles A and D, AB = DB
     "7ef5c01b": ("72425e15988b", "right"),  # AB ∥ CD, M midpoint of BC
     "7450aa6e": ("9e89b9643c34", "right"),  # three pairs of equal sides
-    "77195d48-step1": ("f841c5afaf9d", "wrong: the side labelled 'bisector' makes the whole 74° with line m"),
-    "77195d48-step2": ("8cd2cf284ab5", "right"),  # the bisector at 37° to line m
     "12c77989": ("db9767c9722b", "right"),  # similar triangles apart; AB 12, BC 9, DE 8; EF unlabelled
     # (cosmetic: F's name sits on AB's label "12")
     "099d8962": ("da924d37c12d", "right"),  # WX ≅ YZ, ∠W ≅ ∠Y, ∠X ≅ ∠Z, meeting at V

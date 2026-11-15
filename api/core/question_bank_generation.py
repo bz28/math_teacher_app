@@ -14,6 +14,7 @@ import asyncio
 import logging
 import re
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, cast
 
@@ -21,7 +22,12 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.assignment_generation import generate_questions, generate_solutions
+from api.core.assignment_generation import (
+    FIGURE_PROBLEM_WORDING,
+    WHEN_TO_DRAW,
+    generate_questions,
+    generate_solutions,
+)
 from api.core.construction_figures import CONSTRUCTION_FIGURE_RULES, read_figure_facts, redraw_figure
 from api.core.document_vision import (
     MAX_TOTAL_SOURCE_B64_BYTES,
@@ -114,9 +120,11 @@ async def read_step_facts(
     """Read each step that has a construction figure, by the question's own
     rule (two readings checked by code), and put on the step, as
     `figure_facts`, the facts its figure is checked against: the question's
-    reading `facts` plus what the step states. A step whose reading can't be
-    trusted gets none, so its figure fails closed. Returns, per 1-based step
-    number, why it has none."""
+    reading `facts` plus what this step and every earlier figured step
+    state (a step's figure is the one before it plus what the step adds, so
+    step 3 keeps step 2's altitude). A step whose reading can't be trusted
+    gets none, so its figure fails closed; later steps build on the steps
+    that were read. Returns, per 1-based step number, why it has none."""
     from api.core.geometry.facts import with_step
 
     question = as_facts(facts)
@@ -128,18 +136,21 @@ async def read_step_facts(
     if question is None:
         return {i: [_NOT_READ] for i, _ in todo}
 
-    async def read(i: int, step: dict[str, Any]) -> None:
-        reading, why = await read_figure_facts(
+    async def read(step: dict[str, Any]) -> tuple[FigureFacts | None, list[str]]:
+        return await read_figure_facts(
             _step_statement(step), mode=mode, user_id=user_id, generation_job_id=generation_job_id,
             step_of=question_text,
         )
+
+    readings = await asyncio.gather(*(read(s) for _, s in todo))
+    so_far = question
+    for (i, step), (reading, why) in zip(todo, readings):
         if reading is None:
             drops[i] = [w.replace("the problem", "the step") for w in why]
         else:
-            step["figure_facts"] = with_step(question, reading).model_dump()
-
-    await asyncio.gather(*(read(i, s) for i, s in todo))
-    return dict(sorted(drops.items()))
+            so_far = with_step(so_far, reading)
+            step["figure_facts"] = so_far.model_dump()
+    return drops
 
 
 def _render_step_figures(
@@ -148,21 +159,17 @@ def _render_step_figures(
     question_text: str = "",
     question_spec: Any = None,
 ) -> list[dict[str, Any]]:
-    """Render any per-step figure_spec into figure_svg in-place.
+    """Check and render each step's figure_spec into figure_svg (the
+    generation, chat and accept paths), so downstream readers never need to
+    know about the geometry module.
 
-    Mirrors `_resolve_figure` but works on a list of steps from a
-    regenerate / generation payload. Used for the regenerate path
-    (which bypasses step_decomposition._parse_decomposition); the
-    main generation path already renders step figures in
-    _parse_decomposition. Centralizing the spec→svg conversion at
-    persistence time means downstream readers never need to know
-    about the geometry module.
-
-    A construction step figure is also checked (`_check_figure` with the
+    A step figure is a construction: checked (`_check_figure` with the
     step's text, against `question_text` and the question's figure
     `question_spec`) and dropped when it fails. It is checked against the
     step's own `figure_facts` (`read_step_facts`); a step without them
-    can't be checked, so its figure is dropped.
+    can't be checked, so its figure is dropped. A step figure in the shape
+    forms (triangle, circle, polygon) is dropped too: nothing checks it
+    against the problem (prod 77195d48: a wrong triangle for a step).
     """
     out: list[dict[str, Any]] = []
     for step in steps:
@@ -170,13 +177,12 @@ def _render_step_figures(
             continue
         rendered: dict[str, Any] = dict(step)
         spec = step.get("figure_spec")
+        svg = None
         if _is_construction(spec):
             _, svg, _ = _check_figure(
                 spec, question_text, step_text=_step_text(step), base=question_spec,
                 facts=step.get("figure_facts"),
             )
-        else:
-            svg = render_figure_or_none(spec, context="step figure_spec")
         if svg:
             rendered["figure_svg"] = svg
         else:
@@ -436,6 +442,7 @@ async def _render_step_figures_with_retry(
     mode: str,
     user_id: str | None,
     facts: Any = None,
+    generation_job_id: str | None = None,
 ) -> tuple[list[dict[str, Any]], dict[int, list[str]], FigureFacts | None]:
     """Render steps; a construction step figure that fails its check gets
     the one retry, then the step is kept without a figure. Returns the
@@ -446,7 +453,9 @@ async def _render_step_figures_with_retry(
     drops: dict[int, list[str]] = {}
     reading = as_facts(facts)
     if reading is None and any(_is_construction(s.get("figure_spec")) for s in raw_steps):
-        reading, why = await read_figure_facts(question_text, mode=mode, user_id=user_id)
+        reading, why = await read_figure_facts(
+            question_text, mode=mode, user_id=user_id, generation_job_id=generation_job_id,
+        )
         if reading is None:
             for i, s in enumerate(raw_steps):
                 if _is_construction(s.get("figure_spec")):
@@ -454,6 +463,7 @@ async def _render_step_figures_with_retry(
     if reading is not None:
         drops.update(await read_step_facts(
             raw_steps, question_text=question_text, facts=reading, mode=mode, user_id=user_id,
+            generation_job_id=generation_job_id,
         ))
     out = _render_step_figures(steps, question_text=question_text, question_spec=question_spec)
     # _render_step_figures keeps every dict step, in order.
@@ -462,6 +472,7 @@ async def _render_step_figures_with_retry(
         spec, svg, issues, _ = await _resolve_figure_with_retry(
             raw["figure_spec"], question_text, mode=mode, user_id=user_id,
             step_text=_step_text(raw), base=question_spec, facts=raw["figure_facts"],
+            generation_job_id=generation_job_id,
         )
         if svg:
             out[i] = {**out[i], "figure_spec": spec, "figure_svg": svg, "figure_facts": raw["figure_facts"]}
@@ -535,6 +546,9 @@ async def _draw_figures(
     actually see — and the solver is only shown that."""
 
     async def draw(q: dict[str, Any]) -> None:
+        _drop_unwanted_figure(q, generation_job_id)
+        # The AI's own choice, kept after a failed check drops the spec.
+        q["figure_wanted"] = bool(q.get("figure_spec"))
         spec, svg, issues, reading = await _resolve_figure_with_retry(
             q.get("figure_spec"), q.get("text") or "", mode=LLMMode.GENERATE_QUESTIONS,
             user_id=user_id, generation_job_id=generation_job_id,
@@ -550,9 +564,42 @@ async def _draw_figures(
     await asyncio.gather(*(draw(q) for q in questions))
 
 
-def _missing_figure(q: dict[str, Any]) -> bool:
-    """Says "the figure below" but has no figure to show."""
-    return not q.get("figure_svg") and bool(_FIGURE_REFERENCE.search(q.get("text") or ""))
+def _drop_unwanted_figure(q: dict[str, Any], job_id: str | None = None, *, stored_flag: bool | None = None) -> None:
+    """Ben's rule: when the student is to draw or construct it, the problem
+    gets no figure. A figure the AI drafted for such a problem is dropped
+    before it is drawn. The test is the item's stored flag itself:
+    `stored_flag` when the caller has already worked it out (regenerate,
+    where a teacher's choice stands), else `combine_requires_drawing` (the
+    AI's flag or the regex). So a problem never shows a figure while grading
+    expects the student to draw it, nor loses one grading doesn't expect.
+
+    The safe direction: this only ever removes a figure, so a wrong call
+    costs a missing figure, never a wrong one. Known limitation: a proof
+    that adds a line ("Draw the median $\\overline{AD}$. Prove ...") also
+    loses its figure; telling an auxiliary line from the student's own
+    construction belongs in drawing_requirement.py."""
+    text = q.get("text") or ""
+    draws = combine_requires_drawing(text, q.get("requires_drawing")) if stored_flag is None else stored_flag
+    if q.get("figure_spec") and draws:
+        logger.info("Job %s: the student draws this one, so its figure is dropped: %.80s", job_id, q.get("text"))
+        q["figure_spec"] = None
+
+
+def _needs_figure(q: dict[str, Any]) -> bool:
+    """The problem wants a figure: the generating AI drafted one for it
+    (`figure_spec`, following the when-to-draw rule in its prompt;
+    `figure_wanted` keeps that choice after a failed check drops the spec),
+    or its text points at a figure ("in the figure below", "as shown"). The
+    AI decides; code checks the figure, and holds a problem that points at a
+    figure to having one. No guessing from the words."""
+    if q.get("figure_wanted") or q.get("figure_spec"):
+        return True
+    return bool(_FIGURE_REFERENCE.search(q.get("text") or ""))
+
+
+def _lacks_figure(q: dict[str, Any]) -> bool:
+    """Wants a figure (`_needs_figure`) but has no checked one to show."""
+    return not q.get("figure_svg") and _needs_figure(q)
 
 
 def schedule_generation_job(job_id: uuid.UUID) -> None:
@@ -744,6 +791,241 @@ def _empty_result_message(docs_selected: int, docs_used: int) -> str:
     )
 
 
+_REPLACEMENT_RULE = (
+    "Every problem must be complete on its own. Follow the when-to-draw rule; a problem that "
+    "gets a figure, or refers to one, must include a figure_spec that draws exactly the points "
+    "it names, and every number on the figure must be in the text."
+)
+# The last try for a slot whose figure couldn't be checked twice: a problem
+# on the same topic that needs no figure, so the set keeps its size.
+_NO_FIGURE_RULE = (
+    "Every problem must be complete on its own and need no figure: name no points (no AB, no "
+    "triangle ABC), never mention a figure, diagram or picture, and give every number in the "
+    "text. Stay on the same topic. Do not include a figure_spec."
+)
+
+
+@dataclass(frozen=True)
+class ProblemRequest:
+    """What a generation job asks for: everything a call for problems takes
+    but the count and the rule for that call."""
+
+    unit_name: str
+    course_name: str
+    subject: str
+    user_id: str
+    images: list[dict[str, str]] | None = None
+    constraint_text: str | None = None
+    assignment_title: str | None = None
+    params: dict[str, Any] | None = None
+    call_metadata: dict[str, Any] | None = None
+    job_id: str | None = None
+
+
+def _normalized(text: Any) -> str:
+    return " ".join(str(text or "").split()).casefold()
+
+
+def _without_repeats(new: list[dict[str, Any]], kept: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """`new` less any problem whose text (spacing and case aside) is already
+    in `kept` or earlier in `new`."""
+    seen = {_normalized(q.get("text")) for q in kept}
+    out = []
+    for q in new:
+        key = _normalized(q.get("text"))
+        if key not in seen:
+            seen.add(key)
+            out.append(q)
+    return out
+
+
+async def _ask_for_problems(
+    request: ProblemRequest, count: int, rule: str, kept: list[dict[str, Any]], *, failed: str,
+) -> list[dict[str, Any]]:
+    """`count` more problems under `rule`, told which problems the set
+    already has so none comes back twice. A failed call returns none (logged
+    as `failed`): the problems already kept still ship."""
+    already = (
+        "The set already has these problems; do not repeat any of them:\n"
+        + "\n".join(f"- {q.get('text') or ''}" for q in kept)
+    ) if kept else ""
+    try:
+        return cast(list[dict[str, Any]], await generate_questions(
+            unit_name=request.unit_name,
+            count=count,
+            course_name=request.course_name,
+            subject=request.subject,
+            user_id=request.user_id,
+            images=request.images,
+            extra_instructions="\n\n".join(t for t in (request.constraint_text, rule, already) if t),
+            assignment_title=request.assignment_title,
+            params=request.params,
+            call_metadata=request.call_metadata,
+            generation_job_id=request.job_id,
+        ))
+    except Exception:
+        logger.exception("Job %s: %s", request.job_id, failed)
+        return []
+
+
+async def _no_figure_top_up(
+    request: ProblemRequest, short: int, kept: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Up to `short` problems on the same topic that need no figure, for the
+    slots whose figure couldn't be kept (after drawing, or after solving),
+    so the teacher gets the count asked for."""
+    logger.warning(
+        "Job %s: %d problem(s) still had no figure that could be checked; asking for problems on the same "
+        "topic that need no figure", request.job_id, short,
+    )
+    plain = await _ask_for_problems(
+        request, short, _NO_FIGURE_RULE, kept, failed="the no-figure replacement call failed; keeping the rest",
+    )
+    # Asked for none: one that drafts a figure or points at one is not taken.
+    plain = _without_repeats([q for q in plain if not _needs_figure(q)], kept)[:short]
+    for q in plain:
+        q["figure_spec"] = q["figure_svg"] = q["figure_facts"] = None
+    if len(plain) < short:
+        logger.warning(
+            "Job %s: left out %d problem(s): no figure could be checked, and no replacement without a "
+            "figure came back", request.job_id, short - len(plain),
+        )
+    return plain
+
+
+async def generate_checked_problems(
+    request: ProblemRequest, *, count: int, docs_selected: int = 0,
+) -> list[dict[str, Any]]:
+    """Generate problems and draw each one's figure, checked. A problem that
+    wants a figure (`_needs_figure`: the AI drafted one, or it refers to one)
+    and ends without a checked one, or repeats another problem, is replaced
+    once; a slot whose replacement has the same flaw gets a problem that
+    needs no figure (`_no_figure_top_up`), so the teacher gets the count
+    asked for. Only when that fails too is the slot left out, never handed
+    to the teacher broken. Each call for more problems is told the ones
+    already kept, and an exact repeat is dropped."""
+    question_dicts: list[dict[str, Any]] = cast(list[dict[str, Any]], await generate_questions(
+        unit_name=request.unit_name,
+        count=count,
+        course_name=request.course_name,
+        subject=request.subject,
+        user_id=request.user_id,
+        images=request.images,
+        extra_instructions=request.constraint_text,
+        assignment_title=request.assignment_title,
+        params=request.params,
+        call_metadata=request.call_metadata,
+        generation_job_id=request.job_id,
+    ))
+    if not question_dicts:
+        # Reached only when the call SUCCEEDED and came back empty — a real
+        # API failure propagates with its own cause rather than arriving
+        # here disguised as "no questions".
+        raise TeacherFacingGenerationError(_empty_result_message(docs_selected, len(request.images or [])))
+
+    def lacks(q: dict[str, Any]) -> bool:
+        return _lacks_figure(q)
+
+    job_id, asked = request.job_id, len(question_dicts)
+    question_dicts = _without_repeats(question_dicts, [])
+    await _draw_figures(question_dicts, user_id=request.user_id, generation_job_id=job_id)
+    kept = [q for q in question_dicts if not lacks(q)]
+    missing = asked - len(kept)
+    if not missing:
+        return kept
+    logger.warning(
+        "Job %s: replacing %d problem(s) that need a figure they don't have, or repeat another", job_id, missing,
+    )
+    replacements = await _ask_for_problems(
+        request, missing, _REPLACEMENT_RULE, kept, failed="replacement call failed; keeping the rest",
+    )
+    await _draw_figures(replacements, user_id=request.user_id, generation_job_id=job_id)
+    kept += _without_repeats([q for q in replacements if not lacks(q)], kept)[:missing]
+    short = asked - len(kept)
+    if short:
+        kept += await _no_figure_top_up(request, short, kept)
+    if not kept:
+        raise TeacherFacingGenerationError(
+            "Every generated problem needed a figure that couldn't be drawn. Try again."
+        )
+    return kept
+
+
+async def solve_checked_problems(
+    question_dicts: list[dict[str, Any]],
+    *,
+    subject: str,
+    user_id: str,
+    job_id: str | None,
+    request: ProblemRequest | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Solve each problem, then, per problem in parallel: drop a figure that
+    prints the answer (it was drawn before the problem was solved), and
+    check each step's figure (read, checked against the problem's figure
+    and facts, one redraw, else the step keeps no figure). A problem that
+    needs a figure and lost it is left out; with the generation `request`
+    (not for a teacher's upload), its slot gets a problem on the same topic
+    that needs no figure (`_no_figure_top_up`), solved too. Returns the kept
+    problems and their solutions."""
+    solutions = await generate_solutions(
+        question_dicts, subject=subject, user_id=user_id, generation_job_id=job_id,
+    )
+    sem = asyncio.Semaphore(5)
+
+    async def check(q: dict[str, Any], s: dict[str, Any]) -> str | None:
+        """Why the problem must be left out, or None."""
+        if s.get("final_answer"):
+            s["final_answer"] = real_newlines(s["final_answer"])
+        lost = None
+        wanted = _needs_figure(q)
+        if _is_construction(q.get("figure_spec")):
+            kept_spec, kept_svg, issues = _check_figure(
+                q["figure_spec"], q.get("text") or "", final_answer=s.get("final_answer") or "",
+                facts=q.get("figure_facts"),
+            )
+            if issues:
+                logger.warning("Job %s: figure dropped after solving: %s", job_id, "; ".join(issues))
+            q["figure_spec"], q["figure_svg"] = kept_spec, kept_svg
+            if not kept_svg:
+                q["figure_facts"] = None
+            if issues and wanted and not kept_svg:
+                lost = "; ".join(issues)
+        if lost is None and isinstance(s.get("steps"), list) and s["steps"]:
+            async with sem:
+                s["steps"], drops, _ = await _render_step_figures_with_retry(
+                    s["steps"], question_text=q.get("text") or "", question_spec=q.get("figure_spec"),
+                    mode=LLMMode.GENERATE_QUESTIONS, user_id=user_id, facts=q.get("figure_facts"),
+                    generation_job_id=job_id,
+                )
+            for i, why in drops.items():
+                logger.info("Job %s: step %d keeps no figure: %s", job_id, i, "; ".join(why))
+        return lost
+
+    lost = await asyncio.gather(*(check(q, s) for q, s in zip(question_dicts, solutions)))
+    if not any(lost):
+        return question_dicts, solutions
+    logger.warning(
+        "Job %s: left out %d problem(s) whose figure gave away the answer: %s",
+        job_id, sum(map(bool, lost)), " | ".join(w for w in lost if w),
+    )
+    kept_qs = [q for q, w in zip(question_dicts, lost) if not w]
+    kept_sols = [s for s, w in zip(solutions, lost) if not w]
+    if request is not None:
+        plain = await _no_figure_top_up(request, sum(map(bool, lost)), kept_qs)
+        if plain:
+            # Asked for no figure and stripped of any: nothing more to lose.
+            more_qs, more_sols = await solve_checked_problems(
+                plain, subject=subject, user_id=user_id, job_id=job_id,
+            )
+            kept_qs, kept_sols = kept_qs + more_qs, kept_sols + more_sols
+    if not kept_qs:
+        raise TeacherFacingGenerationError(
+            "Every generated problem needs a figure, and each figure gave away its answer, "
+            "so none could be kept. Try again."
+        )
+    return kept_qs, kept_sols
+
+
 async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> None:
     """Run the actual Claude calls and persist results.
 
@@ -774,6 +1056,9 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
 
     # 1. Get question texts — either extract from uploaded images or
     # generate via AI, depending on job mode.
+    # The generation request, for filling a slot after solving; None for an
+    # upload, whose problems are the teacher's own.
+    request: ProblemRequest | None = None
     if job.mode == "upload":
         # Upload mode: extract problems from worksheet pages stored on
         # the job row. Files are [{data, media_type}] — JPEG, PNG, or PDF.
@@ -828,7 +1113,7 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
             )
             # If the parent has a structured figure, hand its spec to
             # the model so the variations stay figure-coherent (same
-            # shape family, different numbers). Without this, a
+            # layout, different numbers). Without this, a
             # triangle-with-figure parent commonly spawned children
             # that either dropped the figure entirely or invented a
             # structurally different one — the variation tree was
@@ -836,14 +1121,10 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
             if parent.figure_spec:
                 import json as _json
                 seed_block += (
-                    "\n\nThe reference question has a structured "
-                    "geometry figure. Each variation should carry "
-                    "the SAME shape family (triangle, circle, "
-                    "polygon, compound) — vary only the numeric "
-                    "values, labels, and orientation. Don't drop "
-                    "the figure entirely and don't switch to a "
-                    "different shape.\n\n"
-                    f"Reference figure_spec (for shape reference):\n"
+                    "\n\nThe reference question has a figure. Each "
+                    "variation keeps the same layout and point names "
+                    "and draws a new figure_spec for its own numbers.\n\n"
+                    f"Reference figure_spec (for layout reference):\n"
                     f"{_json.dumps(parent.figure_spec, indent=2)}"
                 )
             constraint_text = (
@@ -866,116 +1147,28 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
         if job.parent_question_id:
             assignment_title = None
 
-        question_dicts = await generate_questions(
+        request = ProblemRequest(
             unit_name=unit_name,
-            count=job.requested_count,
             course_name=course.name,
             subject=course.subject,
             user_id=str(job.created_by_id),
             images=images or None,
-            extra_instructions=constraint_text,
+            constraint_text=constraint_text,
             assignment_title=assignment_title,
             params=job.params,
             call_metadata=doc_metadata,
-            generation_job_id=str(job.id),
+            job_id=str(job.id),
         )
-        if not question_dicts:
-            # Reached only when the call SUCCEEDED and came back empty —
-            # a real API failure now propagates with its own cause
-            # rather than arriving here disguised as "no questions".
-            raise TeacherFacingGenerationError(
-                _empty_result_message(len(doc_ids), len(images))
-            )
+        question_dicts = await generate_checked_problems(
+            request, count=job.requested_count, docs_selected=len(doc_ids),
+        )
 
-        # A problem that refers to a figure it doesn't have can't be
-        # done. Replace each one once; a replacement with the same flaw
-        # is left out rather than handed to the teacher broken.
-        await _draw_figures(question_dicts, user_id=str(job.created_by_id), generation_job_id=str(job.id))
-        missing = sum(map(_missing_figure, question_dicts))
-        if missing:
-            logger.warning("Job %s: replacing %d problem(s) that cite a missing figure", job.id, missing)
-            try:
-                replacements = await generate_questions(
-                    unit_name=unit_name,
-                    count=missing,
-                    course_name=course.name,
-                    subject=course.subject,
-                    user_id=str(job.created_by_id),
-                    images=images or None,
-                    extra_instructions=(
-                        (constraint_text + "\n\n" if constraint_text else "")
-                        + "Every problem must be complete on its own. A problem that refers "
-                        "to a figure must include that figure's figure_spec, and every "
-                        "number on the figure must also be in the problem text."
-                    ),
-                    assignment_title=assignment_title,
-                    params=job.params,
-                    call_metadata=doc_metadata,
-                    generation_job_id=str(job.id),
-                )
-            except Exception:
-                # The first batch's complete problems still ship; a failed
-                # cleanup call must not cost the teacher the whole job.
-                logger.exception("Job %s: replacement call failed; keeping the rest", job.id)
-                replacements = []
-            await _draw_figures(replacements, user_id=str(job.created_by_id), generation_job_id=str(job.id))
-            question_dicts = [q for q in question_dicts if not _missing_figure(q)] + [
-                q for q in replacements if not _missing_figure(q)
-            ][:missing]
-            if not question_dicts:
-                raise TeacherFacingGenerationError(
-                    "Every generated problem referred to a figure that couldn't be drawn. Try again."
-                )
-
-    # 2. Solve each question in parallel (capped concurrency inside)
-    solutions = await generate_solutions(
-        question_dicts,
-        subject=course.subject,
-        user_id=str(job.created_by_id),
-        generation_job_id=str(job.id),
+    # 2. Solve each question in parallel (capped concurrency inside), then
+    # check what the answer and the steps add to each figure.
+    question_dicts, solutions = await solve_checked_problems(
+        question_dicts, subject=course.subject, user_id=str(job.created_by_id), job_id=str(job.id),
+        request=request,
     )
-    lost_figure: list[str] = []
-    for q_text_only, s in zip(question_dicts, solutions):
-        q = cast(dict[str, Any], q_text_only)
-        if s.get("final_answer"):
-            s["final_answer"] = real_newlines(s["final_answer"])
-        # The answer is known only now: a construction figure that prints
-        # it is dropped (it was drawn before the problem was solved).
-        if _is_construction(q.get("figure_spec")):
-            kept_spec, kept_svg, issues = _check_figure(
-                q["figure_spec"], q.get("text") or "", final_answer=s.get("final_answer") or "",
-                facts=q.get("figure_facts"),
-            )
-            if issues:
-                logger.warning("Job %s: figure dropped after solving: %s", job.id, "; ".join(issues))
-            q["figure_spec"], q["figure_svg"] = kept_spec, kept_svg
-            if not kept_svg:
-                q["figure_facts"] = None
-            # The missing-figure rule again: a problem that points at a
-            # figure it no longer has is left out, as before solving.
-            if issues and _missing_figure(q):
-                lost_figure.append("; ".join(issues))
-        if isinstance(s.get("steps"), list):
-            await read_step_facts(
-                s["steps"], question_text=q.get("text") or "", facts=q.get("figure_facts"),
-                mode=LLMMode.GENERATE_QUESTIONS, user_id=str(job.created_by_id), generation_job_id=str(job.id),
-            )
-            s["steps"] = _render_step_figures(
-                s["steps"], question_text=q.get("text") or "", question_spec=q.get("figure_spec"),
-            )
-    if lost_figure:
-        logger.warning(
-            "Job %s: left out %d problem(s) whose figure gave away the answer: %s",
-            job.id, len(lost_figure), " | ".join(lost_figure),
-        )
-        kept_pairs = [(q, s) for q, s in zip(question_dicts, solutions) if not _missing_figure(cast(dict[str, Any], q))]
-        if not kept_pairs:
-            raise TeacherFacingGenerationError(
-                "Every generated problem refers to a figure, and each figure gave away its answer, "
-                "so none could be kept. Try again."
-            )
-        question_dicts = [q for q, _s in kept_pairs]
-        solutions = [s for _q, s in kept_pairs]
 
     # 2b. Generate 3 MCQ distractors per question. Stored on the bank
     # item so the school-student practice loop can serve MCQs with
@@ -1151,9 +1344,10 @@ async def regenerate_one(
     cfg = get_config(course.subject)
     system_prompt = _REGENERATE_SYSTEM_TEMPLATE.format(professor_role=cfg["professor_role"])
     system_prompt += (
-        "\nInclude a figure_spec when the problem needs a diagram (a geometry problem "
-        "that names points, segments, angles, lines or circles, or text that refers to "
-        "a figure); omit it otherwise.\n\n" + CONSTRUCTION_FIGURE_RULES + "\n"
+        "\n" + WHEN_TO_DRAW + "\nFollow the when-to-draw rule; a problem that gets a figure, or refers to "
+        "one, must include a figure_spec that draws exactly the points it names, and every number on the "
+        "figure must be in the text. Omit the figure_spec otherwise.\n\n"
+        + FIGURE_PROBLEM_WORDING + "\n" + CONSTRUCTION_FIGURE_RULES + "\n"
     )
     qa_schema = REGENERATE_QA_CONSTRUCTION_SCHEMA
 
@@ -1222,15 +1416,25 @@ async def regenerate_one(
     new_final = real_newlines(str(new_answer)) if new_answer else ""
     # Figure first, so a problem that points at a figure it can't have is
     # refused before anything is overwritten.
+    # The flag the item will store, worked out once: a teacher's choice
+    # stands; otherwise the AI's flag OR'd with the regex. The figure guard
+    # uses this same value.
+    stored_flag = (
+        item.requires_drawing if item.requires_drawing_teacher_set
+        else combine_requires_drawing(new_question, result.get("requires_drawing"))
+    )
+    drafted = {"text": new_question, "figure_spec": result.get("figure_spec")}
+    _drop_unwanted_figure(drafted, stored_flag=stored_flag)
     new_figure_spec, new_figure_svg, figure_issues, new_facts = await _resolve_figure_with_retry(
-        result.get("figure_spec"), new_question, mode=LLMMode.REGENERATE_BANK_ITEM,
+        drafted["figure_spec"], new_question, mode=LLMMode.REGENERATE_BANK_ITEM,
         user_id=str(user_id), final_answer=new_final,
     )
-    if not new_figure_svg and _FIGURE_REFERENCE.search(new_question):
+    if _lacks_figure({**drafted, "figure_svg": new_figure_svg}):
         reason = "; ".join(figure_issues) or "no figure was drawn"
-        logger.warning("Regenerated item %s refers to a figure it doesn't have: %s", item.id, reason)
+        logger.warning("Regenerated item %s needs a figure it doesn't have: %s", item.id, reason)
+        what = "refers to a figure" if _FIGURE_REFERENCE.search(new_question) else "has a figure"
         raise RuntimeError(
-            f"The new version of this problem refers to a figure that couldn't be drawn ({reason}). "
+            f"The new version of this problem {what} that couldn't be drawn ({reason}). "
             "Nothing was changed — try again.",
         )
     new_steps_rendered: list[dict[str, Any]] | None = None
@@ -1247,8 +1451,7 @@ async def regenerate_one(
     # A regenerated question is new AI text, so its drawing requirement is
     # re-derived — the same call's answer (REGENERATE_QA_SCHEMA) OR'd with
     # the regex — unless the teacher set it themselves.
-    if not item.requires_drawing_teacher_set:
-        item.requires_drawing = combine_requires_drawing(item.question, result.get("requires_drawing"))
+    item.requires_drawing = stored_flag
     item.solution_steps = new_steps_rendered
     item.final_answer = new_final
     # The figure resolved above, from the regenerated payload. If the new

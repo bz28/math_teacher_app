@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from api.core.question_bank_generation import _FIGURE_REFERENCE, _missing_figure
+from api.core.question_bank_generation import _FIGURE_REFERENCE, _lacks_figure
 
 
 @pytest.mark.parametrize("text", [
@@ -34,8 +34,8 @@ from api.core.question_bank_generation import _FIGURE_REFERENCE, _missing_figure
 ])
 def test_a_reference_to_a_figure_needs_one(text: str) -> None:
     assert _FIGURE_REFERENCE.search(text), text
-    assert _missing_figure({"text": text})
-    assert not _missing_figure({"text": text, "figure_svg": "<svg/>"})
+    assert _lacks_figure({"text": text})
+    assert not _lacks_figure({"text": text, "figure_svg": "<svg/>"})
 
 
 @pytest.mark.parametrize("text", [

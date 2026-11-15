@@ -10,7 +10,7 @@ from api.core.construction_figures import CONSTRUCTION_FIGURE_RULES
 from api.core.document_vision import build_vision_content
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
 from api.core.llm_schemas import GENERATE_QUESTIONS_CONSTRUCTION_SCHEMA
-from api.core.step_decomposition import decompose_problem
+from api.core.step_decomposition import StepFigures, decompose_problem
 from api.core.subjects import Subject, get_config
 
 logger = logging.getLogger(__name__)
@@ -65,17 +65,73 @@ student level — NOT absolute math/science difficulty:
 """
 
 
-_CONSTRUCTION_FIGURES_SECTION = """\
-# Figures (diagrams)
+# When a generated problem gets a figure. The first paragraph is Ben's
+# wording (2026-11-13), word for word; the second makes every figure
+# checkable: the reading that checks a figure turns away a problem that
+# describes it in words without naming its points
+# (construction_figures._IN_WORDS). Code enforces one rule on top
+# (question_bank_generation._lacks_figure): a problem the AI drafted a
+# figure for, or whose text refers to a figure, ends with a checked figure,
+# or is replaced, or its slot gets a problem that needs no figure.
+# How a problem that gets a figure is worded. Code checks every word of
+# such a problem against the figure (api/core/geometry/coverage.py), so
+# the wording rules come before any figure rule. Shared with the
+# regenerate prompt (question_bank_generation).
+FIGURE_PROBLEM_WORDING = (
+    'How to word a problem that gets a figure. Code checks the figure against every word of the '
+    'problem, so:\n'
+    '- Name every point the figure shows, and state every given in plain math form with those '
+    'names: "$\\overline{AB} \\cong \\overline{CD}$", "$m\\angle A = 40^\\circ$", "$\\overline{AB} '
+    '\\parallel \\overline{CD}$", "$AB = 7$", "$M$ is the midpoint of $\\overline{AB}$", '
+    '"$\\overline{BD}$ bisects $\\angle ABC$". Not in words ("the two sides are equal", "the angles '
+    'across from each other").\n'
+    '- No story in a problem with a figure. A layout from a real situation (a ladder against a '
+    'wall, a floor plan) is written as plain geometry when it gets a figure: "$\\triangle ABC$ has '
+    'a right angle at $C$, $AB = 13$ and $BC = 5$. Find $AC$." not "Ladder AB leans against wall '
+    'BC." No story words (ladder, wall, park, room, garden) in any sentence of it, not even a '
+    'sentence without point names. A word problem that keeps its story gets no figure and names no '
+    'points.\n'
+    '- Never put a theorem\'s or postulate\'s name in the problem ("by the Hypotenuse-Leg Theorem", '
+    '"using SAS", "by the Vertical Angles Theorem"). Theorem names belong in the solution steps.\n'
+    '- Name every line by two of its points: "$\\overleftrightarrow{AB} \\parallel '
+    '\\overleftrightarrow{CD}$", "transversal $\\overleftrightarrow{EF}$", never "line $p$" or "line '
+    '$q$".\n'
+    '- Name a circle by its center point: "Points $A$, $B$ and $C$ lie on circle $O$." Not "the '
+    'circle" or "$O$ is the center of the circle". Give an arc by its angle ("$m\\angle AOB = '
+    '112^\\circ$"), not "arc $AB$".\n'
+    '- One plain statement per sentence, each a fact about the named parts. No connecting or '
+    'framing words ("Additionally", "Also", "labeled as", "A composite figure made up of", "is '
+    'a diagonal"): "$ABCD$ is a rectangle." "$\\triangle CDE$ has a right angle at $D$."\n'
+)
 
-Some problems genuinely need a diagram to be understood — congruence and
-similarity setups, parallel lines and transversals, angle relationships,
-right-triangle trigonometry, circles with chords, tangents or inscribed
-angles. Emit `figure_spec` for those, NOT for algebra, word problems, or
-anything where the prose already carries the full picture. A problem
-that says "in the figure below" MUST carry its figure_spec.
+# When a problem gets a figure (Ben, 2026-11-14; replaces the first
+# "When to draw" paragraph). TODO(text auditor): a separate PR may let a
+# real-world layout keep its story words once code can account for them;
+# until then the SHOULD case is written as plain geometry with named points.
+WHEN_TO_DRAW = (
+    "When to draw.\n"
+    "- MUST have a figure: the problem refers to a figure, or its answer depends on how named parts "
+    "are arranged (proofs, angle pairs, transversals, circle chords and tangents, composite shapes).\n"
+    "- SHOULD have a figure: a real-world layout a textbook would picture (a ladder against a wall, a "
+    "ramp, a floor plan). Write it as plain geometry with named points (see below), not as a story.\n"
+    "- OPTIONAL: a shape problem answered by a formula alone (a polygon's angle sum).\n"
+    "- NO figure: when the task is for the student to draw, construct or sketch it; when there is no "
+    "shape; when an exact drawing would reveal what is asked (acute or obtuse, \"are the lines "
+    "parallel?\"); graphs and 3D solids (the tool can't draw them).\n"
+    "- Every problem with a figure names its points, and names each line by two of its points.\n"
+)
 
-"""
+_CONSTRUCTION_FIGURES_SECTION = (
+    '# Figures (diagrams)\n'
+    '\n'
+    + WHEN_TO_DRAW
+    + '\n'
+    'When a problem gets a figure, its text names every point the figure shows, so the figure can '
+    "be checked; a figure whose points the problem doesn't name is not shown.\n"
+    '\n'
+    + FIGURE_PROBLEM_WORDING
+    + "\n"
+)
 
 
 def _build_question_generation_prompt(subject: str) -> str:
@@ -191,6 +247,14 @@ def _translate_params_to_instructions(params: dict[str, Any] | None) -> list[str
     return instructions
 
 
+# A set of problems that each carry a construction figure: about 150 tokens
+# of text plus 300-500 of figure each, so 4096 cut an 8-problem set short.
+_GENERATE_MAX_TOKENS = 16000
+# Room to write all of them: output streams at about 70 tokens/s, so 16000
+# tokens take about 230 s; the default 90 s would cut a full set off.
+_GENERATE_TIMEOUT_S = 300.0
+
+
 async def generate_questions(
     unit_name: str,
     count: int,
@@ -274,7 +338,7 @@ async def generate_questions(
                 tool_schema=schema,
                 user_id=user_id,
                 model=MODEL_REASON,
-                max_tokens=4096,
+                max_tokens=_GENERATE_MAX_TOKENS,
                 call_metadata=call_metadata,
                 generation_job_id=generation_job_id,
             )
@@ -286,7 +350,8 @@ async def generate_questions(
                 tool_schema=schema,
                 user_id=user_id,
                 model=MODEL_REASON,
-                max_tokens=4096,
+                max_tokens=_GENERATE_MAX_TOKENS,
+                timeout=_GENERATE_TIMEOUT_S,
                 call_metadata=call_metadata,
                 generation_job_id=generation_job_id,
             )
@@ -355,14 +420,23 @@ async def generate_solutions(
             problem += (
                 "\n\nThe figure drawn with this problem, as data — its labels "
                 "and measurements are part of the problem:\n"
-                + json.dumps(q["figure_spec"])
+                # Sorted, so the prompt is the same however the spec's keys
+                # arrived (a live call's order, or a stored one's).
+                + json.dumps(q["figure_spec"], sort_keys=True)
             )
+        # Step figures build on the problem's checked construction figure
+        # (and are checked themselves by the caller); a problem without one
+        # gets no step figures.
+        spec = q.get("figure_spec")
+        construction = isinstance(spec, dict) and spec.get("shape") == "construction"
+        figures: StepFigures = "construction" if construction else "none"
         try:
             decomp = await decompose_problem(
                 problem,
                 user_id=user_id,
                 subject=subject,
                 generation_job_id=generation_job_id,
+                figures=figures,
             )
             return {
                 "question_text": q["text"],

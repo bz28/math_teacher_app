@@ -87,8 +87,10 @@ def test_render_step_figures_passes_text_steps_through() -> None:
     assert out[0]["description"] == "Identify the right triangle."
 
 
-def test_render_step_figures_renders_valid_spec() -> None:
-    """A step with a valid figure_spec gets figure_svg populated."""
+def test_render_step_figures_drops_a_shape_form_step_figure() -> None:
+    """A step figure in the shape forms is dropped, valid or not: nothing
+    checks it against the problem (prod 77195d48: a wrong triangle for a
+    step of a rewritten problem). Step figures are constructions, checked."""
     steps = [
         {
             "title": "Draw the triangle",
@@ -103,8 +105,7 @@ def test_render_step_figures_renders_valid_spec() -> None:
         },
     ]
     out = _render_step_figures(steps)
-    assert out[0]["figure_svg"].startswith("<svg")
-    assert out[0]["figure_spec"]["shape"] == "triangle"
+    assert out == [{"title": "Draw the triangle", "description": "We start with a 3-4-5 right triangle."}]
 
 
 def test_render_step_figures_drops_bad_spec_keeps_step() -> None:

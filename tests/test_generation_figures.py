@@ -17,7 +17,7 @@ from sqlalchemy import select
 
 from api.core.assignment_generation import generate_solutions
 from api.core.auth import hash_password
-from api.core.question_bank_generation import _missing_figure, _named_points, _resolve_figure, _run_generation
+from api.core.question_bank_generation import _lacks_figure, _named_points, _resolve_figure, _run_generation
 from api.database import get_session_factory
 from api.models.assignment import Assignment
 from api.models.course import Course
@@ -49,11 +49,11 @@ def _q(text: str, spec: dict[str, Any] | None = None) -> dict[str, Any]:
     ("Solve 2x + 3 = 11.", False),
 ])
 def test_what_counts_as_pointing_at_a_figure(text: str, missing: bool) -> None:
-    assert _missing_figure({"text": text}) is missing
+    assert _lacks_figure({"text": text}) is missing
 
 
 def test_a_drawn_figure_satisfies_the_pointer() -> None:
-    assert not _missing_figure({"text": "In the figure below, find x.", "figure_svg": "<svg/>"})
+    assert not _lacks_figure({"text": "In the figure below, find x.", "figure_svg": "<svg/>"})
 
 
 @pytest.mark.asyncio
@@ -121,7 +121,7 @@ BROKEN = _q("In the figure below, AB = DE and BC = EF. Name the postulate.")
 
 
 @pytest.mark.asyncio
-async def test_a_problem_citing_a_missing_figure_is_replaced() -> None:
+async def test_a_problem_citing_a_lacks_figure_is_replaced() -> None:
     drawn = _q("Find the hypotenuse c in the right triangle below.", RIGHT_TRIANGLE)
     items, gen = await _run([[GOOD, BROKEN], [drawn]])
     assert gen.await_count == 2 and gen.await_args_list[1].kwargs["count"] == 1
@@ -131,8 +131,10 @@ async def test_a_problem_citing_a_missing_figure_is_replaced() -> None:
 
 @pytest.mark.asyncio
 async def test_a_replacement_with_the_same_flaw_is_left_out() -> None:
-    items, gen = await _run([[GOOD, BROKEN], [BROKEN]])
-    assert gen.await_count == 2
+    # (the third call asks for a problem that needs no figure; it too
+    # comes back broken, so the slot is left out)
+    items, gen = await _run([[GOOD, BROKEN], [BROKEN], [BROKEN]])
+    assert gen.await_count == 3
     assert [i.question for i in items] == [GOOD["text"]]
 
 
@@ -145,8 +147,8 @@ async def test_a_batch_with_every_figure_drawn_makes_no_extra_call() -> None:
 
 @pytest.mark.asyncio
 async def test_a_failed_replacement_call_keeps_the_good_problems() -> None:
-    items, gen = await _run([[GOOD, BROKEN], RuntimeError("upstream 529")])
-    assert gen.await_count == 2
+    items, gen = await _run([[GOOD, BROKEN], RuntimeError("upstream 529"), RuntimeError("upstream 529")])
+    assert gen.await_count == 3
     assert [i.question for i in items] == [GOOD["text"]]
 
 
@@ -173,7 +175,7 @@ def test_a_figure_missing_a_named_point_is_dropped() -> None:
     # Prod, 2026-10-21: "DE ∥ BC, D on AB, E on AC" drawn as a bare triangle ABC.
     text = r"In the figure below, $\overline{DE} \parallel \overline{BC}$, where $D$ lies on $\overline{AB}$."
     assert _resolve_figure(TRIANGLE_ABC, text) == (None, None)
-    assert _missing_figure({"text": text, "figure_svg": None})
+    assert _lacks_figure({"text": text, "figure_svg": None})
 
 
 def test_a_figure_with_every_named_point_is_kept() -> None:
