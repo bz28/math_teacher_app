@@ -286,7 +286,34 @@ async def test_every_construction_figures_check_has_a_part(monkeypatch: pytest.M
     names = {c.name for r in results for c in cf.checks(r)}
     key = "chat diagrams / construction-figures"
     assert {n for n in names if _part_of(key, n) is None} == set()
-    assert {_part_of(key, n) for n in names} == set(sc.NEVER[key])
+    # Every part but the renamed "no negative listed" one comes from a real name.
+    assert {_part_of(key, n) for n in names} == set(sc.NEVER[key]) - {"known_wrong_missing"}
+
+
+_CF = "chat diagrams / construction-figures"
+
+
+@pytest.mark.parametrize("rejected, part", [(False, "known_wrong_passed"), (None, "known_wrong_missing")])
+def test_a_case_with_no_negative_is_not_a_passed_negative(rejected: bool | None, part: str) -> None:
+    """The probe's negative check fails both when the checker passed the
+    known-wrong figure (False) and when the case lists none (None)."""
+    from types import SimpleNamespace
+
+    from tests.harness.types import CheckResult
+
+    cf = SimpleNamespace(
+        checks=lambda r: [CheckResult("the checker rejects the case's known-wrong figure", False, "")],
+        negative_rejected=lambda r: rejected,
+    )
+    assert sc._check_parts(_CF, sc._construction_failed_checks(cf, [{}]))[1] == {part: 1}
+
+
+@pytest.mark.parametrize("name, part", [
+    ("by-eye verdict holds (figure)", "figure_case_claims_undrawn"),
+    ("by-eye verdict holds (decline)", "decline_case_drawn"),
+])
+def test_the_by_eye_verdict_check_counts_by_its_kind(name: str, part: str) -> None:
+    assert sc._check_parts(_CF, [name])[1] == {part: 1}
 
 
 def test_every_drawing_eval_check_has_a_part() -> None:

@@ -130,10 +130,12 @@ NEVER: dict[str, dict[str, str]] = {
     "chat diagrams / construction-figures": {
         "crashed": "a case that crashed",
         "claims_undrawn_figure": "a reply claiming a figure that wasn't drawn",
-        "verdict_not_held": "a case that ended against its by-eye verdict (a 'decline' case drawn)",
+        "figure_case_claims_undrawn": "a 'figure' case that drew none and whose reply claims one",
+        "decline_case_drawn": "a 'decline' case that drew a figure",
         "not_looked_at": "a figure nobody looked at",
         "wrong_figure_passed": "a figure judged wrong by eye that passed the checker",
         "known_wrong_passed": "a known-wrong figure the checker passed",
+        "known_wrong_missing": "a drawn figure with no known-wrong version to test the checker",
         "names_undrawn_point": "a reply naming a point that isn't drawn",
     },
     "step diagrams / construction-figures (steps)": {
@@ -178,10 +180,13 @@ _CHECK_PARTS: dict[str, dict[str, str]] = {
     "chat diagrams / construction-figures": {
         "the case ran": "crashed",
         "no reply claims a figure that wasn't drawn": "claims_undrawn_figure",
-        "by-eye verdict holds": "verdict_not_held",
+        "by-eye verdict holds (figure)": "figure_case_claims_undrawn",
+        "by-eye verdict holds (decline)": "decline_case_drawn",
         "every drawn figure was looked at": "not_looked_at",
         "no figure judged wrong by eye passed the checker": "wrong_figure_passed",
         "the checker rejects the case's known-wrong figure": "known_wrong_passed",
+        # Renamed by _construction_figures when the case lists no negative.
+        "no known-wrong figure listed for the case": "known_wrong_missing",
         "the reply names only drawn points": "names_undrawn_point",
     },
     "reading student work / drawing-eval": {
@@ -290,6 +295,23 @@ async def _generation_figures(env: Env) -> list[Row]:
     return [gen, hw, st]
 
 
+def _construction_failed_checks(cf: Any, results: list[dict[str, Any]]) -> list[str]:
+    """Failed check names per case. The negative check fails both when the
+    checker passed the known-wrong figure and when the case has none to
+    test; the second is renamed so it counts as its own part."""
+    out = []
+    for r in results:
+        for c in cf.checks(r):
+            if c.passed:
+                continue
+            if c.name.startswith("the checker rejects the case's known-wrong figure") and \
+                    cf.negative_rejected(r) is None:
+                out.append("no known-wrong figure listed for the case")
+            else:
+                out.append(c.name)
+    return out
+
+
 async def _construction_figures(env: Env) -> list[Row]:
     from tests.harness.probes import construction_figures as cf
 
@@ -297,8 +319,7 @@ async def _construction_figures(env: Env) -> list[Row]:
     s = cf.summarize(results, redraws)
     chat = _new("chat diagrams", "construction-figures",
                 "problems that should get a figure that got one (drawn and checked)")
-    chat.never, chat.never_parts = _check_parts(
-        chat.key, [c.name for r in results for c in cf.checks(r) if not c.passed])
+    chat.never, chat.never_parts = _check_parts(chat.key, _construction_failed_checks(cf, results))
     chat.how_good = _share(s["drawn"], s["expect_figure"])
     chat.cases = s["cases"]
     chat.notes.append(f"readings agreed {s['readings_agreed']}/{s['readings']}")
