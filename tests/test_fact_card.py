@@ -1037,3 +1037,51 @@ def test_a_point_inside_a_segment_it_ends_is_refused(kind: str) -> None:
     card, why = read_card({"points": ["A", "B", "C", "D"], "segments": ["BD"], "givens": [
         F(kind, ["BD"], point="B")], "find": [{"kind": "segment", "item": "AB"}]})
     assert card is None and any("inside a segment it ends" in w for w in why), why
+
+
+def test_two_parallels_between_named_lines_are_both_said() -> None:
+    """#1003 review round 1: "m ∥ n" and "p ∥ q" were one given to the dedupe."""
+    card, why = read_card({"points": ["A", "B", "C", "D"], "named_lines": ["m", "n", "p", "q"],
+                           "segments": ["AB", "BC", "CD"], "givens": [
+                               F("parallel", ["m", "n"]), F("parallel", ["p", "q"]),
+                               F("numbered_angle", ["1", "ABC"]), F("angle_measure", ["1"], value=40)],
+                           "find": [{"kind": "angle", "item": "BCD"}]})
+    assert card is not None, why
+    text = card_text(card)
+    assert r"m \parallel n" in text and r"p \parallel q" in text, text
+
+
+def test_an_angle_pair_given_on_a_parallelogram_is_kept() -> None:
+    """#1003 review round 1: a parallelogram's opposite sides are the parallel lines."""
+    card, why = read_card({"points": ["A", "B", "C", "D"], "polygons": ["ABCD"], "segments": ["AC"], "givens": [
+        F("parallelogram", ["ABCD"]), F("alternate_interior", ["BAC", "DCA"])],
+        "prove": [F("congruent_triangles", ["ABC", "CDA"])]})
+    assert card is not None, why
+
+
+def _jklm_figure(parallel: list[str]) -> list[str]:
+    from api.core.geometry.dsl import ConstructionFigure
+    from api.core.geometry.figure_check import check_construction
+
+    raw = {"points": ["J", "K", "L", "M"], "segments": ["JK", "KL", "LM", "MJ", "KM"],
+           "triangles": ["JKM", "LMK"], "givens": [
+               F("congruent_segments", ["JK", "LM"]), F("alternate_interior", ["JKM", "LMK"]),
+               F("parallel", parallel)],
+           "prove": [F("congruent_triangles", ["JKM", "LMK"])]}
+    card, why = read_card(raw)
+    assert card is not None, why
+    # A parallelogram JKLM drawn so JK ∥ LM and JM ∥ KL both hold would hide the
+    # check, so the drawing is a trapezoid with JK ∥ LM only.
+    fig = ConstructionFigure.model_validate({
+        "type": "geometry", "shape": "construction",
+        "points": {"J": [0, 3], "K": [5, 3], "L": [7, 0], "M": [2, 0]},
+        "segments": ["JK", "KL", "LM", "MJ", "KM"],
+        "parallel_groups": [parallel]})
+    return [i.message for i in check_construction(fig, card_text(card), facts=card)]
+
+
+def test_an_angle_pair_whose_lines_are_not_the_parallel_ones_is_refused_on_the_drawing() -> None:
+    """#1003 review round 1: "∠JKM and ∠LMK are alternate interior; JM ∥ KL"
+    says nothing about the pair (its lines are JK and LM)."""
+    assert not any("not the parallel lines given" in m for m in _jklm_figure(["JK", "LM"]))
+    assert any("not the parallel lines given" in m for m in _jklm_figure(["JM", "KL"]))

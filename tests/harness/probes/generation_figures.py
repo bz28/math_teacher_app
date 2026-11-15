@@ -11,9 +11,9 @@ problem's figure, one redraw). Recorded once against the real model;
 replays at $0 from its own cassette dir (tests/test_generation_figure_eval.py
 runs it in CI once recorded).
 
-The fact-card mode (this PR) is NOT recorded yet: its cassette dir
-`_cassettes/generation_figures_cards/` is empty, and the CI test skips until
-it is. #998's recordings (the reading mode) no longer apply: the generation
+The fact-card mode (this PR) was recorded 2026-11-15 (Eval 1) in
+`_cassettes/generation_figures_cards/` (sets in recorded_sets.json) and
+replays at $0. #998's recordings (the reading mode) no longer apply: the generation
 schema and prompt changed. Their 8 drawings are kept, checked against hand
 cards at $0, in tests/harness/probes/fact_card_recorded.py.
 
@@ -86,8 +86,9 @@ SETS: dict[str, dict[str, Any]] = {
         "brief": "Parallel lines cut by a transversal, angle pairs, polygon angle sums, and areas of composite "
                  "figures, including a floor-plan and a ladder-against-a-wall problem.",
     },
-    # Ben's NO-figure cases, so the "unwanted" bar can fail: each of these
-    # problems should ship with no figure.
+    # Ben's NO-figure cases, so the "unwanted" bar can fail: p2-p4 should ship
+    # with no figure; p1 (a construction) gets a figure of its given segment
+    # only, never the student's construction (FACT_CARD_RULES).
     "set3": {
         "unit_name": "Unit 6", "assignment_title": "Constructions, Graphs & Solids", "count": 4,
         "brief": "Exactly four problems, one of each: (1) the student constructs the perpendicular bisector of "
@@ -196,7 +197,11 @@ def count_of(name: str) -> int:
 BY_EYE: dict[str, tuple[str, str]] = {
     # Looked at by eye 2026-11-15 (~/.veradic/evals/sheet_sets_v3.png): each figure
     # shows its card's givens and marks, nothing the student makes, no answer.
-    "set1-p1": ("c02d87ee3ea1", "right"),
+    # #1003 review round 1: the figure matches its card, but the PROBLEM can't
+    # be proven. AB ∥ DE with C on AD and BE makes △ABC ~ △DEC (A↔D, B↔E), so
+    # BC ≅ DC gives nothing; the figure is the one symmetric case where
+    # △ABC ≅ △EDC happens to hold, so "true in the drawing" passed it.
+    "set1-p1": ("c02d87ee3ea1", "wrong: the statement to prove holds only in this symmetric drawing"),
     "set1-p2": ("46f96a1ff547", "right"),
     "set1-p3": ("813bed6ec8ae", "right"),
     "set1-p4": ("3a4e90fddb5a", "right"),
