@@ -666,9 +666,8 @@ async def _draw_figures(
                            generation_job_id, q.get("text"))
             q["figure_spec"] = None
         if card is None:
-            # (A shape-form figure keeps its own rule: every named point drawn.)
-            q["figure_spec"], q["figure_svg"], _ = _check_figure(q.get("figure_spec"), q.get("text") or "")
-            q["figure_facts"] = None
+            # Every figure without a card was dropped above: none is shown.
+            q["figure_spec"] = q["figure_svg"] = q["figure_facts"] = None
             return
         spec, svg, issues, _ = await _resolve_figure_with_retry(
             q.get("figure_spec"), q.get("text") or "", mode=LLMMode.GENERATE_QUESTIONS,
@@ -928,6 +927,16 @@ def shortfall_note(asked: int, kept: int) -> str:
     )
 
 
+def job_notice(job: Any) -> str | None:
+    """The note a finished job shows the teacher beside its problems, as its
+    own field (not an error: the job is done): a generated set that came
+    back short says how many were left out (`shortfall_note`)."""
+    if job.status != "done" or job.mode == "upload":
+        return None
+    asked, kept = int(job.requested_count or 0), int(job.produced_count or 0)
+    return shortfall_note(asked, kept) if 0 < asked and kept < asked else None
+
+
 @dataclass(frozen=True)
 class ProblemRequest:
     """What a generation job asks for: everything a call for problems takes
@@ -1004,7 +1013,7 @@ async def generate_checked_problems(
     replaced once. A slot whose replacement has the same flaw is left out,
     never handed to the teacher broken nor filled with a problem that only
     tells the geometry as a story: the set comes back short, and the job
-    tells the teacher (`shortfall_note`). Each call for more
+    tells the teacher (`job_notice`). Each call for more
     problems is told the ones already kept, and an exact repeat is dropped."""
     question_dicts: list[dict[str, Any]] = cast(list[dict[str, Any]], await generate_questions(
         unit_name=request.unit_name,
@@ -1366,10 +1375,8 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
 
     job.status = "done"
     job.produced_count = len(question_dicts)
-    if job.mode != "upload" and len(question_dicts) < job.requested_count:
-        # A set that came back short says so: the slots whose figure
-        # couldn't be checked were left out, not filled with something else.
-        job.error_message = shortfall_note(job.requested_count, len(question_dicts))
+    # A set that came back short says so (`job_notice`, read from the counts
+    # by the API): not an error, the job is done.
     job.updated_at = datetime.now(UTC)
     await db.commit()
     logger.info("Generation job %s produced %d questions", job.id, len(question_dicts))

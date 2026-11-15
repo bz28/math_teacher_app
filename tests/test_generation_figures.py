@@ -17,13 +17,20 @@ from sqlalchemy import select
 
 from api.core.assignment_generation import generate_solutions
 from api.core.auth import hash_password
-from api.core.question_bank_generation import _lacks_figure, _named_points, _resolve_figure, _run_generation
+from api.core.question_bank_generation import (
+    _lacks_figure,
+    _named_points,
+    _resolve_figure,
+    _run_generation,
+    job_notice,
+)
 from api.database import get_session_factory
 from api.models.assignment import Assignment
 from api.models.course import Course
 from api.models.question_bank import QuestionBankGenerationJob, QuestionBankItem
 from api.models.unit import Unit
 from api.models.user import User
+from api.routes.teacher_question_bank import _serialize_job
 
 RIGHT_TRIANGLE = {"type": "geometry", "shape": "triangle", "vertices": ["A", "B", "C"],
                   "right_angle_at": ["C"], "side_labels": {"AC": "9", "BC": "40", "AB": "c"}}
@@ -156,17 +163,19 @@ async def test_a_replacement_with_the_same_flaw_is_left_out() -> None:
     assert gen.await_count == 2
     assert [i.question for i in items] == [GOOD["text"]]
     assert job.status == "done" and job.produced_count == 1
-    assert job.error_message == (
+    assert job.error_message is None  # not an error: its own field, shown beside the problems
+    assert job_notice(job) == (
         "1 of 2 problems are ready. 1 more didn't pass our checks (usually a diagram that couldn't be "
         "confirmed), so it was left out — "
         "generate again for more."
     )
+    assert _serialize_job(job)["notice"] == job_notice(job)
 
 
 @pytest.mark.asyncio
 async def test_a_full_set_has_no_note() -> None:
     _items, _gen, job = await _run([[GOOD, _carded()]])
-    assert job.status == "done" and job.error_message is None
+    assert job.status == "done" and job.error_message is None and job_notice(job) is None
 
 
 @pytest.mark.asyncio
@@ -225,3 +234,18 @@ def test_a_figure_labeled_with_the_problems_names_is_kept() -> None:
     spec = {**TRIANGLE_ABC, "vertex_labels": {"A": "P", "B": "Q", "C": "R"}}
     out, svg = _resolve_figure(spec, r"Find $m\\angle PQR$ in $\\triangle PQR$.")
     assert out == spec and svg
+
+
+@pytest.mark.parametrize(("status", "mode", "asked", "kept", "noted"), [
+    ("done", "generate", 8, 6, True),
+    ("done", "generate", 8, 8, False),
+    ("done", "upload", 8, 6, False),  # an upload makes what the pages hold
+    ("running", "generate", 8, 6, False),
+    ("failed", "generate", 8, 0, False),
+])
+def test_only_a_finished_short_generated_set_has_a_notice(
+        status: str, mode: str, asked: int, kept: int, noted: bool) -> None:
+    from types import SimpleNamespace
+
+    job = SimpleNamespace(status=status, mode=mode, requested_count=asked, produced_count=kept)
+    assert (job_notice(job) is not None) is noted

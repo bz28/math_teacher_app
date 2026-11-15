@@ -2687,6 +2687,9 @@ export interface BankJob {
   constraint: string | null;
   produced_count: number;
   error_message: string | null;
+  /** A finished set that came back short: how many were left out and why.
+   *  Not an error — shown beside the problems that were made. */
+  notice?: string | null;
   // Set when this is a "generate similar" job — children inherit
   // this as their parent_question_id, building the variation tree.
   parent_question_id: string | null;

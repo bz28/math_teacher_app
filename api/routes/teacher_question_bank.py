@@ -40,6 +40,7 @@ from api.core.question_bank_generation import (
     _is_construction,
     _render_step_figures,
     _resolve_figure,
+    job_notice,
     regenerate_one,
     schedule_generation_job,
     snapshot_history,
@@ -356,6 +357,8 @@ def _serialize_job(job: QuestionBankGenerationJob) -> dict[str, Any]:
         "params": job.params,
         "produced_count": job.produced_count,
         "error_message": job.error_message,
+        # A done job that came back short: shown beside its problems.
+        "notice": job_notice(job),
         "parent_question_id": str(job.parent_question_id) if job.parent_question_id else None,
         "created_at": job.created_at.isoformat(),
         "updated_at": job.updated_at.isoformat(),
