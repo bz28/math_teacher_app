@@ -43,6 +43,7 @@ from api.models.assignment import (
     SubmissionGrade,
 )
 from api.models.course import Course, CourseTeacher
+from api.models.integrity_check import IntegrityCheckSubmission
 from api.models.question_bank import QuestionBankItem
 from api.models.school import SCHOOL_KIND_INSTITUTIONAL, School
 from api.models.section import Section
@@ -302,6 +303,15 @@ async def seed() -> dict:
                     )
                     s.add(sub)
                     await s.flush()
+                    # Integrity check is on by default, and confirming the
+                    # reading starts one. Without a row the student's page
+                    # waits on a check that never comes; a finished one is
+                    # what a student who turned this in days ago would have.
+                    s.add(IntegrityCheckSubmission(
+                        submission_id=sub_id, status="complete", disposition="pass",
+                        headline="Explained each step clearly",
+                        overall_summary="Walked through the setup and the arithmetic without help.",
+                    ))
 
                     if state in ("graded", "approved"):
                         breakdown, ai_grades = [], []
