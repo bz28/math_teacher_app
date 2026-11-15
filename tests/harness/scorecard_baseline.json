@@ -24,11 +24,6 @@
     "cassette_misses": 0,
     "how_good": 0.6
   },
-  "integrity / integrity": {
-    "cases": 28,
-    "cassette_misses": 0,
-    "how_good": 1.0
-  },
   "problem generation / generation-figures (sets)": {
     "cases": 20,
     "cassette_misses": 0,

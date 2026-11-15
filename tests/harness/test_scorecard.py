@@ -9,13 +9,11 @@ vanished, and (end to end) the figure checker switched off.
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
-from sqlalchemy.engine import make_url
 
 from tests.harness import scorecard as sc
 
@@ -31,7 +29,6 @@ _MUST_RUN = {
     "step diagrams / construction-figures (steps)",
     "reading student work / drawing-flag",
     "grading / grading",
-    "integrity / integrity",
 }
 # Their synthetic pages are drawn with a macOS font; elsewhere they skip.
 _FONT_BOUND = {"reading student work / drawing-eval", "grading / graph-check"}
@@ -39,13 +36,10 @@ _FONT_BOUND = {"reading student work / drawing-eval", "grading / graph-check"}
 
 def test_the_scorecard_replays_clean(tmp_path: Path) -> None:
     """`python -m tests.harness scorecard`, in its own process (no test-suite
-    mocks), against a scratch DB on the test server, passes, and every row
-    that can run here did."""
-    db = make_url(os.environ["DATABASE_URL"]).set(database="mathapp_scorecard")
+    mocks, no database), passes, and every row that can run here did."""
     out = tmp_path / "rows.json"
     proc = subprocess.run(  # noqa: S603 — our own CLI
-        [sys.executable, "-m", "tests.harness", "scorecard",
-         "--db", db.render_as_string(hide_password=False), "--json", str(out)],
+        [sys.executable, "-m", "tests.harness", "scorecard", "--json", str(out)],
         cwd=_ROOT, capture_output=True, text=True, timeout=300,
     )
     assert proc.returncode == 0, proc.stdout[-4000:] + proc.stderr[-4000:]
@@ -108,7 +102,7 @@ async def test_the_scorecard_fails_when_the_checker_is_off(monkeypatch: pytest.M
     import api.core.question_bank_generation as qbg
 
     monkeypatch.setenv("HARNESS_LLM_MODE", "replay")
-    env = sc.Env(db_url=None, has_recorded_font=False)
+    env = sc.Env(has_recorded_font=False)
     only = ["construction-adversarial", "construction-figures"]
     baseline = json.loads(sc.BASELINE_PATH.read_text())
 

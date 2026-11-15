@@ -4,11 +4,11 @@ One command runs every AI-feature eval that can replay at **$0 with no app
 server**, and prints one table:
 
 ```bash
-python -m tests.harness scorecard --db postgresql+asyncpg://mathapp:mathapp@localhost:5432/mathapp_scorecard
+python -m tests.harness scorecard
 ```
 
 - **never**: a count of things that must never happen (a wrong figure passed,
-  full credit for broken work, a memorised student passed...). Above 0 → FAIL.
+  full credit for broken work, "yes" for an undrawn graph feature...). Above 0 → FAIL.
 - **how good**: a share from 0 to 1 (figures drawn, cases graded as labelled...).
   Below the committed baseline (`scorecard_baseline.json`) → FAIL.
 - Also FAIL: a probe that crashes or misses a cassette, a case count below the
@@ -17,11 +17,13 @@ python -m tests.harness scorecard --db postgresql+asyncpg://mathapp:mathapp@loca
 - A probe that can't run here prints `skipped: needs <x>`. It is never dropped.
 
 It is replay only. The command sets `HARNESS_LLM_MODE=replay` and a fake API
-key, so a call with no recording raises an error and can't cost anything.
-`--db` is a scratch Postgres for the integrity probe, which seeds a class for
-each case. Only a DB whose name contains `scorecard` is reset; without `--db`,
-integrity is skipped. Other flags: `--only <probe>…`, `--json PATH`,
-`--write-baseline` (after a deliberate improvement or re-record).
+key, so a call with no recording raises an error and can't cost anything. It
+needs no database: the app's DB URL points at a port nothing listens on.
+Flags: `--only <probe>…`, `--json PATH`, `--write-baseline` (after a
+deliberate improvement or re-record).
+
+**Integrity is not on the scorecard** (Ben, 2026-11-14). Its probe stays in the
+repo and runs as before with `python -m tests.harness run --probe integrity`.
 
 **What replay can and can't see.** Replay hands back the model output that
 was *recorded*. So these numbers move only when our own code around the model
@@ -30,7 +32,7 @@ that changes the cassette key and so misses. A change in the model's
 *judgment* needs a paid re-record, and this command never makes one.
 
 CI: `tests/harness/test_scorecard.py` runs the command in its own process
-(about 17 s) against `mathapp_scorecard` on the CI Postgres. It also checks
+(about 17 s) with no database. It also checks
 that the scorecard fails when the figure checker is switched off (a revert
 check).
 
@@ -67,10 +69,8 @@ grading
   grading                            0     1.000     38  PASS
                                    - score label right 38/38
   graph-check                        0     1.000      8  PASS
-integrity
-  integrity                          0     1.000     28  PASS
 
-11 rows ran, 4 skipped, 0 failed: PASS
+10 rows ran, 4 skipped, 0 failed: PASS
 ```
 
 ## Audit: every probe in `tests/harness/probes/`
@@ -88,14 +88,14 @@ integrity
 | `drawing_flag` | reading student work | Does a question require a drawing? AI call vs regex vs label, 62 phrasings | Hand labels | Stored flag (AI or regex) wrong | AI call alone right (60/62 = 0.968; 2 misses listed as known) | Yes | PASS |
 | `grading` | grading | 38 hand-labelled submissions: other method, right answer with broken work, slips, blank, required method, class rules, theorems | Hand labels (accepted score_status, percent bands, deduction words) | Full credit on work not labelled full; deduction ledger that doesn't add up; step ref out of range; rule id shown to the teacher | Cases with every check right (1.000) | Yes (shared committed `call_claude_json.json`) | PASS |
 | `graph_check` | grading | The checklist check on a student's graph, 8 generated pages (wrong asymptote, one branch, written but not drawn, no graph...) | Generated pages + a hand verdict per checklist item | "yes" for a feature that isn't drawn; a verdict on a page with no graph | Verdicts that match the drawing exactly; "unclear" counts as a miss (1.000) | Yes, **on macOS only** (same font) | PASS |
-| `integrity` | integrity | The real integrity agent, 22 scripted students + 6 engagement cases | Hand-labelled disposition bands and harm tags | Honest-but-halting student flagged; memorised student passed; injection flipped to pass; over the turn budget | Cases with every check right (1.000) | Yes, with a scratch Postgres (no server) | PASS |
+| `integrity` | not on the scorecard (Ben, 2026-11-14) | The real integrity agent, 22 scripted students + 6 engagement cases | Hand-labelled disposition bands and harm tags | Honest-but-halting student flagged; memorised student passed; injection flipped to pass; over the turn budget | Cases with every check right (1.000) | Yes, with a scratch Postgres (no server) | not run (off the scorecard) |
 
 Notes:
 - Not every module in `probes/` is in the `PROBES` registry. `generation_figures`
   and `construction_adversarial` aren't, so `run` / `for-diff` never run them
   (CI runs them through `tests/test_*_figure_eval.py`). The scorecard runs both.
-- Before this PR, CI replayed only the two figure evals. Grading, drawing-flag
-  and integrity replay are new in CI here.
+- Before this PR, CI replayed only the two figure evals. Grading and
+  drawing-flag replay are new in CI here.
 
 ## Gaps found
 
@@ -119,8 +119,8 @@ Notes:
    their pages with a macOS font, so on Linux CI they skip (shown as skipped).
    A committed font file would make them portable but would also change the
    pages, which means a paid re-record.
-6. **Some how-good numbers are weak.** drawing-eval has 3 cases. Grading,
-   integrity and graph-check sit at 1.000, so they can only stay or drop,
+6. **Some how-good numbers are weak.** drawing-eval has 3 cases. Grading
+   and graph-check sit at 1.000, so they can only stay or drop,
    and only when our own code changes (replay can't see the model's judgment;
    see above).
 7. **geometry** (UI screenshots) needs the full stack. Nothing offline covers

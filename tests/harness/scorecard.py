@@ -5,7 +5,7 @@ committed cassettes without an app server, and prints one row per
 (feature, probe) with two numbers:
 
   - NEVER: a count of things that must never happen (a wrong figure passed,
-    full credit on broken work, a memorised student passed...). Any value
+    full credit on broken work, a drawn feature credited that isn't there...). Any value
     above 0 fails the scorecard.
   - HOW GOOD: a share in [0, 1] (figures drawn, cases graded as labelled...).
     Falling below the committed baseline (scorecard_baseline.json) fails.
@@ -26,8 +26,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import contextlib
-import io
 import json
 import logging
 import os
@@ -47,7 +45,6 @@ FEATURES = [
     "step diagrams",
     "reading student work",
     "grading",
-    "integrity",
 ]
 
 # The handwriting face the synthetic student pages were drawn with when their
@@ -57,8 +54,8 @@ _RECORDED_FONT = "/System/Library/Fonts/Supplemental/Bradley Hand Bold.ttf"
 # Env vars that narrow a probe to some of its cases; cleared so the scorecard
 # always runs the whole suite.
 _CASE_FILTERS = ("DRAWING_EVAL_CASES", "GRAPH_CHECK_CASES", "DRAWING_EVAL_OUT")
-# Where the CLI points the app's DB when no --db is given: a port nothing
-# listens on, so nothing can be written anywhere.
+# Where the CLI points the app's DB: a port nothing listens on, so nothing
+# can be written anywhere (no probe on the scorecard needs a database).
 _OFFLINE_DB = "postgresql+asyncpg://scorecard:offline@127.0.0.1:9/offline"
 
 
@@ -95,7 +92,6 @@ class Row:
 class Env:
     """What this host can offer the probes."""
 
-    db_url: str | None  # a scratch Postgres for the integrity probe, or None
     has_recorded_font: bool
 
 
@@ -320,43 +316,6 @@ async def _grading(env: Env) -> list[Row]:
     return [row]
 
 
-async def _integrity(env: Env) -> list[Row]:
-    row = Row("integrity", "integrity",
-              "an honest-but-halting student flagged, a memorised student passed, an injection "
-              "that flipped the verdict to pass, an interview over its turn budget",
-              "scripted students whose verdict and every check are right")
-    if not env.db_url:
-        row.skipped = "needs a scratch Postgres (pass --db; it seeds a class per case)"
-        return [row]
-    from tests.harness.probes.integrity import IntegrityProbe
-    from tests.harness.seed import seed_world
-    from tests.harness.types import HarnessContext
-
-    await _reset_db(env.db_url)
-    s = await seed_world()
-    ctx = HarnessContext(api_base="", web_base="", teacher_token=s.teacher_token, student_token=s.student_token,
-                         teacher_refresh=s.teacher_refresh, student_refresh=s.student_refresh,
-                         teacher_id=s.teacher_id, student_id=s.student_id, course_id=s.course_id,
-                         unit_id=s.unit_id, assignment_id=s.assignment_id)
-    p = IntegrityProbe()
-    with contextlib.redirect_stdout(io.StringIO()):  # it prints its own table
-        items = await p.generate(ctx)
-    per = _failed_check_names(p, items)
-
-    def count(prefix: str) -> int:
-        return sum(1 for _, ns in per for n in ns if n.startswith(prefix))
-
-    row.never, row.never_parts = _parts(
-        honest_student_flagged=count("no false-flag"),
-        memorised_student_passed=count("no false-pass"),
-        injection_flipped_to_pass=count("injection did not flip"),
-        over_turn_budget=count("interview within turn budget"),
-    )
-    row.how_good = _share(sum(1 for _, ns in per if not ns), len(per))
-    row.cases = len(per)
-    return [row]
-
-
 def _skipped(feature: str, probe: str, needs: str, never_what: str, how_good_what: str) -> Callable[[Env], Any]:
     async def run(env: Env) -> list[Row]:
         return [Row(feature, probe, never_what, how_good_what, skipped=needs)]
@@ -388,37 +347,7 @@ SOURCES: dict[str, Callable[[Env], Awaitable[list[Row]]]] = {
     "drawing-flag": _drawing_flag,
     "grading": _grading,
     "graph-check": _graph_check,
-    "integrity": _integrity,
 }
-
-
-async def _reset_db(url: str) -> None:
-    """Create the scratch DB if it's missing and give it a fresh schema. Only
-    a DB whose name says "scorecard" is touched: this drops every table."""
-    from sqlalchemy import text
-    from sqlalchemy.engine import make_url
-    from sqlalchemy.ext.asyncio import create_async_engine
-
-    u = make_url(url)
-    if "scorecard" not in (u.database or ""):
-        raise SystemExit(f"refusing to reset DB {u.database!r}: the scorecard DB's name must contain 'scorecard'")
-    admin = create_async_engine(u.set(database="postgres"), isolation_level="AUTOCOMMIT")
-    try:
-        async with admin.connect() as c:
-            found = (await c.execute(text("SELECT 1 FROM pg_database WHERE datname = :n"),
-                                     {"n": u.database})).scalar()
-            if not found:
-                await c.execute(text(f'CREATE DATABASE "{u.database}"'))
-    finally:
-        await admin.dispose()
-
-    import api.main  # noqa: F401 — registers every model on Base
-    from api.database import Base, get_engine
-
-    async with get_engine().begin() as c:
-        await c.execute(text("DROP SCHEMA public CASCADE"))
-        await c.execute(text("CREATE SCHEMA public"))
-        await c.run_sync(Base.metadata.create_all)
 
 
 async def collect(env: Env, only: list[str] | None = None) -> list[Row]:
@@ -462,7 +391,6 @@ def _feature_of(source: str) -> str:
         "generation-figures": "homework diagrams", "construction-figures": "chat diagrams",
         "construction-adversarial": "chat diagrams", "drawing-eval": "reading student work",
         "drawing-flag": "reading student work", "grading": "grading", "graph-check": "grading",
-        "integrity": "integrity",
     }.get(source, "problem generation")
 
 
@@ -526,14 +454,14 @@ def render(rows: list[Row]) -> str:
     return "\n".join(out)
 
 
-def _configure_env(db: str | None) -> None:
-    """Replay only, a key that can't spend, and a DB that is the scratch one
-    or nothing. Must run before any api.* import."""
+def _configure_env() -> None:
+    """Replay only, a key that can't spend, and no database. Must run before
+    any api.* import."""
     os.environ["HARNESS_LLM_MODE"] = "replay"
     os.environ["CLAUDE_API_KEY"] = "scorecard-replay-only-no-key"
     os.environ.pop("ANTHROPIC_API_KEY", None)
     os.environ.pop("HARNESS_CASSETTE_DIR", None)
-    os.environ["DATABASE_URL"] = db or _OFFLINE_DB
+    os.environ["DATABASE_URL"] = _OFFLINE_DB
     os.environ.setdefault("JWT_SECRET", "scorecard")
     os.environ.setdefault("APP_ENV", "test")
     os.environ.setdefault("SENTRY_DSN", "")
@@ -543,9 +471,6 @@ def _configure_env(db: str | None) -> None:
 
 def add_parser(sub: Any) -> None:
     sc = sub.add_parser("scorecard", help="run every $0 offline eval and print one scorecard")
-    sc.add_argument("--db", default=os.environ.get("HARNESS_SCORECARD_DB"),
-                    help="scratch Postgres for the integrity probe (name must contain 'scorecard'); "
-                         "omitted, integrity is skipped")
     sc.add_argument("--only", nargs="*", choices=list(SOURCES), help="run only these probes")
     sc.add_argument("--baseline", type=Path, default=BASELINE_PATH)
     sc.add_argument("--write-baseline", action="store_true",
@@ -554,9 +479,9 @@ def add_parser(sub: Any) -> None:
 
 
 def run_cli(args: argparse.Namespace) -> int:
-    _configure_env(args.db)
+    _configure_env()
     logging.disable(logging.WARNING)  # the checkers log every dropped figure
-    env = Env(db_url=args.db, has_recorded_font=Path(_RECORDED_FONT).exists())
+    env = Env(has_recorded_font=Path(_RECORDED_FONT).exists())
     rows = asyncio.run(collect(env, args.only))
     baseline = json.loads(args.baseline.read_text()) if args.baseline.exists() else {}
     if args.write_baseline:

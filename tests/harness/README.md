@@ -21,7 +21,7 @@ Every Claude call is recorded once and replayed for **$0** thereafter
 ## Commands
 ```bash
 # Every $0 offline eval in one table (see SCORECARD.md); CI runs it
-python -m tests.harness scorecard --db postgresql+asyncpg://mathapp:mathapp@localhost:5432/mathapp_scorecard
+python -m tests.harness scorecard
 
 # Run a probe end-to-end → HTML report + admin row
 python -m tests.harness run --probe geometry --mode replay
