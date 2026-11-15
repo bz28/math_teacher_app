@@ -5,6 +5,7 @@ import { useParams, usePathname, useRouter, useSearchParams } from "next/navigat
 import Link from "next/link";
 import {
   schoolStudent,
+  type StudentClassSummary,
   type StudentHomeworkSummary,
   type StudentPracticeSummary,
 } from "@/lib/api";
@@ -52,16 +53,45 @@ function ClassDetailInner() {
     [router, pathname, searchParams],
   );
 
+  // Which class this is. The page had no heading, so a student in two
+  // classes saw two identical-looking lists. The same call as the
+  // sidebar's class list; if it fails, the page works without a title.
+  const [cls, setCls] = useState<StudentClassSummary | null>(null);
+  useEffect(() => {
+    if (!courseId) return;
+    let live = true;
+    schoolStudent
+      .listClasses()
+      .then((all) => {
+        if (live) setCls(all.find((c) => c.course_id === courseId) ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [courseId]);
+
   return (
     <div className="mx-auto max-w-3xl">
       <Link
         href="/school/student"
         className="inline-flex items-center gap-1 text-sm text-text-muted hover:text-primary"
       >
-        ← Back to classes
+        ← Dashboard
       </Link>
 
-      <div className="mt-3 flex gap-1 overflow-x-auto border-b border-border-light">
+      {cls && (
+        <div className="mt-4">
+          <span className="font-sans text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
+            {cls.section_name}
+          </span>
+          <h1 className="mt-2 font-serif text-[40px] leading-[1.05] tracking-[-0.02em] text-text-primary">
+            {cls.course_name}
+          </h1>
+        </div>
+      )}
+
+      <div className="mt-6 flex gap-1 overflow-x-auto border-b border-border-light">
         {TABS.map((t) => (
           <button
             key={t.key}
@@ -170,15 +200,15 @@ function HomeworkList({ courseId }: { courseId: string }) {
                 {NEXT_STEP_COPY[hw.next_step].label}
               </span>
             ) : hw.status === "submitted" ? (
-              <span className="rounded-full bg-success-light px-2 py-0.5 text-xs font-semibold text-success">
+              <span className="shrink-0 whitespace-nowrap rounded-full bg-success-light px-2 py-0.5 text-xs font-semibold text-success">
                 Submitted ✓
               </span>
             ) : hw.closed ? (
-              <span className="rounded-full bg-bg-subtle px-2 py-0.5 text-xs font-semibold text-text-secondary">
+              <span className="shrink-0 whitespace-nowrap rounded-full bg-bg-subtle px-2 py-0.5 text-xs font-semibold text-text-secondary">
                 Closed
               </span>
             ) : (
-              <span className="rounded-full bg-warning-bg px-2 py-0.5 text-xs font-semibold text-warning-dark">
+              <span className="shrink-0 whitespace-nowrap rounded-full bg-warning-bg px-2 py-0.5 text-xs font-semibold text-warning-dark">
                 Not started
               </span>
             )}
