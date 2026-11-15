@@ -31,6 +31,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from api.core import photo_store
 from api.core.auth import create_access_token, create_refresh_token, hash_password
 from api.core.homework_points import assignment_points, weighted_percent
 from api.core.late_policy import set_final_score, submission_penalty_percent
@@ -141,9 +142,11 @@ async def seed() -> dict[str, Any]:
             hw: Assignment, u: User, late_by: timedelta, percents: list[float], *, publish: bool,
         ) -> Submission:
             assert hw.due_at is not None
+            sub_id = uuid.uuid4()
             sub = Submission(
-                assignment_id=hw.id, student_id=u.id, section_id=section.id, status="submitted",
-                files=[_page_file()], submitted_at=hw.due_at + late_by, is_late=late_by > timedelta(0),
+                id=sub_id, assignment_id=hw.id, student_id=u.id, section_id=section.id, status="submitted",
+                files=await photo_store.store_pages(sub_id, [_page_file()]),
+                submitted_at=hw.due_at + late_by, is_late=late_by > timedelta(0),
                 extraction_confirmed_at=hw.due_at + late_by,
             )
             s.add(sub)

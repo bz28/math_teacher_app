@@ -60,7 +60,6 @@ export function stablePhotoUrls<T extends SubmissionFile>(
   const now = Date.now();
   let changed = false;
   const out = files.map((f) => {
-    if (!f.id || f.expires_in == null) return f;
     const cached = urls.get(f.id);
     if (cached && cached.expiresAt - now > REUSE_MARGIN_MS) {
       return { ...f, url: cached.url };
@@ -82,7 +81,6 @@ export const PHOTO_URLS_EXPIRED = "veradic:photo-urls-expired";
  *  that owns it for fresh ones. A load error on a live URL is left alone
  *  — re-fetching can't fix a missing object, and would loop. */
 export function onPhotoError(file: SubmissionFile): void {
-  if (!file.id) return;
   const cached = urls.get(file.id);
   const expired = !cached || cached.url !== file.url || cached.expiresAt <= Date.now();
   if (!expired) return;

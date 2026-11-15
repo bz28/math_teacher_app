@@ -25,7 +25,7 @@ from typing import Any
 
 import pytest
 
-from api.core import integrity_ai, llm_client
+from api.core import integrity_ai, llm_client, photo_store
 from api.core.integrity_ai import _EXTRACT_SYSTEM
 from api.core.llm_schemas import INTEGRITY_EXTRACT_SCHEMA
 
@@ -198,9 +198,11 @@ async def test_the_extractor_hands_its_prompt_to_the_vision_call(
     async def _no_verify(*args: Any, **kwargs: Any) -> None:
         return None
 
+    stored = await photo_store.store_pages(uuid.uuid4(), [{"data": "iVBORw0KGgo=", "media_type": "image/png"}])
+
     class _Row:
-        def scalar_one_or_none(self) -> list[dict[str, str]]:
-            return [{"data": "iVBORw0KGgo=", "media_type": "image/png"}]
+        def scalar_one_or_none(self) -> list[dict[str, Any]]:
+            return stored
 
     class _Db:
         async def execute(self, *args: Any, **kwargs: Any) -> _Row:

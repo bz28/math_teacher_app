@@ -22,6 +22,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from api.core import photo_store
 from api.core.auth import create_access_token, create_refresh_token, hash_password
 from api.database import get_session_factory
 from api.models.assignment import (
@@ -157,9 +158,10 @@ async def seed() -> dict[str, str]:
             _grade_entry(pids[0], "full", 100, 0.97, "Correct factoring.", "x = 2, 3"),
             _grade_entry(pids[1], "full", 100, 0.96, "Correct.", "x = ±3"),
         ]
+        maya_sub_id = uuid.uuid4()
         maya_sub = Submission(
-            assignment_id=assignment.id, student_id=maya.id, section_id=section.id,
-            status="submitted", files=[_file_obj()],
+            id=maya_sub_id, assignment_id=assignment.id, student_id=maya.id, section_id=section.id,
+            status="submitted", files=await photo_store.store_pages(maya_sub_id, [_file_obj()]),
             extraction={"steps": []},
             extraction_confirmed_at=now - timedelta(hours=1),
             submitted_at=now - timedelta(hours=2),
@@ -236,9 +238,11 @@ async def seed() -> dict[str, str]:
             _grade_entry(pids[0], "full", 100, 0.98, "Correct.", "x = 2, 3"),
             _grade_entry(pids[1], "full", 100, 0.97, "Correct.", "x = ±3"),
         ]
+        liam_sub_id = uuid.uuid4()
         liam_sub = Submission(
-            assignment_id=assignment.id, student_id=liam.id, section_id=section.id,
-            status="submitted", files=[_file_obj()], extraction={"steps": []},
+            id=liam_sub_id, assignment_id=assignment.id, student_id=liam.id, section_id=section.id,
+            status="submitted", files=await photo_store.store_pages(liam_sub_id, [_file_obj()]),
+            extraction={"steps": []},
             extraction_confirmed_at=now - timedelta(hours=1),
             submitted_at=now - timedelta(hours=2),
         )

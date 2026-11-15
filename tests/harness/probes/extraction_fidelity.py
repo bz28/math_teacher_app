@@ -30,12 +30,14 @@ from __future__ import annotations
 import base64
 import io
 import os
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
+from api.core import photo_store
 from api.core.integrity_ai import extract_student_work_from_pages
 from tests.harness.probe import Probe
 from tests.harness.types import CheckResult, GeneratedItem, HarnessContext
@@ -271,7 +273,8 @@ class ExtractionFidelityProbe(Probe):
     async def _run_case(self, case: FidelityCase) -> GeneratedItem:
         b64, media = render_page(case)
         extraction = await extract_student_work_from_pages(
-            [{"data": b64, "media_type": media}], problems=case.problems,
+            await photo_store.store_pages(uuid.uuid4(), [{"data": b64, "media_type": media}]),
+            problems=case.problems,
         )
         return GeneratedItem(
             id=case.name,

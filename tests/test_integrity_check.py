@@ -19,6 +19,7 @@ from httpx import AsyncClient
 from sqlalchemy import select, text, update
 from sqlalchemy.exc import IntegrityError
 
+from api.core import photo_store
 from api.database import get_session_factory
 from api.models.integrity_check import (
     IntegrityCheckProblem,
@@ -413,14 +414,16 @@ async def test_get_state_returns_extracting_before_pipeline_writes(
     report "extracting" when integrity is enabled."""
     from api.models.assignment import Submission
     async with get_session_factory()() as s:
+        sub_id = uuid.uuid4()
         sub = Submission(
+            id=sub_id,
             assignment_id=world["assignment_id"],
             student_id=world["student_id"],
             section_id=(await s.execute(
                 text("SELECT id FROM sections LIMIT 1"),
             )).scalar_one(),
             status="submitted",
-            files=[{"data": PAGE_PNG, "media_type": "image/png"}],
+            files=await photo_store.store_pages(sub_id, [{"data": PAGE_PNG, "media_type": "image/png"}]),
             final_answers=None,
             is_late=False,
         )

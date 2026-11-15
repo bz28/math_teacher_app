@@ -33,6 +33,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from api.core import photo_store
 from api.core.auth import create_access_token, create_refresh_token, hash_password
 from api.database import get_session_factory
 from api.models.assignment import (
@@ -253,10 +254,13 @@ async def seed() -> dict:
                 turned_in = students if state != "partial" else students[: max(1, len(students) - 3)]
 
                 for st_i, stu in enumerate(turned_in):
+                    sub_id = uuid.uuid4()
                     sub = Submission(
-                        assignment_id=hw.id, student_id=stu.id, section_id=section.id,
+                        id=sub_id, assignment_id=hw.id, student_id=stu.id, section_id=section.id,
                         status="submitted",
-                        files=[_page_svg(["2x + 7 = 23", "2x = 16", "x = 8"])],
+                        files=await photo_store.store_pages(
+                            sub_id, [_page_svg(["2x + 7 = 23", "2x = 16", "x = 8"])],
+                        ),
                         submitted_at=due - timedelta(hours=RNG.randint(1, 30)),
                     )
                     s.add(sub)

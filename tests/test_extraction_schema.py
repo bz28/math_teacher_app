@@ -101,11 +101,3 @@ def test_submission_file_is_a_url_never_the_bytes() -> None:
     assert dumped["filename"] is None
 
 
-def test_inline_submission_file_is_served_as_a_data_url_with_its_filename() -> None:
-    # INLINE: a row the backfill hasn't moved yet.
-    out = photo_store.page_out({"data": "aGVsbG8=", "media_type": "application/pdf", "filename": "page1.pdf"})
-    dumped = SubmissionFileOut.model_validate(out).model_dump()
-    assert dumped["url"] == "data:application/pdf;base64,aGVsbG8="
-    assert dumped["filename"] == "page1.pdf"
-    assert dumped["id"] is None
-    assert dumped["expires_in"] is None

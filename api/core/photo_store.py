@@ -7,12 +7,9 @@ and its entry names it:
 
     {"key": "submissions/<submission id>/<random hex>.jpg", "media_type": "image/jpeg"}
 
-Rows written before the move carry the page inline instead —
-`{"data": <base64>, "media_type": ...}` (~7 MB a submission; 2.1 GB of a
-2.2 GB database in Nov 2026) — until `scripts/backfill_photo_bucket.py`
-moves them. Every reader goes through this module and accepts both; the
-inline branches (marked INLINE) are removed in a follow-up once the
-backfill has run.
+(Until Nov 2026 the pages were stored inline as base64 — ~7 MB a
+submission, 2.1 GB of a 2.2 GB database. All of them were moved here and
+nothing writes or reads that form any more.)
 
 Three operations, one per kind of caller:
 
@@ -85,7 +82,9 @@ PRESIGN_SECONDS = 3600
 # keep one as long as it holds the URL. `private`: never a shared cache.
 _CACHE_CONTROL = "private, max-age=86400, immutable"
 
-EXTENSIONS = {"image/jpeg": "jpg", "image/png": "png", "application/pdf": "pdf"}
+# The three a turn-in accepts, plus SVG for the dev seed scripts' drawn
+# pages (uploads never pass validation as SVG).
+EXTENSIONS = {"image/jpeg": "jpg", "image/png": "png", "application/pdf": "pdf", "image/svg+xml": "svg"}
 
 KEY_PREFIX = "submissions/"
 
@@ -259,12 +258,6 @@ def new_key(submission_id: uuid.UUID | str, media_type: str) -> str:
     return f"{KEY_PREFIX}{submission_id}/{uuid.uuid4().hex}.{EXTENSIONS.get(media_type, 'bin')}"
 
 
-def _inline_base64(entry: dict[str, Any]) -> str:
-    """INLINE: a pre-backfill entry's base64, without any `data:` prefix."""
-    data = str(entry.get("data") or "")
-    return data.split(",", 1)[1] if data.startswith("data:") else data
-
-
 async def store_pages(submission_id: uuid.UUID, pages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Upload a turn-in's pages (entries with base64 `data`) in parallel.
 
@@ -279,7 +272,7 @@ async def store_pages(submission_id: uuid.UUID, pages: list[dict[str, Any]]) -> 
     ]
 
     def put(entry: dict[str, Any], page: dict[str, Any]) -> None:
-        store.put(entry["key"], base64.b64decode(_inline_base64(page)), entry["media_type"])
+        store.put(entry["key"], base64.b64decode(page["data"]), entry["media_type"])
 
     results = await asyncio.gather(
         *(asyncio.to_thread(put, e, p) for e, p in zip(out, pages, strict=True)),
@@ -303,11 +296,7 @@ async def load_pages(entries: list[dict[str, Any]] | None) -> list[dict[str, Any
     from the store concurrently, at the resolution it was uploaded at."""
 
     def fetch(entry: dict[str, Any]) -> dict[str, Any]:
-        if "key" in entry:
-            return {**entry, "data": base64.b64encode(backend().get(entry["key"])).decode("ascii")}
-        # INLINE: a row the backfill hasn't moved yet — passed on exactly
-        # as stored (a `data:` prefix and all; the readers strip it).
-        return dict(entry)
+        return {**entry, "data": base64.b64encode(backend().get(entry["key"])).decode("ascii")}
 
     return list(await asyncio.gather(*(asyncio.to_thread(fetch, e) for e in entries or [])))
 
@@ -316,21 +305,14 @@ def page_out(entry: dict[str, Any]) -> dict[str, Any]:
     """One page as a client gets it: a URL to load it from, its media
     type, and — for the client's URL cache — a stable `id` and how many
     seconds the URL works for. Never the bytes."""
-    media_type = str(entry.get("media_type") or "image/jpeg")
-    out: dict[str, Any] = {"media_type": media_type, "filename": entry.get("filename")}
-    if "key" in entry:
-        key = str(entry["key"])
-        out["url"] = backend().url(key, PRESIGN_SECONDS)
-        out["id"] = key.rsplit("/", 1)[-1].split(".", 1)[0]
-        out["expires_in"] = PRESIGN_SECONDS
-    else:
-        # INLINE: served as a data: URL until the backfill moves it, so
-        # clients render every page the same way.
-        data = str(entry.get("data") or "")
-        out["url"] = data if data.startswith("data:") else f"data:{media_type};base64,{data}"
-        out["id"] = None
-        out["expires_in"] = None
-    return out
+    key = str(entry["key"])
+    return {
+        "url": backend().url(key, PRESIGN_SECONDS),
+        "media_type": str(entry.get("media_type") or "image/jpeg"),
+        "id": key.rsplit("/", 1)[-1].split(".", 1)[0],
+        "expires_in": PRESIGN_SECONDS,
+        "filename": entry.get("filename"),
+    }
 
 
 def pages_out(entries: list[dict[str, Any]] | None) -> list[dict[str, Any]] | None:
@@ -346,9 +328,8 @@ async def delete_pages(entries: list[dict[str, Any]]) -> None:
     """Best-effort removal of pages: ones a failed request uploaded, or
     the pages of submissions whose delete has COMMITTED. Never raises — a
     page that won't delete is logged by key (never a URL or credential),
-    and the request that removed its row still succeeds. INLINE entries
-    have nothing to remove."""
-    keys = list(dict.fromkeys(entry["key"] for entry in entries if "key" in entry))
+    and the request that removed its row still succeeds."""
+    keys = list(dict.fromkeys(entry["key"] for entry in entries))
     for i in range(0, len(keys), DELETE_BATCH):
         batch = keys[i:i + DELETE_BATCH]
         try:
@@ -363,8 +344,8 @@ async def delete_pages(entries: list[dict[str, Any]]) -> None:
 
 
 # Every bucket key in the given submissions' `files` and their earlier
-# attempts' — read out in SQL, so a course still holding inline (pre-
-# backfill) pages isn't loaded into memory to find none.
+# attempts' — read out in SQL, so a course's rows aren't loaded into
+# memory just to list their keys.
 _KEYS_SQL = text("""
     SELECT DISTINCT e ->> 'key' FROM (
         SELECT files FROM submissions WHERE id = ANY(:ids)

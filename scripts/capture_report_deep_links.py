@@ -32,6 +32,7 @@ from PIL import Image, ImageDraw, ImageFont
 from sqlalchemy.engine import make_url
 
 from api.config import settings
+from api.core import photo_store
 from api.core.auth import create_access_token, create_refresh_token, hash_password
 from api.database import get_session_factory
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
@@ -183,8 +184,10 @@ async def seed() -> dict[str, str]:
         ]
         for u in students:
             s.add(SectionEnrollment(section_id=section.id, course_id=course.id, student_id=u.id))
-            sub = Submission(assignment_id=asg.id, student_id=u.id, section_id=section.id,
-                             status="submitted", files=pages, extraction=EXTRACTION,
+            sub_id = uuid.uuid4()
+            sub = Submission(id=sub_id, assignment_id=asg.id, student_id=u.id, section_id=section.id,
+                             status="submitted", files=await photo_store.store_pages(sub_id, pages),
+                             extraction=EXTRACTION,
                              extraction_confirmed_at=NOW - timedelta(days=2, hours=1),
                              submitted_at=NOW - timedelta(days=2, hours=2))
             s.add(sub)

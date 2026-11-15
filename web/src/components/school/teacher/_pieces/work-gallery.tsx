@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { Modal } from "@/components/ui/modal";
-import { useOpenableUrl } from "@/hooks/use-blob-url";
 import type { SubmissionFile } from "@/lib/api";
 import { onPhotoError } from "@/lib/submission-photos";
 
@@ -196,9 +195,7 @@ function GalleryBody({
   );
 }
 
-/** The page itself plus its open-full-size link. Split out so a
- *  not-yet-moved page's blob handle (`useOpenableUrl`) is keyed to one
- *  file and is revoked when the teacher pages away. */
+/** The page itself plus its open-full-size link. */
 function GalleryPage({
   file,
   label,
@@ -211,12 +208,11 @@ function GalleryPage({
   maxHeightClass: string;
 }) {
   const isPdf = file.media_type === "application/pdf";
-  const href = useOpenableUrl(file.url);
   return (
     <div className="relative overflow-auto">
       {isPdf ? (
         <embed
-          src={href}
+          src={file.url}
           type="application/pdf"
           className={`${maxHeightClass} h-[70vh] w-full rounded-[--radius-md] bg-white`}
         />
@@ -231,7 +227,7 @@ function GalleryPage({
         />
       )}
       <a
-        href={href}
+        href={file.url}
         target="_blank"
         rel="noopener noreferrer"
         className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary underline-offset-2 hover:underline"

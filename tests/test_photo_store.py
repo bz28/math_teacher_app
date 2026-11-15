@@ -5,24 +5,17 @@ boto3 calls the app makes in production are the ones under test:
 
 - the write path stores keys, never bytes, and the bucket holds the
   decoded pages with their content type;
-- the read helper hands the reader identical bytes for a stored page and
-  for a not-yet-moved inline one;
+- the read helper hands the reader the exact bytes that were uploaded;
 - every response that shows photos carries presigned URLs, not base64;
-- a failed upload fails the turn-in (503) and leaves nothing behind;
-- the backfill (scripts/backfill_photo_bucket.py): dry run touches
-  nothing, --go moves and verifies, a rerun is a no-op, and a page that
-  doesn't verify keeps its row's inline data.
+- a failed upload fails the turn-in (503) and leaves nothing behind.
 """
 
 from __future__ import annotations
 
 import base64
-import hashlib
 import io
-import json
 import uuid
 from collections.abc import Iterator
-from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
@@ -35,9 +28,7 @@ from sqlalchemy import text
 
 from api.core import photo_store
 from api.database import get_session_factory
-from api.models.assignment import Submission, SubmissionAttempt
 from api.routes.school_student_practice import drain_integrity_background_tasks
-from scripts.backfill_photo_bucket import backfill
 from tests.conftest import PAGE_PNG
 
 BUCKET = "test-submission-photos"
@@ -195,17 +186,13 @@ async def test_deleting_pages_batches_them_through_delete_objects(
 # ── read helper ──
 
 
-async def test_load_pages_gives_identical_bytes_for_stored_and_inline_pages(s3: Any) -> None:
-    sid = uuid.uuid4()
+async def test_load_pages_gives_back_the_uploaded_bytes(s3: Any) -> None:
     pages = [{"data": PAGE_JPEG, "media_type": "image/jpeg"}, {"data": PAGE_PNG, "media_type": "image/png"}]
-    stored = await photo_store.store_pages(sid, pages)
-    inline_with_prefix = [{"data": f"data:image/jpeg;base64,{PAGE_JPEG}", "media_type": "image/jpeg"}]
+    stored = await photo_store.store_pages(uuid.uuid4(), pages)
 
-    from_bucket = await photo_store.load_pages(stored)
-    from_rows = await photo_store.load_pages(pages)
-    assert [p["data"] for p in from_bucket] == [p["data"] for p in from_rows] == [PAGE_JPEG, PAGE_PNG]
-    assert [p["media_type"] for p in from_bucket] == ["image/jpeg", "image/png"]
-    assert (await photo_store.load_pages(inline_with_prefix)) == inline_with_prefix
+    loaded = await photo_store.load_pages(stored)
+    assert [p["data"] for p in loaded] == [PAGE_JPEG, PAGE_PNG]
+    assert [p["media_type"] for p in loaded] == ["image/jpeg", "image/png"]
     assert await photo_store.load_pages(None) == []
 
 
@@ -283,17 +270,6 @@ async def test_the_originals_endpoint_serves_urls(
     assert f["media_type"] == "image/png"
 
 
-async def test_a_row_the_backfill_hasnt_moved_is_served_as_a_data_url(
-    client: AsyncClient, world: dict[str, Any], s3: Any,
-) -> None:
-    sid = await _inline_submission(world)
-    r = await client.get(f"/v1/teacher/submissions/{sid}", headers=_auth(world["teacher_token"]))
-    assert r.status_code == 200, r.text
-    (f,) = r.json()["files"]
-    assert f["url"] == f"data:image/jpeg;base64,{PAGE_JPEG}"
-    assert f["id"] is None and f["expires_in"] is None
-
-
 async def test_the_dev_route_serves_a_signed_local_page_and_nothing_else(
     client: AsyncClient, tmp_path: Any,
 ) -> None:
@@ -312,138 +288,3 @@ async def test_the_dev_route_serves_a_signed_local_page_and_nothing_else(
         assert (await client.get(traversal)).status_code == 404
     finally:
         photo_store.set_backend(None)
-
-
-# ── backfill ──
-
-
-async def _inline_submission(world: dict[str, Any], pages: list[str] | None = None) -> str:
-    """A pre-move row: pages inline, as every row written before this was."""
-    pages = pages or [PAGE_JPEG]
-    async with get_session_factory()() as s:
-        await s.execute(text("DELETE FROM submissions WHERE assignment_id = :a AND student_id = :s"),
-                        {"a": world["assignment_id"], "s": world["student_id"]})
-        section_id = (await s.execute(
-            text("SELECT section_id FROM assignment_sections WHERE assignment_id = :a"), {"a": world["assignment_id"]},
-        )).scalar_one()
-        sub = Submission(
-            assignment_id=world["assignment_id"], student_id=world["student_id"], section_id=section_id,
-            status="submitted", files=[{"data": p, "media_type": "image/jpeg"} for p in pages],
-            submitted_at=datetime.now(UTC), is_late=False,
-        )
-        s.add(sub)
-        await s.flush()
-        s.add(SubmissionAttempt(
-            submission_id=sub.id, number=1, reason="retake",
-            files=[{"data": _jpeg(color="gray"), "media_type": "image/jpeg", "filename": "first.jpg"}],
-            submitted_at=datetime.now(UTC), is_late=False, replaced_at=datetime.now(UTC),
-        ))
-        await s.commit()
-        return str(sub.id)
-
-
-async def _attempt_files(sid: str) -> Any:
-    async with get_session_factory()() as s:
-        return (await s.execute(
-            text("SELECT files FROM submission_attempts WHERE submission_id = :id"), {"id": sid},
-        )).scalar_one()
-
-
-async def _inline_rows() -> int:
-    async with get_session_factory()() as s:
-        return int((await s.execute(text(
-            "SELECT (SELECT count(*) FROM submissions WHERE jsonb_path_exists(files::jsonb, '$[*].data'))"
-            " + (SELECT count(*) FROM submission_attempts WHERE jsonb_path_exists(files::jsonb, '$[*].data'))"
-        ))).scalar_one())
-
-
-async def test_backfill_dry_run_go_and_rerun(world: dict[str, Any], s3: Any) -> None:
-    sid = await _inline_submission(world, [PAGE_JPEG, _jpeg(color="black")])
-    before_sub, before_att = await _files(sid), await _attempt_files(sid)
-    factory = get_session_factory()
-
-    dry = await backfill(factory, photo_store.backend(), go=False)
-    assert dry.moved == 0 and dry.rows >= 2
-    assert await _files(sid) == before_sub and await _attempt_files(sid) == before_att
-    assert _objects(s3) == []
-
-    done = await backfill(factory, photo_store.backend(), go=True)
-    assert not done.failed
-    assert await _inline_rows() == 0
-    after_sub, after_att = await _files(sid), await _attempt_files(sid)
-    for before, after in ((before_sub, after_sub), (before_att, after_att)):
-        assert len(after) == len(before)
-        for b, a in zip(before, after, strict=True):
-            assert "data" not in a
-            assert a["key"].startswith(f"submissions/{sid}/")
-            assert a["media_type"] == b["media_type"]
-            assert a.get("filename") == b.get("filename")  # other fields kept
-            assert s3.get_object(Bucket=BUCKET, Key=a["key"])["Body"].read() == base64.b64decode(b["data"])
-    # The reader gets the very bytes it got before the move.
-    assert [p["data"] for p in await photo_store.load_pages(after_sub)] == [p["data"] for p in before_sub]
-
-    again = await backfill(factory, photo_store.backend(), go=True)
-    assert again.rows == 0 and again.moved == 0
-    assert await _files(sid) == after_sub
-
-
-async def test_backfill_keeps_the_inline_data_of_a_page_that_doesnt_verify(
-    world: dict[str, Any], s3: Any, monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    sid = await _inline_submission(world)
-    before = await _files(sid)
-    store = photo_store.backend()
-    real_get = store.get
-    bad_key = None
-
-    def corrupt_get(key: str) -> bytes:
-        nonlocal bad_key
-        if key.startswith(f"submissions/{sid}/") and bad_key in (None, key):
-            bad_key = key
-            return real_get(key)[:-1] + b"\x00"
-        return real_get(key)
-
-    monkeypatch.setattr(store, "get", corrupt_get)
-    tally = await backfill(get_session_factory(), store, go=True)
-    assert any(sid in f for f in tally.failed)
-    assert await _files(sid) == before  # inline data kept, untouched
-
-
-async def test_backfill_leaves_a_row_that_changed_mid_move(
-    world: dict[str, Any], s3: Any, monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A retake landing while the old pages upload must win: the backfill
-    never writes its rewrite over photos it didn't read."""
-    import scripts.backfill_photo_bucket as bf
-
-    sid = await _inline_submission(world)
-    retaken = [{"key": f"submissions/{sid}/retaken.jpg", "media_type": "image/jpeg"}]
-    real_move = bf._move_page
-
-    async def move_then_retake(store: Any, key: str, raw: bytes, media_type: str) -> None:
-        await real_move(store, key, raw, media_type)
-        if key.startswith(f"submissions/{sid}/"):
-            async with get_session_factory()() as s:
-                await s.execute(text("UPDATE submissions SET files = CAST(:f AS json) WHERE id = :id"),
-                                {"f": json.dumps(retaken), "id": sid})
-                await s.commit()
-
-    monkeypatch.setattr(bf, "_move_page", move_then_retake)
-    tally = await backfill(get_session_factory(), photo_store.backend(), go=True)
-    assert any(sid in row for row in tally.skipped)
-    assert await _files(sid) == retaken
-
-
-async def test_backfill_refuses_without_the_bucket(tmp_path: Any) -> None:
-    store = photo_store.LocalBackend(root=tmp_path, base_url="http://test", secret="s")
-    with pytest.raises(SystemExit, match="REFUSING"):
-        await backfill(get_session_factory(), store, go=True)
-
-
-def test_backfill_keys_are_derived_from_the_bytes() -> None:
-    from scripts.backfill_photo_bucket import _key
-
-    raw = base64.b64decode(PAGE_JPEG)
-    key = _key("abc", raw, "image/jpeg")
-    assert key == f"submissions/abc/{hashlib.sha256(raw).hexdigest()[:32]}.jpg"
-    assert key == _key("abc", raw, "image/jpeg")

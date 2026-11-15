@@ -224,10 +224,6 @@ async def test_replacing_a_preview_rehearsal_deletes_its_photos(client: AsyncCli
     assert new != old and new.startswith(f"submissions/{second.json()['submission_id']}/")
 
 
-async def test_inline_pages_need_no_delete(local: Path) -> None:
-    await photo_store.delete_pages([{"data": PAGE_PNG, "media_type": "image/png"}])  # nothing to remove, no error
-
-
 async def test_a_page_that_wont_delete_is_logged_not_raised(
     local: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -244,15 +240,14 @@ async def test_a_page_that_wont_delete_is_logged_not_raised(
 
 
 async def test_page_keys_are_read_from_every_shape_of_row(world: dict[str, Any], local: Path) -> None:
-    """`pages_of_submissions` reads keys out in SQL: inline pages, JSON
-    null, a non-list, and malformed entries yield nothing; a key listed
-    twice comes back once."""
+    """`pages_of_submissions` reads keys out in SQL: JSON null, a non-list,
+    and malformed entries yield nothing; a key listed twice comes back
+    once."""
     rows: list[Any] = [
-        [{"key": "submissions/a/1.png", "media_type": "image/png"}, {"data": PAGE_PNG, "media_type": "image/png"}],
+        [{"key": "submissions/a/1.png", "media_type": "image/png"}],
         [{"key": "submissions/a/1.png"}, {"key": None}, "key", {"key": 7}],
         None,
         {"key": "submissions/a/not-a-list.png"},
-        [{"data": PAGE_PNG}],
     ]
     async with get_session_factory()() as s:
         ids = []

@@ -1,7 +1,6 @@
 import type { ExtractionDetail } from "../lib/api";
 import { problemAnchor } from "../lib/anchor";
 import MathText from "./MathText";
-import PdfPages from "./PdfPages";
 
 /**
  * The strokes beside the transcription — evidence next to interpretation.
@@ -64,9 +63,7 @@ function ReadText({ text, isLatex }: { text: string; isLatex: boolean }) {
 /** One uploaded file of the student's work. A submission is photos OR
  *  scanned PDFs — an <img> cannot show a PDF. A PDF in the photo bucket
  *  is shown by the browser's own viewer: the bucket sends no CORS headers,
- *  so pdf.js can't fetch it to draw page by page. One the backfill hasn't
- *  moved yet still arrives inline and is drawn page by page as before
- *  (INLINE: that branch goes once the backfill has run). `index` is 0-based. */
+ *  so pdf.js can't fetch it to draw page by page. `index` is 0-based. */
 export function WorkFile({
   file,
   index,
@@ -79,9 +76,6 @@ export function WorkFile({
     return (
       <img src={file.url} alt={`Submitted work, page ${index + 1}`} loading="lazy" decoding="async" />
     );
-  }
-  if (file.url.startsWith("data:")) {
-    return <PdfPages b64={file.url.slice(file.url.indexOf(",") + 1)} label={label} />;
   }
   return (
     <div className="xq-pdf">

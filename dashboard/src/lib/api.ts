@@ -593,8 +593,7 @@ export interface ExtractionDetail {
   confidence: number | null;
   rows: ExtractionRow[];
   /** The strokes themselves, drill-in only, never in the list: a
-   *  short-lived presigned URL per page to the photo bucket (or, for a row
-   *  the photo backfill hasn't moved yet, a data: URL). */
+   *  short-lived presigned URL per page to the photo bucket. */
   files: { url: string; media_type: string; filename?: string | null }[];
 }
 

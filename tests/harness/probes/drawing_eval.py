@@ -45,13 +45,14 @@ import json
 import os
 import random
 import time
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-from api.core import integrity_ai
+from api.core import integrity_ai, photo_store
 from api.core.drawing_requirement import requires_drawing
 from api.core.grading_ai import grade_submission_with_ai
 from tests.harness.probe import Probe
@@ -370,7 +371,8 @@ class DrawingEvalProbe(Probe):
         integrity_ai.verify_visual_work = snapshot_then_verify  # type: ignore[assignment]
         try:
             verified = await integrity_ai.extract_student_work_from_pages(
-                [{"data": b64, "media_type": media}], problems=problems,
+                await photo_store.store_pages(uuid.uuid4(), [{"data": b64, "media_type": media}]),
+                problems=problems,
             )
         finally:
             integrity_ai.verify_visual_work = real_verify  # type: ignore[assignment]
