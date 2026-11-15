@@ -264,7 +264,7 @@ function LoginPageContent() {
                   autoComplete="current-password"
                 />
                 <div className="mt-2 text-right">
-                  <button type="button" className={quietLink} onClick={(e) => { forgotOpener.current = e.currentTarget; setShowForgot(true); }}>
+                  <button type="button" className={quietLink} onClick={(e) => { forgotOpener.current = e.currentTarget; setForgotEmail((cur) => cur || email); setShowForgot(true); }}>
                     Forgot password?
                   </button>
                 </div>
