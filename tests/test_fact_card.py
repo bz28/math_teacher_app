@@ -587,6 +587,16 @@ ANSWERED = {
         "ABC", triangles=["ABC"]),
     "angle B asked, angle ABC given": _ask(
         [F("angle_measure", ["ABC"], value=50)], {"kind": ANGLE, "item": "B"}, "ABC", triangles=["ABC"]),
+    # Coordinator check after round 4: in a triangle ∠B can only be ∠ABC,
+    # whichever way round it is written.
+    "triangle ABC, angle B measured, find ABC": _ask(
+        [F("angle_measure", ["B"], value=50)], {"kind": ANGLE, "item": "ABC"}, "ABC", triangles=["ABC"]),
+    "triangle ABC, angle B right, find ABC": _ask(
+        [F("right_angle", ["B"])], {"kind": ANGLE, "item": "ABC"}, "ABC", triangles=["ABC"]),
+    "triangle ABC, angle ABC measured, find B": _ask(
+        [F("angle_measure", ["ABC"], value=50)], {"kind": ANGLE, "item": "B"}, "ABC", triangles=["ABC"]),
+    "no shapes at B: angle ABC measured, find B": _ask(
+        [F("angle_measure", ["ABC"], value=50)], {"kind": ANGLE, "item": "B"}, "ABC", segments=["AC"]),
     "a rectangle's corner asked by its vertex": _ask(
         [F("rectangle", ["ABCD"])], {"kind": ANGLE, "item": "B"}, "ABCD", polygons=["ABCD"]),
     "a length the givens state, written backwards": _ask(
@@ -627,10 +637,19 @@ DERIVED = {  # one theorem step: the student's work, so the card is kept
     "the opposite ray is a different angle": _ask(
         [F("angle_measure", ["ABC"], value=50), F("on_segment", ["AD"], point="B")], {"kind": ANGLE, "item": "DBC"},
         "ABCD", triangles=["ABC"], segments=["AD"]),
-    # Independent round 4: the asked angle doesn't name itself, so a ∠B
-    # given reads as ∠ABC only when a statement names ∠ABC.
-    "angle ABC asked, angle B given, no statement names ABC": _ask(
-        [F("angle_measure", ["B"], value=50)], {"kind": ANGLE, "item": "ABC"}, "ABC", triangles=["ABC"]),
+    # Coordinator check after round 4: with two angles at B, ∠B is neither.
+    "B on AC, segment BD, angle ABD measured: find B (ABD or DBC)": _ask(
+        [F("on_segment", ["AC"], point="B"), F("angle_measure", ["ABD"], value=50)], {"kind": ANGLE, "item": "B"},
+        "ABCD", segments=["AC", "BD"]),
+    # Whichever angle at B an alias picked, it would be measured: pins that
+    # ∠B is an alias only with exactly one angle there (not by set order).
+    "three angles at B, each measured: find B (still only itself)": _ask(
+        [F("angle_measure", ["ABD"], value=30), F("angle_measure", ["DBC"], value=40),
+         F("angle_measure", ["ABC"], value=70)], {"kind": ANGLE, "item": "B"}, "ABCD", rays=["BA", "BC", "BD"]),
+    "right angle B, segments BA, BC, BD: find ABD": _ask(
+        [F("right_angle", ["B"])], {"kind": ANGLE, "item": "ABD"}, "ABCD", segments=["BA", "BC", "BD"]),
+    "right angle B, a ray BD inside: find ABD": _ask(
+        [F("right_angle", ["B"])], {"kind": ANGLE, "item": "ABD"}, "ABCD", triangles=["ABC"], rays=["BD"]),
     "right angle B, only the ask names an angle at B": _ask(
         [F("right_angle", ["B"]), F("angle_measure", ["BAD"], value=30)], {"kind": ANGLE, "item": "ABD"}, "ABCD",
         rays=["BA", "BC", "BD"], segments=["AD"]),
@@ -807,6 +826,40 @@ def test_proving_a_given_is_refused_and_only_that(name: str) -> None:
         assert card is not None, (name, why)
     else:
         assert card is None and any(refused in w for w in why), (name, why)
+
+
+def _swapped(raw: dict[str, Any]) -> dict[str, Any] | None:
+    """The card with its one measured (or right) angle and its asked angle
+    swapped: given ∠X, find ∠Y becomes given ∠Y, find ∠X."""
+    finds = raw.get("find") or []
+    stated = [g for g in raw["givens"] if g["kind"] in ("angle_measure", "right_angle") and len(g["items"]) == 1]
+    if len(finds) != 1 or finds[0]["kind"] != ANGLE or len(stated) != 1:
+        return None
+    asked, given = finds[0]["item"], stated[0]["items"][0]
+    givens = [dict(g, items=[asked]) if g is stated[0] else g for g in raw["givens"]]
+    return {**raw, "givens": givens, "find": [{"kind": ANGLE, "item": given}]}
+
+
+SWAPPABLE = sorted(n for n, raw in {**ANSWERED, **DERIVED}.items() if _swapped(raw) is not None)
+
+
+@pytest.mark.parametrize("name", SWAPPABLE)
+def test_the_ask_check_is_symmetric(name: str) -> None:
+    """Given ∠X, find ∠Y and given ∠Y, find ∠X: the same answer (both
+    state the asked angle, or neither does)."""
+    raw = {**ANSWERED, **DERIVED}[name]
+    swapped = _swapped(raw)
+    assert swapped is not None
+
+    def answered(r: dict[str, Any]) -> bool:
+        return any("it gives" in w for w in read_card(r)[1])
+    assert answered(raw) == answered(swapped), name
+
+
+def test_the_symmetry_table_covers_the_vertex_cases() -> None:
+    assert {"triangle ABC, angle B measured, find ABC", "triangle ABC, angle ABC measured, find B",
+            "right angle B, a ray BD inside: find ABD"} <= set(SWAPPABLE)
+    assert len(SWAPPABLE) >= 15
 
 
 @pytest.mark.parametrize("name", sorted(DERIVED))

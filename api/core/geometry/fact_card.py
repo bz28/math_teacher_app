@@ -297,8 +297,12 @@ class _Measures:
       listed order) maps to one representative, so ∠ABD is ∠ABC when D is on
       BC, and ∠CBA is ∠ABC.
     - A numbered angle is the angle it labels.
-    - ∠B is ∠ABC only when the card names exactly one angle at B; with two
-      (∠ABD and ∠DBC) ∠B is only itself.
+    - ∠B is ∠ABC only when the card has exactly one angle at B, counting
+      the angles its shapes make there (two sides of a triangle, two
+      segments or rays from B), the angles its statements name, and the
+      asked angle; with two (∠ABD and ∠DBC) ∠B is only itself. Counting the
+      asked angle too keeps the check symmetric: "m∠B given, find m∠ABC" and
+      "m∠ABC given, find m∠B" get the same answer.
     - Values: a number on the fact (angle_measure, equal_length, radius…), or
       fixed with no number (a right angle, ⊥ at its point, a right
       triangle's right angle, an equilateral's 60°, a square's or
@@ -318,10 +322,12 @@ class _Measures:
                 self.rays.union((a, m), (a, b))
                 self.rays.union((b, m), (b, a))
         named: dict[str, set[Any]] = {}
-        for x in _named_angles(card):
+        for x in [*_named_angles(card), *(t.item for t in card.find if t.kind == "angle")]:
             k = self._three(x)
             if k is not None:
                 named.setdefault(k[1], set()).add(k)
+        for k in self._drawn_angles(card):
+            named.setdefault(k[1], set()).add(k)
         self.only = {v: next(iter(ks)) for v, ks in named.items() if len(ks) == 1}
         self.angle_values: dict[Any, set[float]] = {}
         self.known_segments: set[frozenset[str]] = set()
@@ -335,6 +341,41 @@ class _Measures:
             for x, deg in _fixed_values(f):
                 self.angle_values.setdefault(self.angle(x), set()).add(deg)
         self.known_angles = set(self.angle_values)
+
+    def _drawn_angles(self, card: FigureFacts) -> list[tuple[str, str, frozenset[Any]]]:
+        """The angles the card's shapes make: at each point, every two rays
+        from it along a segment, ray, line or side through it."""
+        rays: dict[str, set[Any]] = {}
+
+        def ray(v: str, x: str) -> Any:
+            r = self.rays.find((v, x))
+            rays.setdefault(v, set()).add(r)
+            return r
+        for x in [*card.segments, *card.lines]:
+            n = split_names(x)
+            if len(n) == 2 and n[0] != n[1]:
+                ray(n[0], n[1])
+                ray(n[1], n[0])
+        for x in card.rays:
+            n = split_names(x)
+            if len(n) == 2 and n[0] != n[1]:
+                ray(n[0], n[1])
+        for x in [*card.triangles, *card.polygons]:
+            corners = split_names(x)
+            for i in range(len(corners)):
+                a, b = corners[i], corners[(i + 1) % len(corners)]
+                if a != b:
+                    ray(a, b)
+                    ray(b, a)
+        for f in [*card.givens, *card.constructs]:
+            for a, m, b in _betweens(f):
+                ray(m, a)
+                ray(m, b)
+        out = []
+        for v, rs in rays.items():
+            ordered = sorted(rs, key=repr)
+            out += [("A", v, frozenset((r1, r2))) for i, r1 in enumerate(ordered) for r2 in ordered[i + 1:]]
+        return out
 
     def _three(self, x: str) -> tuple[str, str, frozenset[Any]] | None:
         n = split_names(self.labels.get(x.strip(), x.strip()))
@@ -365,8 +406,8 @@ class _Measures:
 
 def _named_angles(card: FigureFacts) -> list[str]:
     """Every three-letter angle the card's statements name (its givens,
-    proves and constructs, and the corners its value-less facts fix). Never
-    its asks: the asked angle naming itself would make ∠B read as it."""
+    proves and constructs). A shape's corners come from its sides (see
+    _Measures._drawn_angles)."""
     out: list[str] = []
     for f in [*card.givens, *card.prove, *card.constructs]:
         it = [x.strip() for x in f.items]
@@ -374,7 +415,6 @@ def _named_angles(card: FigureFacts) -> list[str]:
             out += it
         if f.kind in ("bisects_angle", "numbered_angle") and len(it) == 2:
             out.append(it[1])
-        out += _fixed_angles(f)
     return out
 
 
