@@ -1182,3 +1182,20 @@ def test_parallels_joined_through_a_shared_line_are_one_class() -> None:
         "parallel_groups": [["AB", "CD", "EF"]], "angle_labels": {"AGH": "60°"}})
     assert not any("not the parallel lines given" in m
                    for m in (i.message for i in check_construction(fig, card_text(card), facts=card)))
+
+
+def test_a_three_line_parallel_is_read_as_a_chain() -> None:
+    """#1003 review round 4: "JM ∥ KL ∥ NP" added no class, so the words check passed."""
+    from api.core.geometry.fact_card import pair_lines_unsaid
+
+    off, why = read_card({"points": list("JKLMNP"), "segments": ["JK", "KL", "LM", "MJ", "KM", "NP"],
+                          "triangles": ["JKM", "LMK"], "givens": [
+                              F("congruent_segments", ["JK", "LM"]), F("alternate_interior", ["JKM", "LMK"]),
+                              F("parallel", ["JM", "KL", "NP"])],
+                          "prove": [F("congruent_triangles", ["JKM", "LMK"])]})
+    assert off is not None and pair_lines_unsaid(off), why
+    right, why = read_card({"points": list("ABCDEFGHI"), "lines": ["AB", "CD", "EF", "GI"], "givens": [
+        F("parallel", ["AB", "CD", "EF"]), F("intersect", ["GI", "AB"], point="G"),
+        F("intersect", ["GI", "EF"], point="H"), F("alternate_interior", ["AGH", "GHF"]),
+        F("angle_measure", ["AGH"], value=60)], "find": [{"kind": "angle", "item": "GHF"}]})
+    assert right is not None and pair_lines_unsaid(right) == [], why

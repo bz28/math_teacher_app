@@ -642,10 +642,10 @@ def _parallel_classes(card: FigureFacts, groups: list[set[str]]) -> list[list[se
 
     pairs: list[tuple[set[str], set[str]]] = []
     for f in [*card.givens, *card.prove]:
-        if f.kind == "parallel" and len(f.items) == 2:
-            x, y = (_piece(i) for i in f.items)
-            if x and y:
-                pairs.append((line(x), line(y)))
+        if f.kind == "parallel" and len(f.items) >= 2:
+            # "AB ∥ CD ∥ EF" chains, as facts.py reads it (#1003 review round 4).
+            pieces = [_piece(i) for i in f.items]
+            pairs += [(line(x), line(y)) for x, y in zip(pieces, pieces[1:]) if x and y]
         elif f.kind in _PARALLEL_SIDED and f.items:
             q = split_names(f.items[0])
             if len(q) == 4:
@@ -717,7 +717,10 @@ def pair_lines_unsaid(card: FigureFacts | dict[str, Any] | None) -> list[str]:
         except ValidationError:
             return []
     groups = _line_groups(card)
-    if not _parallel_classes(card, groups):
+    # Any parallel at all, read or not: a parallel the classes can't read
+    # leaves its pairs unplaced, so they are flagged (fail closed).
+    if not _parallel_classes(card, groups) and not any(
+            f.kind == "parallel" for f in [*card.givens, *card.prove]):
         return []
     return [f"no figure, and the words don't put {f.kind.replace('_', ' ')} {' and '.join(f.items[:2])} "
             f"on the parallel lines given"
