@@ -723,6 +723,26 @@ def _needs_figure(q: dict[str, Any]) -> bool:
     return bool(_FIGURE_REFERENCE.search(q.get("text") or ""))
 
 
+_ANGLE_NAME = re.compile(r"(?:\\angle|∠)\s*\{?\s*([0-9]+|[A-Z]{1,3})\b")
+
+
+def answer_names_unseen_angles(text: str, answer: str) -> list[str]:
+    """Angles the answer names that the problem never shows: a number the
+    problem doesn't label (∠4), or a letter that isn't one of its points.
+    With no figure, the student can't know which angle is ∠4, so the
+    problem can't be answered as written. Only ever leaves a problem out."""
+    numbers = {m for m in _ANGLE_NAME.findall(text) if m.isdigit()}
+    # Any capital counts as shown (a sentence's first letter too): this
+    # leans toward keeping a problem, never toward leaving one out wrongly.
+    letters = set(re.findall(r"[A-Z]", re.sub(r"\\[a-zA-Z]+", " ", text)))
+    out: list[str] = []
+    for name in _ANGLE_NAME.findall(answer):
+        unseen = name not in numbers if name.isdigit() else not set(name) <= letters
+        if unseen and f"∠{name}" not in out:
+            out.append(f"∠{name}")
+    return out
+
+
 def _lacks_figure(q: dict[str, Any]) -> bool:
     """Wants a figure (`_needs_figure`) but has no checked one to show."""
     return not q.get("figure_svg") and _needs_figure(q)
@@ -1111,6 +1131,12 @@ async def solve_checked_problems(
                 q["figure_facts"] = None
             if issues and wanted and not kept_svg:
                 lost = "; ".join(issues)
+        if lost is None and wanted is False and not q.get("figure_svg"):
+            unseen = answer_names_unseen_angles(q.get("text") or "", s.get("final_answer") or "")
+            if unseen:
+                # Eval 1 job 35f87339 p1: "Name one pair of alternate interior
+                # angles" with no figure; the answer was "∠4 and ∠6".
+                lost = f"the answer names angles the problem doesn't show: {', '.join(unseen)}"
         if lost is None and isinstance(s.get("steps"), list) and s["steps"]:
             async with sem:
                 s["steps"], drops, _ = await _render_step_figures_with_retry(

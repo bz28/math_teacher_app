@@ -504,3 +504,32 @@ async def test_regenerate_without_a_card_keeps_the_students_own_drawing_undrawn(
 async def test_regenerate_reads_a_blank_card_as_no_card() -> None:
     item, _ = await _regenerate({"question": "Solve 2x + 3 = 11.", "figure_facts": {"points": [], "givens": []}})
     assert item.question == "Solve 2x + 3 = 11." and item.figure_svg is None
+
+
+# ── An answer that names angles the problem doesn't show ──────────────
+
+NAMING = {"text": "Two parallel lines $p$ and $q$ are cut by a transversal $t$. Name one pair of "
+                  "alternate interior angles."}
+
+
+@pytest.mark.parametrize(("text", "answer", "unseen"), [
+    (NAMING["text"], r"$\angle 4$ and $\angle 6$", ["∠4", "∠6"]),            # Eval 1 job 35f87339 p1
+    (NAMING["text"], "∠3 and ∠5", ["∠3", "∠5"]),
+    (r"$\angle 1$ and $\angle 2$ form a linear pair. $m\angle 1 = 70^\circ$.", r"$m\angle 2 = 110^\circ$", []),
+    (r"In $\triangle ABC$, $m\angle A = 40^\circ$ and $m\angle B = 90^\circ$.", r"$m\angle C = 50^\circ$", []),
+    (r"In $\triangle ABC$, $m\angle A = 40^\circ$.", r"$\angle XYZ$", ["∠XYZ"]),
+    ("A right triangle has legs 6 and 8. Find the hypotenuse.", "$c = 10$", []),
+])
+def test_the_angles_an_answer_names_must_be_in_the_problem(text: str, answer: str, unseen: list[str]) -> None:
+    assert qbg.answer_names_unseen_angles(text, answer) == unseen
+
+
+@pytest.mark.asyncio
+async def test_a_problem_with_no_figure_whose_answer_names_unseen_angles_is_left_out() -> None:
+    plain = {**PLAIN, "figure_spec": None, "figure_svg": None}
+    naming = {**NAMING, "figure_spec": None, "figure_svg": None}
+    solved = [{"question_text": plain["text"], "steps": [], "final_answer": "1"},
+              {"question_text": naming["text"], "steps": [], "final_answer": r"$\angle 4$ and $\angle 6$"}]
+    with patch.object(qbg, "generate_solutions", AsyncMock(return_value=solved)):
+        kept, _ = await qbg.solve_checked_problems([plain, naming], subject="math", user_id="u", job_id="j")
+    assert [q["text"] for q in kept] == [plain["text"]]
