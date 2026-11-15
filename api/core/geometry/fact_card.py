@@ -44,6 +44,7 @@ from api.core.geometry.facts import (
     Target,
     _is_line_name,
     impossible_measures,
+    lin,
     line_key,
     split_names,
     unverifiable,
@@ -584,7 +585,10 @@ def _pair_without_parallels(card: FigureFacts) -> list[str]:
     what the givens don't say (Eval 1 job bd113585 p5: "∠JKM and ∠LMK are
     alternate interior angles … Prove △JKM ≅ △LMK", no JK ∥ LM). Such a
     card is refused: the problem gets no figure and is replaced."""
-    if any(f.kind == "parallel" for f in [*card.givens, *card.prove]):
+    # A parallel given, or a shape whose sides are parallel (#1003 review:
+    # "ABCD is a parallelogram" gives AB ∥ DC). Whether the parallel lines are
+    # the pair's own is checked on the drawing (figure_check _pair_off_parallels).
+    if any(f.kind == "parallel" or (f.kind in SHAPES and f.kind != "kite") for f in [*card.givens, *card.prove]):
         return []
     return [f"an angle-pair given says nothing about sizes without parallel lines: {f.kind} {f.items}"
             for f in card.givens if f.kind in PAIRS]
@@ -1118,7 +1122,9 @@ def _said_once(card: FigureFacts) -> list[str]:
             continue
         if f.kind == "congruent_segments" and len(f.items) == 2 and frozenset(seg(x) for x in f.items) in legs:
             continue
-        same = (f.kind, frozenset(seg(x) for x in f.items), (f.point or "").strip(), f.value, f.expr) \
+        # A segment by its two points, a named line by its name ("m ∥ n" and
+        # "p ∥ q" are two givens: #1003 review).
+        same = (f.kind, frozenset(lin(x) for x in f.items), (f.point or "").strip(), f.value, f.expr) \
             if f.kind in ("congruent_segments", "parallel") else sentence(f, card)
         if same not in seen:
             seen.append(same)

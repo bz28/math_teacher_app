@@ -519,6 +519,9 @@ NAMING = {"text": "Two parallel lines $p$ and $q$ are cut by a transversal $t$. 
     (r"In $\triangle ABC$, $m\angle A = 40^\circ$ and $m\angle B = 90^\circ$.", r"$m\angle C = 50^\circ$", []),
     (r"In $\triangle ABC$, $m\angle A = 40^\circ$.", r"$\angle XYZ$", ["∠XYZ"]),
     ("A right triangle has legs 6 and 8. Find the hypotenuse.", "$c = 10$", []),
+    # #1003 review round 1: "angles 1 and 2" shows both numbers.
+    ("Angles 1 and 2 form a linear pair and angle 1 measures 70 degrees. Find angle 2.",
+     r"$m\angle 2 = 110^\circ$", []),
 ])
 def test_the_angles_an_answer_names_must_be_in_the_problem(text: str, answer: str, unseen: list[str]) -> None:
     assert qbg.answer_names_unseen_angles(text, answer) == unseen
@@ -533,3 +536,15 @@ async def test_a_problem_with_no_figure_whose_answer_names_unseen_angles_is_left
     with patch.object(qbg, "generate_solutions", AsyncMock(return_value=solved)):
         kept, _ = await qbg.solve_checked_problems([plain, naming], subject="math", user_id="u", job_id="j")
     assert [q["text"] for q in kept] == [plain["text"]]
+
+
+@pytest.mark.asyncio
+async def test_a_set_left_out_for_unseen_angles_says_so_to_the_teacher() -> None:
+    """#1003 review round 1: the message said every figure gave away its answer."""
+    naming = {**NAMING, "figure_spec": None, "figure_svg": None}
+    solved = [{"question_text": naming["text"], "steps": [], "final_answer": r"$\angle 4$ and $\angle 6$"}]
+    with patch.object(qbg, "generate_solutions", AsyncMock(return_value=solved)), \
+            pytest.raises(qbg.TeacherFacingGenerationError) as err:
+        await qbg.solve_checked_problems([naming], subject="math", user_id="u", job_id="j")
+    assert "couldn't be answered as written" in str(err.value)
+    assert "each figure gave away" not in str(err.value)

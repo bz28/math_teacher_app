@@ -731,9 +731,10 @@ def answer_names_unseen_angles(text: str, answer: str) -> list[str]:
     problem doesn't label (∠4), or a letter that isn't one of its points.
     With no figure, the student can't know which angle is ∠4, so the
     problem can't be answered as written. Only ever leaves a problem out."""
-    numbers = {m for m in _ANGLE_NAME.findall(text) if m.isdigit()}
-    # Any capital counts as shown (a sentence's first letter too): this
-    # leans toward keeping a problem, never toward leaving one out wrongly.
+    # Any number in the text counts as shown ("angles 1 and 2", "∠3"), and
+    # any capital (a sentence's first letter too): this leans toward keeping
+    # a problem, never toward leaving one out wrongly.
+    numbers = set(re.findall(r"(?<![0-9.])[0-9]+(?![0-9.])", re.sub(r"\\[a-zA-Z]+", " ", text)))
     letters = set(re.findall(r"[A-Z]", re.sub(r"\\[a-zA-Z]+", " ", text)))
     out: list[str] = []
     for name in _ANGLE_NAME.findall(answer):
@@ -1159,8 +1160,8 @@ async def solve_checked_problems(
     kept_sols = [s for s, w in zip(solutions, lost) if not w]
     if not kept_qs:
         raise TeacherFacingGenerationError(
-            "Every generated problem needs a figure, and each figure gave away its answer, "
-            "so none could be kept. Try again."
+            "Every generated problem was left out after solving: its figure gave away the answer, "
+            "or it couldn't be answered as written. Try again."
         )
     return kept_qs, kept_sols
 
