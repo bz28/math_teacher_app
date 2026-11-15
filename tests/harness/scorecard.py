@@ -261,19 +261,27 @@ async def _drawing_flag(env: Env) -> list[Row]:
     p = DrawingFlagProbe()
     items = await p.generate(_ctx())
     row = Row("reading student work", "drawing-flag",
-              "a question whose stored requires-drawing flag (AI or regex) is wrong",
+              "a question whose stored requires-drawing flag (AI or regex) is wrong, an AI-alone "
+              "miss not on the known list, a listed known miss the AI now gets right",
               "questions the AI call alone labels right")
     # The AI is gated on its own too (the probe's rule): the regex was tuned
     # on this corpus, so the stored flag alone would hide a broken AI call.
-    new_misses = [it.id for it, names in _failed_check_names(p, items) if any(n.startswith("AI alone") for n in names)]
+    # A failed "AI alone" check on a listed known miss means the AI now gets
+    # it right: the list is stale (delete the entry from AI_KNOWN_MISSES).
+    ai_fails = [(it.id, n) for it, names in _failed_check_names(p, items) for n in names if n.startswith("AI alone")]
+    new_misses = [i for i, n in ai_fails if not n.endswith("(listed known miss)")]
+    now_right = [i for i, n in ai_fails if n.endswith("(listed known miss)")]
     row.never, row.never_parts = _parts(
         stored_flag_wrong=sum(1 for it in items if it.raw["stored"] != it.raw["truth"]),
         ai_miss_not_on_known_list=len(new_misses),
+        known_miss_now_right=len(now_right),
     )
     row.how_good = _share(sum(1 for it in items if it.raw["llm"] is it.raw["truth"]), len(items))
     row.cases = len(items)
     if new_misses:
         row.notes.append(f"AI misses not on the known list: {new_misses}")
+    if now_right:
+        row.notes.append(f"known misses the AI now gets right (delete from AI_KNOWN_MISSES): {now_right}")
     return [row]
 
 

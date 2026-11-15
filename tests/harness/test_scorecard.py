@@ -191,3 +191,19 @@ async def test_a_no_for_a_drawn_graph_feature_is_a_never(monkeypatch: pytest.Mon
     monkeypatch.setattr(GraphCheckProbe, "generate", gen)
     (row,) = await sc._graph_check(sc.Env(has_recorded_font=True))
     assert row.never_parts == {"no_for_drawn_feature": 1}
+
+
+@pytest.mark.asyncio
+async def test_a_known_miss_the_ai_now_gets_right_is_its_own_never(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A listed known miss the AI now labels right means AI_KNOWN_MISSES is
+    stale: its own never part, not a new AI miss."""
+    from tests.harness.probes.drawing_flag import AI_KNOWN_MISSES, DrawingFlagProbe
+
+    q = sorted(AI_KNOWN_MISSES)[0]
+
+    async def gen(self: object, ctx: object, constraint: str | None = None) -> list[object]:
+        return _items([{"question": q, "truth": True, "llm": True, "regex": True, "stored": True}])
+
+    monkeypatch.setattr(DrawingFlagProbe, "generate", gen)
+    (row,) = await sc._drawing_flag(sc.Env(has_recorded_font=False))
+    assert row.never_parts == {"known_miss_now_right": 1}
