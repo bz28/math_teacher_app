@@ -155,11 +155,11 @@ STORIES: dict[str, tuple[dict[str, Any], str, str]] = {
     "set1-p3": ({"points": list("ABC"), "triangles": ["ABC"],
                  "givens": [F("right_triangle", ["ABC"], point="C"), F("equal_length", ["AB"], value=13),
                             F("equal_length", ["BC"], value=5)], "find": [{"kind": "segment", "item": "AC"}]},
-                "A painter is fixing a house.", ""),
+                "A builder is framing a house.", ""),
     "set1-p6": ({"points": list("ABPO"), "circles": ["O"], "lines": ["PA"], "segments": ["AB"],
                  "givens": [F("chord", ["AB"], circle="O"), F("tangent", ["PA"], circle="O", point="A"),
                             F("angle_measure", ["PAB"], value=54)], "find": [{"kind": "angle", "item": "AOB"}]},
-                "A city is designing a garden.", ""),
+                "A city planner is laying out a park.", ""),
     "set1-p8": ({"points": list("ABPCO"), "circles": ["O"], "lines": ["PA"], "segments": ["AB"],
                  "givens": [F("chord", ["AB"], circle="O"), F("tangent", ["PA"], circle="O", point="A"),
                             F("on_circle", ["C"], circle="O"), F("inscribed_angle", ["ACB"], circle="O", value=58)],
@@ -169,7 +169,7 @@ STORIES: dict[str, tuple[dict[str, Any], str, str]] = {
                  "givens": [F("rectangle", ["ABCD"]), F("right_angle", ["CDE"]), F("equal_length", ["AB"], value=14),
                             F("equal_length", ["BC"], value=9), F("equal_length", ["DE"], value=6)],
                  "find": [{"kind": "segment", "item": "CE"}]},
-                "A floor plan has a room and a nook.", ""),
+                "An architect is designing a library.", ""),
 }
 
 
@@ -200,7 +200,7 @@ def run() -> dict[str, Any]:
                 out[f"{name}_{'passed' if bad else 'rejected'}"].append(key)
     for key, (raw, context, hint) in STORIES.items():
         card, why = read_card(raw)
-        kept = clean_context(context)[0], clean_hint(hint)[0]
+        kept = clean_context(context)[0], clean_hint(hint, card)[0]
         out["stories"][key] = card_text(card, context=kept[0], hint=kept[1]) if card else f"refused: {why}"
     return out
 

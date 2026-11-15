@@ -625,7 +625,7 @@ def apply_card(q: dict[str, Any]) -> None:
         q["card_refused"] = why
         return
     kept_context, why_context = clean_context(context)
-    kept_hint, why_hint = clean_hint(hint)
+    kept_hint, why_hint = clean_hint(hint, card)
     for w in (why_context, why_hint):
         if w:
             logger.info("fact card: %s, so it was left out", w)

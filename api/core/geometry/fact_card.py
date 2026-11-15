@@ -122,12 +122,8 @@ CARD_SCHEMA: dict[str, Any] = {
 
 CONTEXT_FIELD: dict[str, Any] = {
     "type": "string",
-    "description": (
-        "Optional, only with figure_facts: one plain sentence of setting before the givens ('A carpenter "
-        "is building a roof truss.'), at most 15 words. No point names, no numbers in digits or words, no "
-        "math, no relation or measure words (parallel, equal, match, side, long, feet…): the givens say all "
-        "of that. Omit when there is none."
-    ),
+    "enum": [""],  # filled below from CONTEXTS
+    "description": "Optional, only with figure_facts: one setting sentence from the list, or empty.",
 }
 HINT_FIELD: dict[str, Any] = {
     "type": "string",
@@ -195,7 +191,7 @@ _MIN_ITEMS = {
 }
 # Its phrase states only the first two items (a ⊥ b ⊥ c says nothing clear).
 _EXACT_ITEMS = {"perpendicular": 2, "bisects_segment": 2, "bisects_angle": 2, "numbered_angle": 2}
-_NEEDS_POINT = ("midpoint", "on_segment", "on_line", "intersect")
+_NEEDS_POINT = ("midpoint", "on_segment", "on_line", "intersect", "perpendicular")
 _NEEDS_CIRCLE = ("on_circle", "tangent", "chord", "diameter", "radius", "central_angle", "inscribed_angle")
 _LENGTH_KINDS = ("equal_length", "chord", "diameter", "radius")
 _MIN_LENGTH = 0.01
@@ -274,23 +270,120 @@ def _incomplete(f: Fact) -> list[str]:
     return out
 
 
-def _angle_key(x: str, labels: dict[str, str]) -> str:
-    """One angle, however it is written: ∠ABC = ∠CBA (vertex in the
-    middle), ∠1 = the angle it labels, ∠B = its vertex alone."""
-    x = labels.get(x.strip(), x.strip())
-    n = split_names(x)
-    if len(n) == 3:
-        return n[1] + ":" + "".join(sorted((n[0], n[2])))
-    return "".join(n) or x
+class _Classes:
+    """Union-find: which keys the givens make equal."""
+
+    def __init__(self) -> None:
+        self.parent: dict[Any, Any] = {}
+
+    def find(self, x: Any) -> Any:
+        self.parent.setdefault(x, x)
+        while self.parent[x] != x:
+            self.parent[x] = self.parent[self.parent[x]]
+            x = self.parent[x]
+        return x
+
+    def union(self, a: Any, b: Any) -> None:
+        self.parent[self.find(a)] = self.find(b)
 
 
-def _item_key(kind: str, x: str, labels: dict[str, str]) -> str:
-    if kind in _ANGLE_ITEM_KINDS or kind == "bisects_angle" and len(split_names(x)) != 2:
-        return _angle_key(x, labels)
-    n = split_names(x)
-    if len(n) == 2:
-        return "".join(sorted(n))  # a segment or line either way round
-    return "".join(n) or x.strip()
+class _Measures:
+    """What a card's givens state outright about its angles and lengths: one
+    model, so "an ask the givens already answer" is closed by construction
+    rather than by a list of cases.
+
+    - Rays: a ray is its vertex and a point on it. Every point the card puts
+      on the same ray from a vertex (on_segment, midpoint, collinear in its
+      listed order) maps to one representative, so ∠ABD is ∠ABC when D is on
+      BC.
+    - Angles and segments fall into equivalence classes by what the givens
+      state equal by definition: congruent_*, equal_length, an equilateral
+      triangle's, square's or rhombus's sides, an isosceles triangle's legs
+      (apex given), a midpoint's halves, the radii of one circle. A theorem
+      step (alternate interior, vertical angles, a linear pair) is NOT an
+      equality here: deriving it is the student's work.
+    - Values: a number given for any member (angle_measure, equal_length,
+      radius…), or fixed with no number (a right angle, ⊥ at its point, a
+      right triangle's right angle, an equilateral's 60°, a square's or
+      rectangle's corners).
+    A find is answered when its class holds a value."""
+
+    def __init__(self, card: FigureFacts) -> None:
+        every = [*card.givens, *card.prove, *card.constructs]
+        self.labels = {f.items[0].strip(): f.items[1].strip() for f in every
+                       if f.kind == "numbered_angle" and len(f.items) == 2}
+        self.rays = _Classes()
+        for f in [*card.givens, *card.constructs]:
+            for a, m, b in _betweens(f):
+                self.rays.union((a, m), (a, b))
+                self.rays.union((b, m), (b, a))
+        self.angles, self.segments = _Classes(), _Classes()
+        valued_angles: list[Any] = []
+        valued_segments: list[Any] = []
+        radii: dict[str, list[str]] = {}
+        for f in card.givens:
+            it = [x.strip() for x in f.items]
+            p = (f.point or "").strip()
+            if f.kind == "congruent_angles":
+                for x in it[1:]:
+                    self.angles.union(self.angle(it[0]), self.angle(x))
+            if f.kind in ("congruent_segments", "equal_length"):
+                for x in it[1:]:
+                    self.segments.union(_seg_key(it[0]), _seg_key(x))
+            if f.value is not None and f.kind in _ANGLE_KINDS:
+                valued_angles += [self.angle(x) for x in it]
+            if f.value is not None and f.kind in _LENGTH_KINDS:
+                valued_segments += [_seg_key(x) for x in it]
+            if f.kind == "radius" and f.circle:
+                radii.setdefault(f.circle.strip(), []).extend(it)
+            if f.kind == "midpoint" and it and p and len(split_names(it[0])) == 2:
+                x, y = split_names(it[0])
+                self.segments.union(frozenset((x, p)), frozenset((p, y)))
+            sides = _sides(it[0]) if it and (f.kind in ("equilateral", "square", "rhombus")) else []
+            for side in sides[1:]:
+                self.segments.union(sides[0], side)
+            if f.kind == "isosceles" and it and p in split_names(it[0]) and len(set(split_names(it[0]))) == 3:
+                o1, o2 = (v for v in split_names(it[0]) if v != p)
+                self.segments.union(frozenset((p, o1)), frozenset((p, o2)))
+            valued_angles += [self.angle(x) for x in _fixed_angles(f)]
+        for legs in radii.values():
+            for x in legs[1:]:
+                self.segments.union(_seg_key(legs[0]), _seg_key(x))
+        self.known_angles = {self.angles.find(k) for k in valued_angles}
+        self.known_vertices = {k[1] for k in valued_angles if k[0] in ("A", "V")}
+        self.known_segments = {self.segments.find(k) for k in valued_segments}
+
+    def angle(self, x: str) -> tuple[str, ...] | tuple[str, str, frozenset[Any]]:
+        """∠ABC as (vertex, its two rays); ∠B as its vertex; ∠1 as the angle
+        it labels."""
+        x = self.labels.get(x.strip(), x.strip())
+        n = split_names(x)
+        if len(n) == 3:
+            v = n[1]
+            return "A", v, frozenset((self.rays.find((v, n[0])), self.rays.find((v, n[2]))))
+        if len(n) == 1:
+            return "V", n[0]
+        return "N", x
+
+    def angle_known(self, x: str) -> bool:
+        k = self.angle(x)
+        if k[0] == "V":
+            return k[1] in self.known_vertices  # ∠B: any measured angle at B may be it
+        if self.angles.find(k) in self.known_angles:
+            return True
+        return k[0] == "A" and self.angles.find(("V", k[1])) in self.known_angles
+
+    def segment_known(self, x: str) -> bool:
+        return self.segments.find(_seg_key(x)) in self.known_segments
+
+
+def _seg_key(x: str) -> frozenset[str]:
+    return frozenset(split_names(x))
+
+
+def _sides(poly: str) -> list[frozenset[str]]:
+    v = split_names(poly)
+    return [frozenset((v[i], v[(i + 1) % len(v)])) for i in range(len(v))] if len(v) >= 3 else []
 
 
 def _corners(poly: str) -> list[str]:
@@ -299,74 +392,78 @@ def _corners(poly: str) -> list[str]:
     return ["".join((v[i - 1], v[i], v[(i + 1) % len(v)])) for i in range(len(v))] if len(v) >= 3 else []
 
 
+def _betweens(f: Fact) -> list[tuple[str, str, str]]:
+    """(a, m, b): m lies between a and b on one line, as the fact says."""
+    it = [x.strip() for x in f.items]
+    p = (f.point or "").strip()
+    if f.kind in ("on_segment", "midpoint") and it and p and len(split_names(it[0])) == 2:
+        a, b = split_names(it[0])
+        return [(a, p, b)] if p not in (a, b) else []
+    if f.kind == "collinear":
+        pts = [x for x in it if len(split_names(x)) == 1]
+        return [(pts[i], pts[j], pts[k]) for i in range(len(pts)) for j in range(i + 1, len(pts))
+                for k in range(j + 1, len(pts))]
+    return []
+
+
 def _fixed_angles(f: Fact) -> list[str]:
     """The angles a given fixes without a value (each is 90° or 60°)."""
     it = [x.strip() for x in f.items]
     p = (f.point or "").strip()
     if f.kind == "right_angle":
         return it
-    if f.kind == "right_triangle" and it and p:
+    if f.kind == "right_triangle" and it and p and p in split_names(it[0]) and len(set(split_names(it[0]))) == 3:
         t = split_names(it[0])
-        return ["".join((a, p, b)) for a in t for b in t if a < b and p not in (a, b)] if p in t else [p]
+        a, b = (v for v in t if v != p)
+        return [a + p + b]
     if f.kind == "perpendicular" and len(it) == 2 and p:
         ends = [[q for q in split_names(x) if q != p] for x in it]
         return ["".join((a, p, b)) for a in ends[0] for b in ends[1]] or [p]
-    if f.kind == "equilateral" and it:
-        return _corners(it[0])
-    if f.kind in ("square", "rectangle") and it:
+    if f.kind in ("equilateral", "square", "rectangle") and it:
         return _corners(it[0])
     return []
 
 
+def _same_statement(card: FigureFacts, m: _Measures, f: Fact) -> bool:
+    """A statement to prove that a given already states."""
+    it = [x.strip() for x in f.items]
+    if f.kind == "congruent_angles" and len(it) > 1:
+        return len({m.angles.find(m.angle(x)) for x in it}) == 1
+    if f.kind == "congruent_segments" and len(it) > 1:
+        return len({m.segments.find(_seg_key(x)) for x in it}) == 1
+    def key(g: Fact) -> tuple[str, frozenset[str]]:
+        return g.kind, frozenset("".join(sorted(split_names(x))) or x.strip() for x in g.items) \
+            if g.kind not in ("congruent_triangles", "similar_triangles") else frozenset(x.strip() for x in g.items)
+    return key(f) in {key(g) for g in card.givens}
+
+
 def _already_given(card: FigureFacts) -> list[str]:
-    """An ask the givens already answer: "m∠ABC = 50°. Find m∠CBA.", or a
-    statement to prove that is a given. Angles compare however written
-    (vertex in the middle, or by the number that labels them); segments
-    either way round."""
-    every = [*card.givens, *card.prove, *card.constructs]
-    labels = {f.items[0].strip(): f.items[1].strip() for f in every
-              if f.kind == "numbered_angle" and len(f.items) == 2}
-
-    def key(f: Fact) -> tuple[str, frozenset[str] | tuple[str, ...]]:
-        items = [_item_key(f.kind, x, labels) for x in f.items]
-        if f.kind in ("congruent_triangles", "similar_triangles"):
-            return f.kind, frozenset(x.strip() for x in f.items)  # △DEF ≅ △ABC is △ABC ≅ △DEF
-        ordered = f.kind in ("bisects_segment", "bisects_angle", "transversal", "numbered_angle")
-        return f.kind, tuple(items) if ordered else frozenset(items)
-
-    given = {key(f) for f in card.givens}
-    out = [f"the card asks to prove a given: {f.kind} {f.items}" for f in card.prove if key(f) in given]
-    lengths: set[str] = set()
-    angles: set[str] = set()
-    for f in card.givens:
-        # Angles a fact fixes with no value: the ask "Find m∠ABC" after
-        # "∠ABC is a right angle" (or ⊥ at B, a right triangle's angle, an
-        # equilateral's 60°, a square's corner) is answered by the givens.
-        angles |= {_angle_key(a, labels) for a in _fixed_angles(f)}
-        if f.value is None and not (f.kind == "equal_length" and len(f.items) > 1 and f.expr):
-            continue
-        if f.kind in _LENGTH_KINDS:
-            lengths |= {_item_key("segment", x, labels) for x in f.items}
-        if f.kind in _ANGLE_KINDS:
-            angles |= {_angle_key(x, labels) for x in f.items}
-    # ∠B and ∠ABC may be the same angle: an angle named by its vertex alone
-    # matches any measured angle at that vertex, and the other way round.
-    vertices = {k.split(":")[0] for k in angles}
+    """An ask the givens already answer (see _Measures), or a statement to
+    prove that is a given."""
+    m = _Measures(card)
+    out = [f"the card asks to prove a given: {f.kind} {f.items}" for f in card.prove if _same_statement(card, m, f)]
     for t in card.find:
-        if t.kind == "segment" and _item_key("segment", t.item, labels) in lengths:
+        if t.kind == "segment" and m.segment_known(t.item):
             out.append(f"the card asks for a length it gives: {t.item!r}")
-        if t.kind == "angle":
-            k = _angle_key(t.item, labels)
-            if k in angles or (":" not in k and k in vertices) or (":" in k and k.split(":")[0] in angles):
-                out.append(f"the card asks for an angle it gives: {t.item!r}")
+        if t.kind == "angle" and m.angle_known(t.item):
+            out.append(f"the card asks for an angle it gives: {t.item!r}")
     return out
 
 
 def _blank_to_none(f: Any) -> Any:
-    """A fact's empty optional field ("circle": "") read as absent."""
+    """A fact's empty optional field ("circle": "") read as absent; a
+    perpendicular's missing point read from the one letter its two lines
+    share (AB ⊥ BC meets at B). Else it stays missing, and is refused."""
     if not isinstance(f, dict):
         return f
-    return {k: (None if k in ("point", "circle", "expr", "value") and v == "" else v) for k, v in f.items()}
+    f = {k: (None if k in ("point", "circle", "expr", "value") and v == "" else v) for k, v in f.items()}
+    items = f.get("items")
+    if f.get("kind") == "perpendicular" and not f.get("point") and isinstance(items, list) and len(items) == 2 \
+            and all(isinstance(x, str) for x in items):
+        shared = set(split_names(items[0])) & set(split_names(items[1]))
+        if len(shared) == 1 and all(len(split_names(x)) == 2 for x in items):
+            f["point"] = shared.pop()
+    return f
 
 
 def _has_bool_value(raw: dict[str, Any]) -> bool:
@@ -842,79 +939,51 @@ def card_text(card: FigureFacts, *, context: str = "", hint: str = "", figure: b
     return " ".join(out)
 
 
-# A word or symbol that states something about a figure: kept out of the
-# context and the hint, which code can't check.
-_STATES = re.compile(
-    r"[=≅∥⊥∼≈°$\\∠△⊙]|\d"
-    r"|\b(?:parallel|perpendicular|congruent|equal|same|bisect\w*|midpoint|degrees?|right|acute|obtuse|"
-    r"isosceles|equilateral|scalene|square|rectangle|rhomb\w*|trapez\w*|kite|parallelogram|tangent|chord|"
-    r"diameter|radius|radii|inscribed|central|half\w*|twice|double|longer|shorter|shortest|longest|vertical|identical|level|upright|alongside|"
-    r"supplementary|complementary|similar|straight|collinear|meet\w*|cross\w*|intersect\w*|\w*angular|circular|round|oval|curved)\b"
-    r"|\bside by side\b",
-    re.IGNORECASE,
+# The settings a problem may open with: a closed list (the schema's enum),
+# kept by exact match, like HINTS. A free sentence can't be checked: any
+# word list misses a form or a synonym ("perpendicularly", "plumb",
+# "twin beams"), and a setting that says a number, a relation or a shape
+# says what the card may not. Each of these says none.
+CONTEXTS: tuple[str, ...] = (
+    "A carpenter is building a roof frame.",
+    "A city planner is laying out a park.",
+    "An architect is designing a library.",
+    "An engineer is designing a bridge.",
+    "A gardener is planning a flower bed.",
+    "A landscaper is planning a backyard.",
+    "A surveyor is mapping a field.",
+    "A builder is framing a house.",
+    "A furniture maker is building a table.",
+    "A designer is making a logo.",
+    "An artist is painting a mural.",
+    "A coach is laying out a practice field.",
+    "A family is planning a garden.",
+    "A crew is repairing a fence.",
+    "A pilot is planning a flight.",
+    "A hiker is reading a trail map.",
+    "A team is building a set for a school play.",
+    "A baker is decorating a cake.",
+    "A student is planning a science fair booth.",
+    "A town is planning a new playground.",
 )
-_DRAWS = re.compile(r"\b(?:draw\w*|construct\w*|sketch\w*|graph\w*|plot\w*|shade\w*)\b", re.IGNORECASE)
+CONTEXT_FIELD["enum"] = ["", *CONTEXTS]
 
 
-def _names_a_point(s: str) -> bool:
-    """A capital that is a name, not a sentence's first word or 'I'."""
-    for m in re.finditer(r"(?<![A-Za-z\\])[A-Z][0-9]*'*(?![a-z])", s):
-        if m.group(0) in ("A", "I") and re.match(r"[A-Z]\s+[a-z]", s[m.start():]):
-            continue
-        return True
-    return False
-
-
-# Words a context sentence may not use: any number word (the card says
-# every number) and any word for a relation or a count of parts. Matched
-# on the sentence with hyphens and repeated spaces made single spaces, so
-# "side-by-side" and "side  by side" read alike. A blocklist can't list
-# every synonym, so the sentence is also capped short: one line of setting.
-_NUMBER_WORDS = (
-    r"zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|"
-    r"sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|"
-    r"hundreds?|thousands?|millions?|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|"
-    r"twelfth|twentieth|hundredth|halves|half|thirds|quarters?|fifths|tenths|dozens?|pairs?|both|single|"
-    r"couple|once|twice|thrice|double|triple|quadruple|several|each|every|either|neither|another|other"
-)
-_RELATION_WORDS = (
-    r"match\w*|shar\w*|split\w*|touch\w*|lines? up|lined up|lining up|alongside|along|meet\w*|met|"
-    r"cross\w*|same|equal\w*|identical|even\w*|level|upright|vertical\w*|horizontal\w*|flat|steep|"
-    r"slant\w*|tilt\w*|lean\w*|between|across|opposite|apart|join\w*|connect\w*|divid\w*|cut\w*|"
-    r"fold\w*|mirror\w*|symmetr\w*|reflect\w*|rotat\w*|corner\w*|edges?|sides?|ends?|middle|center\w*|"
-    r"centre\w*|halfway|side by side|face to face|back to back|in line|parallel|perpendicular|congruent|"
-    r"similar|bisect\w*|midpoint|tangent|chord|radius|radii|diameter|inscribed|circumscribed|square|"
-    r"rectang\w*|triang\w*|circl\w*|round|oval|curv\w*|\w*angular|straight|right|acute|obtuse|"
-    r"longer|shorter|longest|shortest|taller|tallest|wider|widest|larger|smaller|bigger|twice|"
-    r"degrees?|feet|foot|ft|inch\w*|meters?|metres?|cm|km|miles?|yards?|units?|long|wide|tall|high|deep"
-)
-_CONTEXT_REFUSED = re.compile(rf"\b(?:{_NUMBER_WORDS}|{_RELATION_WORDS})\b", re.IGNORECASE)
-_CONTEXT_MAX_WORDS = 15
-
-
-def _plain_words(s: str) -> str:
-    return " ".join(re.sub(r"[-‐‑‒–—_/]+", " ", s).split())
+def _one_of(text: Any, choices: tuple[str, ...]) -> str:
+    """The choice the text is, exactly (its final period optional), or ""."""
+    s = " ".join(str(text or "").split())
+    for c in choices:
+        if s and (s == c or s == c.rstrip(".")):
+            return c
+    return ""
 
 
 def clean_context(context: Any) -> tuple[str, str]:
-    """(the context sentence to keep, why it was left out). Kept only when
-    it is one short line of setting that names no point, gives no number
-    (in digits or words), says no relation and speaks of no drawing."""
-    s = " ".join(str(context or "").split())
-    if not s:
+    """(the context sentence to keep, why it was left out): one of CONTEXTS."""
+    if not " ".join(str(context or "").split()):
         return "", ""
-    plain = _plain_words(s)
-    if _names_a_point(s) or _STATES.search(s) or _STATES.search(plain) or _CONTEXT_REFUSED.search(plain):
-        return "", "the context named a point, a number or a relation"
-    if _DRAWS.search(plain):
-        # "Engineers plan to construct a bridge." would read as the student's
-        # drawing (who draws it is on the card).
-        return "", "the context spoke of drawing or constructing"
-    if len(plain.split()) > _CONTEXT_MAX_WORDS or len(re.findall(r"[.!?;:]", s.rstrip(".!? "))) > 0:
-        return "", "the context was more than one short sentence"
-    if not s.endswith((".", "!", "?")):
-        s += "."
-    return s, ""
+    kept = _one_of(context, CONTEXTS)
+    return (kept, "") if kept else ("", "the context isn't one of the fixed settings")
 
 
 # The hints a problem may carry: a closed list (the schema's enum), kept by
@@ -930,12 +999,28 @@ HINTS: tuple[str, ...] = (
 HINT_FIELD["enum"] = ["", *HINTS]
 
 
-def clean_hint(hint: Any) -> tuple[str, str]:
-    """(the hint to keep, why it was left out): one of HINTS, as written."""
-    s = " ".join(str(hint or "").split())
-    if not s:
+_CONGRUENCE_HINTS = ("Use SSS.", "Use SAS.", "Use ASA.", "Use AAS.")
+_RIGHT_KINDS = ("right_angle", "right_triangle", "perpendicular")
+
+
+def clean_hint(hint: Any, card: FigureFacts | None = None) -> tuple[str, str]:
+    """(the hint to keep, why it was left out): one of HINTS, and a
+    theorem hint only when the card is about what the theorem is for: a
+    congruence postulate when it proves triangles congruent, HL when one of
+    them is a right triangle too, CPCTC when it has congruent triangles to
+    take parts from. A general method hint is always kept. Without the card
+    no theorem hint is kept (fail closed)."""
+    if not " ".join(str(hint or "").split()):
         return "", ""
-    for h in HINTS:
-        if s == h or s == h.rstrip("."):
-            return h, ""
-    return "", "the hint isn't one of the fixed method hints"
+    kept = _one_of(hint, HINTS)
+    if not kept:
+        return "", "the hint isn't one of the fixed method hints"
+    if kept in (*_CONGRUENCE_HINTS, "Use HL.", "Use CPCTC."):
+        proves_triangles = card is not None and any(f.kind == "congruent_triangles" for f in card.prove)
+        has_triangles = card is not None and any(
+            f.kind == "congruent_triangles" for f in [*card.givens, *card.prove])
+        right = card is not None and any(f.kind in _RIGHT_KINDS for f in card.givens)
+        backed = {"Use HL.": proves_triangles and right, "Use CPCTC.": has_triangles}.get(kept, proves_triangles)
+        if not backed:
+            return "", "the hint names a theorem the problem isn't about"
+    return kept, ""

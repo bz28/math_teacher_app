@@ -153,9 +153,13 @@ async def test_a_context_that_names_a_point_is_left_out() -> None:
         _written(MEDIAN, MEDIAN_FIGURE, context="A ladder AB leans on a wall.", hint="Draw a line."), PLAIN]])
     assert out[0]["text"] == MEDIAN_TEXT
     kept, _ = await _generate([[
-        _written(MEDIAN, MEDIAN_FIGURE, context="A carpenter is building a roof truss.",
-                 hint="Use SAS."), PLAIN]])
-    assert kept[0]["text"] == ("A carpenter is building a roof truss. " + MEDIAN_TEXT + " Hint: Use SAS.")
+        _written(MEDIAN, MEDIAN_FIGURE, context="A carpenter is building a roof frame.",
+                 hint="Work backward from what you need to prove."), PLAIN]])
+    assert kept[0]["text"] == ("A carpenter is building a roof frame. " + MEDIAN_TEXT
+                               + " Hint: Work backward from what you need to prove.")
+    # A theorem hint the card isn't about (MEDIAN proves angles, not triangles) is left out.
+    no_sas, _ = await _generate([[_written(MEDIAN, MEDIAN_FIGURE, hint="Use SAS."), PLAIN]])
+    assert no_sas[0]["text"] == MEDIAN_TEXT
 
 
 @pytest.mark.asyncio
@@ -422,6 +426,7 @@ def test_the_prompt_says_a_construction_shows_only_its_givens() -> None:
 
     assert "gets a figure of its givens only" in FACT_CARD_RULES
     assert 'overrides "draw every point and segment the problem names"' in FACT_CARD_RULES
+    assert "point P (required: where they meet)" in FACT_CARD_RULES  # independent round 2
 
 
 
