@@ -1122,7 +1122,6 @@ async def solve_checked_problems(
             s["final_answer"] = real_newlines(s["final_answer"])
         lost = None
         wanted = _needs_figure(q)
-        card = q.get("figure_facts")
         if _is_construction(q.get("figure_spec")):
             kept_spec, kept_svg, issues = _check_figure(
                 q["figure_spec"], q.get("text") or "", final_answer=s.get("final_answer") or "",
@@ -1141,8 +1140,6 @@ async def solve_checked_problems(
                 # Eval 1 job 35f87339 p1: "Name one pair of alternate interior
                 # angles" with no figure; the answer was "∠4 and ∠6".
                 lost = f"the answer names angles the problem doesn't show: {', '.join(unseen)}"
-        if lost is None and not q.get("figure_svg") and (unsaid := pair_lines_unsaid(card)):
-            lost = "; ".join(unsaid)
         if lost is None and isinstance(s.get("steps"), list) and s["steps"]:
             async with sem:
                 s["steps"], drops, _ = await _render_step_figures_with_retry(
@@ -1601,8 +1598,9 @@ async def regenerate_one(
     # The AI's choice of a figure, unless the teacher's "the student draws it" stands.
     # (A figure the student draws was dropped above, so it isn't wanted.)
     drafted["figure_wanted"] = (bool(drafted["figure_spec"]) or _has_card(drafted)) and teacher_draws is not True
-    if card is not None and not new_figure_svg and (unsaid := pair_lines_unsaid(card)):
-        # No figure goes with it, so the words alone must place the pair.
+    if card is not None and teacher_draws is True and (unsaid := pair_lines_unsaid(card)):
+        # The only way a carded problem ships with no figure (generation drops
+        # a carded problem that has none): the words alone must place the pair.
         raise RuntimeError(f"The new version of this problem can't be done from its words ({'; '.join(unsaid)}). "
                            "Nothing was changed — try again.")
     if _lacks_figure({**drafted, "figure_svg": new_figure_svg}):

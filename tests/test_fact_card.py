@@ -1141,3 +1141,44 @@ def test_a_pair_the_words_cant_place_on_its_parallels_is_flagged_for_a_no_figure
         F("intersect", ["CD", "EF"], point="H"), F("alternate_interior", ["AGH", "GHD"]),
         F("angle_measure", ["AGH"], value=65)], "find": [{"kind": "angle", "item": "GHD"}]})
     assert textbook is not None and pair_lines_unsaid(textbook) == [], why
+
+
+def test_a_pair_on_a_shape_or_named_lines_the_words_cant_place_is_flagged() -> None:
+    """#1003 review round 3: parallels from a parallelogram or named lines count too."""
+    from api.core.geometry.fact_card import pair_lines_unsaid
+
+    shape, why = read_card({"points": list("ABCDEF"), "polygons": ["ABCD"], "segments": ["AC", "AE", "CF"],
+                            "givens": [F("parallelogram", ["ABCD"]), F("alternate_interior", ["EAC", "FCA"]),
+                                       F("angle_measure", ["EAC"], value=30)],
+                            "find": [{"kind": "angle", "item": "FCA"}]})
+    assert shape is not None and pair_lines_unsaid(shape), why
+    named = {"points": list("JKLM"), "named_lines": ["m", "n"], "segments": ["JK", "KM", "ML"], "givens": [
+        F("parallel", ["m", "n"]), F("alternate_interior", ["JKM", "LMK"]), F("angle_measure", ["JKM"], value=30)],
+        "find": [{"kind": "angle", "item": "LMK"}]}
+    card, why = read_card(named)
+    assert card is not None and pair_lines_unsaid(card), why
+    # (A card can't put J on m: the checker can't verify "J is on line m", so
+    # such a pair is only ever placed by a figure.)
+
+
+def test_parallels_joined_through_a_shared_line_are_one_class() -> None:
+    """#1003 review round 3: AB ∥ CD and CD ∥ EF put ∠AGH and ∠GHF on parallels."""
+    from api.core.geometry.dsl import ConstructionFigure
+    from api.core.geometry.fact_card import pair_lines_unsaid
+    from api.core.geometry.figure_check import check_construction
+
+    card, why = read_card({"points": list("ABCDEFGHI"), "lines": ["AB", "CD", "EF", "GI"], "givens": [
+        F("parallel", ["AB", "CD"]), F("parallel", ["CD", "EF"]),
+        F("intersect", ["GI", "AB"], point="G"), F("intersect", ["GI", "EF"], point="H"),
+        F("alternate_interior", ["AGH", "GHF"]), F("angle_measure", ["AGH"], value=60)],
+        "find": [{"kind": "angle", "item": "GHF"}]})
+    assert card is not None and pair_lines_unsaid(card) == [], why
+    fig = ConstructionFigure.model_validate({
+        "type": "geometry", "shape": "construction",
+        "points": {"A": [0, 4], "B": [8, 4], "C": [0, 2], "D": [8, 2], "E": [0, 0], "F": [8, 0],
+                   "G": [3, 4], "H": [5.309, 0], "I": [5.886, -1]},
+        "lines": [{"through": ["A", "B"]}, {"through": ["C", "D"]}, {"through": ["E", "F"]},
+                  {"through": ["G", "I"]}],
+        "parallel_groups": [["AB", "CD", "EF"]], "angle_labels": {"AGH": "60°"}})
+    assert not any("not the parallel lines given" in m
+                   for m in (i.message for i in check_construction(fig, card_text(card), facts=card)))

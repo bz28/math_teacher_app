@@ -2950,6 +2950,18 @@ def _parallel_lines(d: _Drawing, rels: list[_Relation]) -> list[tuple[tuple[str,
     return out
 
 
+def _classes(d: _Drawing, pars: list[tuple[tuple[str, ...], tuple[str, ...]]]) -> list[list[tuple[str, ...]]]:
+    """Parallel lines in classes: AB ∥ CD and CD ∥ EF (or DC ∥ EF, the same
+    line) put all three in one (#1003 review round 3)."""
+    classes: list[list[tuple[str, ...]]] = []
+    for x, y in pars:
+        joined = [c for c in classes if any(d.same_line(m, x) or d.same_line(m, y) for m in c)]
+        for c in joined:
+            classes.remove(c)
+        classes.append([m for c in joined for m in c] + [x, y])
+    return classes
+
+
 def _pair_off_parallels(d: _Drawing, parts: ProblemParts) -> list[str]:
     """An angle-pair given says the two angles are equal (or supplementary)
     only when ITS two lines are the parallel ones. A problem whose parallel
@@ -2972,8 +2984,8 @@ def _pair_off_parallels(d: _Drawing, parts: ProblemParts) -> list[str]:
         if lines is None:
             continue
         l1, l2 = lines
-        if not any((d.same_line(l1, x) and d.same_line(l2, y)) or (d.same_line(l1, y) and d.same_line(l2, x))
-                   for x, y in pars):
+        if not any(any(d.same_line(l1, m) for m in c) and any(d.same_line(l2, m) for m in c)
+                   for c in _classes(d, pars)):
             out.append(f"the given {rel.text} says nothing about sizes: its lines are not the parallel lines given")
     return out
 
