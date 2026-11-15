@@ -20,7 +20,7 @@ def test_the_recorded_drawings_pass_against_hand_written_cards() -> None:
     assert sorted(r["left_out_rejected"]) == sorted(fr.LEFT_OUT) and r["left_out_passed"] == []
     assert all(not t.startswith("refused") for t in r["stories"].values()), r["stories"]
     # The context sentence is kept for the three stories that have one.
-    assert sum(t.startswith(("A ladder", "A garden", "A floor plan")) for t in r["stories"].values()) == 3
+    assert sum(t.startswith(("A painter", "A city", "A floor plan")) for t in r["stories"].values()) == 3
 
 
 def test_the_bar_fails_when_the_checker_is_switched_off(monkeypatch: pytest.MonkeyPatch) -> None:

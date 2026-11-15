@@ -148,20 +148,23 @@ LEFT_OUT: dict[str, dict[str, Any]] = {
 }
 
 # The four story problems of #998 (no figure there), as cards with a context.
+# (Their first settings, "A ladder leans against a wall." and "A garden has two
+# paths that start at one spot on its edge.", say a relation and a count: the
+# context filter refuses them, see tests/test_fact_card.py.)
 STORIES: dict[str, tuple[dict[str, Any], str, str]] = {
     "set1-p3": ({"points": list("ABC"), "triangles": ["ABC"],
                  "givens": [F("right_triangle", ["ABC"], point="C"), F("equal_length", ["AB"], value=13),
                             F("equal_length", ["BC"], value=5)], "find": [{"kind": "segment", "item": "AC"}]},
-                "A ladder leans against a wall.", ""),
+                "A painter is fixing a house.", ""),
     "set1-p6": ({"points": list("ABPO"), "circles": ["O"], "lines": ["PA"], "segments": ["AB"],
                  "givens": [F("chord", ["AB"], circle="O"), F("tangent", ["PA"], circle="O", point="A"),
                             F("angle_measure", ["PAB"], value=54)], "find": [{"kind": "angle", "item": "AOB"}]},
-                "A garden has two paths that start at one spot on its edge.", ""),
+                "A city is designing a garden.", ""),
     "set1-p8": ({"points": list("ABPCO"), "circles": ["O"], "lines": ["PA"], "segments": ["AB"],
                  "givens": [F("chord", ["AB"], circle="O"), F("tangent", ["PA"], circle="O", point="A"),
                             F("on_circle", ["C"], circle="O"), F("inscribed_angle", ["ACB"], circle="O", value=58)],
                  "find": [{"kind": "angle", "item": "PAB"}]},
-                "", "Use the inscribed angle that opens onto the same arc."),
+                "", "Look for a theorem that links the givens to what you need."),
     "set2-p8": ({"points": list("ABCDE"), "polygons": ["ABCD"], "triangles": ["CDE"],
                  "givens": [F("rectangle", ["ABCD"]), F("right_angle", ["CDE"]), F("equal_length", ["AB"], value=14),
                             F("equal_length", ["BC"], value=9), F("equal_length", ["DE"], value=6)],

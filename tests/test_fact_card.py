@@ -209,6 +209,19 @@ def test_each_kind_has_one_fixed_phrase_that_says_only_its_fact(kind: str) -> No
       "prove": [F("congruent_triangles", ["ABC", "DEF"])]}, "prove a given"),
     ({"points": list("ABC"), "triangles": ["ABC"], "givens": [F("congruent_segments", ["AB", "AC"])],
       "prove": [F("equal_length", ["AB"], expr="x")], "find": [{"kind": "other", "item": "x"}]}, "never show"),
+    # Independent review round: an angle a value-less fact fixes is given.
+    ({"points": list("ABC"), "triangles": ["ABC"], "givens": [F("right_angle", ["ABC"])],
+      "find": [{"kind": "angle", "item": "ABC"}]}, "angle it gives"),
+    ({"points": list("ABC"), "triangles": ["ABC"], "givens": [F("right_triangle", ["ABC"], point="C")],
+      "find": [{"kind": "angle", "item": "BCA"}]}, "angle it gives"),
+    ({"points": list("ABCD"), "segments": ["AB", "CD"], "givens": [F("perpendicular", ["AB", "CD"], point="D")],
+      "find": [{"kind": "angle", "item": "ADC"}]}, "angle it gives"),
+    ({"points": list("ABC"), "triangles": ["ABC"], "givens": [F("equilateral", ["ABC"])],
+      "find": [{"kind": "angle", "item": "CAB"}]}, "angle it gives"),
+    ({"points": list("ABCD"), "polygons": ["ABCD"], "givens": [F("square", ["ABCD"])],
+      "find": [{"kind": "angle", "item": "DAB"}]}, "angle it gives"),
+    ({"points": list("ABCD"), "polygons": ["ABCD"], "givens": [F("rectangle", ["ABCD"])],
+      "find": [{"kind": "angle", "item": "C"}]}, "angle it gives"),
     # "Find a" where only code's English ("is a right angle") has an a.
     ({"points": list("ABC"), "triangles": ["ABC"],
       "givens": [F("right_angle", ["ACB"]), F("equal_length", ["AB"], value=5)],
@@ -308,6 +321,37 @@ def test_a_construction_says_what_the_student_constructs() -> None:
     ("A rectangular garden has a path.", ""),  # a shape the card may not have
     ("A circular track has a fence.", ""),
     (r"In $\triangle ABC$ the sides are equal.", ""),
+    # Independent review round: number words, hyphen variants, relation
+    # verbs, and a cap on length (a blocklist alone can't list every word).
+    ("A ladder twelve feet long leans against a wall.", ""),
+    ("A rope runs from the top of a ten foot pole.", ""),
+    ("Two roads run side-by-side and never touch.", ""),
+    ("Two roads run side  by  side.", ""),
+    ("The posts stood lined-up.", ""),  # only the hyphen keeps "lined up" apart
+    ("A carpenter builds truss ABC.", ""),  # only the point names
+    ("A path splits the garden into halves.", ""),
+    ("The two triangles match.", ""),
+    ("A fence and a wall share a post.", ""),
+    ("A dozen students stand in a field.", ""),
+    ("The first beam rests on the second.", ""),
+    ("Both poles stand in the yard.", ""),
+    ("A single wire runs to the roof.", ""),
+    ("A pair of trails cross near the lake.", ""),
+    ("Three friends meet at a cafe.", ""),
+    ("The shelves line up along the wall.", ""),
+    ("A kite flies above the park.", ""),
+    ("A ramp is steep.", ""),
+    ("The sail is a quarter of the mast.", ""),
+    ("A park lies between a road and a river.", ""),
+    ("A ladder leans against a wall.", ""),
+    ("A garden has two paths that start at one spot on its edge.", ""),
+    ("A twenty-one foot flagpole stands by a school.", ""),
+    ("The roof's beams are the same length.", ""),
+    ("A school is planning a new garden with benches, paths, a fountain and lots of shady trees "
+     "for students.", ""),  # more than fifteen words
+    ("A painter is fixing a house. The house is old.", ""),  # more than one sentence
+    ("A city is designing a garden.", "A city is designing a garden."),
+    ("A floor plan has a room and a nook.", "A floor plan has a room and a nook."),
     # Review round 2: relations said without the listed words.
     ("The two ramps are identical.", ""),
     ("The shelf is level and the post is upright.", ""),
@@ -320,23 +364,21 @@ def test_the_context_is_kept_only_when_it_states_nothing(context: str, kept: str
 
 
 @pytest.mark.parametrize(("hint", "kept"), [
-    ("Work backward from what you need to prove", "Work backward from what you need to prove."),
-    # Review round 3: a relation word with no verb still says something.
+    ("Use SAS.", "Use SAS."),
+    ("Use SAS", "Use SAS."),  # the period is the list's
+    ("Work backward from what you need to prove.", "Work backward from what you need to prove."),
+    # Anything not on the list is dropped: free text can't be checked.
+    ("Try CPCTC", ""),
+    ("Use SAS on triangles ABD and ACD.", ""),
+    ("Use the 30-60-90 rule.", ""),
+    ("Draw an auxiliary line first.", ""),
     ("Look for a pair of congruent triangles", ""),
     ("Use the parallel lines.", ""),
-    ("Notice the right angle.", ""),
-    ("Focus on the midpoint.", ""),
-    ("Use SAS on triangles ABD and ACD.", ""),  # names points
-    # Review round 2: a theorem's initials are not a point; a hint that
-    # states a relation is a fact code can't check.
-    ("Use SAS.", "Use SAS."),
-    ("Try CPCTC", "Try CPCTC."),
-    ("Remember that the lines are parallel.", ""),
-    ("Notice the triangles are congruent.", ""),
-    ("The base angles are equal.", ""),
-    ("Use the 30-60-90 rule.", ""),  # a number
-    ("Draw an auxiliary line first.", ""),  # the student would draw: grading would need to know
-    ("Construct a perpendicular.", ""),
+    ("Show the two triangles match first.", ""),  # independent review round
+    ("Notice the shared side.", ""),
+    ("The diagonal splits it into halves.", ""),
+    ("use sas.", ""),
+    ("", ""),
 ])
 def test_the_hint_is_kept_only_without_names_numbers_or_drawing(hint: str, kept: str) -> None:
     assert clean_hint(hint)[0] == kept
@@ -454,6 +496,10 @@ def test_a_sentence_that_comes_out_empty_is_refused_even_past_the_field_checks(
      "givens": [F("on_segment", ["BC"], point="D"), F("congruent_angles", ["BAD", "CAD"]),
                 F("congruent_segments", ["AB", "AC"])],
      "prove": [F("congruent_angles", ["ABD", "ACD"])]},
+    # A right triangle's other angles are not given by its right angle.
+    {"points": list("ABC"), "triangles": ["ABC"],
+     "givens": [F("right_triangle", ["ABC"], point="C"), F("angle_measure", ["BAC"], value=35)],
+     "find": [{"kind": "angle", "item": "ABC"}]},
     # Empty optional fields read as absent ("circle": "", "expr": "").
     _card({}, F("parallel", ["AB", "CD"], circle="", expr="", point="")),
 ])
@@ -469,7 +515,7 @@ def test_an_ordinary_card_is_accepted(raw: dict[str, Any]) -> None:
 def test_a_context_that_speaks_of_drawing_is_left_out(context: str) -> None:
     """Review round 3: the words would read as the student drawing (who
     draws it is on the card)."""
-    assert clean_context(context) == ("", "the context spoke of drawing or constructing")
+    assert clean_context(context)[0] == ""
 
 
 
@@ -478,3 +524,10 @@ def test_a_blank_card_is_no_card() -> None:
 
     assert is_blank_card({}) and is_blank_card({"points": [], "givens": [], "context": ""})
     assert not is_blank_card({"points": ["A"]}) and not is_blank_card(None) and not is_blank_card("card")
+
+
+
+def test_the_hint_is_a_closed_choice_in_the_schema() -> None:
+    from api.core.geometry.fact_card import HINT_FIELD, HINTS
+
+    assert HINT_FIELD["enum"] == ["", *HINTS]

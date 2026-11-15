@@ -124,17 +124,15 @@ CONTEXT_FIELD: dict[str, Any] = {
     "type": "string",
     "description": (
         "Optional, only with figure_facts: one plain sentence of setting before the givens ('A carpenter "
-        "is building a roof truss.'). No point names, no numbers, no math, no relation (parallel, equal, "
-        "right…): the givens say all of that. Omit when there is none."
+        "is building a roof truss.'), at most 15 words. No point names, no numbers in digits or words, no "
+        "math, no relation or measure words (parallel, equal, match, side, long, feet…): the givens say all "
+        "of that. Omit when there is none."
     ),
 }
 HINT_FIELD: dict[str, Any] = {
     "type": "string",
-    "description": (
-        "Optional, only with figure_facts: a hint on method ('Use SAS.', 'Work backward from what you "
-        "need to prove.'). No point names, no numbers, no math, no relation words (parallel, congruent, "
-        "right…), and no instruction to draw or construct."
-    ),
+    "enum": ["", *()],  # filled below from HINTS
+    "description": "Optional, only with figure_facts: one method hint from the list, or empty.",
 }
 
 
@@ -295,6 +293,31 @@ def _item_key(kind: str, x: str, labels: dict[str, str]) -> str:
     return "".join(n) or x.strip()
 
 
+def _corners(poly: str) -> list[str]:
+    """Each corner of a polygon as a three-letter angle, vertex in the middle."""
+    v = split_names(poly)
+    return ["".join((v[i - 1], v[i], v[(i + 1) % len(v)])) for i in range(len(v))] if len(v) >= 3 else []
+
+
+def _fixed_angles(f: Fact) -> list[str]:
+    """The angles a given fixes without a value (each is 90° or 60°)."""
+    it = [x.strip() for x in f.items]
+    p = (f.point or "").strip()
+    if f.kind == "right_angle":
+        return it
+    if f.kind == "right_triangle" and it and p:
+        t = split_names(it[0])
+        return ["".join((a, p, b)) for a in t for b in t if a < b and p not in (a, b)] if p in t else [p]
+    if f.kind == "perpendicular" and len(it) == 2 and p:
+        ends = [[q for q in split_names(x) if q != p] for x in it]
+        return ["".join((a, p, b)) for a in ends[0] for b in ends[1]] or [p]
+    if f.kind == "equilateral" and it:
+        return _corners(it[0])
+    if f.kind in ("square", "rectangle") and it:
+        return _corners(it[0])
+    return []
+
+
 def _already_given(card: FigureFacts) -> list[str]:
     """An ask the givens already answer: "m∠ABC = 50°. Find m∠CBA.", or a
     statement to prove that is a given. Angles compare however written
@@ -316,6 +339,10 @@ def _already_given(card: FigureFacts) -> list[str]:
     lengths: set[str] = set()
     angles: set[str] = set()
     for f in card.givens:
+        # Angles a fact fixes with no value: the ask "Find m∠ABC" after
+        # "∠ABC is a right angle" (or ⊥ at B, a right triangle's angle, an
+        # equilateral's 60°, a square's corner) is answered by the givens.
+        angles |= {_angle_key(a, labels) for a in _fixed_angles(f)}
         if f.value is None and not (f.kind == "equal_length" and len(f.items) > 1 and f.expr):
             continue
         if f.kind in _LENGTH_KINDS:
@@ -826,8 +853,6 @@ _STATES = re.compile(
     r"|\bside by side\b",
     re.IGNORECASE,
 )
-# A congruence theorem's initials: a hint may name one ("Use SAS.").
-_THEOREMS = re.compile(r"\b(?:SSS|SAS|ASA|AAS|HL|CPCTC|AA)\b")
 _DRAWS = re.compile(r"\b(?:draw\w*|construct\w*|sketch\w*|graph\w*|plot\w*|shade\w*)\b", re.IGNORECASE)
 
 
@@ -840,35 +865,77 @@ def _names_a_point(s: str) -> bool:
     return False
 
 
+# Words a context sentence may not use: any number word (the card says
+# every number) and any word for a relation or a count of parts. Matched
+# on the sentence with hyphens and repeated spaces made single spaces, so
+# "side-by-side" and "side  by side" read alike. A blocklist can't list
+# every synonym, so the sentence is also capped short: one line of setting.
+_NUMBER_WORDS = (
+    r"zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|"
+    r"sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|"
+    r"hundreds?|thousands?|millions?|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|"
+    r"twelfth|twentieth|hundredth|halves|half|thirds|quarters?|fifths|tenths|dozens?|pairs?|both|single|"
+    r"couple|once|twice|thrice|double|triple|quadruple|several|each|every|either|neither|another|other"
+)
+_RELATION_WORDS = (
+    r"match\w*|shar\w*|split\w*|touch\w*|lines? up|lined up|lining up|alongside|along|meet\w*|met|"
+    r"cross\w*|same|equal\w*|identical|even\w*|level|upright|vertical\w*|horizontal\w*|flat|steep|"
+    r"slant\w*|tilt\w*|lean\w*|between|across|opposite|apart|join\w*|connect\w*|divid\w*|cut\w*|"
+    r"fold\w*|mirror\w*|symmetr\w*|reflect\w*|rotat\w*|corner\w*|edges?|sides?|ends?|middle|center\w*|"
+    r"centre\w*|halfway|side by side|face to face|back to back|in line|parallel|perpendicular|congruent|"
+    r"similar|bisect\w*|midpoint|tangent|chord|radius|radii|diameter|inscribed|circumscribed|square|"
+    r"rectang\w*|triang\w*|circl\w*|round|oval|curv\w*|\w*angular|straight|right|acute|obtuse|"
+    r"longer|shorter|longest|shortest|taller|tallest|wider|widest|larger|smaller|bigger|twice|"
+    r"degrees?|feet|foot|ft|inch\w*|meters?|metres?|cm|km|miles?|yards?|units?|long|wide|tall|high|deep"
+)
+_CONTEXT_REFUSED = re.compile(rf"\b(?:{_NUMBER_WORDS}|{_RELATION_WORDS})\b", re.IGNORECASE)
+_CONTEXT_MAX_WORDS = 15
+
+
+def _plain_words(s: str) -> str:
+    return " ".join(re.sub(r"[-‐‑‒–—_/]+", " ", s).split())
+
+
 def clean_context(context: Any) -> tuple[str, str]:
-    """(the context sentence to keep, why it was left out)."""
+    """(the context sentence to keep, why it was left out). Kept only when
+    it is one short line of setting that names no point, gives no number
+    (in digits or words), says no relation and speaks of no drawing."""
     s = " ".join(str(context or "").split())
     if not s:
         return "", ""
-    if _names_a_point(s) or _STATES.search(s):
-        return "", "the context named a point or stated something about the figure"
-    if _DRAWS.search(s):
+    plain = _plain_words(s)
+    if _names_a_point(s) or _STATES.search(s) or _STATES.search(plain) or _CONTEXT_REFUSED.search(plain):
+        return "", "the context named a point, a number or a relation"
+    if _DRAWS.search(plain):
         # "Engineers plan to construct a bridge." would read as the student's
         # drawing (who draws it is on the card).
         return "", "the context spoke of drawing or constructing"
+    if len(plain.split()) > _CONTEXT_MAX_WORDS or len(re.findall(r"[.!?;:]", s.rstrip(".!? "))) > 0:
+        return "", "the context was more than one short sentence"
     if not s.endswith((".", "!", "?")):
         s += "."
     return s, ""
+
+
+# The hints a problem may carry: a closed list (the schema's enum), kept by
+# membership. Free text can't be checked, and a hint that says a relation
+# ("the two triangles match") gives the proof away or claims what the card
+# doesn't.
+HINTS: tuple[str, ...] = (
+    "Use SSS.", "Use SAS.", "Use ASA.", "Use AAS.", "Use HL.", "Use CPCTC.",
+    "Work backward from what you need to prove.",
+    "List what you know, then what you need.",
+    "Look for a theorem that links the givens to what you need.",
+)
+HINT_FIELD["enum"] = ["", *HINTS]
 
 
 def clean_hint(hint: Any) -> tuple[str, str]:
-    """(the hint to keep, why it was left out)."""
+    """(the hint to keep, why it was left out): one of HINTS, as written."""
     s = " ".join(str(hint or "").split())
     if not s:
         return "", ""
-    if _names_a_point(_THEOREMS.sub(" ", s)) or re.search(r"[=≅∥⊥∼≈°$\\∠△⊙]|\d", s):
-        return "", "the hint named a point or gave a number"
-    if _STATES.search(_THEOREMS.sub(" ", s)):
-        # "Use the parallel lines." says something code can't check (and may
-        # give the proof away): a hint names a method or a theorem's initials.
-        return "", "the hint stated something about the figure"
-    if _DRAWS.search(s):
-        return "", "the hint asked the student to draw"
-    if not s.endswith((".", "!", "?")):
-        s += "."
-    return s, ""
+    for h in HINTS:
+        if s == h or s == h.rstrip("."):
+            return h, ""
+    return "", "the hint isn't one of the fixed method hints"
