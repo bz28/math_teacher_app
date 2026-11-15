@@ -42,7 +42,7 @@ PHRASES: dict[str, tuple[dict[str, Any], dict[str, Any], str]] = {
     "perpendicular": ({}, F("perpendicular", ["AB", "CD"], point="E"), r"$\overline{AB} \perp \overline{CD}$ at $E$"),
     "congruent_segments": ({}, F("congruent_segments", ["AB", "CD"]), r"$\overline{AB} \cong \overline{CD}$"),
     "congruent_angles": ({}, F("congruent_angles", ["ABC", "DEF"]), r"$\angle ABC \cong \angle DEF$"),
-    "equal_length": ({}, F("equal_length", ["AB"], value=7), r"$AB = 7$"),
+    "equal_length": ({}, F("equal_length", ["BC"], value=7), r"$BC = 7$"),
     "angle_measure": ({}, F("angle_measure", ["ABC"], value=40), r"$m\angle ABC = 40^\circ$"),
     "midpoint": ({}, F("midpoint", ["AB"], point="M"), r"$M$ is the midpoint of $\overline{AB}$"),
     "on_segment": ({}, F("on_segment", ["AB"], point="M"), r"$M$ is on $\overline{AB}$"),
@@ -166,6 +166,26 @@ def test_each_kind_has_one_fixed_phrase_that_says_only_its_fact(kind: str) -> No
      "needs its measure"),
     ({"points": list("ABC"), "triangles": ["ABC"], "constructs": [F("bisects_segment", ["AB"])]},
      "wrong number of parts"),
+    # Review round 2: items of the wrong shape (a phrase reading backwards),
+    # numbered angles no fact labels, expressions that break the LaTeX, an
+    # apex off the triangle, and asks the givens already answer.
+    (_card({}, F("numbered_angle", ["ABC", "1"])), "aren't the kind"),
+    (_card({}, F("numbered_angle", ["1", "AB"])), "aren't the kind"),
+    (_card({"circles": ["D"]}, F("on_circle", ["AB", "C"], circle="D")), "aren't the kind"),
+    (_card({}, F("collinear", ["AB", "C", "D"])), "aren't the kind"),
+    (_card({}, F("congruent_angles", ["1", "2"])), "numbered angle the card doesn't label"),
+    ({"points": list("ABC"), "triangles": ["ABC"], "givens": [F("equal_length", ["AB"], value=6)],
+      "find": [{"kind": "angle", "item": "1"}]}, "angle it doesn't label"),
+    (_card({}, F("angle_measure", ["ABC"], expr="$2x$")), "plain arithmetic"),
+    (_card({}, F("angle_measure", ["ABC"], expr="2x$")), "plain arithmetic"),
+    (_card({}, F("isosceles", ["ABC"], point="D")), "apex"),
+    (_card({}, F("equal_length", ["AB"], value=0.00001)), "positive number"),
+    ({"points": list("ABC"), "triangles": ["ABC"], "givens": [F("angle_measure", ["ABC"], value=50)],
+      "find": [{"kind": "angle", "item": "ABC"}]}, "angle it gives"),
+    (_card({}, F("equal_length", ["AB"], value=3))  # _card finds AB
+     , "length it gives"),
+    ({"points": list("ABC"), "triangles": ["ABC"], "givens": [F("congruent_segments", ["AB", "AC"])],
+      "prove": [F("congruent_segments", ["AC", "AB"])]}, "prove a given"),
     # Review round 1: a construction step whose every point the figure
     # shows (D listed as a point): the figure would show the construction.
     ({"points": list("ABCD"), "segments": ["AD"], "givens": [F("congruent_segments", ["AB", "AC"])],
@@ -259,6 +279,11 @@ def test_a_construction_says_what_the_student_constructs() -> None:
     ("A rectangular garden has a path.", ""),  # a shape the card may not have
     ("A circular track has a fence.", ""),
     (r"In $\triangle ABC$ the sides are equal.", ""),
+    # Review round 2: relations said without the listed words.
+    ("The two ramps are identical.", ""),
+    ("The shelf is level and the post is upright.", ""),
+    ("Two roads run side by side.", ""),
+    ("Two lamps stand halfway along the path.", ""),
     ("", ""),
 ])
 def test_the_context_is_kept_only_when_it_states_nothing(context: str, kept: str) -> None:
@@ -267,7 +292,14 @@ def test_the_context_is_kept_only_when_it_states_nothing(context: str, kept: str
 
 @pytest.mark.parametrize(("hint", "kept"), [
     ("Look for a pair of congruent triangles", "Look for a pair of congruent triangles."),
-    ("Use SAS on triangles ABD and ACD.", ""),  # names points (and SAS reads as one)
+    ("Use SAS on triangles ABD and ACD.", ""),  # names points
+    # Review round 2: a theorem's initials are not a point; a hint that
+    # states a relation is a fact code can't check.
+    ("Use SAS.", "Use SAS."),
+    ("Try CPCTC", "Try CPCTC."),
+    ("Remember that the lines are parallel.", ""),
+    ("Notice the triangles are congruent.", ""),
+    ("The base angles are equal.", ""),
     ("Use the 30-60-90 rule.", ""),  # a number
     ("Draw an auxiliary line first.", ""),  # the student would draw: grading would need to know
     ("Construct a perpendicular.", ""),

@@ -645,10 +645,18 @@ async def _draw_figures(
 
     async def draw(q: dict[str, Any]) -> None:
         card = q.get("card")
+        if not _has_card(q):
+            # No card: the student's own drawing (the AI's flag, or the words:
+            # "graph y = …", "construct …") is never drawn for them, and the
+            # problem doesn't want a figure.
+            _drop_unwanted_figure(q, generation_job_id, teacher_draws=combine_requires_drawing(
+                q.get("text") or "", q.get("requires_drawing")))
         # The AI's own choice, kept after a failed check drops the spec.
         q["figure_wanted"] = bool(q.get("figure_spec")) or _has_card(q)
-        if card is None and _is_construction(q.get("figure_spec")):
-            logger.warning("Job %s: a figure came without a fact card, so it can't be checked: %.80s",
+        if card is None and q.get("figure_spec") and (_has_card(q) or _is_construction(q.get("figure_spec"))):
+            # A refused card (its problem has no words code could write) or a
+            # construction with no card: nothing to hold the figure to.
+            logger.warning("Job %s: a figure came without a fact card it can be checked against: %.80s",
                            generation_job_id, q.get("text"))
             q["figure_spec"] = None
         if card is None:
@@ -679,7 +687,9 @@ def _drop_unwanted_figure(q: dict[str, Any], job_id: str | None = None, *, teach
 
     One choice stands over the card: a teacher's own "the student draws it"
     (`teacher_draws`, on regenerate) drops the drafted figure before it is
-    drawn. This only ever removes a figure, never makes one wrong."""
+    drawn. A problem with no card (a shape-form figure) passes its stored
+    flag as `teacher_draws`: what the student draws is never drawn for them.
+    This only ever removes a figure, never makes one wrong."""
     if q.get("figure_spec") and teacher_draws is True:
         logger.info("Job %s: the teacher says the student draws this one, so its figure is dropped: %.80s",
                     job_id, q.get("text"))
@@ -900,13 +910,15 @@ _REPLACEMENT_RULE = (
 
 
 def shortfall_note(asked: int, kept: int) -> str:
-    """The note the teacher gets when a set comes back short: the slots
-    whose figure couldn't be checked are left out, never filled with a
-    problem off the topic's geometry."""
+    """The note the teacher gets when a set comes back short: a slot that
+    didn't pass its checks (most often a diagram that couldn't be checked;
+    also a repeat, or a replacement that didn't come) is left out, never
+    filled with a problem off the topic's geometry."""
     left = asked - kept
     return (
-        f"{kept} of {asked} problems are ready. {left} more needed a diagram that couldn't be checked, "
-        f"so {'it was' if left == 1 else 'they were'} left out — generate again for more."
+        f"{kept} of {asked} problems are ready. {left} more didn't pass our checks (usually a diagram "
+        f"that couldn't be confirmed), so {'it was' if left == 1 else 'they were'} left out — "
+        "generate again for more."
     )
 
 

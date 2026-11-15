@@ -314,3 +314,79 @@ async def test_a_chat_figure_edit_is_held_to_the_author_card() -> None:
     read.assert_not_awaited()
     proposal = msg.get("proposal") or {}
     assert not proposal.get("figure_svg"), proposal
+
+
+# ── Ben's rule: what the student must produce is never drawn ───────────
+# (the constructed part, the graph of "graph y = …", the value asked for).
+# Review round 2 found two ways around it; each is pinned here.
+
+
+@pytest.mark.asyncio
+async def test_a_refused_card_never_shows_its_figure() -> None:
+    """Refused card + a shape-form figure: no figure (its words would be
+    the AI's, unchecked), so the slot is replaced."""
+    bad = dict(RIGHT, givens=[{"kind": "other", "items": ["AB"]}])
+    for text in ("", "In triangle ABC, AB = 7 and angle C is right. Find BC."):
+        out, _ = await _generate([[_written(bad, SHAPE, text=text), PLAIN], [dict(PLAIN, text="Solve 5x = 20.")]])
+        assert [q["text"] for q in out] == ["Solve 2x + 3 = 11.", "Solve 5x = 20."]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("text", "flag"), [
+    ("Construct triangle ABC with AB = 12, BC = 4, CA = 9 using a compass and straightedge.", None),
+    ("Graph the line y = 2x + 1 and give its intercepts.", True),
+])
+async def test_without_a_card_the_students_own_drawing_is_never_drawn(text: str, flag: bool | None) -> None:
+    out, _ = await _generate([[dict(PLAIN, text=text, figure_spec=SHAPE, **(
+        {"requires_drawing": flag} if flag is not None else {})), PLAIN]])
+    assert out[0]["text"] == text  # kept: the problem wants no figure
+    assert not out[0].get("figure_svg") and not out[0].get("figure_spec")
+
+
+def test_the_figure_never_shows_the_value_asked_for() -> None:
+    from api.core.geometry.fact_card import card_text, read_card
+
+    card, why = read_card(RIGHT)
+    assert card is not None, why
+    spec = {"type": "geometry", "shape": "construction", "points": {"A": [0, 4], "B": [3, 0], "C": [0, 0]},
+            "segments": ["AB", "BC", "CA"], "side_labels": {"AB": "7", "BC": "5"}, "right_angles": ["ACB"]}
+    _, svg, issues = qbg._check_figure(spec, card_text(card), final_answer="5", facts=card)
+    assert svg is None and issues
+
+
+def test_a_shape_form_figure_is_refused_for_an_author_card_by_the_check_itself() -> None:
+    """The guard in _check_figure (the chat path's only one), not the
+    fresh-drawing branch before it."""
+    from api.core.geometry.fact_card import card_text, read_card
+
+    card, why = read_card(RIGHT)
+    assert card is not None, why
+    assert qbg._check_figure(SHAPE, card_text(card), facts=card) == (None, None, [qbg._NOT_CONSTRUCTION])
+    assert qbg._resolve_figure(SHAPE, card_text(card), facts=card) == (None, None)
+    assert qbg._resolve_figure(SHAPE, card_text(card))[1]  # the shape form itself still renders
+
+
+@pytest.mark.asyncio
+async def test_a_chat_shape_form_figure_for_an_author_card_is_never_proposed() -> None:
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    import api.core.question_bank_chat as qbc
+    from api.core.geometry.fact_card import card_text, read_card
+
+    card, why = read_card(RIGHT)
+    assert card is not None, why
+    item = SimpleNamespace(
+        id=uuid.uuid4(), course_id=uuid.uuid4(), unit_id=None, source_doc_ids=None,
+        question=card_text(card), solution_steps=None, final_answer="", generation_prompt=None,
+        chat_messages=[], figure_spec=None, figure_svg=None, figure_facts=card.model_dump(), requires_drawing=False,
+    )
+    db = MagicMock()
+    db.commit = AsyncMock()
+    with patch.object(qbc, "call_claude_json", AsyncMock(return_value={
+            "reply": "Added.", "proposal": {"figure_spec": SHAPE}})):
+        msg = await qbc.chat_with_bank_item(
+            db, item, SimpleNamespace(subject="math", name="Geometry"),  # type: ignore[arg-type]
+            teacher_message="add a figure", user_id=uuid.UUID(int=0),
+        )
+    assert not (msg.get("proposal") or {}).get("figure_svg")

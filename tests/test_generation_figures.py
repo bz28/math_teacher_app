@@ -141,7 +141,8 @@ async def test_a_replacement_with_the_same_flaw_is_left_out() -> None:
     assert [i.question for i in items] == [GOOD["text"]]
     assert job.status == "done" and job.produced_count == 1
     assert job.error_message == (
-        "1 of 2 problems are ready. 1 more needed a diagram that couldn't be checked, so it was left out — "
+        "1 of 2 problems are ready. 1 more didn't pass our checks (usually a diagram that couldn't be "
+        "confirmed), so it was left out — "
         "generate again for more."
     )
 

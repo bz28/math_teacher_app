@@ -199,6 +199,48 @@ _EXACT_ITEMS = {"perpendicular": 2, "bisects_segment": 2, "bisects_angle": 2, "n
 _NEEDS_POINT = ("midpoint", "on_segment", "on_line", "intersect")
 _NEEDS_CIRCLE = ("on_circle", "tangent", "chord", "diameter", "radius", "central_angle", "inscribed_angle")
 _LENGTH_KINDS = ("equal_length", "chord", "diameter", "radius")
+_MIN_LENGTH = 0.01
+# The shape of each item, per kind, so a phrase never reads backwards
+# ("∠1 is labeled ∠ABC") or names a segment where a point goes.
+_POINT_ITEMS = ("collinear", "on_circle")
+_SEGMENT_KINDS = ("congruent_segments", "equal_length", "midpoint", "on_segment", "chord", "diameter", "radius")
+_ANGLE_ITEM_KINDS = ("congruent_angles", "angle_measure", "right_angle", "vertical_angles", "linear_pair",
+                     "supplementary", "complementary", "central_angle", "inscribed_angle", *PAIRS)
+_STRAIGHT_KINDS = ("parallel", "perpendicular", "intersect", "transversal", "tangent", "opposite_rays")
+_EXPR = re.compile(r"[0-9a-z+\-*/(). ]{1,40}")
+
+
+def _is_angle_item(x: str) -> bool:
+    return x.isdigit() or len(split_names(x)) in (1, 3)
+
+
+def _is_straight_item(x: str) -> bool:
+    return len(split_names(x)) == 2 or (_is_line_name(x) and not split_names(x))
+
+
+def _bad_shape(f: Fact) -> bool:
+    """An item that isn't the kind of part the fact's phrase says it is."""
+    it = [x.strip() for x in f.items]
+    k = f.kind
+    if k in _POINT_ITEMS:
+        return any(len(split_names(x)) != 1 for x in it)
+    if k in _SEGMENT_KINDS:
+        return any(len(split_names(x)) != 2 for x in it)
+    if k in _ANGLE_ITEM_KINDS:
+        return not all(_is_angle_item(x) for x in it)
+    if k in _TRIANGLE_KINDS:
+        return any(len(split_names(x)) != 3 for x in it)
+    if k in _STRAIGHT_KINDS:
+        return not all(_is_straight_item(x) for x in it)
+    if k in SHAPES:
+        return len(it) != 1 or len(split_names(it[0])) != 4
+    if k == "bisects_segment":
+        return len(it) != 2 or not _is_straight_item(it[0]) or len(split_names(it[1])) != 2
+    if k == "bisects_angle":
+        return len(it) != 2 or not _is_straight_item(it[0]) or not _is_angle_item(it[1]) or it[1].isdigit()
+    if k == "numbered_angle":
+        return len(it) != 2 or not it[0].isdigit() or len(split_names(it[1])) != 3
+    return False
 _ANGLE_KINDS = ("angle_measure", "central_angle", "inscribed_angle")
 _MAX_LENGTH = 10_000.0
 
@@ -211,6 +253,12 @@ def _incomplete(f: Fact) -> list[str]:
         out.append(f"a fact has the wrong number of parts: {f.kind} {f.items}")
     if any(len(set(split_names(x))) != len(split_names(x)) for x in it):
         out.append(f"a fact names a part with a repeated point: {f.kind} {f.items}")
+    if not out and _bad_shape(f):
+        out.append(f"a fact's parts aren't the kind its sentence names: {f.kind} {f.items}")
+    if f.expr is not None and not _EXPR.fullmatch(f.expr.strip()):
+        out.append(f"a fact's expression isn't plain arithmetic: {f.kind} {f.expr!r}")
+    if f.kind == "isosceles" and f.point and it and f.point.strip() not in split_names(it[0]):
+        out.append(f"an isosceles triangle's apex isn't one of its vertices: {f.items} {f.point}")
     if f.kind in _NEEDS_POINT and not (f.point or "").strip():
         out.append(f"a fact needs its point: {f.kind} {f.items}")
     if f.kind in _NEEDS_CIRCLE and not (f.circle or "").strip():
@@ -220,10 +268,29 @@ def _incomplete(f: Fact) -> list[str]:
         out.append(f"a fact needs its measure: {f.kind} {f.items}")
     if f.value is not None:
         v = float(f.value)
-        if f.kind in _LENGTH_KINDS and not (math.isfinite(v) and 0 < v <= _MAX_LENGTH):
+        if f.kind in _LENGTH_KINDS and not (math.isfinite(v) and _MIN_LENGTH <= v <= _MAX_LENGTH):
             out.append(f"a length must be a positive number: {f.kind} {f.items} = {f.value}")
         if f.kind in _ANGLE_KINDS and not (math.isfinite(v) and 0 < v < 360):
             out.append(f"an angle must be between 0° and 360°: {f.kind} {f.items} = {f.value}")
+    return out
+
+
+def _already_given(card: FigureFacts) -> list[str]:
+    """An ask the givens already answer: "m∠ABC = 50°. Find m∠ABC."."""
+    def key(f: Fact) -> tuple[str, tuple[str, ...]]:
+        return f.kind, tuple(sorted("".join(sorted(split_names(x))) or x.strip() for x in f.items))
+
+    given = {key(f) for f in card.givens}
+    out = [f"the card asks to prove a given: {f.kind} {f.items}" for f in card.prove if key(f) in given]
+    lengths = {frozenset(split_names(f.items[0])) for f in card.givens
+               if f.kind == "equal_length" and len(f.items) == 1 and f.value is not None}
+    angles = {"".join(split_names(f.items[0])) for f in card.givens
+              if f.kind == "angle_measure" and f.items and f.value is not None}
+    for t in card.find:
+        if t.kind == "segment" and frozenset(split_names(t.item)) in lengths:
+            out.append(f"the card asks for a length it gives: {t.item!r}")
+        if t.kind == "angle" and "".join(split_names(t.item)) in angles:
+            out.append(f"the card asks for an angle it gives: {t.item!r}")
     return out
 
 
@@ -304,6 +371,14 @@ def _read_card(raw: Any) -> tuple[FigureFacts | None, list[str]]:
             why.append(f"a construction step makes nothing the figure doesn't show: {f.kind} {f.items}")
     for f in every:
         why += _incomplete(f)
+    numbers = {f.items[0].strip() for f in every if f.kind == "numbered_angle" and f.items}
+    for f in every:
+        if f.kind != "numbered_angle" and any(x.strip().isdigit() and x.strip() not in numbers for x in f.items):
+            why.append(f"a fact names a numbered angle the card doesn't label: {f.kind} {f.items}")
+    for t in card.find:
+        if t.kind == "angle" and t.item.strip().isdigit() and t.item.strip() not in numbers:
+            why.append(f"the card asks for an angle it doesn't label: {t.item!r}")
+    why += _already_given(card)
     for t in card.find:
         if t.kind == "angle" and not (split_names(t.item) and set(split_names(t.item)) <= shown | made
                                       and len(split_names(t.item)) in (1, 3) or t.item.strip().isdigit()):
@@ -675,10 +750,14 @@ _STATES = re.compile(
     r"[=≅∥⊥∼≈°$\\∠△⊙]|\d"
     r"|\b(?:parallel|perpendicular|congruent|equal|same|bisect\w*|midpoint|degrees?|right|acute|obtuse|"
     r"isosceles|equilateral|scalene|square|rectangle|rhomb\w*|trapez\w*|kite|parallelogram|tangent|chord|"
-    r"diameter|radius|radii|inscribed|central|half|twice|double|longer|shorter|shortest|longest|vertical|"
-    r"supplementary|complementary|similar|straight|collinear|meet\w*|cross\w*|intersect\w*|\w*angular|circular|round|oval|curved)\b",
+    r"diameter|radius|radii|inscribed|central|half\w*|twice|double|longer|shorter|shortest|longest|vertical|identical|level|upright|alongside|"
+    r"supplementary|complementary|similar|straight|collinear|meet\w*|cross\w*|intersect\w*|\w*angular|circular|round|oval|curved)\b"
+    r"|\bside by side\b",
     re.IGNORECASE,
 )
+# A congruence theorem's initials: a hint may name one ("Use SAS.").
+_THEOREMS = re.compile(r"\b(?:SSS|SAS|ASA|AAS|HL|CPCTC|AA)\b")
+_ASSERTS = re.compile(r"\b(?:is|are|was|were|has|have|equals?|makes?|forms?)\b", re.IGNORECASE)
 _DRAWS = re.compile(r"\b(?:draw\w*|construct\w*|sketch\w*|graph\w*|plot\w*|shade\w*)\b", re.IGNORECASE)
 
 
@@ -708,8 +787,12 @@ def clean_hint(hint: Any) -> tuple[str, str]:
     s = " ".join(str(hint or "").split())
     if not s:
         return "", ""
-    if _names_a_point(s) or re.search(r"[=≅∥⊥∼≈°$\\∠△⊙]|\d", s):
+    if _names_a_point(_THEOREMS.sub(" ", s)) or re.search(r"[=≅∥⊥∼≈°$\\∠△⊙]|\d", s):
         return "", "the hint named a point or gave a number"
+    if _STATES.search(_THEOREMS.sub(" ", s)) and _ASSERTS.search(s):
+        # "The lines are parallel." states a fact code can't check; "Look
+        # for a pair of congruent triangles." names a method.
+        return "", "the hint stated something about the figure"
     if _DRAWS.search(s):
         return "", "the hint asked the student to draw"
     if not s.endswith((".", "!", "?")):
