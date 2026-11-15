@@ -324,3 +324,34 @@ def test_every_drawing_eval_check_has_a_part() -> None:
     names = [c.name for c in DrawingEvalProbe().deterministic_checks(item)]  # type: ignore[arg-type]
     key = "reading student work / drawing-eval"
     assert len(names) == 4 and {_part_of(key, n) for n in names} == set(sc.NEVER[key])
+
+
+@pytest.mark.asyncio
+async def test_an_unrecorded_generation_figures_probe_fails_its_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When the probe says its cassette isn't recorded (gf.recorded() False,
+    as on #1003), its rows FAIL as "not recorded": not PASS, not a crash."""
+    from tests.harness.probes import generation_figures as gf
+
+    monkeypatch.setenv("HARNESS_LLM_MODE", "replay")
+    monkeypatch.setattr(gf, "recorded", lambda: False, raising=False)
+    rows = await sc.collect(sc.Env(has_recorded_font=False), ["generation-figures"])
+    assert not sc.judge(rows, json.loads(sc.BASELINE_PATH.read_text()), ["generation-figures"])
+    assert [r.key for r in rows] == [f"{f} / {p}" for f, p in sc._GF_ROWS]
+    assert all(r.status == "FAIL" and "not recorded" in " ".join(r.failures) for r in rows), sc.render(rows)
+
+
+@pytest.mark.asyncio
+async def test_a_not_recorded_error_fails_the_rows_too(monkeypatch: pytest.MonkeyPatch) -> None:
+    from tests.harness.probes import generation_figures as gf
+
+    class NotRecordedError(RuntimeError):
+        pass
+
+    async def run_all(*a: object, **k: object) -> list[object]:
+        raise NotRecordedError("no recording for set1")
+
+    monkeypatch.setattr(gf, "run_all", run_all)
+    rows = await sc.collect(sc.Env(has_recorded_font=False), ["generation-figures"])
+    assert not sc.judge(rows, json.loads(sc.BASELINE_PATH.read_text()), ["generation-figures"])
+    assert len(rows) == 3
+    assert all("not recorded: no recording for set1" in " ".join(r.failures) for r in rows), sc.render(rows)

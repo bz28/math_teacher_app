@@ -240,10 +240,33 @@ def _ctx() -> Any:
 # ── sources: each runs one probe once and returns its row(s) ─────────────
 
 
+_GF_ROWS = [("problem generation", "generation-figures (sets)"), ("homework diagrams", "generation-figures"),
+            ("step diagrams", "generation-figures (steps)")]
+
+
+def _not_recorded(why: str) -> list[Row]:
+    """The generation-figures rows when the probe has no recording to replay:
+    each FAILs with that plain reason (never PASS, never a crash)."""
+    return [Row(f, p, "; ".join(NEVER[f"{f} / {p}"].values()), "",
+                error=f"not recorded: {why} (record it with the command in the probe's docstring)")
+            for f, p in _GF_ROWS]
+
+
 async def _generation_figures(env: Env) -> list[Row]:
     from tests.harness.probes import generation_figures as gf
 
-    results = await gf.run_all()
+    # A probe version that knows whether its cassette is recorded says so
+    # (gf.recorded()), or raises NotRecordedError in replay; matched by name
+    # so this file doesn't depend on that version.
+    recorded = getattr(gf, "recorded", None)
+    if callable(recorded) and not recorded():
+        return _not_recorded("the generation-figures cassette has no recording")
+    try:
+        results = await gf.run_all()
+    except Exception as e:
+        if type(e).__name__ == "NotRecordedError":
+            return _not_recorded(str(e)[:200] or "the generation-figures cassette has no recording")
+        raise
     s = gf.summarize(results)
     neg = {k: v for p in results for k, v in gf.negatives(p).items()}
     q_neg = {k: v for k, v in neg.items() if "-step" not in k}
