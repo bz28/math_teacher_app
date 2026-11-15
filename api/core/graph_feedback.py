@@ -41,7 +41,8 @@ cost the most, saying what to fix ("Your line for y = 2x - 1 should cross the \
 y-axis at -1").
 - A feature marked no is a mistake to fix; one marked unclear is not: don't \
 call it wrong.
-- When there was no drawing, say the problem asked for one.
+- When there was no drawing, say the problem asked for one. When the drawing \
+couldn't be checked, say the teacher will look at it; never call it missing.
 - Keep any useful point from the grader's note about the written work.
 - No points, percents or scores, and no mention of a checklist or a check.
 """
@@ -63,15 +64,27 @@ def needs_note(entry: dict[str, Any]) -> bool:
     return any(i.get("verdict") != "yes" for i in items) or (entry.get("percent") or 0) < 100
 
 
-def fallback_feedback(work_feedback: str | None, items: list[dict[str, Any]]) -> str:
+_DRAWING_LINE = {
+    "found": "yes",
+    "none": "no, the problem asked for one and none was submitted",
+    "unchecked": "couldn't be checked; the teacher will look at it",
+}
+
+
+def fallback_feedback(work_feedback: str | None, items: list[dict[str, Any]], drawing: str = "found") -> str:
     """A note built in code when the model can't write one: the grader's
     note is about the written work only, so it says so, and the drawing's
-    misses are named after it."""
+    misses are named after it (or its absence, or that the teacher will
+    look at it)."""
     misses = [str(i.get("text") or "").rstrip(".") for i in items if i.get("verdict") == "no"]
     parts = []
     if work_feedback:
         parts.append(f"Your written work: {work_feedback.strip()}")
-    if misses:
+    if drawing == "none":
+        parts.append("This problem asked for a drawing, and none was found.")
+    elif drawing == "unchecked":
+        parts.append("Your teacher will look at your drawing.")
+    elif misses:
         parts.append("On your drawing, check: " + "; ".join(misses[:2]) + ".")
     return " ".join(parts) or "See your teacher's comments on this problem."
 
@@ -82,13 +95,13 @@ async def write_graph_note(
     entry: dict[str, Any],
     work_feedback: str | None,
     *,
-    drawn: bool,
+    drawing: str,
     user_id: str | None = None,
     submission_id: str | None = None,
 ) -> str:
     """The student's note for one combined graph-problem entry
-    (`graph_grading.combine`); `drawn` is False when both looks found no
-    drawing. Never raises: a failed call falls back to
+    (`graph_grading.combine`); `drawing` is "found", "none" or "unchecked"
+    (`grading_ai._drawing_state`). Never raises: a failed call falls back to
     `fallback_feedback`."""
     graph = entry.get("graph") or {}
     items = graph.get("items") or []
@@ -99,7 +112,7 @@ async def write_graph_note(
             (
                 f"Question:\n{question}\n\nAnswer key:\n{final_answer}\n\n"
                 f"Score on this problem: {percent:.0f}%\n"
-                f"Drawing found: {'yes' if drawn else 'no'}\n\n"
+                f"Drawing found: {_DRAWING_LINE.get(drawing, 'yes')}\n\n"
                 f"Drawing, feature by feature:\n{_item_lines(items)}\n\n"
                 f"Grader's note on the written work and answer:\n{work_feedback or '(none)'}"
             ),
@@ -116,4 +129,4 @@ async def write_graph_note(
             return note
     except Exception:  # noqa: BLE001 — a note is never worth failing a grade over
         logger.exception("graph note failed submission=%s", submission_id)
-    return fallback_feedback(work_feedback, items)
+    return fallback_feedback(work_feedback, items, drawing)

@@ -50,7 +50,8 @@ def test_a_full_marks_problem_keeps_the_graders_note() -> None:
 async def test_the_note_is_written_from_both_parts(monkeypatch: pytest.MonkeyPatch) -> None:
     reply = Reply({"feedback": "Your answer is right, but your line should cross at -1."})
     monkeypatch.setattr(graph_feedback, "call_claude_json", reply)
-    note = await write_graph_note("Graph it.", "(2, 3)", _entry(40, "yes", "no"), "Correct — nice job.", drawn=True)
+    note = await write_graph_note("Graph it.", "(2, 3)", _entry(40, "yes", "no"), "Correct — nice job.",
+                                  drawing="found")
     assert note == "Your answer is right, but your line should cross at -1."
     user = reply.calls[0]["user"]
     assert "Score on this problem: 40%" in user
@@ -60,14 +61,15 @@ async def test_the_note_is_written_from_both_parts(monkeypatch: pytest.MonkeyPat
 
 async def test_a_failed_note_falls_back_to_one_that_names_the_drawings_misses(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(graph_feedback, "call_claude_json", Reply(RuntimeError("down")))
-    note = await write_graph_note("Graph it.", "(2, 3)", _entry(40, "yes", "no"), "Correct — nice job.", drawn=True)
+    note = await write_graph_note("Graph it.", "(2, 3)", _entry(40, "yes", "no"), "Correct — nice job.",
+                                  drawing="found")
     assert note == fallback_feedback("Correct — nice job.", _entry(40, "yes", "no")["graph"]["items"])
     assert note.startswith("Your written work: Correct") and "On your drawing, check: Feature 2." in note
 
 
 async def test_grading_puts_the_new_note_on_the_problem(monkeypatch: pytest.MonkeyPatch) -> None:
     async def fake(question: str, answer: str, entry: dict[str, Any], work: str | None, **kw: Any) -> str:
-        assert kw["drawn"] is False  # both looks found nothing
+        assert kw["drawing"] == "none"  # both looks found nothing
         return f"note for {entry['percent']:.0f}% after: {work}"
 
     monkeypatch.setattr(graph_feedback, "write_graph_note", fake)
@@ -79,3 +81,29 @@ async def test_grading_puts_the_new_note_on_the_problem(monkeypatch: pytest.Monk
     await grading_ai._rewrite_graph_notes(combined, by_bid, problems, checks, None, uuid.uuid4())
     assert by_bid["p1"]["feedback"] == "note for 10% after: Correct — nice job."
     assert by_bid["p2"]["feedback"] == "Great work."  # full marks: untouched
+
+
+@pytest.mark.parametrize(("check", "state"), [
+    (ProblemGraphCheck("tight", "whole", []), "found"),
+    (ProblemGraphCheck("page", "not_found", [], note="not_drawn"), "none"),
+    (None, "none"),
+    (ProblemGraphCheck("none", "not_found", [], note="failed"), "unchecked"),
+    (ProblemGraphCheck("page", "not_found", []), "unchecked"),
+])
+def test_the_note_is_told_whether_the_drawing_was_found_missing_or_unchecked(check: Any, state: str) -> None:
+    # A failed check is not "Drawing found: yes" (round 1 review).
+    assert grading_ai._drawing_state(check) == state
+
+
+async def test_an_unchecked_drawing_is_never_called_missing_or_right(monkeypatch: pytest.MonkeyPatch) -> None:
+    reply = Reply({"feedback": "n"})
+    monkeypatch.setattr(graph_feedback, "call_claude_json", reply)
+    await write_graph_note("q", "a", _entry(100, "unclear"), "w", drawing="unchecked")
+    assert "Drawing found: couldn't be checked; the teacher will look at it" in reply.calls[0]["user"]
+
+
+def test_the_fallback_note_says_what_happened_to_the_drawing() -> None:
+    items = _entry(10, "no", "no")["graph"]["items"]
+    none = fallback_feedback("Right answer.", items, "none")
+    assert "asked for a drawing, and none was found" in none and "On your drawing" not in none
+    assert "teacher will look at your drawing" in fallback_feedback(None, items, "unchecked")
