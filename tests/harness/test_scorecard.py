@@ -446,13 +446,18 @@ def test_the_doc_sample_matches_the_baseline() -> None:
         key = f"{feature} / {m.group(1).strip()}"
         # A sample that reads like a false pass: a never above 0 beside PASS,
         # or any FAIL in the committed sample (#1002 review round 3).
-        assert m.group(5) == "PASS" and m.group(2) in ("0", "-"), (key, line)
+        assert m.group(5) == "PASS" and m.group(2) == "0", (key, line)
         if key in base:
             want = base[key]
-            got_good = None if m.group(3) == "-" else float(m.group(3))
-            if want.get("how_good") is not None:
-                assert got_good is not None and abs(got_good - want["how_good"]) < 0.0006, (key, line)
-            if m.group(4) != "-":
-                assert int(m.group(4)) == want.get("cases", 0), (key, line)
+            # Compared the way render() prints them: '-' only for no share / no cases.
+            good = "-" if want.get("how_good") is None else f"{want['how_good']:.3f}"
+            assert m.group(3) == good, (key, line, good)
+            assert m.group(4) == (str(want["cases"]) if want.get("cases") else "-"), (key, line)
             seen.add(key)
     assert seen == set(base), sorted(set(base) ^ seen)  # no baseline row may drop out of the sample
+
+
+def test_a_row_that_ran_with_no_never_number_fails() -> None:
+    """#1002 review round 4: never=None on a row that ran read PASS."""
+    rows = [sc.Row("grading", "grading", "x", "")]
+    assert not sc.judge(rows, {}) and rows[0].status == "FAIL", rows[0].failures

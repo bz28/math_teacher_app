@@ -587,7 +587,10 @@ def judge(rows: list[Row], baseline: dict[str, Any], only: list[str] | None = No
         if r.error:
             r.failures.append(f"could not run: {r.error}")
             continue
-        if r.never:
+        if r.never is None:
+            # Missing data never reads as PASS (#1002 review round 4).
+            r.failures.append("no never-number was measured")
+        elif r.never:
             r.failures.append(f"never-number is {r.never}: {r.never_parts}")
         base = baseline.get(r.key)
         if base is None:
