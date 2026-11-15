@@ -1029,3 +1029,11 @@ def test_the_prompts_perpendicular_bisector_example_is_a_card_code_accepts() -> 
         F("bisects_segment", ["MN", "AB"], point="M"), F("perpendicular", ["MN", "AB"], point="M")]})
     assert card is not None, why
     assert "Make a construction so that" in card_text(card) and "M" not in card.points
+
+
+@pytest.mark.parametrize("kind", ["midpoint", "on_segment"])
+def test_a_point_inside_a_segment_it_ends_is_refused(kind: str) -> None:
+    """Eval 1 set1: "B is the midpoint of BD"."""
+    card, why = read_card({"points": ["A", "B", "C", "D"], "segments": ["BD"], "givens": [
+        F(kind, ["BD"], point="B")], "find": [{"kind": "segment", "item": "AB"}]})
+    assert card is None and any("inside a segment it ends" in w for w in why), why

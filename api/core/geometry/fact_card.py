@@ -276,6 +276,10 @@ def _incomplete(f: Fact) -> list[str]:
         out.append(f"an isosceles triangle's apex isn't one of its vertices: {f.items} {f.point}")
     if f.kind in _NEEDS_POINT and not (f.point or "").strip():
         out.append(f"a fact needs its point: {f.kind} {f.items}")
+    if f.kind in ("midpoint", "on_segment") and it and (f.point or "").strip() in split_names(it[0]):
+        # "B is the midpoint of BD" (Eval 1 set1): a point is never inside a
+        # segment it ends.
+        out.append(f"a fact puts a point inside a segment it ends: {f.kind} {f.items} {f.point}")
     if not out and _same_line(f, it):
         out.append(f"a fact relates a line to itself: {f.kind} {f.items}")
     if f.kind in _NEEDS_CIRCLE and not (f.circle or "").strip():
