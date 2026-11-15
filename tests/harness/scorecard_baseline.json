@@ -23,12 +23,12 @@
     "how_good": 1.0
   },
   "homework diagrams / generation-figures": {
-    "cases": 20,
+    "cases": 22,
     "cassette_misses": [],
-    "how_good": 0.6
+    "how_good": 0.9333
   },
   "problem generation / generation-figures (sets)": {
-    "cases": 20,
+    "cases": 22,
     "cassette_misses": [],
     "how_good": null
   },
@@ -48,7 +48,7 @@
     "how_good": null
   },
   "step diagrams / generation-figures (steps)": {
-    "cases": 23,
+    "cases": 44,
     "cassette_misses": [],
     "how_good": 0.0
   }

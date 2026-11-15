@@ -106,7 +106,7 @@ def _share(num: int, den: int) -> float | None:
 # counts that doesn't match, so the code, the row text and the doc can't drift.
 NEVER: dict[str, dict[str, str]] = {
     "problem generation / generation-figures (sets)": {
-        "short_of_count": "a set short of the count asked",
+        "short_unexplained": "a set short of the count asked with no note to the teacher saying so",
         "repeated_problem": "a problem repeated in its set",
     },
     "homework diagrams / generation-figures": {
@@ -278,7 +278,7 @@ async def _generation_figures(env: Env) -> list[Row]:
 
     gen = _new("problem generation", "generation-figures (sets)", "")
     gen.never, gen.never_parts = _parts(gen.key,
-        short_of_count=max(0, asked - s["problems"]),
+        short_unexplained=short_unexplained(asked, s["problems"], s["left_out"]),
         repeated_problem=s["problems"] - s["distinct_problems"],
     )
     gen.cases = s["problems"]
@@ -549,6 +549,14 @@ def _feature_of(source: str) -> str:
         "construction-adversarial": "chat diagrams", "drawing-eval": "reading student work",
         "drawing-flag": "reading student work", "grading": "grading", "graph-check": "grading",
     }.get(source, "problem generation")
+
+
+def short_unexplained(asked: int, problems: int, left_out: int) -> int:
+    """Slots a set is short that nothing explains. A slot left out (no
+    checked figure, or an answer its figure contradicts) comes back with the
+    job's note to the teacher: the agreed fallback, counted as missing under
+    homework diagrams. Only a shortfall with no note is a never."""
+    return max(0, asked - problems - left_out)
 
 
 def judge(rows: list[Row], baseline: dict[str, Any], only: list[str] | None = None) -> bool:

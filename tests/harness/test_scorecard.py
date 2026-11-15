@@ -355,3 +355,13 @@ async def test_a_not_recorded_error_fails_the_rows_too(monkeypatch: pytest.Monke
     assert not sc.judge(rows, json.loads(sc.BASELINE_PATH.read_text()), ["generation-figures"])
     assert len(rows) == 3
     assert all("not recorded: no recording for set1" in " ".join(r.failures) for r in rows), sc.render(rows)
+
+
+@pytest.mark.parametrize(("asked", "problems", "left_out", "never"), [
+    (24, 22, 2, 0),   # Eval 1 set2: two slots left out, with the note to the teacher
+    (24, 22, 0, 2),   # short with no note
+    (24, 22, 1, 1),
+    (24, 24, 0, 0),
+])
+def test_only_a_shortfall_with_no_note_is_a_never(asked: int, problems: int, left_out: int, never: int) -> None:
+    assert sc.short_unexplained(asked, problems, left_out) == never
