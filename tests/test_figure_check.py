@@ -630,3 +630,25 @@ def test_round1_mark_group_cant_repeat_a_part() -> None:
                   {"parallel_groups": [["AC", "CA"]]}):
         with pytest.raises(ValidationError):
             fig(**base, **marks)
+
+
+THIN = (r"In $\triangle ABC$, $m\angle BAC = (3x + 5)^\circ$, $m\angle ABC = (2x - 1)^\circ$, "
+        r"and $m\angle ACD = (8x - 10)^\circ$. Find $x$.")
+
+
+def test_a_labelled_angle_too_thin_for_its_label_is_refused() -> None:
+    """Eval 1 job bd113585 p2: ∠BAC drawn 19° and ∠ABC 8°; the label for ∠BAC
+    was pushed out beside C, where it read as ∠ACB's."""
+    f = fig(points={"A": [8.375, 1.221], "B": [0, 0], "C": [6, 0], "D": [8, 0]},
+            segments=["AB", "BC", "CA"], rays=["CD"],
+            angle_labels={"BAC": "(3x + 5)°", "ABC": "(2x - 1)°", "ACD": "(8x - 10)°"})
+    got = [m for m in messages(THIN, f) if "too thin for its label" in m]
+    assert any("∠BAC" in m for m in got) and any("∠ABC" in m for m in got), got
+    assert not any("∠ACD" in m for m in got), got
+
+
+def test_a_labelled_angle_wide_enough_is_kept() -> None:
+    f = fig(points={"A": [3, 4], "B": [0, 0], "C": [6, 0], "D": [8, 0]},
+            segments=["AB", "BC", "CA"], rays=["CD"],
+            angle_labels={"BAC": "(3x + 5)°", "ABC": "(2x - 1)°", "ACD": "(8x - 10)°"})
+    assert not [m for m in messages(THIN, f) if "too thin" in m]
