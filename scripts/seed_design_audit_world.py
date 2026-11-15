@@ -70,13 +70,15 @@ LAST = [
     "Walsh", "Xu", "Yates", "Zhang", "Adler", "Bauer",
 ]
 
+# (question, answer key, a wrong answer a real student writes). Maths in
+# $…$, as generated bank items store it, so the audit sees typeset maths.
 PROBLEMS = [
-    ("Solve for x:  2x + 7 = 23", "x = 8"),
-    ("Solve for x:  5(x - 3) = 2x + 6", "x = 7"),
-    ("A line passes through (2, 5) and (6, 13). Find its slope.", "m = 2"),
-    ("Factor completely:  x^2 - 9x + 20", "(x - 4)(x - 5)"),
-    ("Solve the system:  y = 2x + 1,  y = -x + 7", "(2, 5)"),
-    ("Simplify:  (3x^2)(4x^5)", "12x^7"),
+    ("Solve for $x$: $2x + 7 = 23$", "$x = 8$", "x = 15"),
+    ("Solve for $x$: $5(x - 3) = 2x + 6$", "$x = 7$", "x = 3"),
+    ("A line passes through $(2, 5)$ and $(6, 13)$. Find its slope.", "$m = 2$", "m = 1/2"),
+    ("Factor completely: $x^2 - 9x + 20$", "$(x - 4)(x - 5)$", "(x - 2)(x - 10)"),
+    ("Solve the system: $y = 2x + 1$, $y = -x + 7$", "$(2, 5)$", "(5, 2)"),
+    ("Simplify: $(3x^2)(4x^5)$", "$12x^7$", "12x^10"),
 ]
 
 
@@ -115,7 +117,7 @@ def _grade_entry(pid, status, percent, feedback):
 async def _problems(s, course, unit, assignment, count):
     items = []
     for i in range(count):
-        q, ans = PROBLEMS[i % len(PROBLEMS)]
+        q, ans, _wrong = PROBLEMS[i % len(PROBLEMS)]
         it = QuestionBankItem(
             course_id=course.id, unit_id=unit.id,
             originating_assignment_id=assignment.id,
@@ -236,7 +238,12 @@ async def seed() -> dict:
                 )
                 s.add(hw)
                 await s.flush()
-                s.add(AssignmentSection(assignment_id=hw.id, section_id=section.id))
+                # Published to the section, as the publish flow stamps it: the
+                # gradebook and Student Insights count only stamped homework.
+                s.add(AssignmentSection(
+                    assignment_id=hw.id, section_id=section.id,
+                    published_at=due - timedelta(days=7),
+                ))
                 pids = await _problems(s, course, unit, hw, 6)
 
                 if grp_i == 0 and hw_i == 2:
@@ -254,43 +261,79 @@ async def seed() -> dict:
                 turned_in = students if state != "partial" else students[: max(1, len(students) - 3)]
 
                 for st_i, stu in enumerate(turned_in):
+                    # A real distribution: mostly fine, a tail that needs
+                    # the teacher. This is what the product claims to
+                    # surface, so the audit has to see it.
+                    pct = RNG.choice([100, 100, 95, 92, 88, 83, 79, 72, 64, 55, 41])
+                    right = round(len(pids) * pct / 100)
+                    answers = [
+                        PROBLEMS[p_i % len(PROBLEMS)][1].strip("$") if p_i < right
+                        else PROBLEMS[p_i % len(PROBLEMS)][2]
+                        for p_i in range(len(pids))
+                    ]
                     sub_id = uuid.uuid4()
+                    submitted = due - timedelta(hours=RNG.randint(1, 30))
                     sub = Submission(
                         id=sub_id, assignment_id=hw.id, student_id=stu.id, section_id=section.id,
                         status="submitted",
                         files=await photo_store.store_pages(
                             sub_id, [_page_svg(["2x + 7 = 23", "2x = 16", "x = 8"])],
                         ),
-                        submitted_at=due - timedelta(hours=RNG.randint(1, 30)),
+                        # The reader's transcript, in the shape the reader
+                        # writes: without it every problem shows "No answer
+                        # extracted" and the review page is unlike prod.
+                        extraction={
+                            "steps": [
+                                {"problem_position": p_i + 1, "step_num": 1,
+                                 "latex": ans, "plain_english": ""}
+                                for p_i, ans in enumerate(answers)
+                            ],
+                            "final_answers": [
+                                {"problem_position": p_i + 1, "answer_latex": ans,
+                                 "answer_plain": ans}
+                                for p_i, ans in enumerate(answers)
+                            ],
+                            "confidence": 0.94,
+                        },
+                        submitted_at=submitted,
+                        # The student confirmed the reading, which is what
+                        # lets the AI grade it in the real flow.
+                        extraction_confirmed_at=submitted + timedelta(minutes=4),
                     )
                     s.add(sub)
                     await s.flush()
 
                     if state in ("graded", "approved"):
-                        # A real distribution: mostly fine, a tail that needs
-                        # the teacher. This is what the product claims to
-                        # surface, so the audit has to see it.
-                        pct = RNG.choice(
-                            [100, 100, 95, 92, 88, 83, 79, 72, 64, 55, 41]
-                        )
-                        breakdown = []
+                        breakdown, ai_grades = [], []
                         for p_i, pid in enumerate(pids):
-                            ok = p_i < round(len(pids) * pct / 100)
-                            breakdown.append(_grade_entry(
-                                pid,
-                                "correct" if ok else "incorrect",
-                                100.0 if ok else 0.0,
+                            ok = p_i < right
+                            feedback = (
                                 "Clean work — the setup and the arithmetic both hold."
                                 if ok else
                                 "The setup is right, but the sign flips when you divide. "
-                                "Check the step where you move 7 across.",
+                                "Check the step where you move 7 across."
+                            )
+                            breakdown.append(_grade_entry(
+                                pid, "full" if ok else "zero", 100.0 if ok else 0.0, feedback,
                             ))
-                        score = round(len(pids) * pct / 100)
+                            ai_grades.append({
+                                "problem_position": p_i + 1,
+                                "student_answer": answers[p_i],
+                                "score_status": "full" if ok else "zero",
+                                "percent": 100 if ok else 0,
+                                "confidence": 0.95,
+                                "reasoning": feedback,
+                                "feedback": feedback,
+                            })
+                        # Scores are percents of the homework, as the grader
+                        # stores them (not a count of problems right).
+                        score = round(100 * right / len(pids), 1)
                         grade = SubmissionGrade(
                             submission_id=sub.id,
-                            ai_score=float(score), final_score=float(score),
+                            ai_score=score, final_score=score,
                             breakdown=breakdown,
                             ai_breakdown={
+                                "grades": ai_grades,
                                 "summary": (
                                     "Solid grasp of the two-step pattern. The "
                                     "errors cluster on sign handling, not on "
@@ -300,8 +343,11 @@ async def seed() -> dict:
                             graded_at=now - timedelta(hours=RNG.randint(2, 40)),
                         )
                         if state == "approved":
+                            # Published means the teacher approved it first.
+                            grade.reviewed_by = teacher.id
+                            grade.reviewed_at = now - timedelta(hours=2)
                             grade.grade_published_at = now - timedelta(hours=1)
-                            grade.published_final_score = float(score)
+                            grade.published_final_score = score
                             grade.published_breakdown = breakdown
                         s.add(grade)
 
