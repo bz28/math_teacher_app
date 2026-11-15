@@ -577,19 +577,148 @@ def _already_given(card: FigureFacts) -> list[str]:
     return out
 
 
+# Shapes whose words say which sides are parallel: both pairs of opposite
+# sides. A trapezoid's words don't say which pair (its bases need their own
+# parallel given), and a kite has none.
+_PARALLEL_SIDED = ("parallelogram", "rectangle", "square", "rhombus")
+
+
+def _line_groups(card: FigureFacts) -> list[set[str]]:
+    """The points the card puts on one straight line: each segment, ray and
+    two-point line, grown by the facts that put a point on one (on_segment,
+    midpoint, intersect, collinear…). Two pieces sharing two points are one line."""
+    groups: list[set[str]] = []
+
+    def add(pts: set[str]) -> None:
+        if len(pts) < 2:
+            return
+        groups.append(set(pts))
+        merged = True
+        while merged:  # one line per set of pieces sharing two points
+            merged = False
+            for i, g in enumerate(groups):
+                for h in groups[i + 1:]:
+                    if len(g & h) >= 2:
+                        g |= h
+                        groups.remove(h)
+                        merged = True
+                        break
+                if merged:
+                    break
+
+    for x in (*card.segments, *card.rays, *card.lines):
+        add(set(split_names(x)))
+    for f in [*card.givens, *card.prove, *card.constructs]:
+        pt = (f.point or "").strip()
+        if f.kind == "collinear":
+            add({n for x in f.items for n in split_names(x)})
+        elif f.kind in ("on_segment", "on_line", "on_ray", "midpoint") and f.items and pt:
+            add(set(split_names(f.items[0])) | {pt})
+        elif f.kind in ("intersect", "bisects_segment", "perpendicular") and pt:
+            for x in f.items:
+                add(set(split_names(x)) | {pt})
+        elif f.kind in ("parallel", "transversal", "congruent_segments"):
+            for x in f.items:
+                add(set(split_names(x)))
+    return groups
+
+
+def _pair_on_its_parallels(card: FigureFacts, pair: Fact, groups: list[set[str]]) -> bool | None:
+    """Whether some parallel the card gives (or proves, or a parallel-sided
+    shape gives) is the angle pair's own two lines: each angle's arm that
+    doesn't run along the transversal (the line through the two vertices).
+    None when the names can't say (a named line, an angle by one letter)."""
+    if len(pair.items) < 2 or any(len(split_names(a)) != 3 for a in pair.items[:2]):
+        return None
+    a1, a2 = (split_names(a) for a in pair.items[:2])
+
+    def line(p: str, q: str) -> set[str]:
+        return next((g for g in groups if {p, q} <= g), {p, q})
+
+    trans = line(a1[1], a2[1])
+    arms = []
+    for a in (a1, a2):
+        along = [e for e in (a[0], a[2]) if e in trans]
+        if len(along) != 1:
+            return None
+        arms.append(line(a[1], a[2] if along[0] == a[0] else a[0]))
+    pars: list[tuple[set[str], set[str]]] = []
+    for f in [*card.givens, *card.prove]:
+        if f.kind == "parallel" and len(f.items) == 2:
+            x, y = (set(split_names(i)) for i in f.items)
+            if len(x) != 2 or len(y) != 2:
+                return None  # a named line: the names can't say
+            pars.append((x, y))
+        elif f.kind in _PARALLEL_SIDED and f.items:
+            q = split_names(f.items[0])
+            if len(q) == 4:
+                pars += [({q[0], q[1]}, {q[2], q[3]}), ({q[1], q[2]}, {q[3], q[0]})]
+    corners = [set(split_names(t)) for t in [*card.triangles, *card.polygons]]
+
+    def off(item: set[str], on: set[str]) -> bool | None:
+        """Whether a two-point piece is on the line `on`: yes when both its
+        points are; known not when it shares one point and the three are
+        corners of one named triangle or polygon (never in a line)."""
+        if item <= on:
+            return False
+        if len(item & on) == 1 and any(len((item | on) & c) >= 3 and (item | on) <= c for c in corners):
+            return True
+        return None
+
+    l1, l2 = arms
+    known_off = True
+    for x, y in pars:
+        for p, q in ((l1, l2), (l2, l1)):
+            fits = (off(x, p), off(y, q))
+            if fits == (False, False):
+                return True
+            if True not in fits:
+                known_off = False
+    return False if known_off else None
+
+
+def pair_lines_unsaid(card: FigureFacts | dict[str, Any] | None) -> list[str]:
+    """For a problem shipped with NO figure: angle pairs named by points
+    (∠JKM, ∠LMK) whose words never put them on the parallel lines given
+    (two-point lines). With no drawing the student has only the words, so a
+    pair the words can't place on its parallels can't be used: the problem
+    is left out (#1003 review round 2). Named lines and numbered angles are
+    left to the words ("m ∥ n; ∠1 and ∠2 are alternate interior")."""
+    if card is None:
+        return []
+    if isinstance(card, dict):
+        try:
+            card = FigureFacts.model_validate(card)
+        except ValidationError:
+            return []
+    groups = _line_groups(card)
+    straight = [f for f in [*card.givens, *card.prove] if f.kind == "parallel"]
+    if not straight or any(len(split_names(x)) != 2 for f in straight for x in f.items):
+        return []
+    return [f"no figure, and the words don't put {f.kind.replace('_', ' ')} {' and '.join(f.items[:2])} "
+            f"on the parallel lines given"
+            for f in card.givens
+            if f.kind in PAIRS and len(f.items) >= 2 and all(len(split_names(a)) == 3 for a in f.items[:2])
+            and _pair_on_its_parallels(card, f, groups) is None]
+
+
 def _pair_without_parallels(card: FigureFacts) -> list[str]:
     """An angle-pair given (alternate interior, corresponding…) only says
-    where two angles sit; it says something about their sizes only when the
-    lines are parallel. With no parallel lines given and none to prove, a
-    problem that leans on the pair can't be done, and its solution claims
-    what the givens don't say (Eval 1 job bd113585 p5: "∠JKM and ∠LMK are
-    alternate interior angles … Prove △JKM ≅ △LMK", no JK ∥ LM). Such a
-    card is refused: the problem gets no figure and is replaced."""
-    # A parallel given, or a shape whose sides are parallel (#1003 review:
-    # "ABCD is a parallelogram" gives AB ∥ DC). Whether the parallel lines are
-    # the pair's own is checked on the drawing (figure_check _pair_off_parallels).
-    if any(f.kind == "parallel" or (f.kind in SHAPES and f.kind != "kite") for f in [*card.givens, *card.prove]):
-        return []
+    where two angles sit; it says something about their sizes only when ITS
+    two lines are the parallel ones. With no parallel lines given and none to
+    prove, or with parallels on other lines ("∠JKM and ∠LMK are alternate
+    interior; JM ∥ KL": #1003 review), a problem that leans on the pair can't
+    be done, and its solution claims what the givens don't say (Eval 1 job
+    bd113585 p5). Such a card is refused: the problem is replaced. A
+    trapezoid gives no parallel here: its words don't say which sides."""
+    out = []
+    groups = _line_groups(card)
+    for f in card.givens:
+        if f.kind in PAIRS and _pair_on_its_parallels(card, f, groups) is False:
+            out.append(f"an angle-pair given says nothing about sizes without parallel lines "
+                       f"(its own two lines): {f.kind} {f.items}")
+    if out or any(f.kind == "parallel" or f.kind in _PARALLEL_SIDED for f in [*card.givens, *card.prove]):
+        return out
     return [f"an angle-pair given says nothing about sizes without parallel lines: {f.kind} {f.items}"
             for f in card.givens if f.kind in PAIRS]
 
