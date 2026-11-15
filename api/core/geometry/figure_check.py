@@ -2507,6 +2507,16 @@ def _statements(final_answer: str) -> list[str]:
     return out
 
 
+def _working(side: str) -> bool:
+    """True for plain arithmetic: numbers, one-letter variables, + - * / ( )
+    and degree signs, each term joined to the next by an operator."""
+    t = re.sub(r"\^\s*\\circ|°|\\cdot|\\times|\\left|\\right", " ", side)
+    if not re.fullmatch(r"[0-9a-z+\-*/().\s]*", t) or re.search(r"[a-z]{2,}", t):
+        return False
+    # Two terms side by side with no operator ("83 x", "x 19"): two statements.
+    return not re.search(r"[0-9a-z)]\s+[0-9a-z(]", t)
+
+
 # What may come before the name on the left of "=": only a part label
 # ("(a)", "**(b)**", "ii)") and a lead-in word ("Therefore"). Anything else (a
 # sum, a difference, a coefficient: "m∠A + m∠B", "180 - x", "2x") means the
@@ -2535,10 +2545,9 @@ def _answer_value(d: _Drawing, key: Any, exprs: list[str], final_answer: str) ->
         sides = st.split("=")
         last = _BARE.fullmatch(sides[-1])
         # A middle side is another name for the same size ("m∠A = m∠B = 55°") or
-        # working for it ("4x + 7", "180° - 83°"); anything else naming a point
-        # or an angle means two statements ran together.
-        if not last or any(re.search(r"\\angle|[A-Z]", side) and not _ANGLE_SIDE.fullmatch(side)
-                           for side in sides[1:-1]):
+        # plain working for it ("4x + 7", "180° - 83°", "4(19) + 7"); anything
+        # else ("83° when x", "83° m∠GHD") means two statements ran together.
+        if not last or not all(_ANGLE_SIDE.fullmatch(side) or _working(side) for side in sides[1:-1]):
             continue
         for side in sides[:-1]:
             m = _ANGLE_SIDE.fullmatch(side)
