@@ -97,6 +97,7 @@ PHRASES: dict[str, tuple[dict[str, Any], dict[str, Any], str]] = {
     "same_side_interior": ({}, F("same_side_interior", ["BGH", "GHD"]),
                            r"$\angle BGH$ and $\angle GHD$ are same-side interior angles"),
 }
+PAIR_KINDS = {"alternate_interior", "alternate_exterior", "corresponding", "same_side_interior"}
 # The figure carries a numbered angle's label; coverage has no word for "labeled".
 NOT_IN_COVERAGE = {"numbered_angle"}
 
@@ -114,7 +115,9 @@ def test_every_author_kind_has_a_phrase() -> None:
 @pytest.mark.parametrize("kind", sorted(PHRASES))
 def test_each_kind_has_one_fixed_phrase_that_says_only_its_fact(kind: str) -> None:
     extra, fact, want = PHRASES[kind]
-    card, why = read_card(_card(extra, fact))
+    # An angle pair says something only with parallel lines (the card refuses it alone).
+    lines = [F("parallel", ["AB", "CD"])] if kind in PAIR_KINDS else []
+    card, why = read_card(_card(extra, fact, *lines))
     assert card is not None, why
     got = sentence(card.givens[0], card)
     assert got == want
@@ -972,3 +975,26 @@ def test_a_different_pair_of_congruent_sides_is_still_said() -> None:
         "prove": [F("equilateral", ["ABC"])]})
     assert card is not None, why
     assert r"\overline{AB} \cong \overline{BC}" in card_text(card)
+
+
+def test_an_angle_pair_given_without_parallel_lines_is_refused() -> None:
+    """Eval 1 job bd113585 p5: alternate interior angles but no JK ∥ LM, so
+    the triangles can't be proven congruent; the stored solution said they
+    could."""
+    raw = {"points": ["J", "K", "L", "M"], "segments": ["JK", "KL", "LM", "MJ", "KM"],
+           "triangles": ["JKM", "LMK"], "givens": [
+               F("congruent_segments", ["JK", "LM"]), F("alternate_interior", ["JKM", "LMK"]),
+               F("alternate_interior", ["JMK", "LKM"])],
+           "prove": [F("congruent_triangles", ["JKM", "LMK"])]}
+    card, why = read_card(raw)
+    assert card is None and any("without parallel lines" in w for w in why), why
+    card, why = read_card({**raw, "givens": [*raw["givens"], F("parallel", ["JK", "LM"])]})
+    assert card is not None, why
+
+
+def test_an_angle_pair_given_with_parallel_lines_to_prove_is_kept() -> None:
+    card, why = read_card({"points": ["A", "B", "C", "D", "E", "F"], "lines": ["AB", "CD", "EF"], "givens": [
+        F("intersect", ["EF", "AB"], point="E"), F("intersect", ["EF", "CD"], point="F"),
+        F("alternate_interior", ["AEF", "DFE"]), F("congruent_angles", ["AEF", "DFE"])],
+        "prove": [F("parallel", ["AB", "CD"])]})
+    assert card is not None, why

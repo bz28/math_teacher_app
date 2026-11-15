@@ -572,6 +572,20 @@ def _already_given(card: FigureFacts) -> list[str]:
     return out
 
 
+def _pair_without_parallels(card: FigureFacts) -> list[str]:
+    """An angle-pair given (alternate interior, corresponding…) only says
+    where two angles sit; it says something about their sizes only when the
+    lines are parallel. With no parallel lines given and none to prove, a
+    problem that leans on the pair can't be done, and its solution claims
+    what the givens don't say (Eval 1 job bd113585 p5: "∠JKM and ∠LMK are
+    alternate interior angles … Prove △JKM ≅ △LMK", no JK ∥ LM). Such a
+    card is refused: the problem gets no figure and is replaced."""
+    if any(f.kind == "parallel" for f in [*card.givens, *card.prove]):
+        return []
+    return [f"an angle-pair given says nothing about sizes without parallel lines: {f.kind} {f.items}"
+            for f in card.givens if f.kind in PAIRS]
+
+
 def _blank_to_none(f: Any) -> Any:
     """A fact's empty optional field ("circle": "") read as absent; a
     perpendicular's missing point read from the one letter its two lines
@@ -677,6 +691,7 @@ def _read_card(raw: Any) -> tuple[FigureFacts | None, list[str]]:
         if t.kind == "angle" and t.item.strip().isdigit() and t.item.strip() not in numbers:
             why.append(f"the card asks for an angle it doesn't label: {t.item!r}")
     why += _already_given(card)
+    why += _pair_without_parallels(card)
     for t in card.find:
         if t.kind == "angle" and not (split_names(t.item) and set(split_names(t.item)) <= shown | made
                                       and len(split_names(t.item)) in (1, 3) or t.item.strip().isdigit()):
