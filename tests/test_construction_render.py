@@ -195,3 +195,20 @@ def test_labels_of_nearby_points_dont_overlap() -> None:
     (bx, by), (dx, dy) = at["B"], at["D"]
     font = 0.28  # the vertex labels' font size in the canonical frame
     assert abs(bx - dx) > font or abs(by - dy) > font, (at["B"], at["D"])
+
+
+def test_a_second_parallel_pair_reads_as_a_double_arrow() -> None:
+    """Eval 1 (set4-p2): the two arrows of a parallelogram's second pair sat
+    0.09 apart, closer than an arrow is deep, so they printed as one and the
+    figure read as four parallel sides. Consecutive arrows in one mark must
+    be further apart than an arrow's depth."""
+    svg = render_figure({"type": "geometry", "shape": "construction",
+                         "points": {"A": [0, 0], "B": [5, 0], "C": [7, 3], "D": [2, 3]},
+                         "segments": ["AB", "BC", "CD", "DA"], "parallel_groups": [["AB", "DC"], ["AD", "BC"]]})
+    tips = [tuple(float(v) for v in pts.split()[1].split(","))
+            for pts in re.findall(r'<polyline[^>]*points="([^"]+)"', svg)]
+    assert len(tips) == 6  # one arrow on each of AB, DC; two on each of AD, BC
+    from api.core.geometry.construction_render import _ARROW
+    pairs = [(tips[2], tips[3]), (tips[4], tips[5])]
+    for a, b in pairs:
+        assert ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2) ** 0.5 > _ARROW, pairs
