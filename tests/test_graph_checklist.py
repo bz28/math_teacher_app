@@ -105,6 +105,7 @@ async def hw(world: dict[str, Any]) -> dict[str, Any]:
             course_id=course.id, unit_id=world["unit_id"], originating_assignment_id=a.id,
             title="Rational graph", question=QUESTION, final_answer=ANSWER,
             status="pending", requires_drawing=True,
+            solution_steps=[{"title": "Asymptotes", "description": "The denominator is 0 at x = 2."}],
         )
         s.add(item)
         await s.commit()
@@ -424,6 +425,8 @@ async def test_a_rule_the_homework_skips_is_never_linked(
     await _approve(client, hw)
     # The writer only hears about the rules the grader applies here.
     assert writer.calls[0]["class_rules"] == []
+    # And reads values off the worked solution, not just the key.
+    assert writer.calls[0]["solution_steps"][0]["title"] == "Asymptotes"
     # Stored linked (as a stale model answer would be): read unlinked, own points.
     await _set(QuestionBankItem, hw["item_id"], graph_checklist={
         **(await _item(hw["item_id"])).graph_checklist,
@@ -591,6 +594,24 @@ async def test_writer_flags_values_it_worked_out(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr(drawing_check, "call_claude_json", reply)
     items = (await write_graph_checklist("Graph f(x) = (x+1)/(x-2).", "VA x = 2, HA y = 1", 10)).items
     assert [i.values_to_check for i in items] == [[], ["-0.5"]]
+
+
+async def test_writer_reads_values_off_the_worked_solution(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The cosecant case: the key gives only the rule (U-up where the sine
+    # is positive); the solution's table says where that is.
+    reply = Reply({"asks_for_drawing": True, "items": [
+        {"text": "Upward U between x = 50° and x = 80°", "points": 3, "rule_id": None},
+        {"text": "Downward U between x = 80° and x = 140°", "points": 3, "rule_id": None},
+    ]})
+    monkeypatch.setattr(drawing_check, "call_claude_json", reply)
+    steps = [{"title": "Key points", "description": "| 50° | -1 |\n| 65° | 2 (max) |\n| 80° | -1 |"}]
+    written = await write_graph_checklist(
+        "Sketch two periods of $g(x) = 3\\csc[6(x + 10°)] - 1$.", "U-up where sine is positive.", 10,
+        solution_steps=steps,
+    )
+    assert "Worked solution:\nKey points\n| 50° | -1 |" in reply.calls[0]
+    # Values the solution gives aren't flagged; one nothing gives still is.
+    assert [i.values_to_check for i in written.items] == [[], ["140"]]
 
 
 async def test_writer_can_say_no_drawing_is_asked(monkeypatch: pytest.MonkeyPatch) -> None:
