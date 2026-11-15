@@ -663,7 +663,15 @@ SAME_SIDE_FIG = dict(points={"A": [0, 4], "B": [8, 4], "C": [0, 0], "D": [8, 0],
                      angle_labels={"BGH": "(4x + 7)°", "GHD": "(6x - 17)°"})
 
 
-@pytest.mark.parametrize("answer", [r"$m\angle BGH = m\angle GHD = 55°$", r"$x = 12$, so both are $55°$"])
+@pytest.mark.parametrize("answer", [
+    r"$m\angle BGH = m\angle GHD = 55°$",
+    r"$x = 12$, so both are $55°$",
+    # Review round 2 (#989): the givens restated first must not stop the search.
+    r"$m\angle BGH = 4x + 7$ and $m\angle GHD = 6x - 17$ are equal, so $4x + 7 = 6x - 17$, "
+    r"$x = 12$, $m\angle BGH = 55°$",
+    r"Therefore $m\angle BGH = 55°$.",
+    r"$x = 12$.",
+])
 def test_an_answer_the_figure_contradicts_is_refused(answer: str) -> None:
     """Eval 1 set2: ∠BGH and ∠GHD are same-side interior (they sum to 180°,
     x = 19: 83° and 97°); the AI's answer took them as equal (55°). The
@@ -679,6 +687,13 @@ def test_an_answer_the_figure_contradicts_is_refused(answer: str) -> None:
     r"$m\angle BGH = 4x + 7 = 83°$",
     r"$x=19$, $m\angle BGH = 83°$, $m\angle GHD = 180° - 83° = 97°$",
     r"$x = 19$, so $2x = 38$",
+    # Review round 2 (#989): sums, differences and coefficients on the left are working, not a value.
+    r"$m\angle BGH + m\angle GHD = 180°$, $x = 19$, $m\angle BGH = 83°$, $m\angle GHD = 97°$",
+    r"$180° - m\angle BGH = 97°$",
+    r"$2m\angle BGH = 166°$",
+    r"$10x = 190$, $180 - x = 161$",
+    r"$4x + x = 95$",
+    r"$-x = -19$",
     r"$x = 19$; check: $10x = 190$",
     r"$x = 19 \quad m\angle BGH = 83^\circ$",
 ])
@@ -713,3 +728,9 @@ def test_an_answer_with_part_labels_is_still_read() -> None:
     assert any("∠BGH 55°" in m for m in got), got
     assert [m for m in messages(SAME_SIDE, fig(**SAME_SIDE_FIG), final_answer=r"(b) $m\angle BGH = 55°$")
             if "the answer makes" in m]
+
+
+def test_an_answer_that_gives_the_angle_two_sizes_checks_nothing() -> None:
+    """Review round 2 (#989): two different stated sizes say nothing plainly."""
+    answer = r"$m\angle BGH = 55°$, $m\angle BGH = 83°$"
+    assert not [m for m in messages(SAME_SIDE, fig(**SAME_SIDE_FIG), final_answer=answer) if "the answer makes" in m]

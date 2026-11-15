@@ -2488,43 +2488,59 @@ def _given_lengths(parts: ProblemParts, side: frozenset[str]) -> set[float]:
 
 
 # A value the answer states as a bare number: nothing after it but a
-# degree sign, a space or the end of the statement ("55°", "83^\circ").
-_BARE = re.compile(r"\s*(-?\d+(?:\.\d+)?)\s*(?:\^\s*\\circ|°|degrees?)?\s*")
+# degree sign, a sentence's full stop, a space or the end of the statement
+# ("55°", "83^\circ", "x = 12.").
+_BARE = re.compile(r"\s*(-?\d+(?:\.\d+)?)\s*(?:\^\s*\\circ|°|degrees?)?\s*\.?\s*")
 # Where one statement of an answer ends.
 _STATEMENT_END = re.compile(r",|;|\\quad|\\qquad|\\\\|\n|\\text\{|\band\b|\bso\b")
+# What may come before the name on the left of "=": only a part label
+# ("(a)", "**(b)**", "ii)") and a lead-in word ("Therefore"). Anything else (a
+# sum, a difference, a coefficient: "m∠A + m∠B", "180 - x", "2x") means the
+# statement is not "this one thing equals", so it is not read.
+_LEAD_IN = (
+    r"\s*(?:\*{0,2}\(?(?:[a-z]|[ivx]{1,4}|\d{1,2})\)\*{0,2}\s*)?"
+    r"(?:(?:therefore|thus|hence|then|answer:?)\s+)?"
+)
+_ANGLE_SIDE = re.compile(_LEAD_IN + r"(?:m\s*)?\\angle\s*([A-Z]{3})\s*", re.IGNORECASE)
+_VARIABLE_SIDE = re.compile(_LEAD_IN + r"([a-z])\s*", re.IGNORECASE)
 
 
 def _answer_value(d: _Drawing, key: Any, exprs: list[str], final_answer: str) -> float | None:
     """The size the answer gives the angle `key` labelled with `exprs`: its
     own "m∠BGH = … = 55°" (the value after the statement's LAST "=", only
-    when it is a bare number), else the label's algebra at the answer's
-    "x = 12" (a letter standing alone, given one bare-number value). None
-    when the answer says neither plainly: then nothing is checked, so
-    working shown in the answer ("4(19) + 7 = 83°", "2x = 38", "x = 198/13")
-    can never refuse a right figure."""
+    when it is a bare number; every such statement must agree), else the
+    label's algebra at the answer's "x = 12" (a letter standing alone, given
+    one bare-number value). None when the answer says neither plainly: then
+    nothing is checked, so working shown in the answer ("4(19) + 7 = 83°",
+    "2x = 38", "m∠A + m∠B = 180°", "x = 198/13") can never refuse a right
+    figure. A statement like "m∠BGH = 4x + 7" says nothing plainly, so the
+    search goes on to the rest of the answer."""
     text = _clean(final_answer)
     statements = [p for chunk in _STATEMENT_END.split(text) for p in [chunk] if "=" in p]
+    stated: set[float] = set()
     for st in statements:
         sides = st.split("=")
         last = _BARE.fullmatch(sides[-1])
-        for i, side in enumerate(sides[:-1]):
-            # The first side may open with a part label ("(b) m∠P = 86°").
-            m = (re.search if i == 0 else re.fullmatch)(r"\s*(?:m\s*)?\\angle\s*([A-Z]{3})\s*$", side)
+        if not last:
+            continue
+        for side in sides[:-1]:
+            m = _ANGLE_SIDE.fullmatch(side)
             if not m:
                 continue
-            name = m.group(1)
+            name = m.group(1).upper()
             ang = d.resolve((name[0], name[1], name[2]))
             if ang is not None and all(n in d.p for n in ang) and _same_angle(d, ang, key):
-                return float(last.group(1)) if last else None
+                stated.add(float(last.group(1)))
+    if stated:
+        return next(iter(stated)) if len(stated) == 1 else None
     values: dict[str, set[float]] = {}
     for st in statements:
         sides = st.split("=")
         if len(sides) != 2:
             continue
-        # A letter standing alone ("(a) y = 11"), never part of "2x" or "\\pi".
-        var = re.search(r"(?<![A-Za-z0-9\\.)_^])([a-z])\s*$", sides[0])
+        var = _VARIABLE_SIDE.fullmatch(sides[0])
         num = _BARE.fullmatch(sides[1])
-        if var and num:
+        if var and num and var.group(1).islower():
             values.setdefault(var.group(1), set()).add(float(num.group(1)))
     for e in exprs:
         lin = linear_expr(e)
