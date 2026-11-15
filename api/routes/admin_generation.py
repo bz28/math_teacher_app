@@ -37,6 +37,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.question_bank_generation import job_notice
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
 from api.models.course import Course, Document
@@ -254,6 +255,7 @@ async def generation_job_detail(
             "params": job.params,
             "source_doc_ids": [str(d) for d in (job.source_doc_ids or [])],
             "error_message": job.error_message,
+            "notice": job_notice(job),
         },
         # Which attached docs actually reached the model, read straight
         # from the generation call's logged provenance (source of truth —

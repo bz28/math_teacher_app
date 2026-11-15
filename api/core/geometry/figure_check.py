@@ -1189,6 +1189,9 @@ def check_construction(
                     f"the statement to prove ({rel.text}) is marked on the figure; mark only the givens",
                 )
 
+    for message in _pair_off_parallels(d, parts):
+        say("pair_off_parallels", message)
+
     # A figure that collapses can make anything "true": two named points on
     # one spot, a named triangle or polygon drawn flat.
     for message in _degenerate(d, parts):
@@ -2910,6 +2913,81 @@ def _angle_pair(d: _Drawing, kind: str, a1: tuple[str, str, str] | None,
     if kind == "corresponding":
         return in1 != in2 and side1 == side2
     return None
+
+
+def _pair_lines(d: _Drawing, a1: tuple[str, str, str], a2: tuple[str, str, str]) -> tuple[tuple[str, str], ...] | None:
+    """The two lines an angle pair sits on: each angle's arm that is NOT along
+    the transversal (the line through the two vertices), as (vertex, arm end)."""
+    p = d.p
+    out = []
+    for a, b in ((a1, a2), (a2, a1)):
+        v, other = p[a[1]], p[b[1]]
+        along = [e for e in (a[0], a[2]) if d.collinear(v, other, p[e])]
+        if len(along) != 1:
+            return None
+        out.append((a[1], a[2] if along[0] == a[0] else a[0]))
+    return tuple(out)
+
+
+def _parallel_lines(d: _Drawing, rels: list[_Relation]) -> list[tuple[tuple[str, ...], tuple[str, ...]]] | None:
+    """Every pair of lines the relations hold parallel (a parallel given, a
+    parallelogram's sides), as point pairs; None when one can't be
+    placed in the drawing. A trapezoid's sides are not counted: its words
+    don't say which pair is parallel."""
+    out: list[tuple[tuple[str, ...], tuple[str, ...]]] = []
+    for rel in rels:
+        # An "any" (a trapezoid: one of two side pairs) says no pair for sure,
+        # so it gives none (#1003 review round 2).
+        if rel.kind == "par":
+            (a, b), (c, e) = rel.args
+            if not all(n in d.p for n in (a, b, c, e)):
+                return None
+            out.append(((a, b), (c, e)))
+        elif rel.kind == "linepar":
+            if any(n not in d.lines for n in rel.args):
+                return None
+            out.append((tuple(d.lines[rel.args[0]].through), tuple(d.lines[rel.args[1]].through)))
+    return out
+
+
+def _classes(d: _Drawing, pars: list[tuple[tuple[str, ...], tuple[str, ...]]]) -> list[list[tuple[str, ...]]]:
+    """Parallel lines in classes: AB ∥ CD and CD ∥ EF (or DC ∥ EF, the same
+    line) put all three in one (#1003 review round 3)."""
+    classes: list[list[tuple[str, ...]]] = []
+    for x, y in pars:
+        joined = [c for c in classes if any(d.same_line(m, x) or d.same_line(m, y) for m in c)]
+        for c in joined:
+            classes.remove(c)
+        classes.append([m for c in joined for m in c] + [x, y])
+    return classes
+
+
+def _pair_off_parallels(d: _Drawing, parts: ProblemParts) -> list[str]:
+    """An angle-pair given says the two angles are equal (or supplementary)
+    only when ITS two lines are the parallel ones. A problem whose parallel
+    given is some other pair of lines can't be done as written (#1003 review:
+    "∠JKM and ∠LMK are alternate interior … JM ∥ KL"). Undecidable → silent."""
+    rels = [*parts.givens, *parts.prove]
+    pars = _parallel_lines(d, rels)
+    # No parallel lines at all is the card's to judge (fact_card
+    # _pair_without_parallels): "name the pair" problems have none.
+    if not pars:
+        return []
+    out = []
+    for rel in parts.givens:
+        if rel.kind != "anglepair":
+            continue
+        a1, a2 = d.resolve(rel.args[1]), d.resolve(rel.args[2])
+        if a1 is None or a2 is None or not all(n in d.p for n in (*a1, *a2)):
+            continue
+        lines = _pair_lines(d, a1, a2)
+        if lines is None:
+            continue
+        l1, l2 = lines
+        if not any(any(d.same_line(l1, m) for m in c) and any(d.same_line(l2, m) for m in c)
+                   for c in _classes(d, pars)):
+            out.append(f"the given {rel.text} says nothing about sizes: its lines are not the parallel lines given")
+    return out
 
 
 def _box_backed(d: _Drawing, box: tuple[str, str, str], givens: list[_Relation]) -> bool:

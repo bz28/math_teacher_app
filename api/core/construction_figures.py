@@ -19,7 +19,7 @@ import re
 from typing import Any
 
 from api.core.geometry.dsl import ConstructionFigure, is_hidden, split_points
-from api.core.geometry.facts import FACTS_TOOL, FigureFacts, as_facts, unnamed_requests
+from api.core.geometry.facts import FACTS_TOOL, FigureFacts, as_facts, as_prompt, unnamed_requests
 from api.core.geometry.figure_check import givens_marked, parse_problem
 from api.core.llm_client import MODEL_REASON, call_claude_json
 from api.core.llm_schemas import FIGURE_REDRAW_SCHEMA
@@ -128,7 +128,7 @@ async def redraw_figure(
     if reading is not None:
         parts.append(
             "The facts the figure is checked against:\n"
-            + json.dumps(reading.model_dump(exclude_none=True, exclude={"dropped"}), sort_keys=True),
+            + json.dumps(as_prompt(reading.model_dump(exclude_none=True, exclude={"dropped"})), sort_keys=True),
         )
     parts.append(f"Your previous figure:\n{json.dumps(previous_spec, sort_keys=True)}")
     parts.append("The checker found these problems:\n- " + "\n- ".join(issues))
@@ -154,6 +154,38 @@ async def redraw_figure(
         )
     except Exception:
         logger.exception("figure redraw call failed")
+        return None
+    spec = result.get("figure_spec")
+    return spec if isinstance(spec, dict) else None
+
+
+async def draw_figure(
+    problem_text: str,
+    card: FigureFacts,
+    *,
+    mode: str,
+    user_id: str | None,
+    generation_job_id: str | None = None,
+) -> dict[str, Any] | None:
+    """One fresh figure for a problem the AI wrote, from its fact card alone
+    (no earlier figure to anchor on): the same model and room to work as the
+    redraw. None when the call fails or returns none."""
+    message = "\n\n".join((
+        f"Problem:\n{problem_text}",
+        "The facts the figure is checked against (its fact card):\n"
+        + json.dumps(as_prompt(card.model_dump(exclude_none=True, exclude={"dropped"})), sort_keys=True),
+        "Draw the figure for this problem: every point and part on the card, every given exactly true, "
+        "nothing under constructs. Work out each coordinate from the givens (trigonometry, midpoints, "
+        "scaling) and check every given against your numbers before you answer.",
+    ))
+    try:
+        result = await call_claude_json(
+            _REDRAW_SYSTEM, message, mode=mode, tool_schema=FIGURE_REDRAW_SCHEMA, user_id=user_id,
+            model=MODEL_REASON, thinking_budget=_REDRAW_THINKING, max_tokens=_REDRAW_THINKING + 4096,
+            generation_job_id=generation_job_id,
+        )
+    except Exception:
+        logger.exception("fresh figure call failed")
         return None
     spec = result.get("figure_spec")
     return spec if isinstance(spec, dict) else None
@@ -236,7 +268,7 @@ async def _read_once(system: str, message: str, *, mode: str, user_id: str | Non
         max_tokens=4096, temperature=0.0, generation_job_id=generation_job_id,
     )
     # `dropped` is code's own log of what it set aside, never the reading's.
-    return FigureFacts.model_validate(result).model_copy(update={"dropped": []})
+    return FigureFacts.model_validate(result).model_copy(update={"dropped": [], "source": "reading", "constructs": []})
 
 
 async def read_figure_facts(

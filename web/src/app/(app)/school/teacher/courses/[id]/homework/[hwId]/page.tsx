@@ -19,6 +19,7 @@ import {
   type HomeworkPoints,
   type HomeworkGraphChecklist,
 } from "@/lib/api";
+import { jobNotices } from "@/lib/job-notice";
 import { normalizeRubric } from "@/lib/rubric";
 import { buildChoices } from "@/lib/practice-choices";
 import { evenSplit, MAX_TOTAL_POINTS, pointsRange } from "@/lib/points";
@@ -815,6 +816,9 @@ export default function HomeworkDetailPage({
   );
   const generationStalled =
     !activeGenerating && failedJobs.length > 0 && stalledShortfall > 0;
+  // A finished set that came back short says how many were left out (its
+  // own field from the API, not an error).
+  const notices = jobNotices(activeJobs, Boolean(activeGenerating));
 
   return (
     <>
@@ -1041,6 +1045,16 @@ export default function HomeworkDetailPage({
               failed gen job so a zero-produced (or short) run doesn't
               vanish into the empty hero. Sits above the pending banner
               so its "safe in Pending review" note points right at it. */}
+          {notices.map((n) => (
+            <p
+              key={n.id}
+              role="status"
+              className="mt-4 rounded-[--radius-md] border border-border-light bg-surface px-4 py-2 text-sm text-text-secondary"
+            >
+              {n.text}
+            </p>
+          ))}
+
           {generationStalled && (
             <GenerationStalledBanner
               shortfall={stalledShortfall}

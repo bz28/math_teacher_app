@@ -2,12 +2,20 @@
 
 Each set is one teacher-style generation request (unit, title, brief) run
 through the REAL generation path without a database:
-`generate_checked_problems` (generate, draw each figure, check it against
-the problem's two agreed readings, one redraw, one replacement round) and
-`solve_checked_problems` (solve, drop a figure that prints the answer, read
-and check each step figure against the problem's figure, one redraw).
-Recorded once against the real model; replays at $0 from its own cassette
-dir (tests/test_generation_figure_eval.py runs it in CI).
+`generate_checked_problems` (generate: the AI writes each figure problem as
+a fact card, code writes its words; draw each figure, check it against the
+card, one redraw, one fresh drawing from the card, one replacement round,
+else the slot is left out) and `solve_checked_problems` (solve, drop a
+figure that prints the answer, read and check each step figure against the
+problem's figure, one redraw). Recorded once against the real model;
+replays at $0 from its own cassette dir (tests/test_generation_figure_eval.py
+runs it in CI once recorded).
+
+The fact-card mode (this PR) was recorded 2026-11-15 (Eval 1) in
+`_cassettes/generation_figures_cards/` (sets in recorded_sets.json) and
+replays at $0. #998's recordings (the reading mode) no longer apply: the generation
+schema and prompt changed. Their 8 drawings are kept, checked against hand
+cards at $0, in tests/harness/probes/fact_card_recorded.py.
 
 What it measures (the bars):
   - wrong figures: every drawn figure (question and step) has a by-eye
@@ -27,11 +35,23 @@ What it measures (the bars):
   - missing figures (EXPECTED says "figure", none drawn; a target to bring
     down) and unwanted ones (EXPECTED "none" but drawn, or BY_EYE
     "unwanted: …"); set3 holds Ben's NO-figure cases so that bar can fail;
-  - every problem in a set distinct.
+  - every problem in a set distinct;
+  - fact cards (this PR): no question figure is read back from the words
+    (`question_readings` = 0), every stored card is the author's, no figure
+    draws a part the student constructs (`constructed_drawn`, read straight
+    from the spec and the stored card, not with fact_card's own code), and
+    a slot left out counts as missing (`left_out`). set4 holds the
+    who-draws-it cases: auxiliary-line proofs (shown) and constructions.
 
 Record one set at a time, each under its spending cap, and render every
-figure to PNG:
-    HARNESS_LLM_MODE=auto python -m tests.harness.probes.generation_figures --set set1 --cap 2.5 --png-dir /tmp/g
+figure to PNG. The shared eval budget comes from ~/.veradic/evals/budget.env
+(its ledger and total), sourced first:
+    source ~/.veradic/evals/budget.env && HARNESS_LLM_MODE=auto \
+        python -m tests.harness.probes.generation_figures --set set4 --cap 0.75 --png-dir /tmp/g
+then set3 (--cap 0.25), set2 (--cap 1.25), set1 (--cap 1.5). Look at every
+PNG and fill BY_EYE, EXPECTED and NEGATIVES before the CI test can pass.
+A real job's brief (Eval 1): export it to JSON (see `load_brief`), then
+    ... --brief briefs/job-bd113585.json --set job-bd113585 --cap 0.5
 Replay ($0):
     HARNESS_LLM_MODE=replay python -m tests.harness.probes.generation_figures
 """
@@ -40,6 +60,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
 import hashlib
 import json
 import math
@@ -48,8 +69,10 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+from tests.harness.cassette import CassetteMissError
+
 _HERE = Path(__file__).resolve().parent.parent
-CASSETTE_DIR = _HERE / "_cassettes" / "generation_figures"
+CASSETTE_DIR = _HERE / "_cassettes" / "generation_figures_cards"
 
 SETS: dict[str, dict[str, Any]] = {
     "set1": {
@@ -63,8 +86,9 @@ SETS: dict[str, dict[str, Any]] = {
         "brief": "Parallel lines cut by a transversal, angle pairs, polygon angle sums, and areas of composite "
                  "figures, including a floor-plan and a ladder-against-a-wall problem.",
     },
-    # Ben's NO-figure cases, so the "unwanted" bar can fail: each of these
-    # problems should ship with no figure.
+    # Ben's NO-figure cases, so the "unwanted" bar can fail: p2-p4 should ship
+    # with no figure; p1 (a construction) gets a figure of its given segment
+    # only, never the student's construction (FACT_CARD_RULES).
     "set3": {
         "unit_name": "Unit 6", "assignment_title": "Constructions, Graphs & Solids", "count": 4,
         "brief": "Exactly four problems, one of each: (1) the student constructs the perpendicular bisector of "
@@ -72,8 +96,96 @@ SETS: dict[str, dict[str, Any]] = {
                  "the line y = 2x + 1 and give its intercepts; (4) the volume of a cylinder with radius 3 cm and "
                  "height 5 cm.",
     },
+    # Who draws it (fact cards): auxiliary lines the figure shows, and
+    # constructions the student makes on a figure of the givens.
+    "set4": {
+        "unit_name": "Unit 5", "assignment_title": "Auxiliary Lines & Constructions", "count": 4,
+        "brief": "Exactly four problems, one of each: (1) isosceles triangle ABC with AB = AC; draw the median AD "
+                 "and prove angle B is congruent to angle C; (2) parallelogram ABCD; draw diagonal AC and prove "
+                 "triangle ABC is congruent to triangle CDA; (3) in isosceles triangle ABC, the student constructs "
+                 "the bisector of angle A with a compass and straightedge, meeting BC at D, then proves triangle ABD "
+                 "is congruent to triangle ACD; (4) the student constructs the perpendicular bisector of a given "
+                 "segment AB with a compass and straightedge.",
+    },
 }
 COUNT = 8  # problems per set unless the set gives its own "count"
+
+
+class NotRecordedError(CassetteMissError):
+    """Replay asked for sets with no recording yet. A CassetteMissError, so a
+    caller that already treats a cassette miss as "not recorded" (the
+    scorecard) does the same here, and never reports PASS."""
+
+    def __init__(self, missing: list[str]) -> None:
+        self.missing = missing
+        super().__init__(
+            f"generation_figures (fact-card mode) is not recorded yet for {', '.join(missing)}: see the "
+            "probe's docstring for the record command (Eval 1 records it)"
+        )
+
+
+def _manifest() -> Path:
+    """Which sets are recorded: the cassette file holds every call of every
+    set, so set by set is kept here (a set is recorded one run at a time)."""
+    return CASSETTE_DIR / "recorded_sets.json"
+
+
+def missing_sets(sets: list[str] | None = None) -> list[str]:
+    """The sets (default: all) with no recording."""
+    want = list(sets or SETS)
+    try:
+        done = set(json.loads(_manifest().read_text())) if (CASSETTE_DIR / "call_claude_json.json").exists() else set()
+    except (OSError, ValueError):
+        done = set()
+    return [name for name in want if name not in done]
+
+
+def recorded(sets: list[str] | None = None) -> bool:
+    """Every requested set (default: all) is recorded."""
+    return not missing_sets(sets)
+
+
+def finished_recording(mode: str | None, only: list[int] | None, stopped: str) -> bool:
+    """A run may mark its sets recorded only when it recorded (auto/record),
+    ran every problem, and the spending cap never stopped a call: a stopped
+    call is swallowed by the app, so the run "finishes" with problems that
+    lost their figure or steps, and replaying it would score a cut-short
+    run as the real one."""
+    return mode in ("auto", "record") and not only and not stopped
+
+
+def mark_recorded(sets: list[str]) -> None:
+    """After a recording run finishes: these sets are now in the cassette."""
+    try:
+        done = set(json.loads(_manifest().read_text()))
+    except (OSError, ValueError):
+        done = set()
+    _manifest().write_text(json.dumps(sorted(done | set(sets)), indent=1) + "\n")
+
+
+def load_brief(path: Path) -> str:
+    """Register a set from a real generation job's brief (a JSON file), so
+    Eval 1 can re-run prod jobs. The probe never reads a database: the
+    brief is exported by whoever runs the eval. Fields:
+      {"name": "job-bd113585", "course_name": "...", "unit_name": "...",
+       "assignment_title": "...", "constraint": "...", "count": 8,
+       "source_docs": [{"filename": "ws.pdf", "media_type": "application/pdf",
+                        "path": "docs/ws.pdf"}]}
+    `path` in a source doc is relative to the brief's folder; a doc may give
+    "base64" instead. Returns the set's name."""
+    raw = json.loads(Path(path).read_text())
+    name = str(raw["name"])
+    docs: list[dict[str, str]] = []
+    for d in raw.get("source_docs") or []:
+        data = d.get("base64") or base64.b64encode((Path(path).parent / d["path"]).read_bytes()).decode()
+        docs.append({"filename": str(d.get("filename") or d.get("path") or "doc"),
+                     "media_type": str(d["media_type"]), "base64": data})
+    SETS[name] = {
+        "unit_name": str(raw["unit_name"]), "course_name": str(raw.get("course_name") or "Geometry"),
+        "assignment_title": raw.get("assignment_title"), "brief": raw.get("constraint") or "",
+        "count": int(raw.get("count") or COUNT), "images": docs or None,
+    }
+    return name
 
 
 def count_of(name: str) -> int:
@@ -82,17 +194,35 @@ def count_of(name: str) -> int:
 # By-eye verdict per drawn figure, keyed "set1-p3" (the problem's figure) or
 # "set1-p3-step2", with the figure's fingerprint: a figure that changes must
 # be looked at again. "right", "wrong: …", "unwanted: …".
+# Wrong items the recording holds whose fix is still to build, each with what
+# the fix is. The eval and the scorecard show them by name; a NEW wrong item,
+# or a listed one that is no longer wrong (a stale list), fails the bar.
+KNOWN_WRONG: dict[str, str] = {
+    "set1-p1": "a problem true only in its symmetric drawing; fix to build: re-test the statement to prove "
+               "on a second drawing that keeps the givens (#1003 review round 1)",
+}
+
 BY_EYE: dict[str, tuple[str, str]] = {
-    "set1-p1": ("cadc98edaf93", "right"),  # M on AC and BD, each half ticked
-    "set1-p2": ("c7e0c0288895", "right"),  # P, Q, R on circle O; inscribed ∠QPR = 37° labeled; radii OQ, OR
-    "set1-p5": ("8426f4e6b10c", "right"),  # AB ∥ CD arrows, E the midpoint of BC ticked
-    "set2-p1": ("a498817f5848", "right"),  # AB ∥ CD, transversal EF with G past F; ∠AEG = 112° as drawn
-    "set2-p3": ("b055008a90f7", "right"),  # right angle at C; AB = 17, AC = 8 labeled, in proportion
-    # AB ∥ CD cut by PQ at E, F; ∠BEF and ∠DFE both 50° at x = 12. Its labels were written
-    # "$(3x+14)°$": shown as plain text since #989's label fix.
-    "set2-p4": ("82f926ad1496", "right"),
-    "set2-p5": ("bf30773bbe8f", "right"),  # JK ∥ LM cut by NP; ∠KGN = 67° as drawn
-    "set2-p7": ("81db88718466", "right"),  # right angle at C; AB = 20, BC = 12 labeled, AC drawn 16
+    # Looked at by eye 2026-11-15 (~/.veradic/evals/sheet_sets_v3.png): each figure
+    # shows its card's givens and marks, nothing the student makes, no answer.
+    # #1003 review round 1: the figure matches its card, but the PROBLEM can't
+    # be proven. AB ∥ DE with C on AD and BE makes △ABC ~ △DEC (A↔D, B↔E), so
+    # BC ≅ DC gives nothing; the figure is the one symmetric case where
+    # △ABC ≅ △EDC happens to hold, so "true in the drawing" passed it.
+    "set1-p1": ("c02d87ee3ea1", "wrong: the statement to prove holds only in this symmetric drawing"),
+    "set1-p2": ("46f96a1ff547", "right"),
+    "set1-p3": ("813bed6ec8ae", "right"),
+    "set1-p4": ("3a4e90fddb5a", "right"),
+    "set1-p6": ("6b0155b2dbdb", "right"),
+    "set1-p8": ("eb31070a7a2c", "right"),
+    "set2-p1": ("536a3247064b", "right"),
+    "set2-p2": ("06da3c49050e", "right"),
+    "set2-p3": ("97d1dbe007cc", "right"),
+    "set3-p1": ("ba6ff2c86689", "right"),
+    "set4-p1": ("b440b76cf03f", "right"),
+    "set4-p2": ("0ca675994e05", "right"),
+    "set4-p3": ("64da427c1150", "right"),
+    "set4-p4": ("3ccd22dd6242", "right"),
 }
 
 # Per problem (by the fingerprint of its text), whether a figure should be
@@ -100,40 +230,52 @@ BY_EYE: dict[str, tuple[str, str]] = {
 # api/core/assignment_generation.py): "figure" (MUST or SHOULD), "optional"
 # (a formula-only shape problem) or "none" (NOT).
 EXPECTED: dict[str, str] = {
-    # set 1
-    "6612b38f698e": "figure",  # p1: a proof about a named arrangement (MUST)
-    "4d009383ce43": "figure",  # p2: inscribed and central angles (MUST)
-    "df3b2e3390c3": "figure",  # p3: a ladder against a wall (SHOULD); written as a story, no points
-    "f49005c8cf74": "optional",  # p4: △PQR ≅ △XYZ, solve for x from matching sides (algebra)
-    "4d7eb5d09cc9": "figure",  # p5: parallel lines and a midpoint, a proof (MUST)
-    "3b955a73a7bf": "figure",  # p6: a chord and a tangent in a circular garden (MUST); a story, no points
-    "0716423830b5": "optional",  # p7: congruent triangles by AAS, solve for x (algebra)
-    "19b663157fee": "figure",  # p8: the angle between a chord and a tangent (MUST); no points
-    # set 2
-    "ad8560639f80": "figure",  # p1: parallel lines and a transversal (MUST)
-    "8ebcd1c24cce": "figure", "3b3cc497fc0f": "figure",  # p4, p5: parallel lines and a transversal (MUST)
-    "e5511552fced": "optional", "746d6de49463": "optional",  # p3, p7: a right triangle by its formula
-    "ae3590ba66ef": "optional", "93d21c4d1ace": "optional",  # p2, p6: angle sums
-    "00b4d635f44c": "figure",  # p8: a floor plan (SHOULD); a story, no points
-    # set 3: Ben's NO-figure cases
-    "06652fefc9fc": "none",  # p1: the student constructs the perpendicular bisector
-    "fe7fcabbe857": "none",  # p2: a percent problem, no shape
-    "bdbfe4f4d7bd": "none",  # p3: graph a line (the tool can't draw graphs)
-    "0b20295df45a": "none",  # p4: a cylinder's volume (3D)
+    # By the when-to-draw rule, from the text alone (a cold reviewer's labels,
+    # held to the rule where it names the case).
+    "8be81d7ef34a": "figure",  # set1-p1: The figure shows $overline{BE}$ and $overleftrightarrow{AD
+    "371ad5acf021": "figure",  # set1-p2: Points $A$, $B$, and $C$ lie on circle $O$. $angle AOB$ is
+    "1e5a9091c7f0": "figure",  # set1-p3: Given: $angle ABC$ is a right angle, $angle DCB$ is a righ
+    "60ae7b7f3f9a": "figure",  # set1-p4: Points $P$, $Q$, and $R$ lie on circle $O$. $angle PRQ$ is
+    "406e71e7d268": "optional",  # set1-p5: two triangles given by all three sides: the text says everything
+    "c70bfcbf6b7c": "figure",  # set1-p6: Points $A$ and $T$ lie on circle $O$. $overline{BT}$ is ta
+    "c68f586ac7db": "figure",  # set1-p7: a proof about a quadrilateral's diagonals: a MUST in the rule
+    "4c5abfefb96c": "figure",  # set1-p8: A designer is making a logo. Points $A$, $B$, $C$, and $D$
+    "aabc51cdf3fe": "figure",  # set2-p1: $overleftrightarrow{AB} parallel overleftrightarrow{CD}$.
+    "9413287d5da3": "figure",  # set2-p2: $overleftrightarrow{AB} parallel overleftrightarrow{CD}$.
+    "9b52a571beb7": "figure",  # set2-p3: Given: $overleftrightarrow{AB} parallel overleftrightarrow
+    "fbf4e206015a": "optional",  # set2-p4: a polygon's angle sum: OPTIONAL in the rule
+    "f3803d5d005c": "optional",  # set2-p5: a polygon's exterior angles: OPTIONAL in the rule
+    "ffd96bcfe42e": "none",  # set2-p6: the student draws the ladder: NO in the rule
+    "6bafb2065323": "figure",  # set3-p1: the segment AB only; the student constructs MN
+    "aa421302e1a7": "none",  # set3-p2: no shape
+    "23deef828fc5": "none",  # set3-p3: a graph: NO in the rule
+    "b643644fddbd": "none",  # set3-p4: a 3D solid: the tool can't draw it
+    "11afa96b1e1b": "figure",  # set4-p1: The figure shows $triangle ABD$ and $triangle ACD$. Given:
+    "495ea22fec45": "figure",  # set4-p2: Given: $ABCD$ is a parallelogram. Prove: $triangle ABC con
+    "483d5e02bf10": "figure",  # set4-p3: the givens (triangle ABC), never D or AD
+    "3a0e06a1fd8c": "figure",  # set4-p4: the segment AB only; the student constructs MN
 }
 
 # A known-wrong version of each drawn question figure (keyed like BY_EYE),
 # which the checker must reject: {"move": {"D": [x, y]}}, {"drop": ["BD"]},
 # {"label": {"ABC": "47°"}}, {"side_label": {"AB": "9"}}.
 NEGATIVES: dict[str, dict[str, Any]] = {
-    "set1-p1": {"move": {"M": [2.5, 2]}},  # M no longer the midpoint of AC or BD
-    "set1-p2": {"move": {"P": [4, 1]}},  # P off circle O
-    "set1-p5": {"move": {"E": [4.5, 2.5]}},  # E off BC, no longer its midpoint
-    "set2-p1": {"move": {"C": [0, 1]}},  # line CD no longer ∥ AB
-    "set2-p3": {"move": {"B": [0, 10]}},  # AB = 17, AC = 8 out of proportion
-    "set2-p4": {"move": {"C": [8, 3]}},  # line CD no longer ∥ AB
-    "set2-p5": {"move": {"M": [8, 3]}},  # line LM no longer ∥ JK
-    "set2-p7": {"move": {"A": [0, 8]}},  # AB = 20, BC = 12 out of proportion
+    # One point moved so a given is false (a dropped side where no move breaks
+    # one); the checker must refuse each. The reason it gave is in the comment.
+    "set1-p1": {"move": {"A": [-2.4, 0.0]}},  # the given AB ∥ DE is not true in the drawing
+    "set1-p2": {"move": {"A": [1.781, 5.026]}},  # the given A, B, C lie on the circle O is not true in the drawing
+    "set1-p3": {"move": {"A": [0.6, 3.0]}},  # the given ∠ABC is a right angle is not true in the drawing
+    "set1-p4": {"move": {"O": [4.6, 4.0]}},  # the given P, Q, R lie on the circle O is not true in the drawing
+    "set1-p6": {"move": {"A": [7.453, 4.927]}},  # the given A, T lie on the circle O is not true in the drawing
+    "set1-p8": {"move": {"A": [3.445, 7.758]}},  # the given A, B, C, D lie on the circle O is not true in the drawing
+    "set2-p1": {"move": {"A": [0.0, 6.6]}},  # the given AB ∥ CD is not true in the drawing
+    "set2-p2": {"move": {"A": [0.0, 6.6]}},  # the given AB ∥ CD is not true in the drawing
+    "set2-p3": {"move": {"A": [0.0, 6.6]}},  # the given AB ∥ CD is not true in the drawing
+    "set3-p1": {"drop": ["AB"]},  # not drawn: AB
+    "set4-p1": {"move": {"A": [4.6, 6.0]}},  # the given △ABC is isosceles is not true in the drawing
+    "set4-p2": {"move": {"A": [0.6, 0.0]}},  # the given parallelogram ABCD (BC ∥ DA) is not true in the drawing
+    "set4-p3": {"move": {"A": [4.6, 6.0]}},  # the given △ABC is isosceles is not true in the drawing
+    "set4-p4": {"drop": ["AB"]},  # not drawn: AB
 }
 
 
@@ -157,11 +299,21 @@ async def run_set(name: str, only: list[int] | None = None) -> list[dict[str, An
     s = SETS[name]
     step_decomposition._cache.clear()  # replay must not depend on what ran before
     request = qbg.ProblemRequest(
-        unit_name=s["unit_name"], course_name="Geometry", subject="math",
-        user_id="00000000-0000-0000-0000-000000000000", constraint_text=s["brief"],
-        assignment_title=s["assignment_title"],
+        unit_name=s["unit_name"], course_name=s.get("course_name", "Geometry"), subject="math",
+        user_id="00000000-0000-0000-0000-000000000000", constraint_text=s["brief"] or None,
+        assignment_title=s["assignment_title"], images=s.get("images"),
     )
-    questions = await qbg.generate_checked_problems(request, count=count_of(name))
+    readings: list[str] = []
+    real_read = qbg.read_figure_facts
+
+    async def read(text: str, **kw: Any) -> Any:
+        if kw.get("step_of") is None:
+            readings.append(text)  # a question read back from its words: the card path never should
+        return await real_read(text, **kw)
+
+    with patch.object(qbg, "read_figure_facts", read):
+        questions = await qbg.generate_checked_problems(request, count=count_of(name))
+    left_out = count_of(name) - len(questions)
     if only:
         questions = [q for i, q in enumerate(questions, start=1) if i in only]
     # What the solver emitted, before any step figure is checked (and
@@ -183,11 +335,15 @@ async def run_set(name: str, only: list[int] | None = None) -> list[dict[str, An
         dropped[kw.get("question_text") or ""] = drops
         return out, drops, reading
 
-    with patch.object(qbg, "generate_solutions", solve), patch.object(qbg, "_render_step_figures_with_retry", render):
-        questions, solutions = await qbg.solve_checked_problems(
+    with (
+        patch.object(qbg, "generate_solutions", solve), patch.object(qbg, "_render_step_figures_with_retry", render),
+        patch.object(qbg, "read_figure_facts", read),
+    ):
+        solved, solutions = await qbg.solve_checked_problems(
             questions, subject="math", user_id="00000000-0000-0000-0000-000000000000", job_id=None,
-            request=request,
         )
+    left_out += len(questions) - len(solved)
+    questions = solved
     out = []
     for i, (q, sol) in enumerate(zip(questions, solutions), start=1):
         steps = sol.get("steps") or []
@@ -198,6 +354,9 @@ async def run_set(name: str, only: list[int] | None = None) -> list[dict[str, An
             "figure_svg": q.get("figure_svg"), "figure_facts": q.get("figure_facts"),
             # The AI's own choice (it drafted a figure), for the rule_broken bar.
             "figure_wanted": bool(q.get("figure_wanted")),
+            "requires_drawing": bool(q.get("requires_drawing")),
+            "card_refused": q.get("card_refused") or [],
+            "left_out": left_out if i == 1 else 0, "readings": len(readings) if i == 1 else 0,
             "steps": [
                 {"step": n, "text": f"{st.get('title', '')}: {st.get('description', '')}",
                  "spec": st.get("figure_spec"), "svg": st.get("figure_svg"), "facts": st.get("figure_facts"),
@@ -210,6 +369,12 @@ async def run_set(name: str, only: list[int] | None = None) -> list[dict[str, An
 
 
 async def run_all(sets: list[str] | None = None) -> list[dict[str, Any]]:
+    """Every set (or `sets`) through the real path. In replay with nothing
+    recorded it raises NotRecordedError rather than a cassette miss mid-run, so a
+    report reads "not recorded" and an empty result never reads as a pass."""
+    missing = missing_sets(sets)
+    if os.environ.get("HARNESS_LLM_MODE", "off") == "replay" and missing:
+        raise NotRecordedError(missing)
     prev = os.environ.get("HARNESS_CASSETTE_DIR")
     os.environ["HARNESS_CASSETTE_DIR"] = str(CASSETTE_DIR)
     try:
@@ -298,6 +463,19 @@ def negatives(p: dict[str, Any]) -> dict[str, bool | None]:
     return out
 
 
+def constructed_drawn(p: dict[str, Any]) -> list[str]:
+    """Points only the student's construction makes that the problem's
+    figure draws, read straight from the stored card and the spec (not with
+    fact_card's code): a point named in `constructs` and not in `points`."""
+    card, spec = p.get("figure_facts") or {}, p.get("figure_spec") or {}
+    shown = set(card.get("points") or [])
+    made: set[str] = set()
+    for f in card.get("constructs") or []:
+        for x in [*(f.get("items") or []), f.get("point") or ""]:
+            made |= {c for c in x if c.isupper()}
+    return sorted((made - shown) & set(spec.get("points") or {}))
+
+
 def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
     import api.core.question_bank_generation as qbg
 
@@ -327,6 +505,18 @@ def summarize(results: list[dict[str, Any]]) -> dict[str, Any]:
         "missing_figures": [p["key"] for p in results
                             if EXPECTED.get(fingerprint(p["text"])) == "figure" and not p["figure_svg"]],
         "not_expected": [p["key"] for p in results if fingerprint(p["text"]) not in EXPECTED],
+        # Fact cards (this PR).
+        "question_readings": sum(p.get("readings", 0) for p in results),
+        "left_out": sum(p.get("left_out", 0) for p in results),
+        "missing_total": len([p for p in results if EXPECTED.get(fingerprint(p["text"])) == "figure"
+                              and not p["figure_svg"]]) + sum(p.get("left_out", 0) for p in results),
+        "not_author_cards": [p["key"] for p in results if p["figure_svg"]
+                             and (p.get("figure_facts") or {}).get("source") != "author"],
+        "constructed_drawn": [f"{p['key']}: {constructed_drawn(p)}" for p in results if constructed_drawn(p)],
+        "constructs_without_drawing_flag": [p["key"] for p in results
+                                            if (p.get("figure_facts") or {}).get("constructs")
+                                            and not p.get("requires_drawing")],
+        "cards_refused": {p["key"]: p["card_refused"] for p in results if p.get("card_refused")},
         "negatives_rejected": sum(1 for v in neg.values() if v),
         "negatives_missing": [k for k, v in neg.items() if v is None],
         "negatives_passed": [k for k, v in neg.items() if v is False],
@@ -344,12 +534,17 @@ def main() -> None:
     from tests.harness.budget import ledger_from_env, spending_cap
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--set", choices=sorted(SETS))
+    parser.add_argument("--set", help=f"one of {sorted(SETS)}, or the name a --brief registers")
+    parser.add_argument("--brief", type=Path, action="append", default=[],
+                        help="a real job's brief as JSON (see load_brief); repeatable")
     parser.add_argument("--only", nargs="*", type=int)
     parser.add_argument("--cap", type=float, default=2.5)
     parser.add_argument("--png-dir", type=Path)
     parser.add_argument("--out", type=Path)
     args = parser.parse_args()
+    briefs = [load_brief(b) for b in args.brief]
+    if args.set and args.set not in SETS:
+        parser.error(f"unknown set {args.set!r}")
     ledger, total = ledger_from_env()
     prev = os.environ.get("HARNESS_CASSETTE_DIR")
     os.environ["HARNESS_CASSETTE_DIR"] = str(CASSETTE_DIR)
@@ -359,7 +554,9 @@ def main() -> None:
             if args.set:
                 results = asyncio.run(run_set(args.set, args.only))
             else:
-                results = asyncio.run(run_all())
+                results = asyncio.run(run_all(briefs or None))
+        if finished_recording(os.environ.get("HARNESS_LLM_MODE"), args.only, spend.stopped):
+            mark_recorded([args.set] if args.set else (briefs or list(SETS)))
     finally:
         if prev is None:
             os.environ.pop("HARNESS_CASSETTE_DIR", None)

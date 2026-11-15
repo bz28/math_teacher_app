@@ -97,6 +97,26 @@ class FigureFacts(BaseModel):
     # Written by code, never by a reading: each fact taken out of a reading
     # and why, so the stored facts show what was set aside.
     dropped: list[str] = Field(default_factory=list)
+    # Where the facts came from: "reading" (two AI readings of the problem's
+    # words, agreed and covered; every card stored before fact cards) or
+    # "author" (the card the AI filled in when it wrote the problem, whose
+    # words code then wrote from it: api/core/geometry/fact_card.py).
+    source: Literal["reading", "author"] = "reading"
+    # An author card only: what the student constructs, as facts the
+    # construction makes true. Never drawn, never checked on the figure.
+    constructs: list[Fact] = Field(default_factory=list)
+
+
+def as_prompt(facts: dict[str, Any]) -> dict[str, Any]:
+    """Stored facts as a prompt shows them: a reading's `source` and an
+    empty `constructs` add nothing the model needs (and leave the prompt as
+    it was before fact cards, so its recordings still replay)."""
+    out = dict(facts)
+    if out.get("source", "reading") == "reading":
+        out.pop("source", None)
+    if not out.get("constructs"):
+        out.pop("constructs", None)
+    return out
 
 
 # ── Names ──────────────────────────────────────────────────────────────
@@ -342,6 +362,8 @@ def with_step(question: FigureFacts, step: FigureFacts) -> FigureFacts:
         "givens": union(question.givens, [*step.givens, *step.prove]),
         "requested": union(question.requested, step.requested),
         "dropped": union(question.dropped, [f"step: {x}" for x in step.dropped]),
+        # A step read from its words makes the whole a reading.
+        "source": question.source if step.source == question.source else "reading",
     })
 
 

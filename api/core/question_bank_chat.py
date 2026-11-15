@@ -27,6 +27,7 @@ from api.core.construction_figures import (
     figure_sentence,
 )
 from api.core.document_vision import MAX_VISION_IMAGES, build_vision_content, fetch_source_documents
+from api.core.geometry.facts import as_prompt
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
 from api.core.llm_schemas import BANK_CHAT_REPLY_CONSTRUCTION_SCHEMA
 from api.core.subjects import get_config
@@ -190,7 +191,12 @@ def _build_user_context(item: QuestionBankItem, unit_name: str, course_name: str
 def _figure_context(item: QuestionBankItem) -> str:
     """The figures the model is editing, as data: the question's current
     figure and the one in its own pending proposal. Without them a
-    follow-up ("now label angle 1") redraws from scratch and moves things."""
+    follow-up ("now label angle 1") redraws from scratch and moves things.
+
+    TODO(fact cards): a chat-proposed rewrite still has its words read back
+    (the readings path). Moving it onto fact cards changes the chat schema,
+    which retires the recorded teacher-chat eval; that waits for a
+    recording budget."""
     parts: list[str] = []
     if isinstance(item.figure_spec, dict):
         parts.append(f"\nCurrent figure (figure_spec):\n{json.dumps(item.figure_spec)}")
@@ -199,7 +205,7 @@ def _figure_context(item: QuestionBankItem) -> str:
             # What the figure (and any step figure) is checked against.
             parts.append(
                 "\nThe problem's facts, which the figure and every step figure are checked "
-                f"against:\n{json.dumps(facts, sort_keys=True)}",
+                f"against:\n{json.dumps(as_prompt(facts), sort_keys=True)}",
             )
     pending = next(
         (
@@ -372,14 +378,19 @@ async def chat_with_bank_item(
         # construction is checked against the problem (and the teacher's
         # request), with one retry on the checker's errors.
         top_construction = _is_construction(top_spec_raw)
+        # A problem written from its fact card (source "author"), question
+        # unchanged: a new figure is held to that card, never to readings of
+        # code's words (which would miss what the student constructs).
+        stored = None if rewrites_question else getattr(item, "figure_facts", None)
+        author_card = stored if isinstance(stored, dict) and stored.get("source") == "author" else None
         if top_construction:
             answer = str(proposal_raw.get("final_answer") or ("" if rewrites_question else item.final_answer or ""))
             top_figure_spec, top_figure_svg, top_issues, top_facts = await _resolve_figure_with_retry(
                 top_spec_raw, top_text, mode=LLMMode.BANK_CHAT, user_id=str(user_id),
-                final_answer=answer, request=teacher_message,
+                final_answer=answer, request=teacher_message, facts=author_card,
             )
         else:
-            top_figure_spec, top_figure_svg = _resolve_figure(top_spec_raw, top_text)
+            top_figure_spec, top_figure_svg = _resolve_figure(top_spec_raw, top_text, facts=author_card)
             if isinstance(top_spec_raw, dict) and top_figure_svg is None:
                 figure_drop = f"I couldn't draw the diagram. {_figure_drop_reason(top_spec_raw, top_text)}"
 

@@ -25,6 +25,9 @@ export function SimilarJobStrip({
         <span>
           ✨ {job.produced_count} new variation
           {job.produced_count === 1 ? "" : "s"} ready for review
+          {job.notice && (
+            <span className="ml-2 font-normal text-green-800 dark:text-green-200">{job.notice}</span>
+          )}
         </span>
         <button
           type="button"
