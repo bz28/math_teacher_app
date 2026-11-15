@@ -194,6 +194,14 @@ def count_of(name: str) -> int:
 # By-eye verdict per drawn figure, keyed "set1-p3" (the problem's figure) or
 # "set1-p3-step2", with the figure's fingerprint: a figure that changes must
 # be looked at again. "right", "wrong: …", "unwanted: …".
+# Wrong items the recording holds whose fix is still to build, each with what
+# the fix is. The eval and the scorecard show them by name; a NEW wrong item,
+# or a listed one that is no longer wrong (a stale list), fails the bar.
+KNOWN_WRONG: dict[str, str] = {
+    "set1-p1": "a problem true only in its symmetric drawing; fix to build: re-test the statement to prove "
+               "on a second drawing that keeps the givens (#1003 review round 1)",
+}
+
 BY_EYE: dict[str, tuple[str, str]] = {
     # Looked at by eye 2026-11-15 (~/.veradic/evals/sheet_sets_v3.png): each figure
     # shows its card's givens and marks, nothing the student makes, no answer.

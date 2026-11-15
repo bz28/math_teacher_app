@@ -31,11 +31,6 @@ recorded = pytest.mark.skipif(not RECORDED, reason="fact-card generation eval no
 # target is lower (a story keeps its setting as the card's context).
 MISSING_CEILING = 4
 
-# Known wrong items in the recording, each with its fix still to build, so a
-# NEW wrong item fails the bar at once. set1-p1: a problem true only in its
-# symmetric drawing (#1003 review round 1); the fix is a check that re-tests
-# the statement to prove on a second drawing that keeps the givens.
-KNOWN_WRONG = ["set1-p1"]
 
 
 @recorded
@@ -44,7 +39,8 @@ async def test_generation_figure_eval_meets_the_bar(monkeypatch: pytest.MonkeyPa
     monkeypatch.setenv("HARNESS_LLM_MODE", "replay")
     results = await gf.run_all()
     s = gf.summarize(results)
-    assert sorted(w.split(":")[0].strip() for w in s["wrong"]) == KNOWN_WRONG and s["unwanted"] == [], s
+    # Each known wrong item (gf.KNOWN_WRONG, with its fix to build) and no other.
+    assert sorted(w.split(":")[0].strip() for w in s["wrong"]) == sorted(gf.KNOWN_WRONG) and s["unwanted"] == [], s
     assert s["not_looked_at"] == [] and s["not_expected"] == [], s
     assert s["negatives_passed"] == [] and s["negatives_missing"] == [], s
     assert s["negatives_rejected"] == s["question_figures"] + s["step_figures"], s
