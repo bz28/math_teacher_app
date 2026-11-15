@@ -37,6 +37,7 @@ from api.core.homework_points import MAX_TOTAL_POINTS
 from api.core.image_utils import validate_and_decode_upload
 from api.core.question_bank_chat import CHAT_SOFT_CAP, chat_with_bank_item
 from api.core.question_bank_generation import (
+    _is_construction,
     _render_step_figures,
     _resolve_figure,
     regenerate_one,
@@ -625,6 +626,24 @@ async def _rederive_requires_drawing(
         item.requires_drawing = flag
 
 
+def _drop_stale_constructions(item: QuestionBankItem) -> None:
+    """New wording voids the reading a construction figure (and each step's
+    construction figure) was checked against: `figure_facts` describes the
+    old problem. Nothing is kept that no check stands behind, so they go,
+    and the teacher can ask for the figure again (one undo restores them).
+    Other figures don't depend on a reading and stay."""
+    if _is_construction(item.figure_spec):
+        item.figure_spec = None
+        item.figure_svg = None
+    item.figure_facts = None
+    if isinstance(item.solution_steps, list):
+        item.solution_steps = [
+            {k: v for k, v in s.items() if k not in ("figure_spec", "figure_svg")}
+            if isinstance(s, dict) and _is_construction(s.get("figure_spec")) else s
+            for s in item.solution_steps
+        ]
+
+
 @router.patch("/question-bank/{item_id}")
 async def update_bank_item(
     body: UpdateBankItemRequest,
@@ -687,6 +706,7 @@ async def update_bank_item(
         if not t:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Title cannot be empty")
         item.title = t
+    text_changed = False
     if body.question is not None:
         q = body.question.strip()
         if not q:
@@ -720,6 +740,9 @@ async def update_bank_item(
             db, item, EDIT_MANUAL, current_user,
             changes=[(FIELD_REQUIRES_DRAWING, prev_flag, "yes" if item.requires_drawing else "no")],
         )
+
+    if text_changed:
+        _drop_stale_constructions(item)
 
     # A generated question a teacher had to rewrite is the clearest
     # signal the generation prompt is wrong. No-ops when the question
@@ -797,6 +820,7 @@ async def revert_bank_item(
     # Restore the figure alongside the prose so the two stay in sync.
     item.figure_spec = item.previous_figure_spec
     item.figure_svg = item.previous_figure_svg
+    item.figure_facts = item.previous_figure_facts
     # The flag travels with the prose it was derived from — unless the
     # teacher set it, in which case undoing a question edit leaves it.
     if item.previous_requires_drawing is not None and not item.requires_drawing_teacher_set:
@@ -808,6 +832,7 @@ async def revert_bank_item(
     item.previous_status = None
     item.previous_figure_spec = None
     item.previous_figure_svg = None
+    item.previous_figure_facts = None
     item.previous_requires_drawing = None
     # Undo restores the snapshot's status alongside its prose, so it can
     # move an item back to rejected (or approved) with no other trace. That
@@ -1151,6 +1176,7 @@ async def accept_chat_proposal(
         # regenerate does — unless the teacher has set it themselves.
         if text_changed:
             await _rederive_requires_drawing(db, item, user_id=str(current_user.user_id))
+    accepted_steps: list[dict[str, Any]] | None = None
     if proposal.get("solution_steps") is not None:
         # Belt-and-suspenders: defense against malformed steps lingering
         # in old chat_messages written before question_bank_chat.py
@@ -1173,8 +1199,13 @@ async def accept_chat_proposal(
                 # render helper sees it.
                 if isinstance(s.get("figure_spec"), dict):
                     step["figure_spec"] = s["figure_spec"]
+                    # The facts the chat checked this step's figure against
+                    # (its reading of the step, written by code), so accept
+                    # checks it against the same.
+                    if isinstance(s.get("figure_facts"), dict):
+                        step["figure_facts"] = s["figure_facts"]
                 cleaned_steps.append(step)
-            item.solution_steps = _render_step_figures(cleaned_steps)
+            accepted_steps = cleaned_steps
     if proposal.get("final_answer") is not None:
         # Stripped, matching the PATCH path and the question field beside
         # it. Whitespace-only difference is not a repair, and recording it
@@ -1192,15 +1223,27 @@ async def accept_chat_proposal(
     #   3. Proposal touches neither question nor figure_spec → leave
     #      the existing figure alone.
     if proposal.get("figure_spec") is not None:
-        new_figure_spec, new_figure_svg = _resolve_figure(proposal["figure_spec"], item.question)
+        new_figure_spec, new_figure_svg = _resolve_figure(
+            proposal["figure_spec"], item.question, final_answer=item.final_answer or "",
+            facts=proposal.get("figure_facts"),
+        )
         item.figure_spec = new_figure_spec
         item.figure_svg = new_figure_svg
+        # The reading the figure was checked against is kept with it.
+        item.figure_facts = proposal.get("figure_facts") if new_figure_svg else None
     elif proposal.get("question") is not None:
         # Question rewritten without a fresh figure → the old figure
         # almost certainly no longer describes the new question.
         # Match what the preview showed (no figure).
         item.figure_spec = None
         item.figure_svg = None
+        item.figure_facts = None
+    # Steps last: a construction step figure is checked against the
+    # figure the question has now (the chat checked it against the same).
+    if accepted_steps is not None:
+        item.solution_steps = _render_step_figures(
+            accepted_steps, question_text=item.question, question_spec=item.figure_spec,
+        )
 
     # Build a NEW list with NEW dict copies for any modified message.
     # In-place dict mutation (e.g. `m["accepted"] = True`) would be a

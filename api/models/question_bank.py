@@ -93,6 +93,10 @@ class QuestionBankItem(Base):
     # directly (after DOMPurify); we don't re-render on every read.
     # NULL when the question has no figure.
     figure_svg: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # A construction figure's contract: the facts its problem states, as
+    # two AI readings agreed them (api/core/geometry/facts.py). Later checks
+    # of the figure measure against these. NULL for every other figure.
+    figure_facts: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     # One-level undo for the figure, parallel to the previous_* family
     # below. Snapshotted in snapshot_history() so revert atomically
@@ -100,6 +104,7 @@ class QuestionBankItem(Base):
     # old question text alongside the new (or cleared) diagram.
     previous_figure_spec: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     previous_figure_svg: Mapped[str | None] = mapped_column(Text, nullable=True)
+    previous_figure_facts: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
 
     # True while at least one published assignment references this item.
     # While locked, content edits / status changes / delete are refused.

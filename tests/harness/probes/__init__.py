@@ -7,6 +7,7 @@ changeset to the probe(s) that should run (`for-diff`).
 from collections.abc import Callable
 
 from tests.harness.probe import Probe
+from tests.harness.probes.construction_figures import ConstructionFiguresProbe
 from tests.harness.probes.drawing_eval import DrawingEvalProbe
 from tests.harness.probes.drawing_flag import DrawingFlagProbe
 from tests.harness.probes.extraction_fidelity import ExtractionFidelityProbe
@@ -47,4 +48,8 @@ PROBES: dict[str, Callable[[int], Probe]] = {
     # against a fixed checklist; guards "never yes for what isn't drawn".
     # Replays from _cassettes/graph_check/.
     "graph-check": lambda count: GraphCheckProbe(),
+    # Geometry construction figures drawn on a teacher's request in the
+    # workshop chat: checker + one retry + the code-written reply, on real
+    # prod problems. Replays from _cassettes/construction_figures/.
+    "construction-figures": lambda count: ConstructionFiguresProbe(),
 }

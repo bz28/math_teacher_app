@@ -16,6 +16,8 @@ affected.
 
 from __future__ import annotations
 
+import math
+import re
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -477,19 +479,314 @@ class PolygonFigure(BaseModel):
         return self
 
 
+# A construction point name: a capital letter with optional digits and
+# primes (A, B1, A'), or a hidden helper starting with "_" (_p1) — placed
+# for geometry, never drawn or labelled.
+_POINT_NAME = re.compile(r"_[a-z0-9]+|[A-Z][0-9]*'*")
+# A label is plain text in the drawing: math markup in it ("$(3x+14)°$",
+# "$x^\\circ$") would be printed as it is. The few symbols labels use are
+# turned into their characters; anything else in markup is refused. Each
+# command ends at a non-letter, so "\cdots" or "\triangleq" is refused,
+# not read as "\cdot" + "s". Spacing is not set here: `_label_spacing`
+# sets it once, for every symbol alike.
+_END = r"(?![A-Za-z])"
+_LABEL_SYMBOLS = [
+    (re.compile(rf"\^\s*\{{?\s*\\circ{_END}\s*\}}?|\\circ{_END}|\\degree{_END}"), "°"),
+    (re.compile(rf"\\cdot{_END}"), "·"), (re.compile(rf"\\times{_END}"), "×"),
+    (re.compile(rf"\\cong{_END}"), "≅"), (re.compile(rf"\\pi{_END}"), "π"),
+    (re.compile(rf"\\angle{_END}"), "∠"), (re.compile(rf"\\triangle{_END}"), "△"),
+    (re.compile(rf"\\(?:left|right){_END}"), ""), (re.compile(r"\\[,;! ]"), " "),
+]
+# √ keeps its reach: a single number or letter is "√2", "√34", "√x";
+# anything longer is grouped, "√(x+1)", so it never reads as "√x+1".
+_SQRT = re.compile(rf"\\sqrt{_END}\s*\{{\s*([^{{}}]*?)\s*\}}")
+
+
+def _sqrt(m: re.Match[str]) -> str:
+    arg = m.group(1)
+    return "√" + (arg if re.fullmatch(r"\d+(?:\.\d+)?|[A-Za-z]", arg) else f"({arg})")
+
+
+# One rule for "_" and "^": digits become their subscript or superscript
+# characters ("a_1" and "a_{1}" are both "a₁", "x^2" and "x^{2}" both
+# "x²"); anything else after "_" or "^" is refused. Without braces a
+# script takes one digit, as TeX does: "a_12" is "a₁2".
+SUBSCRIPTS = "₀₁₂₃₄₅₆₇₈₉"
+SUPERSCRIPTS = "⁰¹²³⁴⁵⁶⁷⁸⁹"
+_SCRIPT = re.compile(r"([_^])\s*(?:\{\s*(\d+)\s*\}|(\d))")
+
+
+def _script(m: re.Match[str]) -> str:
+    chars = SUBSCRIPTS if m.group(1) == "_" else SUPERSCRIPTS
+    return "".join(chars[int(c)] for c in m.group(2) or m.group(3))
+
+
+def digit_scripts(text: str) -> str:
+    """`text` with its digit sub/superscripts as characters, as a label
+    shows them: "a_1", "a_{1}" are "a₁"; "a_12" is "a₁2", as TeX shows it."""
+    return _SCRIPT.sub(_script, text)
+
+
+# One spacing rule for every label, after all conversions. It only tidies
+# around symbols that are never signs, so it never changes what a label
+# means: a space next to · × √ π ° ∠ △ ≅ or a script character goes
+# ("2·x", "2πr", "(3x + 14)°", "∠ABC", "a₁"), unless what is on its other
+# side is + − = < > (so "2π + 1" and "x = π" keep both spaces). After
+# · × √ ∠ △ ≅ the operand follows, so the space goes even then ("3·-x").
+# + − = < > themselves keep exactly the spacing the source wrote; runs of
+# spaces become one.
+_TIGHT = "·×√π°∠△≅" + SUBSCRIPTS + SUPERSCRIPTS
+_WANTS_OPERAND = "·×√∠△≅"
+_RELATION = "+−=<>≤≥≠±-"  # "-" last: literal in a character class
+
+
+def _label_spacing(text: str) -> str:
+    out = " ".join(text.split())
+    out = re.sub(rf"(?<=[{_WANTS_OPERAND}]) ", "", out)
+    return re.sub(rf"(?<=[{_TIGHT}]) (?![{_RELATION}])|(?<![{_RELATION}]) (?=[{_TIGHT}])", "", out)
+
+
+def plain_label(text: str) -> str:
+    """`text` as the drawing shows it: no "$", TeX symbols as characters.
+    Raises ValueError for markup that can't be shown as plain text."""
+    out = text.replace("$", "")
+    for pattern, repl in _LABEL_SYMBOLS:
+        out = pattern.sub(repl, out)
+    out = _SQRT.sub(_sqrt, digit_scripts(out))
+    out = _label_spacing(out)
+    if any(c in out for c in "\\{}_^"):
+        raise ValueError(f"the label {text!r} is math markup that can't be shown as plain text")
+    return out
+
+
+_MAX_POINTS = 40
+_MAX_PIECES = 60
+
+
+def split_points(ref: str, count: int) -> tuple[str, ...]:
+    """Split a reference like "AB", "A'B'" or "XVY" into `count` point
+    names; raises ValueError when it doesn't split cleanly."""
+    compact = ref.replace(" ", "").replace("′", "'").replace("’", "'")
+    names = tuple(_POINT_NAME.findall(compact))
+    if len(names) != count or "".join(names) != compact:
+        raise ValueError(f"{ref!r} must name exactly {count} points (e.g. 'AB' or 'XVY')")
+    return names
+
+
+def is_hidden(name: str) -> bool:
+    """A helper point: used to place geometry, never drawn or labelled."""
+    return name.startswith("_")
+
+
+_MarkGroup = Annotated[list[str], Field(min_length=2)]
+
+
+class ConstructionLine(BaseModel):
+    """A full line through two points, optionally named (p, q, ℓ1)."""
+
+    name: str | None = None
+    through: list[str] = Field(min_length=2, max_length=2)
+
+
+class ConstructionCircle(BaseModel):
+    """A circle by center and EITHER a radius OR a point it passes through."""
+
+    center: str
+    radius: float | None = None
+    through: str | None = None
+
+    @model_validator(mode="after")
+    def _one_size(self) -> ConstructionCircle:
+        if (self.radius is None) == (self.through is None):
+            raise ValueError("a circle sets exactly one of radius / through")
+        if self.radius is not None and not (self.radius > 0 and math.isfinite(self.radius)):
+            raise ValueError(f"circle radius must be positive (got {self.radius})")
+        return self
+
+
+class ConstructionArc(BaseModel):
+    """The minor arc (or sector) of the circle centred at `center` through
+    endpoints[0], running to the ray toward endpoints[1]; the major one when
+    `major`. Code sets `major` from the problem's words ("major arc AB",
+    "arc ACB" through C, "major sector AOB"); the AI's figure format
+    doesn't offer it."""
+
+    center: str
+    endpoints: list[str] = Field(min_length=2, max_length=2)
+    major: bool = False
+
+
+class ShadedRegion(BaseModel):
+    """A lightly filled region: a polygon by its corner points, or a sector."""
+
+    polygon: list[str] | None = None
+    sector: ConstructionArc | None = None
+
+    @model_validator(mode="after")
+    def _one_region(self) -> ShadedRegion:
+        if (self.polygon is None) == (self.sector is None):
+            raise ValueError("a shaded region sets exactly one of polygon / sector")
+        if self.polygon is not None and len(self.polygon) < 3:
+            raise ValueError("a shaded polygon needs at least 3 points")
+        return self
+
+
+class ConstructionFigure(BaseModel):
+    """A figure built from named points at exact coordinates: the AI places
+    the points and lists what to draw and mark; code draws it and
+    (api/core/geometry/figure_check.py) checks it against the problem.
+
+    Unlike the solver-backed shapes, coordinates are given directly — the
+    checker, not a solver, guarantees the givens hold in the drawing. One
+    vocabulary covers proofs with extra segments, rays, named lines,
+    circles and arcs, which the single-shape forms could not express.
+    """
+
+    type: Literal["geometry"] = "geometry"
+    shape: Literal["construction"] = "construction"
+    points: dict[str, tuple[float, float]]
+    segments: list[str] = Field(default_factory=list)
+    # "OA" = the ray from O through A.
+    rays: list[str] = Field(default_factory=list)
+    lines: list[ConstructionLine] = Field(default_factory=list)
+    circles: list[ConstructionCircle] = Field(default_factory=list)
+    arcs: list[ConstructionArc] = Field(default_factory=list)
+    sectors: list[ConstructionArc] = Field(default_factory=list)
+    shaded: list[ShadedRegion] = Field(default_factory=list)
+    # Congruence marks: group i (0-based) gets i+1 ticks / arcs. A group
+    # ties at least two parts together (an empty or one-part group claims
+    # nothing, and crashed the checks).
+    tick_groups: list[_MarkGroup] = Field(default_factory=list)
+    arc_groups: list[_MarkGroup] = Field(default_factory=list)
+    right_angles: list[str] = Field(default_factory=list)
+    # Segments or line names; group i gets i+1 arrowheads.
+    parallel_groups: list[_MarkGroup] = Field(default_factory=list)
+    angle_labels: dict[str, str] = Field(default_factory=dict)
+    side_labels: dict[str, str] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _validate(self) -> ConstructionFigure:
+        if not self.points:
+            raise ValueError("a construction needs at least one point")
+        if len(self.points) > _MAX_POINTS:
+            raise ValueError(f"at most {_MAX_POINTS} points")
+        for name, (x, y) in self.points.items():
+            if not _POINT_NAME.fullmatch(name):
+                raise ValueError(
+                    f"point name {name!r} must be a capital letter (optionally with digits "
+                    "or primes) or a hidden helper starting with '_'",
+                )
+            if not (math.isfinite(x) and math.isfinite(y)):
+                raise ValueError(f"point {name} has a non-finite coordinate")
+        self.angle_labels = {k: plain_label(v) for k, v in self.angle_labels.items()}
+        self.side_labels = {k: plain_label(v) for k, v in self.side_labels.items()}
+        pieces = len(self.segments) + len(self.rays) + len(self.lines) + len(self.circles)
+        if pieces > _MAX_PIECES:
+            raise ValueError(f"at most {_MAX_PIECES} segments, rays, lines and circles")
+
+        def known(*names: str) -> None:
+            for n in names:
+                if n not in self.points:
+                    raise ValueError(f"references unknown point {n!r}")
+
+        def distinct(names: tuple[str, ...], ref: str) -> None:
+            if len(set(names)) != len(names):
+                raise ValueError(f"{ref!r} repeats a point")
+            pts = [self.points[n] for n in names]
+            if any(math.dist(pts[0], p) < 1e-9 for p in pts[1:]) or (
+                len(pts) == 3 and math.dist(pts[1], pts[2]) < 1e-9
+            ):
+                raise ValueError(f"{ref!r} uses two points at the same spot")
+
+        for ref in [*self.segments, *self.rays, *self.side_labels]:
+            pair = split_points(ref, 2)
+            known(*pair)
+            distinct(pair, ref)
+        line_names = set()
+        for line in self.lines:
+            known(*line.through)
+            distinct(tuple(line.through), "".join(line.through))
+            if line.name:
+                line_names.add(line.name)
+        for circle in self.circles:
+            known(circle.center, *([circle.through] if circle.through else []))
+            if circle.through:
+                distinct((circle.center, circle.through), circle.center + circle.through)
+        for arc in [*self.arcs, *self.sectors, *(r.sector for r in self.shaded if r.sector)]:
+            known(arc.center, *arc.endpoints)
+            distinct((arc.center, *arc.endpoints), arc.center + "".join(arc.endpoints))
+        for region in self.shaded:
+            if region.polygon:
+                known(*region.polygon)
+        for group in self.tick_groups:
+            for ref in group:
+                pair = split_points(ref, 2)
+                known(*pair)
+                distinct(pair, ref)
+            if len({frozenset(split_points(r, 2)) for r in group}) != len(group):
+                raise ValueError(f"tick group {group} lists the same segment twice")
+        for group in self.arc_groups:
+            keys = {(split_points(r, 3)[1], frozenset(split_points(r, 3)[::2])) for r in group}
+            if len(keys) != len(group):
+                raise ValueError(f"arc group {group} lists the same angle twice")
+        for group in self.parallel_groups:
+            line_names = {ln.name for ln in self.lines if ln.name}
+            if len({r if r in line_names else frozenset(split_points(r, 2)) for r in group}) != len(group):
+                raise ValueError(f"parallel group {group} lists the same piece twice")
+        for ref in [*(r for g in self.arc_groups for r in g), *self.right_angles, *self.angle_labels]:
+            triple = split_points(ref, 3)
+            known(*triple)
+            distinct(triple, ref)
+        for group in self.parallel_groups:
+            for ref in group:
+                if ref in line_names:
+                    continue
+                pair = split_points(ref, 2)
+                known(*pair)
+                distinct(pair, ref)
+        return self
+
+
+def used_points(fig: ConstructionFigure) -> set[str]:
+    """The points the figure shows or draws with: every visible point, and
+    each helper point some drawn part or mark is built on. A helper point
+    nothing uses would only stretch the figure's extent (and so the
+    checker's tolerances), so the checker refuses it."""
+    used = {n for n in fig.points if not is_hidden(n)}
+    for ref in [*fig.segments, *fig.rays, *fig.side_labels]:
+        used |= set(split_points(ref, 2))
+    for line in fig.lines:
+        used |= set(line.through)
+    for circle in fig.circles:
+        used |= {circle.center, *([circle.through] if circle.through else [])}
+    for arc in [*fig.arcs, *fig.sectors, *(r.sector for r in fig.shaded if r.sector)]:
+        used |= {arc.center, *arc.endpoints}
+    for region in fig.shaded:
+        used |= set(region.polygon or [])
+    line_names = {ln.name for ln in fig.lines if ln.name}
+    for ref in [*(r for g in fig.tick_groups for r in g),
+                *(r for g in fig.parallel_groups for r in g if r not in line_names)]:
+        used |= set(split_points(ref, 2))
+    for ref in [*(r for g in fig.arc_groups for r in g), *fig.right_angles, *fig.angle_labels]:
+        used |= set(split_points(ref, 3))
+    return used
+
+
 # Discriminated union over the supported shapes. Pydantic uses the
 # `shape` field to dispatch validation; the JSON schema generated by
 # Pydantic includes a properly-typed oneOf branch per shape so the
 # LLM tool-use validator picks up shape-specific required fields.
 FigureSpec = Annotated[
-    TriangleFigure | CircleFigure | PolygonFigure,
+    TriangleFigure | CircleFigure | PolygonFigure | ConstructionFigure,
     Field(discriminator="shape"),
 ]
 
 
-def point_names(fig: TriangleFigure | CircleFigure | PolygonFigure) -> set[str]:
+def point_names(fig: TriangleFigure | CircleFigure | PolygonFigure | ConstructionFigure) -> set[str]:
     """Every point name a student can read on the figure: the keys, and
     the display labels the renderer draws in their place."""
+    if isinstance(fig, ConstructionFigure):
+        return {n for n in fig.points if not is_hidden(n)}
     if isinstance(fig, TriangleFigure):
         names = set(fig.vertices) | set(fig.vertex_labels.values())
         for circle in (fig.inscribed_circle, fig.circumscribed_circle):
