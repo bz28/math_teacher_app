@@ -95,6 +95,9 @@ def _parse(argv: list[str]) -> argparse.Namespace:
              "join_class,submit_homework,grade_publish",
     )
 
+    from tests.harness.scorecard import add_parser as add_scorecard_parser
+    add_scorecard_parser(sub)
+
     imp = sub.add_parser("improve", help="autonomous improver: scan real pages -> proposals")
     imp_sub = imp.add_subparsers(dest="improve_cmd", required=True)
     scan = imp_sub.add_parser("scan", help="scan surfaces, detect + judge, propose improvements")
@@ -865,6 +868,12 @@ def _safe_db(url: str) -> str:
 
 def main(argv: list[str]) -> int:
     args = _parse(argv)
+
+    if args.cmd == "scorecard":
+        # Sets its own env (replay only, a key that can't spend, a scratch DB
+        # or none) before any api.* import.
+        from tests.harness.scorecard import run_cli
+        return run_cli(args)
 
     # Must be set before importing api/runner: cassette mode + DB target.
     # Force (not setdefault) so an ambient DATABASE_URL — e.g. one pointing at

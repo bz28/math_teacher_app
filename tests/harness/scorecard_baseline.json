@@ -1,0 +1,57 @@
+{
+  "chat diagrams / construction-adversarial": {
+    "cases": 106,
+    "cassette_misses": 0,
+    "how_good": 1.0
+  },
+  "chat diagrams / construction-figures": {
+    "cases": 69,
+    "cassette_misses": 2,
+    "how_good": 0.3636
+  },
+  "grading / grading": {
+    "cases": 38,
+    "cassette_misses": 0,
+    "how_good": 1.0
+  },
+  "grading / graph-check": {
+    "cases": 8,
+    "cassette_misses": 0,
+    "how_good": 1.0
+  },
+  "homework diagrams / generation-figures": {
+    "cases": 20,
+    "cassette_misses": 0,
+    "how_good": 0.6
+  },
+  "integrity / integrity": {
+    "cases": 28,
+    "cassette_misses": 0,
+    "how_good": 1.0
+  },
+  "problem generation / generation-figures (sets)": {
+    "cases": 20,
+    "cassette_misses": 0,
+    "how_good": null
+  },
+  "reading student work / drawing-eval": {
+    "cases": 3,
+    "cassette_misses": 0,
+    "how_good": 1.0
+  },
+  "reading student work / drawing-flag": {
+    "cases": 62,
+    "cassette_misses": 0,
+    "how_good": 0.9677
+  },
+  "step diagrams / construction-figures (steps)": {
+    "cases": 0,
+    "cassette_misses": 0,
+    "how_good": null
+  },
+  "step diagrams / generation-figures (steps)": {
+    "cases": 23,
+    "cassette_misses": 0,
+    "how_good": 0.0
+  }
+}
