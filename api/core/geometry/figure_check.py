@@ -57,6 +57,11 @@ _TOL_MOVE = 0.01
 _TOL_APART = 0.05
 # A polygon corner straighter (or sharper) than this many degrees is no corner.
 _TOL_CORNER = 2.0
+# A labelled angle drawn thinner than this has no room for its label: the
+# renderer pushes the text out along the bisector, where it reads as
+# another angle's (Eval 1 job bd113585 p2: "(3x + 5)°" for a 19° angle at
+# A sat beside C).
+_MIN_LABELLED_ANGLE = 20.0
 
 
 def _two(ref: str) -> tuple[str, str]:
@@ -1592,6 +1597,14 @@ def _degenerate(d: _Drawing, parts: ProblemParts) -> list[str]:
                 s1 = poly[i] + poly[(i + 1) % len(poly)]
                 s2 = poly[j] + poly[(j + 1) % len(poly)]
                 out.append(f"{what} is drawn with sides {s1} and {s2} crossing, so it is no {_poly_word(poly)}")
+    for ref in d.fig.angle_labels:
+        names = split_points(ref, 3)
+        if len(names) != 3 or not all(n in d.p for n in names):
+            continue
+        drawn = _angle(d.p[names[0]], d.p[names[1]], d.p[names[2]])
+        if not math.isnan(drawn) and drawn < _MIN_LABELLED_ANGLE:
+            out.append(f"∠{''.join(names)} is drawn {drawn:.0f}°, too thin for its label to sit beside it; "
+                       f"draw it at least {_MIN_LABELLED_ANGLE:g}°")
     return out
 
 
