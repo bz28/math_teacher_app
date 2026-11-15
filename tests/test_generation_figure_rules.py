@@ -4,9 +4,9 @@ enforces one rule.
 - The prompts carry Ben's wording (2026-11-13) word for word: when a problem
   gets a figure, and when a step does.
 - The rule (`_needs_figure`): the AI decides. A problem it drafted a figure
-  for, or whose text refers to a figure, ends with a checked figure, or is
-  replaced once, then its slot gets a problem that needs no figure. A
-  figure drafted for a problem the student is to draw is dropped.
+  or fact card for, or whose text refers to a figure, ends with a checked
+  figure, or is replaced once, then left out (the set comes back short).
+  Who draws what is on the fact card (tests/test_fact_card_generation.py).
 - Step figures are constructions built on the problem's checked figure,
   read and checked like it (one redraw), and their facts build up step by
   step. The shape-form step figure path is gone (prod 77195d48).
@@ -41,10 +41,6 @@ WHEN_TO_DRAW = (
     "and 3D solids (the tool can't draw them).",
     "- Every problem with a figure names its points, and names each line by two of its points.",
 )
-NAME_THE_POINTS = (
-    "When a problem gets a figure, its text names every point the figure shows, so the figure can be "
-    "checked; a figure whose points the problem doesn't name is not shown."
-)
 STEPS = (
     "Steps. Give a step its own figure only when that step changes the picture: it draws a new line or "
     "point, or proves something worth marking. Keep the problem's points exactly where they are and only add."
@@ -70,61 +66,22 @@ def test_the_question_prompt_has_bens_rule_and_the_naming_sentence() -> None:
     for case in WHEN_TO_DRAW:
         assert case in prompt, case
     assert "When to draw. Add a figure when" not in prompt  # the first paragraph, replaced
-    assert NAME_THE_POINTS in prompt
+    assert assignment_generation.FACT_CARD_RULES in prompt
     assert '"shape": "construction"' in prompt
 
 
-def test_both_generation_prompts_say_how_to_word_a_figure_problem() -> None:
-    """Plain math givens with point names, no story, no theorem names (the
-    coordinator's decision 2026-11-14: fix the wording at the source, not the
-    coverage check). The worked example in the wording covers, and a story
-    sentence with no point names is still a gap, so story goes entirely."""
-    w = assignment_generation.FIGURE_PROBLEM_WORDING
-    assert w in assignment_generation._build_question_generation_prompt("math")
+def test_both_generation_prompts_ask_for_a_fact_card() -> None:
+    """The problem with a figure is written as a fact card; code writes its
+    words (the wording rules for a problem that is read back are gone)."""
     import inspect
 
-    assert "FIGURE_PROBLEM_WORDING" in inspect.getsource(qbg)  # the regenerate prompt
-    for phrase in ("plain math form", "No story in a problem with a figure", "Never put a theorem's"):
-        assert phrase in w
-
-    from api.core.geometry import coverage as cv
-    from api.core.geometry.facts import Target, standard_reading
-
-    example = r"$\triangle ABC$ has a right angle at $C$, $AB = 13$ and $BC = 5$. Find $AC$."
-    assert example in w  # the worked example the prompt gives
-    facts = FigureFacts(points=list("ABC"), triangles=["ABC"], find=[Target(kind="segment", item="AC")], givens=[
-        Fact(kind="right_angle", items=["C"], quote="right angle at C"),
-        Fact(kind="equal_length", items=["AB"], value=13, quote="AB = 13"),
-        Fact(kind="equal_length", items=["BC"], value=5, quote="BC = 5")])
-    assert cv.coverage(example, standard_reading(facts))[0] == []
-    assert cv.coverage("A ladder rests against a wall. " + example, standard_reading(facts))[0] != []
-
-
-def test_the_wording_covers_the_remaining_drops() -> None:
-    """Review round 1 of #998: the drops left after the first wording
-    change ("line q", "point O is the center of the circle", "arc AB",
-    "Additionally", "labeled as", "A composite figure made up of") are
-    fixed at the source. The one-statement example passes coverage."""
-    w = assignment_generation.FIGURE_PROBLEM_WORDING
-    for phrase in ('never "line $p$"', "Name a circle by its center point", 'not "arc $AB$"',
-                   '"Additionally"', '"labeled as"', '"A composite figure made up of"', "One plain statement"):
+    w = assignment_generation.FACT_CARD_RULES
+    assert w in assignment_generation._build_question_generation_prompt("math")
+    assert "FACT_CARD_RULES" in inspect.getsource(qbg.regenerate_one)  # the regenerate prompt
+    assert "FIGURE_PROBLEM_WORDING" not in inspect.getsource(qbg)
+    for phrase in ("fill in its fact card", "leave `text` empty", "constructs: what the STUDENT constructs",
+                   "context: optional", "hint: optional"):
         assert phrase in w, phrase
-
-    from api.core.geometry import coverage as cv
-    from api.core.geometry.facts import Target, standard_reading
-
-    composite = (r"$ABCD$ is a rectangle. $\triangle CDE$ has a right angle at $D$. $AB = 14$, $BC = 9$ and "
-                 r"$DE = 6$. Find the area of polygon $ABCED$.")
-    assert r"$\triangle CDE$ has a right angle at $D$." in w
-    facts = FigureFacts(points=list("ABCDE"), polygons=["ABCD", "ABCED"], triangles=["CDE"],
-                        find=[Target(kind="other", item="area of ABCED")], givens=[
-        Fact(kind="rectangle", items=["ABCD"], quote="ABCD is a rectangle"),
-        Fact(kind="right_angle", items=["CDE"], quote="right angle at D"),
-        Fact(kind="equal_length", items=["AB"], value=14, quote="AB = 14"),
-        Fact(kind="equal_length", items=["BC"], value=9, quote="BC = 9"),
-        Fact(kind="equal_length", items=["DE"], value=6, quote="DE = 6")])
-    assert cv.coverage(composite, standard_reading(facts))[0] == []
-    assert cv.coverage("A composite figure made up of " + composite, standard_reading(facts))[0] != []
 
 
 def test_the_construction_step_prompt_has_bens_paragraph_and_the_rules() -> None:
@@ -247,39 +204,28 @@ async def _untrusted(*_a: Any, **_k: Any) -> tuple[None, list[str]]:
 
 
 @pytest.mark.asyncio
-async def test_a_named_point_problem_whose_figure_cant_be_checked_is_replaced_then_a_plain_one_takes_its_slot(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """No "figure below" in it: before, only that phrase was enforced, so
-    "In △ABC …" shipped with no figure when its reading failed. Its
-    replacement fails the same way, so the slot gets a problem on the same
-    topic that needs no figure: the teacher gets the count asked for
-    (coordinator, after review round 1 of #998)."""
+async def test_a_figure_problem_without_a_card_is_replaced_then_left_out(caplog: pytest.LogCaptureFixture) -> None:
+    """No "figure below" in it: the AI drafted a figure, but wrote no fact
+    card, so nothing can check it (an AI-written problem is never read back
+    from its words). It is replaced once; the replacement has the same
+    flaw, so the slot is left out: no third call for a problem that tells
+    its geometry as a story (#998's eval: 4 of 10 such problems)."""
     plain = _q("Solve 2x + 3 = 11.")
-    no_figure = _q("Two angles are supplementary; one measures 70°. Find the other.")
-    with caplog.at_level("WARNING"):
-        out, gen = await _generate([[plain, _q(PROBLEM, TRIANGLE)], [_q(PROBLEM, TRIANGLE)], [no_figure]], _untrusted)
-    assert gen.await_count == 3 and gen.await_args_list[1].kwargs["count"] == 1
+    read = AsyncMock(side_effect=_untrusted)
+    gen = AsyncMock(side_effect=[[plain, _q(PROBLEM, TRIANGLE)], [_q(PROBLEM, TRIANGLE)]])
+    with (
+        caplog.at_level("WARNING"),
+        patch.object(qbg, "generate_questions", gen),
+        patch.object(qbg, "read_figure_facts", read),
+        patch.object(qbg, "redraw_figure", AsyncMock(return_value=None)),
+    ):
+        out = await qbg.generate_checked_problems(REQUEST, count=2)
+    assert gen.await_count == 2 and gen.await_args_list[1].kwargs["count"] == 1
     assert "Follow the when-to-draw rule" in gen.await_args_list[1].kwargs["extra_instructions"]
-    assert gen.await_args_list[2].kwargs["count"] == 1
-    assert "need no figure" in gen.await_args_list[2].kwargs["extra_instructions"]
-    assert [q["text"] for q in out] == [plain["text"], no_figure["text"]]
-    assert out[1]["figure_spec"] is None and out[1]["figure_svg"] is None  # never shown unchecked
-    assert "asking for problems on the same topic that need no figure" in caplog.text
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("last", [_q(PROBLEM, TRIANGLE), _q("In the figure below, find x.")])
-async def test_a_no_figure_reply_that_drafts_or_points_at_a_figure_is_not_taken(
-    last: dict[str, Any], caplog: pytest.LogCaptureFixture,
-) -> None:
-    plain = _q("Solve 2x + 3 = 11.")
-    with caplog.at_level("WARNING"):
-        out, gen = await _generate(
-            [[plain, _q(PROBLEM, TRIANGLE)], [_q(PROBLEM, TRIANGLE)], [dict(last)]], _untrusted)
-    assert gen.await_count == 3
     assert [q["text"] for q in out] == [plain["text"]]
-    assert "left out 1 problem(s): no figure could be checked" in caplog.text
+    read.assert_not_awaited()  # no readings for a problem the AI wrote
+    assert "a figure came without a fact card" in caplog.text
+    assert "left out 1 problem(s) with no figure that could be checked" in caplog.text
 
 
 SQUARE = r"Let $ABCD$ be a square with side 4. Find $AC$."
@@ -305,56 +251,6 @@ async def test_a_problem_the_ai_drafted_no_figure_for_is_kept_without_one(text: 
     assert [q["text"] for q in out] == [text, "Solve x + 1 = 2."] and not out[0].get("figure_svg")
 
 
-async def _passes(spec: Any, _text: str, **_kw: Any) -> tuple[Any, str | None, list[str], Any]:
-    return spec, ("<svg/>" if spec else None), [], (READING if spec else None)
-
-
-# Review round 6 (#998): the student constructs or plots it, then proves
-# something. The figure would show the student's own drawing: dropped.
-CONSTRUCT_AND_PROVE = [
-    r"Using a compass and straightedge, construct the perpendicular bisector of $\overline{AB}$. "
-    r"Prove that your construction is correct.",
-    r"Construct an equilateral triangle $ABC$ on segment $\overline{AB}$ using a compass and straightedge. "
-    r"Then prove that $\triangle ABC$ is equilateral.",
-    r"Plot $A(1,2)$, $B(4,6)$, $C(7,2)$ on the coordinate plane. Prove that $\triangle ABC$ is isosceles.",
-    r"Construct the bisector of $\angle ABC$ with a compass and straightedge, and write a proof that it "
-    r"bisects the angle.",
-]
-# Known limitation (review round 6 of #998): a proof that adds a line is
-# not the student's drawing, but `requires_drawing` can't tell, so these
-# lose their figure too (missing, never wrong). A smarter split belongs in
-# drawing_requirement.py, its own PR; when it lands these move to shown.
-KNOWN_DROPPED_AUX_PROOFS = [
-    r"In $\triangle ABC$, $AB = AC$. Draw the median $\overline{AD}$. Prove $\angle B \cong \angle C$.",
-    r"$ABCD$ is a parallelogram. Draw diagonal $\overline{AC}$. Prove $\triangle ABC \cong \triangle CDA$.",
-    r"In $\triangle ABC$, $AB = AC$. Draw segment $AD$ to the midpoint $D$ of $\overline{BC}$. "
-    r"Prove $\angle BAD \cong \angle CAD$.",
-    r"In $\triangle ABC$, $AB = AC$. Construct the angle bisector of $\angle A$, meeting $\overline{BC}$ at $D$. "
-    r"Prove $\triangle ABD \cong \triangle ACD$.",
-]
-AUX_LINE_PROOF = (r"In $\triangle ABC$, $AB = AC$. Draw $\overline{AD}$ bisecting $\angle BAC$. "
-                  r"Prove: $\angle B \cong \angle C$.")
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(("text", "shown"), [
-    # The student constructs it: a drafted figure is dropped (Ben's rule).
-    (r"Using only a compass and straightedge, construct the perpendicular bisector of $\overline{AB}$.", False),
-    *[(t, False) for t in CONSTRUCT_AND_PROVE],
-    *[(t, False) for t in KNOWN_DROPPED_AUX_PROOFS],
-    # Not a drawing task by the stored flag's test: the figure is kept.
-    (AUX_LINE_PROOF, True),
-])
-async def test_a_figure_for_a_problem_the_student_draws_is_dropped(text: str, shown: bool) -> None:
-    gen = AsyncMock(return_value=[_q(text, TRIANGLE), _q("Solve x + 1 = 2.")])
-    resolve = AsyncMock(side_effect=_passes)
-    with patch.object(qbg, "generate_questions", gen), patch.object(qbg, "_resolve_figure_with_retry", resolve):
-        out = await qbg.generate_checked_problems(REQUEST, count=2)
-    assert gen.await_count == 1 and [q["text"] for q in out] == [text, "Solve x + 1 = 2."]
-    assert bool(out[0]["figure_svg"]) is shown
-    assert (resolve.await_args_list[0].args[0] is not None) is shown  # dropped before it was drawn
-
-
 @pytest.mark.asyncio
 async def test_each_call_for_more_problems_is_told_the_kept_ones_and_repeats_are_dropped() -> None:
     """Review round 2 (#998): the replacement and no-figure calls weren't
@@ -371,54 +267,10 @@ async def test_each_call_for_more_problems_is_told_the_kept_ones_and_repeats_are
 
 
 @pytest.mark.asyncio
-async def test_the_no_figure_call_is_told_the_kept_problems_too() -> None:
-    plain = _q("Solve 2x + 3 = 11.")
-    out, gen = await _generate(
-        [[plain, _q(PROBLEM, TRIANGLE)], [_q(PROBLEM, TRIANGLE)], [_q("Solve 2x + 3 = 11."), _q("Solve 4x = 8.")]],
-        _untrusted,
-    )
-    told = gen.await_args_list[2].kwargs["extra_instructions"]
-    assert "need no figure" in told and "- Solve 2x + 3 = 11." in told
-    assert [q["text"] for q in out] == [plain["text"], "Solve 4x = 8."]  # the repeat is dropped
-
-
-@pytest.mark.asyncio
-async def test_a_slot_lost_after_solving_gets_a_solved_problem_that_needs_no_figure(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """Review round 2 (#998): a named-point problem whose figure prints the
-    answer was left out after solving and nothing took its slot."""
-    def check(_fig: Any, _text: str, *, final_answer: str = "", **_kw: Any) -> list[FigureIssue]:
-        return [FigureIssue("label", "the label '70°' gives away the answer")] if final_answer == "70°" else []
-
-    q = {**_q(PROBLEM, TRIANGLE), "figure_svg": "<svg/>", "figure_facts": READING.model_dump()}
-    plain = _q("Solve x + 1 = 2.")
-    no_figure = _q("Two angles are supplementary; one is 70°. Find the other.")
-    solve = AsyncMock(side_effect=[
-        [{"question_text": "a", "steps": [], "final_answer": "70°"}, {"question_text": "b", "steps": [],
-                                                                     "final_answer": "1"}],
-        [{"question_text": "c", "steps": [], "final_answer": "110°"}],
-    ])
-    gen = AsyncMock(return_value=[no_figure])
-    with (
-        caplog.at_level("WARNING"),
-        patch.object(qbg, "generate_solutions", solve),
-        patch.object(qbg, "generate_questions", gen),
-        patch.object(qbg, "check_construction", check),
-    ):
-        kept, sols = await qbg.solve_checked_problems(
-            [q, plain], subject="math", user_id="u", job_id="j", request=REQUEST)
-    assert [k["text"] for k in kept] == [plain["text"], no_figure["text"]]
-    assert [s["final_answer"] for s in sols] == ["1", "110°"]
-    assert kept[1]["figure_spec"] is None and kept[1]["figure_svg"] is None
-    told = gen.await_args.kwargs["extra_instructions"]
-    assert gen.await_args.kwargs["count"] == 1 and "need no figure" in told and plain["text"] in told
-
-
-@pytest.mark.asyncio
 async def test_a_named_point_problem_whose_figure_gives_away_the_answer_is_left_out() -> None:
-    """Without a generation request (a teacher's upload) nothing is asked
-    for in its place."""
+    """Nothing is asked for in its place (no problem that tells its geometry
+    as a story): the set comes back short (review round 2 of #998 asked for a
+    filler; the fact-card design replaces it with the teacher's note)."""
     def check(_fig: Any, _text: str, *, final_answer: str = "", **_kw: Any) -> list[FigureIssue]:
         return [FigureIssue("label", "the label '70°' gives away the answer")] if final_answer else []
 
@@ -426,12 +278,15 @@ async def test_a_named_point_problem_whose_figure_gives_away_the_answer_is_left_
     plain = _q("Solve x + 1 = 2.")
     solved = [{"question_text": "a", "steps": [], "final_answer": "70°"},
               {"question_text": "b", "steps": [], "final_answer": "1"}]
+    gen = AsyncMock()
     with (
         patch.object(qbg, "generate_solutions", AsyncMock(return_value=solved)),
+        patch.object(qbg, "generate_questions", gen),
         patch.object(qbg, "check_construction", check),
     ):
         kept, sols = await qbg.solve_checked_problems([q, plain], subject="math", user_id="u", job_id="j")
     assert [k["text"] for k in kept] == [plain["text"]] and [s["final_answer"] for s in sols] == ["1"]
+    gen.assert_not_awaited()
 
 
 # ── Step figures ───────────────────────────────────────────────────────
@@ -630,53 +485,3 @@ async def test_regenerate_refuses_a_new_version_whose_figure_fails(question: str
     async with get_session_factory()() as s:
         item = (await s.execute(select(QuestionBankItem).where(QuestionBankItem.id == item_id))).scalar_one()
         assert item.question == "old"
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(("question", "ai_flag", "teacher", "drawn"), [
-    *[(t, None, None, False) for t in CONSTRUCT_AND_PROVE],  # the regex says the student draws it
-    (AUX_LINE_PROOF, None, None, True),
-    (AUX_LINE_PROOF, True, None, False),  # the AI's flag counts, as in the stored flag
-    (AUX_LINE_PROOF, None, True, False),  # so does a teacher's "the student draws it"
-    # Review round 7: a teacher's "the student doesn't draw it" stands too,
-    # over the regex and the AI: the figure is kept.
-    *[(t, True, False, True) for t in KNOWN_DROPPED_AUX_PROOFS],
-])
-async def test_regenerate_drops_the_figure_when_the_student_draws_it(
-    question: str, ai_flag: Any, teacher: bool | None, drawn: bool,
-) -> None:
-    """Review rounds 6-7 (#998): regenerate's figure guard uses the flag
-    the item stores (a teacher's choice, else the AI's flag or the regex),
-    so a construct-and-prove version is not drawn, and the two agree."""
-    from sqlalchemy import select
-
-    from api.database import get_session_factory
-    from api.models.course import Course
-    from api.models.question_bank import QuestionBankItem
-    from tests.test_single_answer_practice import _world
-
-    w = await _world("homework")
-    async with get_session_factory()() as s:
-        item = QuestionBankItem(
-            course_id=w["course"], unit_id=w["unit"], originating_assignment_id=w["assignment"],
-            title="t", question="old", final_answer="1", status="approved", source="generated",
-            requires_drawing=bool(teacher), requires_drawing_teacher_set=teacher is not None,
-        )
-        s.add(item)
-        await s.commit()
-        item_id = item.id
-    call = AsyncMock(return_value={"title": "t", "question": question, "solution_steps": [], "final_answer": "1",
-                                   "figure_spec": TRIANGLE, "requires_drawing": ai_flag})
-    resolve = AsyncMock(side_effect=_passes)
-    with (
-        patch("api.core.question_bank_generation.call_claude_json", call),
-        patch.object(qbg, "_resolve_figure_with_retry", resolve),
-    ):
-        async with get_session_factory()() as s:
-            item = (await s.execute(select(QuestionBankItem).where(QuestionBankItem.id == item_id))).scalar_one()
-            course = (await s.execute(select(Course).where(Course.id == w["course"]))).scalar_one()
-            await qbg.regenerate_one(s, item, course, instructions=None, user_id=w["teacher"])
-    assert (resolve.await_args.args[0] is not None) is drawn
-    async with get_session_factory()() as s:
-        item = (await s.execute(select(QuestionBankItem).where(QuestionBankItem.id == item_id))).scalar_one()
-        assert item.question == question and item.requires_drawing is not drawn  # guard and stored flag agree

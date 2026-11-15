@@ -27,6 +27,7 @@ from api.core.construction_figures import (
     figure_sentence,
 )
 from api.core.document_vision import MAX_VISION_IMAGES, build_vision_content, fetch_source_documents
+from api.core.geometry.facts import as_prompt
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
 from api.core.llm_schemas import BANK_CHAT_REPLY_CONSTRUCTION_SCHEMA
 from api.core.subjects import get_config
@@ -190,7 +191,12 @@ def _build_user_context(item: QuestionBankItem, unit_name: str, course_name: str
 def _figure_context(item: QuestionBankItem) -> str:
     """The figures the model is editing, as data: the question's current
     figure and the one in its own pending proposal. Without them a
-    follow-up ("now label angle 1") redraws from scratch and moves things."""
+    follow-up ("now label angle 1") redraws from scratch and moves things.
+
+    TODO(fact cards): a chat-proposed rewrite still has its words read back
+    (the readings path). Moving it onto fact cards changes the chat schema,
+    which retires the recorded teacher-chat eval; that waits for a
+    recording budget."""
     parts: list[str] = []
     if isinstance(item.figure_spec, dict):
         parts.append(f"\nCurrent figure (figure_spec):\n{json.dumps(item.figure_spec)}")
@@ -199,7 +205,7 @@ def _figure_context(item: QuestionBankItem) -> str:
             # What the figure (and any step figure) is checked against.
             parts.append(
                 "\nThe problem's facts, which the figure and every step figure are checked "
-                f"against:\n{json.dumps(facts, sort_keys=True)}",
+                f"against:\n{json.dumps(as_prompt(facts), sort_keys=True)}",
             )
     pending = next(
         (

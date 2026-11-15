@@ -1874,6 +1874,31 @@ DRAWING_CHECK_SCHEMA: ToolSchema = {
 GENERATE_QUESTIONS_CONSTRUCTION_SCHEMA: ToolSchema = _with_construction_figures(GENERATE_QUESTIONS_SCHEMA)
 BANK_CHAT_REPLY_CONSTRUCTION_SCHEMA: ToolSchema = _with_construction_figures(BANK_CHAT_REPLY_SCHEMA)
 REGENERATE_QA_CONSTRUCTION_SCHEMA: ToolSchema = _with_construction_figures(REGENERATE_QA_SCHEMA)
+
+
+def _with_fact_cards(props: dict[str, Any], text_field: str) -> None:
+    """A problem the AI writes with a figure carries its fact card
+    (api/core/geometry/fact_card.py): code writes the problem's text from
+    the card and checks the figure against it. The chat schema doesn't take
+    one yet (its recorded teacher-problem eval would no longer replay)."""
+    from api.core.geometry.fact_card import CARD_SCHEMA, CONTEXT_FIELD, HINT_FIELD
+
+    props["figure_facts"] = CARD_SCHEMA
+    props["context"] = CONTEXT_FIELD
+    props["hint"] = HINT_FIELD
+    props[text_field] = {
+        **props[text_field],
+        "description": (
+            props[text_field]["description"] + " For a problem with figure_facts, leave this empty: code "
+            "writes the problem's text from the card."
+        ),
+    }
+
+
+_with_fact_cards(
+    GENERATE_QUESTIONS_CONSTRUCTION_SCHEMA["input_schema"]["properties"]["questions"]["items"]["properties"], "text",
+)
+_with_fact_cards(REGENERATE_QA_CONSTRUCTION_SCHEMA["input_schema"]["properties"], "question")
 # A generated problem's solution: step figures in the construction form when
 # the problem has a checked construction figure to build on, else none.
 DECOMPOSITION_CONSTRUCTION_SCHEMA: ToolSchema = _with_construction_figures(DECOMPOSITION_SCHEMA)

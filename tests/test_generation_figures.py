@@ -71,7 +71,7 @@ async def test_the_solver_is_shown_the_figure() -> None:
     assert out[0]["question_text"] == "Find the hypotenuse c in the right triangle below."
 
 
-async def _run(batches: list[Any]) -> tuple[list[QuestionBankItem], AsyncMock]:
+async def _run(batches: list[Any]) -> tuple[list[QuestionBankItem], AsyncMock, QuestionBankGenerationJob]:
     """Run a 2-problem job whose generate calls return `batches` in turn."""
     tag = uuid.uuid4().hex[:6]
     async with get_session_factory()() as s:
@@ -113,7 +113,10 @@ async def _run(batches: list[Any]) -> tuple[list[QuestionBankItem], AsyncMock]:
             select(QuestionBankItem).where(QuestionBankItem.originating_assignment_id == hw_id)
             .order_by(QuestionBankItem.created_at)
         )).scalars().all()
-    return list(items), gen
+        job = (await s.execute(
+            select(QuestionBankGenerationJob).where(QuestionBankGenerationJob.id == job_id)
+        )).scalar_one()
+    return list(items), gen, job
 
 
 GOOD = _q("Solve 2x + 3 = 11.")
@@ -123,7 +126,7 @@ BROKEN = _q("In the figure below, AB = DE and BC = EF. Name the postulate.")
 @pytest.mark.asyncio
 async def test_a_problem_citing_a_lacks_figure_is_replaced() -> None:
     drawn = _q("Find the hypotenuse c in the right triangle below.", RIGHT_TRIANGLE)
-    items, gen = await _run([[GOOD, BROKEN], [drawn]])
+    items, gen, job = await _run([[GOOD, BROKEN], [drawn]])
     assert gen.await_count == 2 and gen.await_args_list[1].kwargs["count"] == 1
     assert [i.question for i in items] == [GOOD["text"], drawn["text"]]
     assert items[1].figure_svg  # the replacement shipped with its figure
@@ -131,24 +134,36 @@ async def test_a_problem_citing_a_lacks_figure_is_replaced() -> None:
 
 @pytest.mark.asyncio
 async def test_a_replacement_with_the_same_flaw_is_left_out() -> None:
-    # (the third call asks for a problem that needs no figure; it too
-    # comes back broken, so the slot is left out)
-    items, gen = await _run([[GOOD, BROKEN], [BROKEN], [BROKEN]])
-    assert gen.await_count == 3
+    """The slot is left out (no third call for a problem that needs no
+    figure), and the done job tells the teacher the set came back short."""
+    items, gen, job = await _run([[GOOD, BROKEN], [BROKEN], [BROKEN]])
+    assert gen.await_count == 2
     assert [i.question for i in items] == [GOOD["text"]]
+    assert job.status == "done" and job.produced_count == 1
+    assert job.error_message == (
+        "1 of 2 problems are ready. 1 more needed a diagram that couldn't be checked, so it was left out — "
+        "generate again for more."
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_full_set_has_no_note() -> None:
+    drawn = _q("Find c in the right triangle below.", RIGHT_TRIANGLE)
+    _items, _gen, job = await _run([[GOOD, drawn]])
+    assert job.status == "done" and job.error_message is None
 
 
 @pytest.mark.asyncio
 async def test_a_batch_with_every_figure_drawn_makes_no_extra_call() -> None:
     drawn = _q("Find c in the right triangle below.", RIGHT_TRIANGLE)
-    items, gen = await _run([[GOOD, drawn]])
+    items, gen, job = await _run([[GOOD, drawn]])
     assert gen.await_count == 1 and len(items) == 2
 
 
 @pytest.mark.asyncio
 async def test_a_failed_replacement_call_keeps_the_good_problems() -> None:
-    items, gen = await _run([[GOOD, BROKEN], RuntimeError("upstream 529"), RuntimeError("upstream 529")])
-    assert gen.await_count == 3
+    items, gen, job = await _run([[GOOD, BROKEN], RuntimeError("upstream 529"), RuntimeError("upstream 529")])
+    assert gen.await_count == 2
     assert [i.question for i in items] == [GOOD["text"]]
 
 

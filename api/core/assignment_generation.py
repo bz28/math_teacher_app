@@ -65,43 +65,52 @@ student level — NOT absolute math/science difficulty:
 """
 
 
-# When a generated problem gets a figure. The first paragraph is Ben's
-# wording (2026-11-13), word for word; the second makes every figure
-# checkable: the reading that checks a figure turns away a problem that
-# describes it in words without naming its points
-# (construction_figures._IN_WORDS). Code enforces one rule on top
-# (question_bank_generation._lacks_figure): a problem the AI drafted a
-# figure for, or whose text refers to a figure, ends with a checked figure,
-# or is replaced, or its slot gets a problem that needs no figure.
-# How a problem that gets a figure is worded. Code checks every word of
-# such a problem against the figure (api/core/geometry/coverage.py), so
-# the wording rules come before any figure rule. Shared with the
-# regenerate prompt (question_bank_generation).
-FIGURE_PROBLEM_WORDING = (
-    'How to word a problem that gets a figure. Code checks the figure against every word of the '
-    'problem, so:\n'
-    '- Name every point the figure shows, and state every given in plain math form with those '
-    'names: "$\\overline{AB} \\cong \\overline{CD}$", "$m\\angle A = 40^\\circ$", "$\\overline{AB} '
-    '\\parallel \\overline{CD}$", "$AB = 7$", "$M$ is the midpoint of $\\overline{AB}$", '
-    '"$\\overline{BD}$ bisects $\\angle ABC$". Not in words ("the two sides are equal", "the angles '
-    'across from each other").\n'
-    '- No story in a problem with a figure. A layout from a real situation (a ladder against a '
-    'wall, a floor plan) is written as plain geometry when it gets a figure: "$\\triangle ABC$ has '
-    'a right angle at $C$, $AB = 13$ and $BC = 5$. Find $AC$." not "Ladder AB leans against wall '
-    'BC." No story words (ladder, wall, park, room, garden) in any sentence of it, not even a '
-    'sentence without point names. A word problem that keeps its story gets no figure and names no '
-    'points.\n'
-    '- Never put a theorem\'s or postulate\'s name in the problem ("by the Hypotenuse-Leg Theorem", '
-    '"using SAS", "by the Vertical Angles Theorem"). Theorem names belong in the solution steps.\n'
-    '- Name every line by two of its points: "$\\overleftrightarrow{AB} \\parallel '
-    '\\overleftrightarrow{CD}$", "transversal $\\overleftrightarrow{EF}$", never "line $p$" or "line '
-    '$q$".\n'
-    '- Name a circle by its center point: "Points $A$, $B$ and $C$ lie on circle $O$." Not "the '
-    'circle" or "$O$ is the center of the circle". Give an arc by its angle ("$m\\angle AOB = '
-    '112^\\circ$"), not "arc $AB$".\n'
-    '- One plain statement per sentence, each a fact about the named parts. No connecting or '
-    'framing words ("Additionally", "Also", "labeled as", "A composite figure made up of", "is '
-    'a diagonal"): "$ABCD$ is a rectangle." "$\\triangle CDE$ has a right angle at $D$."\n'
+# When a generated problem gets a figure: Ben's when-to-draw rule
+# (WHEN_TO_DRAW), then how such a problem is written (FACT_CARD_RULES).
+# Code enforces one rule on top (question_bank_generation._lacks_figure): a
+# problem the AI wrote a card or drafted a figure for, or whose text refers
+# to a figure, ends with a checked figure, or is replaced once, or is left
+# out with a note to the teacher.
+# How a problem that gets a figure is written: as a fact card
+# (api/core/geometry/fact_card.py). Code writes the problem's words from the
+# card and checks the figure against the card, so nothing is read back from
+# the AI's wording. Shared with the regenerate prompt (question_bank_generation).
+FACT_CARD_RULES = (
+    'How to write a problem that gets a figure: fill in its fact card (`figure_facts`) and leave `text` '
+    'empty. Code writes the problem from the card, one fixed phrase per fact ("$\\overline{AB} \\parallel '
+    '\\overline{CD}$", "$M$ is the midpoint of $\\overline{BC}$"), then the question ("Prove: …", "Find '
+    '$m\\angle ABC$."), and checks the figure against the card. So every given, everything to prove or '
+    'find, and everything the student constructs is a fact on the card; nothing else reaches the student.\n'
+    '- points: every point the figure shows. segments, rays, lines (two points: "AB"), triangles, polygons, '
+    'circles (by center): every part the figure shows, including an auxiliary line the problem adds (the '
+    'median $\\overline{AD}$ in "Draw the median AD. Prove …" is a segment the figure shows).\n'
+    '- givens and prove: facts, each {kind, items, point, value, expr, circle}, naming only the card\'s points. '
+    'find: an angle ("ABC"), a segment\'s length ("AB"), or kind "other" with a variable ("x") a given\'s expr '
+    'uses.\n'
+    '- constructs: what the STUDENT constructs or draws themselves, as facts the construction makes true '
+    '("Construct the bisector of angle A meeting BC at D": bisects_angle ["AD", "BAC"] and on_segment ["BC"] '
+    'point "D"). The figure never shows these parts, and a point only the construction makes (D) is not '
+    'under points.\n'
+    '- context: optional, one sentence of setting with no point names, numbers or relations ("A carpenter is '
+    'building a roof truss."). The geometry is all on the card.\n'
+    '- hint: optional, a method or theorem to try, with no point names or numbers.\n'
+    '- The figure_spec draws exactly the card\'s points and parts, every given true.\n'
+    'Fact kinds (angles "ABC" with the vertex in the middle, or "1" for a numbered angle):\n'
+    '- parallel [l1, l2]; perpendicular [l1, l2] (point: where they meet); congruent_segments [s1, s2]; '
+    'congruent_angles [a1, a2]\n'
+    '- equal_length [s] with value or expr ("2x + 1"); angle_measure [a] with value (degrees) or expr\n'
+    '- midpoint [s] point M; on_segment [s] point P; on_line [l] point P; collinear [P, Q, R]; intersect '
+    '[l1, l2] point P; bisects_segment [bisector, s] (point); bisects_angle [ray, angle]; right_angle [a]; '
+    'opposite_rays [r1, r2]\n'
+    '- vertical_angles / linear_pair / supplementary / complementary / alternate_interior / '
+    'alternate_exterior / corresponding / same_side_interior [a1, a2]\n'
+    '- congruent_triangles / similar_triangles [t1, t2] in corresponding order; isosceles [t] (point: the '
+    'apex); equilateral [t]; right_triangle [t] (point: the right angle)\n'
+    '- parallelogram / rectangle / square / rhombus / trapezoid / isosceles_trapezoid / kite [polygon]\n'
+    '- on_circle [P, Q] circle O; tangent [l] circle O point P; chord / diameter / radius [s] circle O; '
+    'central_angle / inscribed_angle [a] circle O (value)\n'
+    '- numbered_angle ["1", angle it labels]; transversal [t, l1, l2]\n'
+    'Never put a theorem\'s name in a fact or the context; it may go in the hint.\n'
 )
 
 # When a problem gets a figure (Ben, 2026-11-14; replaces the first
@@ -126,10 +135,7 @@ _CONSTRUCTION_FIGURES_SECTION = (
     '\n'
     + WHEN_TO_DRAW
     + '\n'
-    'When a problem gets a figure, its text names every point the figure shows, so the figure can '
-    "be checked; a figure whose points the problem doesn't name is not shown.\n"
-    '\n'
-    + FIGURE_PROBLEM_WORDING
+    + FACT_CARD_RULES
     + "\n"
 )
 
@@ -359,11 +365,11 @@ async def generate_questions(
 
         normalized = []
         for q in questions:
-            if not isinstance(q, dict) or "text" not in q:
+            if not isinstance(q, dict) or ("text" not in q and q.get("figure_facts") is None):
                 continue
             entry: dict[str, Any] = {
                 "title": str(q.get("title") or "")[:120],
-                "text": str(q["text"]),
+                "text": str(q.get("text") or ""),
                 "difficulty": str(q.get("difficulty") or "medium"),
             }
             # Pass figure_spec through if the model emitted one. The
@@ -373,6 +379,12 @@ async def generate_questions(
             # than dropping the whole question.
             if isinstance(q.get("figure_spec"), dict):
                 entry["figure_spec"] = q["figure_spec"]
+            # The fact card, as the AI wrote it: read (and the text written
+            # from it) by question_bank_generation.apply_card.
+            if q.get("figure_facts") is not None:
+                entry["figure_card"] = q["figure_facts"]
+                entry["context"] = str(q.get("context") or "")
+                entry["hint"] = str(q.get("hint") or "")
             # The model that wrote the question says whether it asks for a
             # drawing (see GENERATE_QUESTIONS_SCHEMA); the consumer ORs it
             # with the regex classifier (combine_requires_drawing).
