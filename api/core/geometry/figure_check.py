@@ -68,6 +68,11 @@ _TOL_CORNER = 2.0
 # another angle's (Eval 1 job bd113585 p2: "(3x + 5)°" for a 19° angle at
 # A sat beside C).
 _MIN_LABELLED_ANGLE = 20.0
+# A short label ("15°", "x", "∠1": at most this many characters) sits by
+# its vertex down to _MIN_SHORT_LABELLED_ANGLE: a 15° angle reads fine, a
+# 10° one's label touches a side.
+_SHORT_LABEL = 4
+_MIN_SHORT_LABELLED_ANGLE = 12.0
 
 
 def _two(ref: str) -> tuple[str, str]:
@@ -1603,14 +1608,15 @@ def _degenerate(d: _Drawing, parts: ProblemParts) -> list[str]:
                 s1 = poly[i] + poly[(i + 1) % len(poly)]
                 s2 = poly[j] + poly[(j + 1) % len(poly)]
                 out.append(f"{what} is drawn with sides {s1} and {s2} crossing, so it is no {_poly_word(poly)}")
-    for ref in d.fig.angle_labels:
+    for ref, text in d.fig.angle_labels.items():
         names = split_points(ref, 3)
         if len(names) != 3 or not all(n in d.p for n in names):
             continue
         drawn = _angle(d.p[names[0]], d.p[names[1]], d.p[names[2]])
-        if not math.isnan(drawn) and drawn < _MIN_LABELLED_ANGLE:
+        least = _MIN_SHORT_LABELLED_ANGLE if len(re.sub(r"\s+", "", text)) <= _SHORT_LABEL else _MIN_LABELLED_ANGLE
+        if not math.isnan(drawn) and drawn < least:
             out.append(f"∠{''.join(names)} is drawn {drawn:.0f}°, too thin for its label to sit beside it; "
-                       f"draw it at least {_MIN_LABELLED_ANGLE:g}°")
+                       f"draw it at least {least:g}°")
     return out
 
 
@@ -2481,21 +2487,49 @@ def _given_lengths(parts: ProblemParts, side: frozenset[str]) -> set[float]:
     return out | {float(r.args[0]) for r in parts.givens if r.kind == "lengthlabel"}
 
 
+# A value the answer states as a bare number: nothing after it but a
+# degree sign, a space or the end of the statement ("55°", "83^\circ").
+_BARE = re.compile(r"\s*(-?\d+(?:\.\d+)?)\s*(?:\^\s*\\circ|°|degrees?)?\s*")
+# Where one statement of an answer ends.
+_STATEMENT_END = re.compile(r",|;|\\quad|\\qquad|\\\\|\n|\\text\{|\band\b|\bso\b")
+
+
 def _answer_value(d: _Drawing, key: Any, exprs: list[str], final_answer: str) -> float | None:
     """The size the answer gives the angle `key` labelled with `exprs`: its
-    own "m∠BGH = … = 55°", else the label's algebra at the answer's
-    "x = 12". None when the answer says neither."""
+    own "m∠BGH = … = 55°" (the value after the statement's LAST "=", only
+    when it is a bare number), else the label's algebra at the answer's
+    "x = 12" (a letter standing alone, given one bare-number value). None
+    when the answer says neither plainly: then nothing is checked, so
+    working shown in the answer ("4(19) + 7 = 83°", "2x = 38", "x = 198/13")
+    can never refuse a right figure."""
     text = _clean(final_answer)
-    for chain in re.finditer(r"(?:(?:m\s*)?\\angle\s*[A-Z]{3}\s*=\s*)+(-?\d+(?:\.\d+)?)", text):
-        for name in re.findall(r"\\angle\s*([A-Z]{3})", chain.group(0)):
+    statements = [p for chunk in _STATEMENT_END.split(text) for p in [chunk] if "=" in p]
+    for st in statements:
+        sides = st.split("=")
+        last = _BARE.fullmatch(sides[-1])
+        for i, side in enumerate(sides[:-1]):
+            # The first side may open with a part label ("(b) m∠P = 86°").
+            m = (re.search if i == 0 else re.fullmatch)(r"\s*(?:m\s*)?\\angle\s*([A-Z]{3})\s*$", side)
+            if not m:
+                continue
+            name = m.group(1)
             ang = d.resolve((name[0], name[1], name[2]))
             if ang is not None and all(n in d.p for n in ang) and _same_angle(d, ang, key):
-                return float(chain.group(1))
-    found = dict(re.findall(r"(?<![A-Za-z\\])([a-z])\s*=\s*(-?\d+(?:\.\d+)?)", text))
+                return float(last.group(1)) if last else None
+    values: dict[str, set[float]] = {}
+    for st in statements:
+        sides = st.split("=")
+        if len(sides) != 2:
+            continue
+        # A letter standing alone ("(a) y = 11"), never part of "2x" or "\\pi".
+        var = re.search(r"(?<![A-Za-z0-9\\.)_^])([a-z])\s*$", sides[0])
+        num = _BARE.fullmatch(sides[1])
+        if var and num:
+            values.setdefault(var.group(1), set()).add(float(num.group(1)))
     for e in exprs:
         lin = linear_expr(e)
-        if lin and lin[2] in found:
-            return lin[0] * float(found[lin[2]]) + lin[1]
+        if lin and len(values.get(lin[2], ())) == 1:
+            return lin[0] * next(iter(values[lin[2]])) + lin[1]
     return None
 
 
