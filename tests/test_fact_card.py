@@ -1015,3 +1015,17 @@ def test_a_point_only_the_construction_makes_is_still_refused_in_a_given() -> No
                            "constructs": [F("bisects_angle", ["AD", "BAC"]), F("on_segment", ["BC"], point="D")],
                            "prove": [F("congruent_triangles", ["ABD", "ACD"])]})
     assert card is None and any("names a point the card doesn't show" in w for w in why), why
+
+
+def test_the_prompts_perpendicular_bisector_example_is_a_card_code_accepts() -> None:
+    """FACT_CARD_RULES shows the AI how to write "Construct the perpendicular
+    bisector of AB" (Eval 1: two such problems were left out, their cards
+    naming no line). The example must be a card read_card keeps, with the
+    new line for the student to make."""
+    from api.core.assignment_generation import FACT_CARD_RULES
+
+    assert 'bisects_segment ["MN", "AB"] point "M"' in FACT_CARD_RULES
+    card, why = read_card({"points": ["A", "B"], "segments": ["AB"], "constructs": [
+        F("bisects_segment", ["MN", "AB"], point="M"), F("perpendicular", ["MN", "AB"], point="M")]})
+    assert card is not None, why
+    assert "Make a construction so that" in card_text(card) and "M" not in card.points
