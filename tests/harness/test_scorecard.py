@@ -389,6 +389,10 @@ def test_write_baseline_is_refused_when_a_row_errored(tmp_path: Path, monkeypatc
         return [sc.Row("homework diagrams", "generation-figures", "", "", error="not recorded: x")]
 
     monkeypatch.setattr(sc, "collect", collect)
+    # run_cli sets HARNESS_LLM_MODE=replay etc. and silences logging for the
+    # whole process; leaked, that broke later tests in CI (cassette misses).
+    monkeypatch.setattr(sc, "_configure_env", lambda: None)
+    monkeypatch.setattr(sc.logging, "disable", lambda level: None)
     base = tmp_path / "base.json"
     base.write_text('{"homework diagrams / generation-figures": {"how_good": 0.9, "cases": 22}}')
     args = argparse.Namespace(baseline=base, write_baseline=True, only=None, json=None)
