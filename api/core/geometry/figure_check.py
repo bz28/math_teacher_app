@@ -47,6 +47,12 @@ Point = tuple[float, float]
 _TOL_LEN = 0.02
 _TOL_ANG = 1.0
 _TOL_LABEL_ANG = 1.5
+# An angle labelled with algebra ("(4x + 7)°") whose value the answer gives
+# (x = 12, or m∠BGH = 55°) is drawn within this many degrees of it: looser
+# than a number's label (no figure is drawn to an unknown's exact value),
+# tight enough to catch an answer the givens don't allow (Eval 1: 55° by
+# the answer, 83° by the givens, for same-side interior angles).
+_TOL_ANSWER_ANG = 3.0
 # Collinearity: distance from the line, as a fraction of the figure's span.
 _TOL_COLLINEAR = 0.004
 # Step figures: a shared point may move at most this fraction of the span.
@@ -2475,6 +2481,24 @@ def _given_lengths(parts: ProblemParts, side: frozenset[str]) -> set[float]:
     return out | {float(r.args[0]) for r in parts.givens if r.kind == "lengthlabel"}
 
 
+def _answer_value(d: _Drawing, key: Any, exprs: list[str], final_answer: str) -> float | None:
+    """The size the answer gives the angle `key` labelled with `exprs`: its
+    own "m∠BGH = … = 55°", else the label's algebra at the answer's
+    "x = 12". None when the answer says neither."""
+    text = _clean(final_answer)
+    for chain in re.finditer(r"(?:(?:m\s*)?\\angle\s*[A-Z]{3}\s*=\s*)+(-?\d+(?:\.\d+)?)", text):
+        for name in re.findall(r"\\angle\s*([A-Z]{3})", chain.group(0)):
+            ang = d.resolve((name[0], name[1], name[2]))
+            if ang is not None and all(n in d.p for n in ang) and _same_angle(d, ang, key):
+                return float(chain.group(1))
+    found = dict(re.findall(r"(?<![A-Za-z\\])([a-z])\s*=\s*(-?\d+(?:\.\d+)?)", text))
+    for e in exprs:
+        lin = linear_expr(e)
+        if lin and lin[2] in found:
+            return lin[0] * float(found[lin[2]]) + lin[1]
+    return None
+
+
 def _label_issues(
     d: _Drawing, parts: ProblemParts, final_answer: str | None, problem_text: str, step_text: str | None,
 ) -> list[str]:
@@ -2550,6 +2574,14 @@ def _label_issues(
             if not letter_ok(re.sub(r"\s+", "", e), own):
                 out.append(f"the label {text!r} on {where} shows {e}, which the problem doesn't give for {where}")
         drawn = d.measure(key)
+        if final_answer and lab.exprs and not lab.values and not math.isnan(drawn):
+            value = _answer_value(d, key, lab.exprs, final_answer)
+            if value is not None and abs(drawn - value) > _TOL_ANSWER_ANG:
+                # The drawing holds every given; when the answer disagrees,
+                # it is most often the answer that's wrong (Eval 1: five
+                # answers took same-side interior angles as equal).
+                out.append(f"the answer makes {where} {value:g}°, but the figure, which holds the givens, "
+                           f"has it at {drawn:.0f}° (the label {text!r}): the answer or the figure is wrong")
         for value in lab.values:
             if final_answer is not None and _is_target_angle(d, parts, key):
                 out.append(f"the label {text!r} on {where} gives away the answer (the problem asks for it)")

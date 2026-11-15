@@ -144,7 +144,7 @@ BY_EYE: dict[str, tuple[str, str]] = {
     "0ac94bc0": ("e3e590cb9d5f", "right"),  # midsegment MN; MN = 3x − 1 is half of BC = 8x − 14 (x = 6)
     # (cosmetic: "(3x + 4)°" touches AC)
     "1c9d21ab": ("b86f58cdcf73", "right"),  # right angle at C; ∠A 37°, ∠B 53° as (3x + 4)°, (6x − 13)° (x = 11)
-    "218c4a7a": ("07e29138533e", "right"),  # PQ ≅ PR; base angles (5y − 8)° = (3y + 14)° = 47°
+    "218c4a7a": ("b148f96ab94b", "right"),  # PQ ≅ PR; base angles (5y − 8)° = (3y + 14)° = 47°
     "c188b1e1": ("875af4d08a79", "right"),  # RS = RT; base angles 64.15°, vertex 51.7° (x = 198/13)
     "95c727b2": ("97496d672c65", "right"),  # XY ≅ XZ; base angles (7k − 9)° = (4k + 18)° = 54°
     "18ce1004": ("00636307c0c6", "right"),  # △FGH ≅ △PQR; FG = 3x − 1 and PQ = 2x + 5 drawn equal
@@ -153,7 +153,7 @@ BY_EYE: dict[str, tuple[str, str]] = {
     "21807dd6": ("5de92c264eba", "right"),  # ∠A 52°, ∠B 79°, arcs to ∠D, ∠E; ∠C, ∠F (the answer) unlabelled
     "afee316c": ("5aff074e7614", "right"),  # M the midpoint of AC and BD (ticks)
     # Looked at 2026-11-14 after review round 3 and the breadth batch.
-    "1c5107aa": ("5e42bb77d775", "right"),  # ∠ABD 42°, ∠DBC 32° as 4x + 6, 2x + 14 (x = 9); ∠ABC labelled 74°
+    "1c5107aa": ("1526dcfafef6", "right"),  # ∠ABD 42°, ∠DBC 32° as 4x + 6, 2x + 14 (x = 9); ∠ABC labelled 74°
     "6c5008f2": ("e9e9c05d1879", "right"),  # at its coordinates; the parallels to prove unmarked
     "df891226": ("1ceca1259bb7", "right"),  # right ∠R; ∠P 61°, ∠Q 29° (x = 17); RP extended past P
     "430894a4": ("59c0f026b208", "right"),  # ∠A 72°, ∠B 58° labelled; bisected halves arced; rays meet at I

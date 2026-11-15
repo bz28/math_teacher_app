@@ -3749,6 +3749,55 @@
       ]
     }
   },
+  "17982b10a7c3b79fec8749092efc9cb0": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn isosceles $\\triangle PQR$, $\\overline{PQ} \\cong \\overline{PR}$. The base angles satisfy $m\\angle Q = (5y",
+      "recorded_at": 1794733416.334004
+    },
+    "response": {
+      "figure_spec": {
+        "angle_labels": {
+          "PQR": "(5y \u2212 8)\u00b0",
+          "QRP": "(3y + 14)\u00b0"
+        },
+        "arc_groups": [
+          [
+            "PQR",
+            "QRP"
+          ]
+        ],
+        "points": {
+          "P": [
+            4.0,
+            4.289
+          ],
+          "Q": [
+            0.0,
+            0.0
+          ],
+          "R": [
+            8.0,
+            0.0
+          ]
+        },
+        "segments": [
+          "PQ",
+          "PR",
+          "QR"
+        ],
+        "shape": "construction",
+        "tick_groups": [
+          [
+            "PQ",
+            "PR"
+          ]
+        ],
+        "type": "geometry"
+      }
+    }
+  },
   "17cc4ccdc7a706580672257e0bf4e323": {
     "meta": {
       "mode": "bank_chat",
@@ -6141,6 +6190,49 @@
         "ABM",
         "DCM"
       ]
+    }
+  },
+  "290923a709784309ee160a58409c7e7b": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nRay $\\overrightarrow{BD}$ lies in the interior of $\\angle ABC$. If $m\\angle ABD = 4x + 6$, $m\\angle DBC = 2",
+      "recorded_at": 1794733405.956198
+    },
+    "response": {
+      "figure_spec": {
+        "angle_labels": {
+          "ABC": "74\u00b0",
+          "ABD": "4x + 6",
+          "DBC": "2x + 14"
+        },
+        "points": {
+          "A": [
+            1.378,
+            4.806
+          ],
+          "B": [
+            0,
+            0
+          ],
+          "C": [
+            5.0,
+            0.0
+          ],
+          "D": [
+            3.392,
+            2.12
+          ]
+        },
+        "rays": [
+          "BA",
+          "BC",
+          "BD"
+        ],
+        "segments": [],
+        "shape": "construction",
+        "type": "geometry"
+      }
     }
   },
   "298684cf6695a2e625a98be1686bd4f9": {
@@ -27224,6 +27316,54 @@
           "kind": "angle"
         }
       ]
+    }
+  },
+  "aceb0c740a2ec231d9b2888d76b234b7": {
+    "meta": {
+      "mode": "bank_chat",
+      "model": "claude-sonnet-4-6",
+      "prompt": "You draw exact geometry figures for a math teacher's problem. You don't draw pix || Problem:\nIn the figure below, $\\overrightarrow{OA}$, $\\overrightarrow{OB}$, $\\overrightarrow{OC}$, and $\\overrightar",
+      "recorded_at": 1794733405.909058
+    },
+    "response": {
+      "figure_spec": {
+        "angle_labels": {
+          "AOB": "2x + 5",
+          "BOC": "x + 8",
+          "COD": "3x \u2212 1"
+        },
+        "points": {
+          "A": [
+            -5,
+            0
+          ],
+          "B": [
+            -2.424,
+            4.373
+          ],
+          "C": [
+            0.609,
+            4.963
+          ],
+          "D": [
+            5,
+            0
+          ],
+          "O": [
+            0,
+            0
+          ]
+        },
+        "rays": [
+          "OA",
+          "OD",
+          "OB",
+          "OC"
+        ],
+        "segments": [],
+        "shape": "construction",
+        "type": "geometry"
+      }
     }
   },
   "ad5263f4baa8abb8baa279b91208350d": {
