@@ -37,6 +37,14 @@ const teacherNavItems = [
   { label: "Courses", href: "/school/teacher", icon: CoursesIcon },
 ];
 
+// A phone has no sidebar, so the bottom bar is the only way to Account
+// (two-factor sign-in, download my data, delete account). With Courses
+// alone there, a teacher on a phone could never reach them.
+const teacherMobileNavItems = [
+  ...teacherNavItems,
+  { label: "Account", href: "/account", icon: AccountIcon },
+];
+
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { user } = useAuthStore();
   const pathname = usePathname();
@@ -529,7 +537,7 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
             treatment as the student bar. */}
         <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border-light bg-[color:var(--color-surface-alt)]/95 backdrop-blur-md md:hidden">
           <div className="flex h-16 items-stretch">
-            {teacherNavItems.map((item) => {
+            {teacherMobileNavItems.map((item) => {
               const active = pathname.startsWith(item.href);
               return (
                 <Link
