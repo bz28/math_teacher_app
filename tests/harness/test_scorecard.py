@@ -365,3 +365,31 @@ async def test_a_not_recorded_error_fails_the_rows_too(monkeypatch: pytest.Monke
 ])
 def test_only_a_shortfall_with_no_note_is_a_never(asked: int, problems: int, left_out: int, never: int) -> None:
     assert sc.short_unexplained(asked, problems, left_out) == never
+
+
+@pytest.mark.asyncio
+async def test_a_known_wrong_item_is_shown_and_a_new_or_stale_one_counts(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The probe's KNOWN_WRONG items (fix still to build) are named on the row,
+    not counted; a wrong item not on the list, or a listed one that is no
+    longer wrong, is a never."""
+    from tests.harness.probes import generation_figures as gf
+
+    monkeypatch.setenv("HARNESS_LLM_MODE", "replay")
+    rows = {r.probe: r for r in await sc._generation_figures(sc.Env(has_recorded_font=False))}
+    hw = rows["generation-figures"]
+    assert hw.never == 0 and any(n.startswith("known wrong, fix to build: set1-p1") for n in hw.notes), hw.notes
+
+    real = gf.summarize
+
+    def with_new_wrong(results: list[dict[str, object]]) -> dict[str, object]:
+        s = real(results)
+        s["wrong"] = [*s["wrong"], "set2-p1: wrong: E off line"]
+        return s
+
+    monkeypatch.setattr(gf, "summarize", with_new_wrong)
+    rows = {r.probe: r for r in await sc._generation_figures(sc.Env(has_recorded_font=False))}
+    assert rows["generation-figures"].never_parts.get("wrong_figure") == 1
+    monkeypatch.setattr(gf, "summarize", real)
+    monkeypatch.setattr(gf, "KNOWN_WRONG", {**gf.KNOWN_WRONG, "set3-p2": "listed but right"})
+    rows = {r.probe: r for r in await sc._generation_figures(sc.Env(has_recorded_font=False))}
+    assert rows["generation-figures"].never_parts.get("known_wrong_now_right") == 1

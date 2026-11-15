@@ -110,7 +110,8 @@ NEVER: dict[str, dict[str, str]] = {
         "repeated_problem": "a problem repeated in its set",
     },
     "homework diagrams / generation-figures": {
-        "wrong_figure": "a figure judged wrong by eye",
+        "wrong_figure": "a figure (or its problem) judged wrong by eye, not on the probe's known-wrong list",
+        "known_wrong_now_right": "a listed known-wrong item that is no longer wrong (the list is stale)",
         "unwanted_figure": "a figure on a problem that should have none",
         "refers_to_missing_figure": "a problem that says 'the figure' and has none",
         "drafted_figure_shipped_unchecked": "a drafted figure shipped without a checked figure",
@@ -288,8 +289,13 @@ async def _generation_figures(env: Env) -> list[Row]:
     def is_step(entry: str) -> bool:  # "set1-p3-step2: wrong ..." / "set1-p3: unwanted ..."
         return "-step" in entry.split(":")[0]
 
+    # Known wrong items with their fix still to build (gf.KNOWN_WRONG) are
+    # shown by name, not counted; any other wrong item, or a stale entry, is.
+    known = dict(getattr(gf, "KNOWN_WRONG", {}))
+    wrong_ids = [w.split(":")[0].strip() for w in s["wrong"] if not is_step(w)]
     hw.never, hw.never_parts = _parts(hw.key,
-        wrong_figure=len([w for w in s["wrong"] if not is_step(w)]),
+        wrong_figure=len([k for k in wrong_ids if k not in known]),
+        known_wrong_now_right=len([k for k in known if k not in wrong_ids]),
         unwanted_figure=len([u for u in s["unwanted"] if not is_step(u)]),
         refers_to_missing_figure=len(s["missing_reference"]),
         drafted_figure_shipped_unchecked=len(s["rule_broken"]),
@@ -301,6 +307,8 @@ async def _generation_figures(env: Env) -> list[Row]:
     hw.how_good = _share(sum(1 for p in want if p["figure_svg"]), len(want))
     hw.cases = s["problems"]
     hw.notes.append(f"{s['question_figures']} figures drawn; missing: {', '.join(s['missing_figures']) or 'none'}")
+    for k in sorted(set(known) & set(wrong_ids)):
+        hw.notes.append(f"known wrong, fix to build: {k}: {known[k]}")
 
     st = _new("step diagrams", "generation-figures (steps)", "step figures the solver drew that are shown")
     st.never, st.never_parts = _parts(st.key,
