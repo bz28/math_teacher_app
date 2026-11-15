@@ -37,6 +37,16 @@ interface Props {
  */
 export function SubmittedView({ submission, graded, animateEntrance }: Props) {
   const submittedAt = new Date(submission.submitted_at);
+  // Same shape as the due date above it ("Sat, Nov 14, 12:30 PM"), not
+  // the browser default "11/14/2026, 12:03:44 AM".
+  const submittedLabel = submittedAt.toLocaleString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    ...(submittedAt.getFullYear() === new Date().getFullYear() ? {} : { year: "numeric" }),
+    hour: "numeric",
+    minute: "2-digit",
+  });
   const files = submission.files ?? [];
   const [zoomedFile, setZoomedFile] = useState<SubmissionFile | null>(null);
   const reduceMotion = useReducedMotion();
@@ -68,7 +78,7 @@ export function SubmittedView({ submission, graded, animateEntrance }: Props) {
           <div className="border-t border-border-light px-5 pb-5 pt-1">
             <SubmittedGallery files={files} onZoom={setZoomedFile} />
             <p className="mt-3 text-xs text-text-muted">
-              Submitted {submittedAt.toLocaleString()}
+              Submitted {submittedLabel}
             </p>
           </div>
         </details>
@@ -107,7 +117,7 @@ export function SubmittedView({ submission, graded, animateEntrance }: Props) {
           <span className="font-semibold text-text-primary">Grades</span>.
         </p>
         <div className="mt-3 flex items-center justify-center gap-2 text-xs font-medium text-text-muted">
-          <span>Submitted {submittedAt.toLocaleString()}</span>
+          <span>Submitted {submittedLabel}</span>
           {submission.is_late && (
             <span className="rounded-full bg-warning-bg px-2 py-0.5 font-semibold text-warning-dark">
               Marked late
