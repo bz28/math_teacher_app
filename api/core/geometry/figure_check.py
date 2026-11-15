@@ -2930,17 +2930,15 @@ def _pair_lines(d: _Drawing, a1: tuple[str, str, str], a2: tuple[str, str, str])
 
 
 def _parallel_lines(d: _Drawing, rels: list[_Relation]) -> list[tuple[tuple[str, ...], tuple[str, ...]]] | None:
-    """Every pair of lines the relations hold parallel (a shape's sides, either
-    alternative of "a trapezoid"), as point pairs; None when one can't be
-    placed in the drawing."""
+    """Every pair of lines the relations hold parallel (a parallel given, a
+    parallelogram's sides), as point pairs; None when one can't be
+    placed in the drawing. A trapezoid's sides are not counted: its words
+    don't say which pair is parallel."""
     out: list[tuple[tuple[str, ...], tuple[str, ...]]] = []
     for rel in rels:
-        if rel.kind == "any":
-            sub = _parallel_lines(d, [r for alt in rel.args[0] for r in alt])
-            if sub is None:
-                return None
-            out += sub
-        elif rel.kind == "par":
+        # An "any" (a trapezoid: one of two side pairs) says no pair for sure,
+        # so it gives none (#1003 review round 2).
+        if rel.kind == "par":
             (a, b), (c, e) = rel.args
             if not all(n in d.p for n in (a, b, c, e)):
                 return None

@@ -1085,3 +1085,59 @@ def test_an_angle_pair_whose_lines_are_not_the_parallel_ones_is_refused_on_the_d
     says nothing about the pair (its lines are JK and LM)."""
     assert not any("not the parallel lines given" in m for m in _jklm_figure(["JK", "LM"]))
     assert any("not the parallel lines given" in m for m in _jklm_figure(["JM", "KL"]))
+
+
+def test_an_angle_pair_on_its_own_parallels_is_decided_on_the_card() -> None:
+    """#1003 review round 2: decided by names, so a problem with no figure
+    (the teacher's student draws it) is checked too."""
+    raw = {"points": ["J", "K", "L", "M"], "segments": ["JK", "KL", "LM", "MJ", "KM"], "polygons": ["JKLM"],
+           "triangles": ["JKM", "LMK"], "givens": [
+               F("congruent_segments", ["JK", "LM"]), F("alternate_interior", ["JKM", "LMK"])],
+           "prove": [F("congruent_triangles", ["JKM", "LMK"])]}
+    card, why = read_card({**raw, "givens": [*raw["givens"], F("parallel", ["JM", "KL"])]})
+    assert card is None and any("its own two lines" in w for w in why), why
+    # With no polygon the names can't say JM isn't line JK: the drawing decides
+    # (test_an_angle_pair_whose_lines_are_not_the_parallel_ones_is_refused_on_the_drawing).
+    card, why = read_card({**raw, "polygons": [], "givens": [*raw["givens"], F("parallel", ["JM", "KL"])]})
+    assert card is not None, why
+    card, why = read_card({**raw, "givens": [*raw["givens"], F("parallel", ["JK", "LM"])]})
+    assert card is not None, why
+
+
+def test_a_textbook_transversal_pair_is_kept() -> None:
+    """AB ∥ CD cut by EF at G and H: ∠AGH and ∠GHD sit on AB and CD."""
+    card, why = read_card({"points": list("ABCDEFGH"), "lines": ["AB", "CD"], "segments": ["EF"], "givens": [
+        F("parallel", ["AB", "CD"]), F("intersect", ["AB", "EF"], point="G"), F("intersect", ["CD", "EF"], point="H"),
+        F("alternate_interior", ["AGH", "GHD"]), F("angle_measure", ["AGH"], value=65)],
+        "find": [{"kind": "angle", "item": "GHD"}]})
+    assert card is not None, why
+
+
+def test_a_trapezoid_gives_no_parallel_lines_to_an_angle_pair() -> None:
+    """#1003 review round 2: "ABCD is a trapezoid" doesn't say which sides are
+    parallel, so a pair on its legs (AD, BC) would ship with a wrong answer."""
+    card, why = read_card({"points": list("ABCD"), "polygons": ["ABCD"], "segments": ["AC"], "givens": [
+        F("trapezoid", ["ABCD"]), F("alternate_interior", ["DAC", "BCA"]), F("angle_measure", ["DAC"], value=40)],
+        "find": [{"kind": "angle", "item": "BCA"}]})
+    assert card is None and any("without parallel lines" in w for w in why), why
+
+
+def test_a_pair_the_words_cant_place_on_its_parallels_is_flagged_for_a_no_figure_problem() -> None:
+    """#1003 review round 2: with no figure the student has only the words."""
+    from api.core.geometry.fact_card import pair_lines_unsaid
+
+    raw = {"points": ["J", "K", "L", "M"], "segments": ["JK", "KL", "LM", "MJ", "KM"],
+           "triangles": ["JKM", "LMK"], "givens": [
+               F("congruent_segments", ["JK", "LM"]), F("alternate_interior", ["JKM", "LMK"]),
+               F("parallel", ["JM", "KL"])],
+           "prove": [F("congruent_triangles", ["JKM", "LMK"])]}
+    card, why = read_card(raw)
+    assert card is not None, why
+    assert pair_lines_unsaid(card) and pair_lines_unsaid(card.model_dump())
+    card, why = read_card({**raw, "givens": [*raw["givens"][:2], F("parallel", ["JK", "LM"])]})
+    assert card is not None and pair_lines_unsaid(card) == [], why
+    textbook, why = read_card({"points": list("ABCDEFGH"), "lines": ["AB", "CD"], "segments": ["EF"], "givens": [
+        F("parallel", ["AB", "CD"]), F("intersect", ["AB", "EF"], point="G"),
+        F("intersect", ["CD", "EF"], point="H"), F("alternate_interior", ["AGH", "GHD"]),
+        F("angle_measure", ["AGH"], value=65)], "find": [{"kind": "angle", "item": "GHD"}]})
+    assert textbook is not None and pair_lines_unsaid(textbook) == [], why

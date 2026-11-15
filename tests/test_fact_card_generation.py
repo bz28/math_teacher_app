@@ -19,6 +19,7 @@ import pytest
 
 import api.core.question_bank_generation as qbg
 from api.core import assignment_generation
+from api.core.geometry.fact_card import card_text, read_card
 from api.core.geometry.facts import FigureFacts
 
 
@@ -522,6 +523,9 @@ NAMING = {"text": "Two parallel lines $p$ and $q$ are cut by a transversal $t$. 
     # #1003 review round 1: "angles 1 and 2" shows both numbers.
     ("Angles 1 and 2 form a linear pair and angle 1 measures 70 degrees. Find angle 2.",
      r"$m\angle 2 = 110^\circ$", []),
+    # #1003 review round 2: an angle number at the end of a sentence.
+    (r"If $m\angle 1 = 70^\circ$ and $\angle 1$ is supplementary to $\angle 2$.", r"$m\angle 2 = 110^\circ$", []),
+    ("If m∠1 = 70° and ∠1 is supplementary to ∠2.", r"$m\angle 2 = 110^\circ$", []),
 ])
 def test_the_angles_an_answer_names_must_be_in_the_problem(text: str, answer: str, unseen: list[str]) -> None:
     assert qbg.answer_names_unseen_angles(text, answer) == unseen
@@ -548,3 +552,28 @@ async def test_a_set_left_out_for_unseen_angles_says_so_to_the_teacher() -> None
         await qbg.solve_checked_problems([naming], subject="math", user_id="u", job_id="j")
     assert "couldn't be answered as written" in str(err.value)
     assert "each figure gave away" not in str(err.value)
+
+
+def test_an_angle_pair_off_its_parallels_is_not_redrawn() -> None:
+    """#1003 review round 2: the problem can't be done, so no redraw can help."""
+    assert qbg._not_redrawable("the given ∠JKM and ∠LMK says nothing about sizes: its lines are not the "
+                               "parallel lines given")
+
+
+@pytest.mark.asyncio
+async def test_a_no_figure_problem_whose_words_cant_place_its_angle_pair_is_left_out() -> None:
+    """#1003 review round 2: JM ∥ KL never puts ∠JKM and ∠LMK on parallels."""
+    card, why = read_card({"points": ["J", "K", "L", "M"], "segments": ["JK", "KL", "LM", "MJ", "KM"],
+                           "triangles": ["JKM", "LMK"], "givens": [
+                               F("congruent_segments", ["JK", "LM"]), F("alternate_interior", ["JKM", "LMK"]),
+                               F("parallel", ["JM", "KL"])],
+                           "prove": [F("congruent_triangles", ["JKM", "LMK"])]})
+    assert card is not None, why
+    plain = {**PLAIN, "figure_spec": None, "figure_svg": None}
+    q = {"text": card_text(card, figure=False), "figure_spec": None, "figure_svg": None,
+         "figure_facts": card.model_dump(), "figure_wanted": False}
+    solved = [{"question_text": plain["text"], "steps": [], "final_answer": "1"},
+              {"question_text": q["text"], "steps": [], "final_answer": "SAS"}]
+    with patch.object(qbg, "generate_solutions", AsyncMock(return_value=solved)):
+        kept, _ = await qbg.solve_checked_problems([plain, q], subject="math", user_id="u", job_id="j")
+    assert [k["text"] for k in kept] == [plain["text"]]
