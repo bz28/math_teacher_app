@@ -652,3 +652,26 @@ def test_a_labelled_angle_wide_enough_is_kept() -> None:
             segments=["AB", "BC", "CA"], rays=["CD"],
             angle_labels={"BAC": "(3x + 5)°", "ABC": "(2x - 1)°", "ACD": "(8x - 10)°"})
     assert not [m for m in messages(THIN, f) if "too thin" in m]
+
+
+SAME_SIDE = (r"$\overleftrightarrow{AB} \parallel \overleftrightarrow{CD}$. $\overline{GH}$ is a transversal of "
+             r"$\overleftrightarrow{AB}$ and $\overleftrightarrow{CD}$. $m\angle BGH = (4x + 7)^\circ$. "
+             r"$m\angle GHD = (6x - 17)^\circ$. Find $m\angle BGH$ and $m\angle GHD$.")
+SAME_SIDE_FIG = dict(points={"A": [0, 4], "B": [8, 4], "C": [0, 0], "D": [8, 0], "G": [3, 4], "H": [3.4657, 0]},
+                     lines=[{"through": ["A", "B"]}, {"through": ["C", "D"]}], segments=["GH"],
+                     parallel_groups=[["AB", "CD"]],
+                     angle_labels={"BGH": "(4x + 7)°", "GHD": "(6x - 17)°"})
+
+
+@pytest.mark.parametrize("answer", [r"$m\angle BGH = m\angle GHD = 55°$", r"$x = 12$, so both are $55°$"])
+def test_an_answer_the_figure_contradicts_is_refused(answer: str) -> None:
+    """Eval 1 set2: ∠BGH and ∠GHD are same-side interior (they sum to 180°,
+    x = 19: 83° and 97°); the AI's answer took them as equal (55°). The
+    figure held the givens; the answer was wrong."""
+    got = [m for m in messages(SAME_SIDE, fig(**SAME_SIDE_FIG), final_answer=answer) if "the answer makes" in m]
+    assert any("∠BGH 55°" in m for m in got), got
+
+
+def test_an_answer_the_figure_agrees_with_is_kept() -> None:
+    answer = r"$x = 19$, $m\angle BGH = 83°$, $m\angle GHD = 97°$"
+    assert not [m for m in messages(SAME_SIDE, fig(**SAME_SIDE_FIG), final_answer=answer) if "the answer makes" in m]
