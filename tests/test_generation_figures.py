@@ -17,16 +17,39 @@ from sqlalchemy import select
 
 from api.core.assignment_generation import generate_solutions
 from api.core.auth import hash_password
-from api.core.question_bank_generation import _lacks_figure, _named_points, _resolve_figure, _run_generation
+from api.core.question_bank_generation import (
+    _lacks_figure,
+    _named_points,
+    _resolve_figure,
+    _run_generation,
+    job_notice,
+)
 from api.database import get_session_factory
 from api.models.assignment import Assignment
 from api.models.course import Course
 from api.models.question_bank import QuestionBankGenerationJob, QuestionBankItem
 from api.models.unit import Unit
 from api.models.user import User
+from api.routes.teacher_question_bank import _serialize_job
 
 RIGHT_TRIANGLE = {"type": "geometry", "shape": "triangle", "vertices": ["A", "B", "C"],
                   "right_angle_at": ["C"], "side_labels": {"AC": "9", "BC": "40", "AB": "c"}}
+
+
+# A figure problem written as its fact card (this PR: no card, no figure).
+HYPOTENUSE_CARD = {"points": ["A", "B", "C"], "triangles": ["ABC"],
+                   "givens": [{"kind": "equal_length", "items": ["AC"], "value": 9},
+                              {"kind": "equal_length", "items": ["BC"], "value": 40},
+                              {"kind": "right_angle", "items": ["ACB"]}],
+                   "find": [{"kind": "segment", "item": "AB"}]}
+HYPOTENUSE_FIGURE = {"type": "geometry", "shape": "construction",
+                     "points": {"A": [0, 9], "B": [40, 0], "C": [0, 0]}, "segments": ["AB", "BC", "CA"],
+                     "right_angles": ["ACB"], "side_labels": {"AC": "9", "BC": "40"}}
+
+
+def _carded() -> dict[str, Any]:
+    return {"title": "hypotenuse", "text": "", "difficulty": "easy",
+            "figure_card": HYPOTENUSE_CARD, "figure_spec": HYPOTENUSE_FIGURE}  # as generate_questions hands it on
 
 
 def _q(text: str, spec: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -71,7 +94,7 @@ async def test_the_solver_is_shown_the_figure() -> None:
     assert out[0]["question_text"] == "Find the hypotenuse c in the right triangle below."
 
 
-async def _run(batches: list[Any]) -> tuple[list[QuestionBankItem], AsyncMock]:
+async def _run(batches: list[Any]) -> tuple[list[QuestionBankItem], AsyncMock, QuestionBankGenerationJob]:
     """Run a 2-problem job whose generate calls return `batches` in turn."""
     tag = uuid.uuid4().hex[:6]
     async with get_session_factory()() as s:
@@ -113,7 +136,10 @@ async def _run(batches: list[Any]) -> tuple[list[QuestionBankItem], AsyncMock]:
             select(QuestionBankItem).where(QuestionBankItem.originating_assignment_id == hw_id)
             .order_by(QuestionBankItem.created_at)
         )).scalars().all()
-    return list(items), gen
+        job = (await s.execute(
+            select(QuestionBankGenerationJob).where(QuestionBankGenerationJob.id == job_id)
+        )).scalar_one()
+    return list(items), gen, job
 
 
 GOOD = _q("Solve 2x + 3 = 11.")
@@ -122,33 +148,46 @@ BROKEN = _q("In the figure below, AB = DE and BC = EF. Name the postulate.")
 
 @pytest.mark.asyncio
 async def test_a_problem_citing_a_lacks_figure_is_replaced() -> None:
-    drawn = _q("Find the hypotenuse c in the right triangle below.", RIGHT_TRIANGLE)
-    items, gen = await _run([[GOOD, BROKEN], [drawn]])
+    drawn = _carded()
+    items, gen, job = await _run([[GOOD, BROKEN], [drawn]])
     assert gen.await_count == 2 and gen.await_args_list[1].kwargs["count"] == 1
-    assert [i.question for i in items] == [GOOD["text"], drawn["text"]]
+    assert [i.question for i in items][0] == GOOD["text"] and r"Find $AB$." in items[1].question
     assert items[1].figure_svg  # the replacement shipped with its figure
 
 
 @pytest.mark.asyncio
 async def test_a_replacement_with_the_same_flaw_is_left_out() -> None:
-    # (the third call asks for a problem that needs no figure; it too
-    # comes back broken, so the slot is left out)
-    items, gen = await _run([[GOOD, BROKEN], [BROKEN], [BROKEN]])
-    assert gen.await_count == 3
+    """The slot is left out (no third call for a problem that needs no
+    figure), and the done job tells the teacher the set came back short."""
+    items, gen, job = await _run([[GOOD, BROKEN], [BROKEN], [BROKEN]])
+    assert gen.await_count == 2
     assert [i.question for i in items] == [GOOD["text"]]
+    assert job.status == "done" and job.produced_count == 1
+    assert job.error_message is None  # not an error: its own field, shown beside the problems
+    assert job_notice(job) == (
+        "1 of 2 problems are ready. 1 more didn't pass our checks (usually a diagram that couldn't be "
+        "confirmed), so it was left out — "
+        "generate again for more."
+    )
+    assert _serialize_job(job)["notice"] == job_notice(job)
+
+
+@pytest.mark.asyncio
+async def test_a_full_set_has_no_note() -> None:
+    _items, _gen, job = await _run([[GOOD, _carded()]])
+    assert job.status == "done" and job.error_message is None and job_notice(job) is None
 
 
 @pytest.mark.asyncio
 async def test_a_batch_with_every_figure_drawn_makes_no_extra_call() -> None:
-    drawn = _q("Find c in the right triangle below.", RIGHT_TRIANGLE)
-    items, gen = await _run([[GOOD, drawn]])
+    items, gen, job = await _run([[GOOD, _carded()]])
     assert gen.await_count == 1 and len(items) == 2
 
 
 @pytest.mark.asyncio
 async def test_a_failed_replacement_call_keeps_the_good_problems() -> None:
-    items, gen = await _run([[GOOD, BROKEN], RuntimeError("upstream 529"), RuntimeError("upstream 529")])
-    assert gen.await_count == 3
+    items, gen, job = await _run([[GOOD, BROKEN], RuntimeError("upstream 529"), RuntimeError("upstream 529")])
+    assert gen.await_count == 2
     assert [i.question for i in items] == [GOOD["text"]]
 
 
@@ -195,3 +234,18 @@ def test_a_figure_labeled_with_the_problems_names_is_kept() -> None:
     spec = {**TRIANGLE_ABC, "vertex_labels": {"A": "P", "B": "Q", "C": "R"}}
     out, svg = _resolve_figure(spec, r"Find $m\\angle PQR$ in $\\triangle PQR$.")
     assert out == spec and svg
+
+
+@pytest.mark.parametrize(("status", "mode", "asked", "kept", "noted"), [
+    ("done", "generate", 8, 6, True),
+    ("done", "generate", 8, 8, False),
+    ("done", "upload", 8, 6, False),  # an upload makes what the pages hold
+    ("running", "generate", 8, 6, False),
+    ("failed", "generate", 8, 0, False),
+])
+def test_only_a_finished_short_generated_set_has_a_notice(
+        status: str, mode: str, asked: int, kept: int, noted: bool) -> None:
+    from types import SimpleNamespace
+
+    job = SimpleNamespace(status=status, mode=mode, requested_count=asked, produced_count=kept)
+    assert (job_notice(job) is not None) is noted
