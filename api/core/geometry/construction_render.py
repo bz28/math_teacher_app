@@ -43,6 +43,10 @@ _LINE_MARGIN = 0.45
 _ARROW = 0.13
 _TICK_HALF = 0.09
 _TICK_GAP = 0.07
+# Two parallel arrows in one mark sit further apart than an arrow is deep, so
+# a pair reads as a double arrow (at 0.09 they printed over each other and a
+# parallelogram's second pair looked like its first).
+_ARROW_GAP = 0.16
 _MARK_ARC_R = 0.26
 _MARK_ARC_STEP = 0.06
 _ANGLE_LABEL_R = 0.52
@@ -427,7 +431,7 @@ def render_construction(spec: ConstructionFigure) -> str:
             mid = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
             for j in range(gi + 1):
                 # Past the midpoint, which is where tick marks go.
-                off = (j - gi / 2) * 0.09 + _ARROW / 2 + 0.3
+                off = (j - gi / 2) * _ARROW_GAP + _ARROW / 2 + 0.3
                 parts.append(_chevron((mid[0] + u[0] * off, mid[1] + u[1] * off), u, _ARROW * 0.9))
 
     # Angle labels: placed now so a label for a whole angle that other arms
