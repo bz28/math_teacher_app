@@ -310,7 +310,6 @@ async def test_a_chat_figure_edit_is_held_to_the_author_card() -> None:
     from unittest.mock import MagicMock
 
     import api.core.question_bank_chat as qbc
-    from api.core.geometry.fact_card import card_text, read_card
 
     card, why = read_card(BISECTOR)
     assert card is not None, why
@@ -368,7 +367,6 @@ async def test_without_a_card_the_students_own_drawing_is_never_drawn(text: str,
 def test_the_figure_never_shows_the_value_asked_for() -> None:
     """A right drawing (AB = 7, right angle at C) that prints BC's value:
     refused for giving the answer away, and only for that."""
-    from api.core.geometry.fact_card import card_text, read_card
 
     card, why = read_card(RIGHT)
     assert card is not None, why
@@ -383,7 +381,6 @@ def test_the_figure_never_shows_the_value_asked_for() -> None:
 def test_a_shape_form_figure_is_refused_for_an_author_card_by_the_check_itself() -> None:
     """The guard in _check_figure (the chat path's only one), not the
     fresh-drawing branch before it."""
-    from api.core.geometry.fact_card import card_text, read_card
 
     card, why = read_card(RIGHT)
     assert card is not None, why
@@ -398,7 +395,6 @@ async def test_a_chat_shape_form_figure_for_an_author_card_is_never_proposed() -
     from unittest.mock import MagicMock
 
     import api.core.question_bank_chat as qbc
-    from api.core.geometry.fact_card import card_text, read_card
 
     card, why = read_card(RIGHT)
     assert card is not None, why
@@ -475,7 +471,6 @@ async def test_a_skeleton_card_on_a_plain_problem_is_no_card() -> None:
 def test_the_construction_under_another_letter_is_never_shown() -> None:
     """E at the exact foot of the bisector, with BE and EC: the student's D
     renamed. The card lists every point the figure shows, so E is refused."""
-    from api.core.geometry.fact_card import card_text, read_card
 
     card, why = read_card(BISECTOR)
     assert card is not None, why
@@ -560,20 +555,26 @@ def test_an_angle_pair_off_its_parallels_is_not_redrawn() -> None:
                                "parallel lines given")
 
 
+JKLM_OFF = {"points": ["J", "K", "L", "M"], "segments": ["JK", "KL", "LM", "MJ", "KM"],
+            "triangles": ["JKM", "LMK"], "givens": [
+                F("congruent_segments", ["JK", "LM"]), F("alternate_interior", ["JKM", "LMK"]),
+                F("parallel", ["JM", "KL"])],
+            "prove": [F("congruent_triangles", ["JKM", "LMK"])]}
+
+
 @pytest.mark.asyncio
-async def test_a_no_figure_problem_whose_words_cant_place_its_angle_pair_is_left_out() -> None:
-    """#1003 review round 2: JM ∥ KL never puts ∠JKM and ∠LMK on parallels."""
-    card, why = read_card({"points": ["J", "K", "L", "M"], "segments": ["JK", "KL", "LM", "MJ", "KM"],
-                           "triangles": ["JKM", "LMK"], "givens": [
-                               F("congruent_segments", ["JK", "LM"]), F("alternate_interior", ["JKM", "LMK"]),
-                               F("parallel", ["JM", "KL"])],
-                           "prove": [F("congruent_triangles", ["JKM", "LMK"])]})
-    assert card is not None, why
-    plain = {**PLAIN, "figure_spec": None, "figure_svg": None}
-    q = {"text": card_text(card, figure=False), "figure_spec": None, "figure_svg": None,
-         "figure_facts": card.model_dump(), "figure_wanted": False}
-    solved = [{"question_text": plain["text"], "steps": [], "final_answer": "1"},
-              {"question_text": q["text"], "steps": [], "final_answer": "SAS"}]
-    with patch.object(qbg, "generate_solutions", AsyncMock(return_value=solved)):
-        kept, _ = await qbg.solve_checked_problems([plain, q], subject="math", user_id="u", job_id="j")
-    assert [k["text"] for k in kept] == [plain["text"]]
+async def test_a_student_draws_it_regenerate_whose_words_cant_place_its_angle_pair_is_refused() -> None:
+    """#1003 review rounds 2-3: the one way a carded problem ships with no
+    figure; JM ∥ KL never puts ∠JKM and ∠LMK on parallels."""
+    with pytest.raises(RuntimeError, match="Nothing was changed") as err:
+        await _regenerate({"question": "", "figure_facts": JKLM_OFF, "figure_spec": None}, teacher=True)
+    assert "can't be done from its words" in str(err.value)
+
+
+@pytest.mark.asyncio
+async def test_a_wanted_figure_that_couldnt_be_drawn_says_so_not_the_words() -> None:
+    """#1003 review round 3: the words check is for a problem shipped with no figure."""
+    with patch.object(qbg, "_resolve_figure_with_retry", AsyncMock(return_value=(None, None, ["x"], None))), \
+            pytest.raises(RuntimeError) as err:
+        await _regenerate({"question": "", "figure_facts": JKLM_OFF, "figure_spec": TRIANGLE})
+    assert "couldn't be drawn (x)" in str(err.value) and "from its words" not in str(err.value)
