@@ -161,6 +161,8 @@ class ProblemGraphCheck:
             "step": self.step,
             "in_view": self.in_view,
             "note": self.note,
+            # Its "no"s were each confirmed by a second look (`_confirm_noes`).
+            "confirmed_noes": True,
             "overridden": False,
             "items": [
                 {"n": r.n, "text": i.text, "points": i.points, "rule_id": i.rule_id,
@@ -188,6 +190,20 @@ def _page_number(value: Any, pages: int) -> int | None:
     if isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= pages:
         return value
     return None
+
+
+def _written_only_pages(extraction: dict[str, Any], pages: int) -> set[int]:
+    """The pages holding the reader's written steps or answers and no
+    drawing of any problem."""
+    def on(entries: Any, *, drawings: bool = False) -> set[int]:
+        return {
+            n for e in entries or [] if isinstance(e, dict)
+            and (not drawings or e.get("present", True) is not False)
+            and (n := _page_number(e.get("page_index"), pages))
+        }
+
+    written = on(extraction.get("steps")) | on(extraction.get("final_answers"))
+    return written - on(extraction.get("visual_work"), drawings=True)
 
 
 def uploads_look_sideways(pages: list[list[Image]]) -> bool:
@@ -276,8 +292,11 @@ async def check_problem_drawing(
     at whole pages, the ones the reader tied to this problem first, until
     one shows the drawing. When none does, every item is unclear, except
     when the reader also recorded no drawing: two looks agree it isn't
-    there, so every item is "no". A check that fails is every item
-    unclear, for the teacher. On a `sideways` upload (`uploads_look_sideways`)
+    there, so every item is "no". That search then skips the pages holding
+    only other problems' written work (`_written_only_pages`). A check
+    that fails is every item unclear, for the teacher. A look's "no"
+    stands only when a second look at the same image says no too
+    (`_confirm_noes`). On a `sideways` upload (`uploads_look_sideways`)
     every "no" the check returns is unclear (`_doubt_noes`)."""
     visuals = [
         v for v in extraction.get("visual_work") or [] if isinstance(v, dict) and v.get("problem_position") == position
@@ -372,11 +391,12 @@ async def check_problem_drawing(
         order = hinted + [n for n in range(1, len(pages) + 1) if n not in hinted and n not in located_pages]
         if reader_saw_none and hinted:
             # The reader recorded no drawing for this problem. The second
-            # look, which a zero needs, is at the pages holding the
-            # problem's own work: a drawing for it sits there, and the
-            # rest of the homework is other problems (each search look
-            # is a whole page on the vision model).
-            order = hinted
+            # look, which a zero needs, skips only the pages that hold
+            # nothing but other problems' written work: a page with any
+            # drawing on it, or nothing the reader tied to a problem (a
+            # separate sheet of graph paper), is still searched (each
+            # search look is a whole page on the vision model).
+            order = [n for n in order if n in hinted or n not in _written_only_pages(extraction, len(pages))]
         looks = [img for n in order for img in pages[n - 1]][: max(_MAX_PAGE_LOOKS - misses, 0)]
         for data, media_type in looks:
             check = await look(data, media_type, None)

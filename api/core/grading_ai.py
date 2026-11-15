@@ -1311,6 +1311,17 @@ def _build_breakdown(
     return breakdown, ai_score
 
 
+def _drawing_state(check: Any) -> str:
+    """What the drawing check made of a problem's drawing, for its note:
+    "found", "none" (both looks agree there is none, or the problem was
+    left blank), or "unchecked" (the check failed or couldn't find it)."""
+    if check is None or getattr(check, "note", None) == "not_drawn":
+        return "none"
+    if getattr(check, "note", None) == "failed" or getattr(check, "in_view", None) == "not_found":
+        return "unchecked"
+    return "found"
+
+
 async def _rewrite_graph_notes(
     combined: list[dict[str, Any]],
     by_bid: dict[str, dict[str, Any]],
@@ -1332,7 +1343,7 @@ async def _rewrite_graph_notes(
         check = checks.get(c["problem_id"])
         by_bid[c["problem_id"]]["feedback"] = await write_graph_note(
             p.get("question") or "", p.get("final_answer") or "", c, c.get("feedback"),
-            drawn=check is not None and getattr(check, "note", None) != "not_drawn",
+            drawing=_drawing_state(check),
             user_id=user_id, submission_id=str(submission_id),
         )
 
@@ -1460,6 +1471,10 @@ async def run_ai_grading_for_submission(
         if (stored_checks.get(pid) or {}).get("checklist_key") == part.key
         and not stored_checks[pid].get("note")
         and stored_checks[pid].get("in_view") != "not_found"
+        # A check from before a "no" needed two looks is looked at again
+        # when it has one: that "no" may rest on a single look.
+        and (stored_checks[pid].get("confirmed_noes")
+             or not any(i.get("verdict") == "no" for i in stored_checks[pid].get("items") or []))
     }
     to_check = [p for p in problems if p["bank_item_id"] in parts.keys() - checks.keys()]
     # The photos are read only when a drawing is to be checked — fetched

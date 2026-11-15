@@ -732,12 +732,15 @@ async def test_when_the_reader_saw_no_drawing_only_the_problems_own_pages_are_se
     p1, p2, p3 = _jpeg((255, 255, 255)), _jpeg((0, 0, 0)), _jpeg((128, 128, 128))
     checks.queue(_not_found())
     ext = _extraction(visual=[{"problem_position": 1, "present": False}])
-    ext["steps"] = [{"problem_position": 1, "page_index": 2, "latex": "x = 1"}]
+    ext["steps"] = [{"problem_position": 1, "page_index": 2, "latex": "x = 1"},
+                    {"problem_position": 2, "page_index": 1, "latex": "y = 2"},
+                    {"problem_position": 3, "page_index": 3, "latex": "z = 3"}]
     pages = [[(p1, "image/jpeg")], [(p2, "image/jpeg")], [(p3, "image/jpeg")]]
     r = await check_problem_drawing(ext, pages, 1, PART)
     # Two looks agree there is no drawing: the reader's, and one look at
-    # the page holding the problem's work. The other pages are other
-    # problems' (6 whole-page looks for one student before, Nov 2026).
+    # the page holding the problem's work. The other pages hold only other
+    # problems' written work (6 whole-page looks for one student before,
+    # Nov 2026).
     assert [c["page"] for c in checks.calls] == [p2]
     assert r is not None and r.note == "not_drawn" and {i.verdict for i in r.items} == {"no"}
 
@@ -750,3 +753,20 @@ async def test_a_drawing_the_reader_couldnt_place_still_sends_the_search_everywh
     await check_problem_drawing(ext, [[(p1, "image/jpeg")], [(p2, "image/jpeg")]], 1, PART)
     assert [c["page"] for c in checks.calls] == [p2, p1]
 
+
+
+async def test_a_page_with_a_drawing_or_nothing_tied_to_a_problem_is_still_searched(checks: Checks) -> None:
+    # The work on page 1, the graph on its own sheet (page 2) that the
+    # reader missed or tied to problem 2: the search reaches it rather
+    # than zeroing the problem after one page (round 1 review).
+    p1, p2, p3 = _jpeg((255, 255, 255)), _jpeg((0, 0, 0)), _jpeg((128, 128, 128))
+    for other in ([{"problem_position": 2, "present": True, "page_index": 2}], []):
+        checks.calls.clear()
+        checks.queue(_not_found(), _found("page", "yes", "yes"))
+        ext = _extraction(visual=[{"problem_position": 1, "present": False}, *other])
+        ext["steps"] += [{"problem_position": 3, "page_index": 3, "latex": "z"}]
+        pages = [[(p1, "image/jpeg")], [(p2, "image/jpeg")], [(p3, "image/jpeg")]]
+        r = await check_problem_drawing(ext, pages, 1, PART)
+        # Page 3 holds only problem 3's written work: skipped.
+        assert [c["page"] for c in checks.calls] == [p1, p2]
+        assert r is not None and r.note is None and [i.verdict for i in r.items] == ["yes", "yes"]

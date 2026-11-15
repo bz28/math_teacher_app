@@ -11,6 +11,7 @@ waits until she has. A problem she re-scores by hand is hers.
 from __future__ import annotations
 
 import base64
+import copy
 import io
 import uuid
 from typing import Any
@@ -164,6 +165,28 @@ async def test_a_homework_without_graph_checklists_grades_as_before() -> None:
     assert look.calls == 0 and all("graph_part" not in p for p in grader.await_args.args[1])
     row = await _row(w["sub_id"])
     assert row.graph_checks is None and row.final_score == 100
+
+
+async def test_a_regrade_looks_again_at_a_no_from_before_two_looks(client: AsyncClient) -> None:
+    w = await _seed()
+    await _grade(w["sub_id"], _Look("yes", "no"))
+    async with get_session_factory()() as s:
+        q = select(SubmissionGrade).where(SubmissionGrade.submission_id == w["sub_id"])
+        row = (await s.execute(q)).scalar_one()
+        stored = copy.deepcopy(row.graph_checks or {})
+        assert stored[w["graph_id"]].pop("confirmed_noes") is True
+        row.graph_checks = stored  # as stored before a "no" needed two looks
+        await s.commit()
+    again = _Look("yes", "yes")
+    await _grade(w["sub_id"], again, force=True)
+    assert again.calls >= 1
+    stored = ((await _row(w["sub_id"])).graph_checks or {})[w["graph_id"]]
+    assert [i["verdict"] for i in stored["items"]] == ["yes", "yes"]
+    # One made under two looks is kept, "no" and all.
+    kept = _Look("yes", "yes")
+    await _grade(w["sub_id"], _Look("yes", "no"), force=True)
+    await _grade(w["sub_id"], kept, force=True)
+    assert kept.calls == 0
 
 
 async def test_a_regrade_keeps_the_check_until_the_checklist_changes(client: AsyncClient) -> None:
