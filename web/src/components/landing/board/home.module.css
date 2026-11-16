@@ -1678,3 +1678,20 @@
     grid-column: 1 / -1;
   }
 }
+
+/* Printing or saving as PDF: show everything, whatever has scrolled into
+   view. The chalk write-ins and the layer build only exist on screen. */
+@media print {
+  .home [data-state] .write,
+  .home [data-state] .fade {
+    opacity: 1 !important;
+    clip-path: none !important;
+    transform: none !important;
+    animation: none !important;
+  }
+  .lay {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+}

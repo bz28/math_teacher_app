@@ -263,7 +263,7 @@ export function LearnStory() {
         <aside className={s.views} aria-label="The same conversation, from both sides">
           <div className={`${s.view} ${s.viewStudent} ${s.fade}`} style={d(5.2)}>
             <small>What Sam sees</small>
-            <p>Thanks, Sam. Nice work finding that shortcut. Your homework is with Ms. Rivera.</p>
+            <p>Thanks for walking me through that! Your teacher has everything they need. You&rsquo;ll see your grade once they publish it.</p>
           </div>
           <div className={`${s.view} ${s.viewTeacher} ${s.fade}`} style={d(5.6)}>
             <small>What Ms. Rivera sees</small>
@@ -372,7 +372,7 @@ export function Monday() {
           Monday&rsquo;s homework, sorted by who needs you.
         </h2>
         <p className={s.lead}>
-          Open Veradic to a short list of who needs you today. Each class&rsquo;s Insights tab shows the problems most
+          Open Veradic to a short list of who needs you today. Each class&rsquo;s Student Insights tab shows the problems most
           of the class got wrong.
         </p>
         <ul className={s.todo} aria-label="Example to-do list">
@@ -384,10 +384,10 @@ export function Monday() {
       <div
         className={s.app}
         role="img"
-        aria-label="Example teacher view for Algebra II period 3: three students who need attention first, the problem most of the class missed, and 3 grades left to review."
+        aria-label="Example teacher view on Monday: three students across your classes who need you today, the problem most of one class missed, and 3 grades left to review."
       >
         <div className={s.appBar}>
-          <b>Algebra II &middot; Period 3</b>
+          <b>Your classes</b>
           <span>Monday</span>
         </div>
         <div className={s.appSec}>
@@ -415,7 +415,7 @@ export function Monday() {
           </div>
         </div>
         <div className={`${s.appSec} ${s.appClass}`}>
-          <h4>Insights &middot; HW 5.2</h4>
+          <h4>Student Insights &middot; Algebra II, HW 5.2</h4>
           <div>
             <b>Problem 5, distributing</b> &middot; 14 of 21 got it wrong
           </div>
