@@ -298,22 +298,21 @@ export function LearnStory() {
         <div
           className={s.seen}
           role="img"
-          aria-label="Example teacher summary: Jordan explained all three problems. Maya needed help with the first step, then got it. Sam couldn't explain his own work at first and learned it in the chat."
+          aria-label="Example teacher summary: Jordan explained all three problems, so his row stays quiet. Maya was tutored through the first step and got it. Sam couldn't explain his own work at first and learned it in the chat; his row is marked for review."
         >
           <div className={s.seenRow}>
             <b>Jordan P.</b>
             <span>Explained 3 of 3</span>
-            <em className={`${s.pill} ${s.pillGreen}`}>Understands</em>
           </div>
           <div className={s.seenRow}>
             <b>Maya R.</b>
             <span>Needed help with the first step, then got it</span>
-            <em className={`${s.pill} ${s.pillAmber}`}>Practice</em>
+            <em className={`${s.pill} ${s.pillAmber}`}>Tutored</em>
           </div>
           <div className={s.seenRow}>
             <b>Sam T.</b>
             <span>Couldn&rsquo;t explain his work, learned it in the chat</span>
-            <em className={`${s.pill} ${s.pillRed}`}>Check in</em>
+            <em className={`${s.pill} ${s.pillRed}`}>Review</em>
           </div>
         </div>
       </div>
@@ -398,27 +397,27 @@ export function Monday() {
               <b>Sam T.</b>
               <span>Couldn&rsquo;t explain his own work on problem 6</span>
             </div>
-            <span className={`${s.pill} ${s.pillRed}`}>Read conversation</span>
+            <span className={`${s.pill} ${s.pillRed}`}>Flagged</span>
           </div>
           <div className={s.appRow}>
             <div>
               <b>Devon K.</b>
-              <span>Turned it in late, not graded yet</span>
+              <span>Submitted Thursday, not graded yet</span>
             </div>
-            <span className={`${s.pill} ${s.pillAmber}`}>Grade</span>
+            <span className={`${s.pill} ${s.pillAmber}`}>Ungraded</span>
           </div>
           <div className={s.appRow}>
             <div>
               <b>Ana L.</b>
-              <span>Hasn&rsquo;t submitted yet</span>
+              <span>HW 5.1, past due and not graded yet</span>
             </div>
-            <span className={`${s.pill} ${s.pillAmber}`}>Missing</span>
+            <span className={`${s.pill} ${s.pillAmber}`}>Overdue</span>
           </div>
         </div>
         <div className={`${s.appSec} ${s.appClass}`}>
           <h4>What the class missed</h4>
           <div>
-            <b>Problem 5, distributing</b> &middot; 14 of 21 graded
+            <b>Problem 5, distributing</b> &middot; 14 of 21 got it wrong
           </div>
           <div className={s.meter}>
             <i />

@@ -53,6 +53,10 @@ export function Layers() {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     if (el.getBoundingClientRect().top < window.innerHeight) return;
 
+    // Below the fold: rest on the bare homework until it scrolls into view,
+    // so the finished page never shows and then gets wiped. (In a frame
+    // callback, not synchronously in the effect.)
+    const frame = requestAnimationFrame(() => setStep(1));
     const io = new IntersectionObserver(
       (entries) => {
         if (!entries.some((e) => e.isIntersecting)) return;
@@ -65,6 +69,7 @@ export function Layers() {
     observer.current = io;
     io.observe(el);
     return () => {
+      cancelAnimationFrame(frame);
       io.disconnect();
       stopBuild();
     };

@@ -82,8 +82,8 @@
   color: var(--chalk);
   position: relative;
   background-image:
-    radial-gradient(ellipse at 18% 25%, rgba(255, 255, 255, 0.07), transparent 55%),
-    radial-gradient(ellipse at 85% 75%, rgba(255, 255, 255, 0.05), transparent 50%);
+    radial-gradient(ellipse at 18% 25%, rgba(255, 255, 255, 0.035), transparent 55%),
+    radial-gradient(ellipse at 85% 75%, rgba(255, 255, 255, 0.025), transparent 50%);
 }
 .board :focus-visible,
 .foot :focus-visible {
@@ -600,7 +600,7 @@
   color: var(--chalk);
 }
 .viewStudent small {
-  color: var(--chalk-dim);
+  color: var(--chalk);
 }
 .viewTeacher {
   background: var(--card);
