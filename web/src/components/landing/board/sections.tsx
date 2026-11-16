@@ -298,15 +298,15 @@ export function LearnStory() {
         <div
           className={s.seen}
           role="img"
-          aria-label="Example teacher summary: Jordan explained all three problems, so his row stays quiet. Maya was tutored through the first step and got it. Sam couldn't explain his own work at first and learned it in the chat; his row is marked for review."
+          aria-label="Example teacher summary: Jordan explained his steps, so his row stays quiet. Priya got a problem wrong and was taught the step in the chat. Sam couldn't explain his own work at first and learned it in the chat; his row is marked for review."
         >
           <div className={s.seenRow}>
             <b>Jordan P.</b>
-            <span>Explained 3 of 3</span>
+            <span>Explained his steps on problem 4</span>
           </div>
           <div className={s.seenRow}>
-            <b>Maya R.</b>
-            <span>Needed help with the first step, then got it</span>
+            <b>Priya S.</b>
+            <span>Got problem 5 wrong, was taught distributing in the chat</span>
             <em className={`${s.pill} ${s.pillAmber}`}>Tutored</em>
           </div>
           <div className={s.seenRow}>
@@ -337,8 +337,8 @@ export function Outcomes() {
         </div>
         <div>
           <span className={s.habitName}>Practice</span>
-          <b>They practice exactly what they missed.</b>
-          <p>New versions of the problems they got wrong, ungraded, from problems you approved.</p>
+          <b>They practice the problems the class missed.</b>
+          <p>New versions of the problems you pick, ungraded, each one approved by you first.</p>
         </div>
         <div>
           <span className={s.habitName}>Catch it early</span>
@@ -372,8 +372,8 @@ export function Monday() {
           Monday&rsquo;s homework, sorted by who needs you.
         </h2>
         <p className={s.lead}>
-          Open Veradic to a short list: who needs you today, what&rsquo;s left to grade, and which problems most of
-          the class got wrong.
+          Open Veradic to a short list of who needs you today. Each class&rsquo;s Insights tab shows the problems most
+          of the class got wrong.
         </p>
         <ul className={s.todo} aria-label="Example to-do list">
           <li>Talk to Sam before 1st period</li>
@@ -387,11 +387,11 @@ export function Monday() {
         aria-label="Example teacher view for Algebra II period 3: three students who need attention first, the problem most of the class missed, and 3 grades left to review."
       >
         <div className={s.appBar}>
-          <b>Algebra II &middot; Period 3 &middot; HW 5.2</b>
-          <span>24 of 25 submitted</span>
+          <b>Algebra II &middot; Period 3</b>
+          <span>Monday</span>
         </div>
         <div className={s.appSec}>
-          <h4>Needs you first</h4>
+          <h4>Needs you today</h4>
           <div className={s.appRow}>
             <div>
               <b>Sam T.</b>
@@ -415,7 +415,7 @@ export function Monday() {
           </div>
         </div>
         <div className={`${s.appSec} ${s.appClass}`}>
-          <h4>What the class missed</h4>
+          <h4>Insights &middot; HW 5.2</h4>
           <div>
             <b>Problem 5, distributing</b> &middot; 14 of 21 got it wrong
           </div>
@@ -426,10 +426,10 @@ export function Monday() {
         <div className={s.appSec}>
           <div className={s.appRow}>
             <div>
-              <b>3 grades drafted</b>
-              <span>Each point explained. Nothing posted yet.</span>
+              <b>HW 5.2 grades</b>
+              <span>Drafted, each point explained. Nothing posted yet.</span>
             </div>
-            <span className={`${s.pill} ${s.pillGreen}`}>Review &amp; approve</span>
+            <span className={`${s.pill} ${s.pillAmber}`}>3 to review</span>
           </div>
         </div>
       </div>

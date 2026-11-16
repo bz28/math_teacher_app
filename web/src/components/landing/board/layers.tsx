@@ -126,7 +126,7 @@ export function Layers() {
         </div>
         <div className={`${s.lay} ${s.hlRed}`} data-on={on(2)} />
         <div className={`${s.lay} ${s.noteRed}`} data-on={on(2)}>
-          <b>&minus;1 &middot; From your rule</b>
+          <b>&minus;1 &middot; Class rule</b>
           Show the distribution: the 2 multiplies both terms.
         </div>
         <div className={`${s.lay} ${s.rulesCard}`} data-on={on(2)}>
