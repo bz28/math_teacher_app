@@ -89,7 +89,7 @@ html:has(.home) {
     radial-gradient(ellipse at 85% 75%, rgba(255, 255, 255, 0.025), transparent 50%);
 }
 .board :focus-visible,
-.foot :focus-visible {
+.home.foot :focus-visible {
   outline-color: var(--chalk-yellow);
 }
 .h2 {

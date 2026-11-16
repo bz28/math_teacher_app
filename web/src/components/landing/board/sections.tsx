@@ -38,8 +38,6 @@ function Band({
   );
 }
 
-
-
 export function Hero() {
   return (
     <section aria-labelledby="h-hero" className={`${s.hero} ${s.band}`}>

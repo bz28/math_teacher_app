@@ -27,7 +27,7 @@ const ITEMS: ComplianceItem[] = [
   {
     label: "NDPA standard template",
     body: "We sign the National Data Privacy Agreement template most US districts already use. Send us your filled version and we'll countersign.",
-    implication: "Most districts sign it as is.",
+    implication: "Use the template you already have.",
     link: { label: "Request the DPA", href: mailto("DPA request") },
   },
   {
