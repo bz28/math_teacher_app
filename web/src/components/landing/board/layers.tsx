@@ -36,6 +36,8 @@ const STEPS = [
 
 export function Layers() {
   const [step, setStep] = useState(4);
+  // Only a step the visitor picked is announced; the automatic build is silent.
+  const [chosen, setChosen] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
   const timers = useRef<number[]>([]);
   const observer = useRef<IntersectionObserver | null>(null);
@@ -83,6 +85,7 @@ export function Layers() {
               onClick={() => {
                 stopBuild();
                 setStep(i + 1);
+                setChosen(true);
               }}
             >
               <span className={s.stepN}>{i + 1}</span>
@@ -142,7 +145,7 @@ export function Layers() {
         </div>
       </div>
       <p className="sr-only" aria-live="polite">
-        {`Layer ${step} of 4: ${STEPS[step - 1].said}`}
+        {chosen ? `Layer ${step} of 4: ${STEPS[step - 1].said}` : ""}
       </p>
     </div>
   );

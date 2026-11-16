@@ -177,7 +177,7 @@
   margin-bottom: 4px;
 }
 .ask small {
-  color: color-mix(in srgb, var(--chalk-yellow) 80%, var(--board));
+  color: var(--chalk-yellow);
 }
 .reply small {
   color: var(--chalk-dim);
@@ -296,9 +296,28 @@
   padding: 0 20px;
   font-size: 16px;
 }
-@media (max-width: 860px) {
-  .navLinks,
+.navRight a {
+  white-space: nowrap;
+}
+@media (max-width: 400px) {
+  .logo {
+    font-size: 18px;
+    gap: 6px;
+  }
+  .navRight {
+    gap: 10px;
+  }
+  .navRight .btn {
+    min-height: 40px;
+    padding: 0 12px;
+    font-size: 14px;
+  }
   .signin {
+    font-size: 14px;
+  }
+}
+@media (max-width: 860px) {
+  .navLinks {
     display: none;
   }
   .nav .inner {
@@ -867,8 +886,9 @@
   background: #e8a0a0;
 }
 .row {
+  white-space: nowrap;
   font-family: var(--f-hand);
-  font-size: clamp(21px, 2.3vw, 26px);
+  font-size: clamp(18px, 2.3vw, 26px);
   line-height: 44px;
   color: #2c394b;
   position: relative;
@@ -930,7 +950,7 @@
   font-family: var(--f-body);
   font-size: 12px;
   font-weight: 700;
-  color: color-mix(in srgb, var(--chalk-yellow) 80%, var(--board));
+  color: var(--chalk-yellow);
 }
 .noteYellow span {
   display: block;
@@ -1184,7 +1204,7 @@
 .meter i {
   display: block;
   height: 100%;
-  width: 25%;
+  width: 67%;
   background: var(--red);
 }
 @media (max-width: 920px) {

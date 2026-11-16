@@ -373,19 +373,19 @@ export function Monday() {
           Monday&rsquo;s homework, sorted by who needs you.
         </h2>
         <p className={s.lead}>
-          Open Veradic to a short list: who couldn&rsquo;t explain their work, which idea the class missed, and
-          what&rsquo;s ready for your approval.
+          Open Veradic to a short list: who needs you today, what&rsquo;s left to grade, and which problems most of
+          the class got wrong.
         </p>
         <ul className={s.todo} aria-label="Example to-do list">
           <li>Talk to Sam before 1st period</li>
-          <li>Reteach distributing (6 of 24 missed it)</li>
-          <li>Approve 21 drafts</li>
+          <li>Reteach problem 5 (14 of 21 missed it)</li>
+          <li>Review the last 3 drafts</li>
         </ul>
       </div>
       <div
         className={s.app}
         role="img"
-        aria-label="Example teacher view for Algebra II period 3: three students who need attention first, the idea the class missed most, and 21 grades ready to approve."
+        aria-label="Example teacher view for Algebra II period 3: three students who need attention first, the problem most of the class missed, and 3 grades left to review."
       >
         <div className={s.appBar}>
           <b>Algebra II &middot; Period 3 &middot; HW 5.2</b>
@@ -403,9 +403,9 @@ export function Monday() {
           <div className={s.appRow}>
             <div>
               <b>Devon K.</b>
-              <span>Distributed to the first term only, 3 of 5 times</span>
+              <span>Turned it in late, not graded yet</span>
             </div>
-            <span className={`${s.pill} ${s.pillAmber}`}>Pointed to practice</span>
+            <span className={`${s.pill} ${s.pillAmber}`}>Grade</span>
           </div>
           <div className={s.appRow}>
             <div>
@@ -418,7 +418,7 @@ export function Monday() {
         <div className={`${s.appSec} ${s.appClass}`}>
           <h4>What the class missed</h4>
           <div>
-            <b>Distributing a negative</b> &middot; 6 of 24 students
+            <b>Problem 5, distributing</b> &middot; 14 of 21 graded
           </div>
           <div className={s.meter}>
             <i />
@@ -427,7 +427,7 @@ export function Monday() {
         <div className={s.appSec}>
           <div className={s.appRow}>
             <div>
-              <b>21 grades drafted</b>
+              <b>3 grades drafted</b>
               <span>Each point explained. Nothing posted yet.</span>
             </div>
             <span className={`${s.pill} ${s.pillGreen}`}>Review &amp; approve</span>
