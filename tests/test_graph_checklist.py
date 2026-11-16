@@ -18,7 +18,7 @@ from sqlalchemy import select
 
 from api.core import drawing_check, graph_checklist
 from api.core.auth import create_access_token, hash_password
-from api.core.checklist_points import fit_checklist
+from api.core.checklist_points import MAX_CHECKLIST_ITEMS, fit_checklist
 from api.core.drawing_check import ChecklistItem, WrittenChecklist, values_not_given, write_graph_checklist
 from api.core.graph_checklist import drain_checklist_tasks, needs_checklist, source_of, to_stored
 from api.database import get_session_factory
@@ -490,7 +490,7 @@ async def test_fit_unlinks_a_missing_rule() -> None:
 
 @pytest.mark.parametrize(("items", "code"), [
     ([], 422),
-    ([{"text": f"item {n}", "points": 1} for n in range(7)], 422),
+    ([{"text": f"item {n}", "points": 1} for n in range(MAX_CHECKLIST_ITEMS + 1)], 422),
     ([{"text": "   ", "points": 1}], 422),
     ([{"text": "x" * 201, "points": 1}], 422),
     ([{"text": "a", "points": 0}], 422),
@@ -554,9 +554,17 @@ async def test_writer_parses_defensively_and_holds_the_sum(monkeypatch: pytest.M
 
 
 async def test_writer_caps_the_item_count(monkeypatch: pytest.MonkeyPatch) -> None:
-    reply = Reply({"items": [{"text": f"item {n}", "points": 1, "rule_id": None} for n in range(9)]})
+    reply = Reply({"items": [{"text": f"item {n}", "points": 1, "rule_id": None} for n in range(13)]})
     monkeypatch.setattr(drawing_check, "call_claude_json", reply)
-    assert len((await write_graph_checklist(QUESTION, ANSWER, 20)).items) == 6
+    assert len((await write_graph_checklist(QUESTION, ANSWER, 20)).items) == MAX_CHECKLIST_ITEMS == 10
+
+
+def test_the_model_is_told_the_same_cap_as_the_code() -> None:
+    # The answer format said 6 while the code allowed more, and the model
+    # bundled a trig graph's features into 6 items (Nov 2026 graph eval).
+    schema = drawing_check.GRAPH_CHECKLIST_SCHEMA["input_schema"]["properties"]["items"]
+    assert schema["maxItems"] == MAX_CHECKLIST_ITEMS
+    assert "3 to 10 items, one feature each" in drawing_check._CHECKLIST_SYSTEM
 
 
 async def test_writer_skips_a_problem_with_no_room_for_a_graph_part(monkeypatch: pytest.MonkeyPatch) -> None:

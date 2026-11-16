@@ -1311,6 +1311,45 @@ def _build_breakdown(
     return breakdown, ai_score
 
 
+def _drawing_state(check: Any) -> str:
+    """What the drawing check made of a problem's drawing, for its note:
+    "found", "none" (both looks agree there is none, or the problem was
+    left blank), or "unchecked" (the check failed or couldn't find it)."""
+    if check is None or getattr(check, "note", None) == "not_drawn":
+        return "none"
+    if getattr(check, "note", None) == "failed" or getattr(check, "in_view", None) == "not_found":
+        return "unchecked"
+    return "found"
+
+
+async def _rewrite_graph_notes(
+    combined: list[dict[str, Any]],
+    by_bid: dict[str, dict[str, Any]],
+    problems: list[dict[str, Any]],
+    checks: dict[str, Any],
+    user_id: str | None,
+    submission_id: uuid.UUID,
+) -> None:
+    """Each graph problem's student note, from both its parts, onto its
+    breakdown entry (`by_bid`). `combined` carries the drawing's item
+    results; a problem at full marks keeps the grader's note."""
+    from api.core.graph_feedback import needs_note, write_graph_note
+
+    by_id = {p["bank_item_id"]: p for p in problems}
+    todo = [c for c in combined if c.get("graph") and c["problem_id"] in by_bid and needs_note(c)]
+
+    async def one(c: dict[str, Any]) -> None:
+        p = by_id.get(c["problem_id"]) or {}
+        check = checks.get(c["problem_id"])
+        by_bid[c["problem_id"]]["feedback"] = await write_graph_note(
+            p.get("question") or "", p.get("final_answer") or "", c, c.get("feedback"),
+            drawing=_drawing_state(check),
+            user_id=user_id, submission_id=str(submission_id),
+        )
+
+    await asyncio.gather(*(one(c) for c in todo))
+
+
 async def _graph_parts(
     db: AsyncSession, problems: list[dict[str, Any]], rules: list[dict[str, Any]],
 ) -> dict[str, Any]:
@@ -1432,6 +1471,10 @@ async def run_ai_grading_for_submission(
         if (stored_checks.get(pid) or {}).get("checklist_key") == part.key
         and not stored_checks[pid].get("note")
         and stored_checks[pid].get("in_view") != "not_found"
+        # A check from before a "no" needed two looks is looked at again
+        # when it has one: that "no" may rest on a single look.
+        and (stored_checks[pid].get("confirmed_noes")
+             or not any(i.get("verdict") == "no" for i in stored_checks[pid].get("items") or []))
     }
     to_check = [p for p in problems if p["bank_item_id"] in parts.keys() - checks.keys()]
     # The photos are read only when a drawing is to be checked — fetched
@@ -1498,12 +1541,17 @@ async def run_ai_grading_for_submission(
         # The AI's call on a graph problem is the whole problem's grade,
         # not the grader's grade of the work alone (kept as work_percent).
         by_bid = {e["problem_id"]: e for e in breakdown}
+        # The grader wrote its note before the drawing was marked; the
+        # student reads one written from both parts (`graph_feedback`).
+        await _rewrite_graph_notes(combined, by_bid, problems, checks, user_id, submission_id)
         for g in grades:
             e = by_bid.get(pos_to_bid.get(g.get("problem_position")) or "")
             if e and e["problem_id"] in parts:
                 g["work_percent"] = g.get("percent")
+                g["work_feedback"] = g.get("student_feedback")
                 g.update(percent=e["percent"], score_status=e["score_status"],
-                         deductions=[dict(d) for d in e.get("deductions") or []])
+                         deductions=[dict(d) for d in e.get("deductions") or []],
+                         student_feedback=e.get("feedback"))
     # The per-problem percents ai_score weighs, so a later points change
     # can re-weigh the AI's call without regrading (homework_points).
     result["problem_percents"] = {e["problem_id"]: e["percent"] for e in breakdown}

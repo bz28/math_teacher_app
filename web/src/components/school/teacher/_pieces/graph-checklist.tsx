@@ -5,7 +5,7 @@ import { ApiError, teacher, type GraphChecklistItem, type HomeworkGraphChecklist
 import { numberInputClass } from "@/components/school/teacher/_pieces/problem-points";
 import { splitValues } from "@/lib/checklist-values";
 
-const MAX_ITEMS = 6;
+const MAX_ITEMS = 10;
 const MAX_ITEM_CHARS = 200;
 
 const capClass =

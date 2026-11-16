@@ -8,6 +8,8 @@ markdown fencing or manual JSON parsing needed.
 import copy
 from typing import Any
 
+from api.core.checklist_points import MAX_CHECKLIST_ITEMS
+
 ToolSchema = dict[str, Any]
 
 # ---------------------------------------------------------------------------
@@ -1780,7 +1782,7 @@ GRAPH_CHECKLIST_SCHEMA: ToolSchema = {
             },
             "items": {
                 "type": "array",
-                "maxItems": 6,
+                "maxItems": MAX_CHECKLIST_ITEMS,
                 "items": {
                     "type": "object",
                     "properties": {
@@ -1918,5 +1920,23 @@ FIGURE_REDRAW_SCHEMA: ToolSchema = {
         "type": "object",
         "properties": {"figure_spec": _CONSTRUCTION_FIGURE_SCHEMA},
         "required": ["figure_spec"],
+    },
+}
+
+
+# The note a student reads under a graph problem, written after both its
+# parts are graded (`graph_feedback`).
+GRAPH_FEEDBACK_SCHEMA: ToolSchema = {
+    "name": "return_student_note",
+    "description": "The short note the student reads under this problem.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "feedback": {
+                "type": "string",
+                "description": "1 to 3 sentences to the student, agreeing with the score.",
+            },
+        },
+        "required": ["feedback"],
     },
 }

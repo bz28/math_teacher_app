@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from api.core.drawing_check import ChecklistItem
 
-MAX_CHECKLIST_ITEMS = 6
+MAX_CHECKLIST_ITEMS = 10
 MAX_CHECKLIST_ITEM_CHARS = 200
 
 

@@ -6635,7 +6635,7 @@
             "items": {
               "$ref": "#/components/schemas/GraphChecklistItemIn"
             },
-            "maxItems": 6,
+            "maxItems": 10,
             "minItems": 1,
             "title": "Items",
             "type": "array"

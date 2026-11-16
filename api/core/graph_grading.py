@@ -49,6 +49,7 @@ _CHECK_CONCURRENCY = 3
 _NOT_FOUND = "Couldn't find the drawing."
 _FAILED = "Couldn't check the graph."
 _NOT_DRAWN = "No drawing for this problem."
+_UNCONFIRMED = "A second look didn't confirm this; the teacher decides."
 _SIDEWAYS = "The photo looks sideways, so the axes may have been misread."
 _OTHER_DRAWING = "Another drawing for this problem"
 
@@ -160,6 +161,8 @@ class ProblemGraphCheck:
             "step": self.step,
             "in_view": self.in_view,
             "note": self.note,
+            # Its "no"s were each confirmed by a second look (`_confirm_noes`).
+            "confirmed_noes": True,
             "overridden": False,
             "items": [
                 {"n": r.n, "text": i.text, "points": i.points, "rule_id": i.rule_id,
@@ -189,12 +192,39 @@ def _page_number(value: Any, pages: int) -> int | None:
     return None
 
 
+def _written_only_pages(extraction: dict[str, Any], pages: int) -> set[int]:
+    """The pages holding the reader's written steps or answers and no
+    drawing of any problem."""
+    def on(entries: Any, *, drawings: bool = False) -> set[int]:
+        return {
+            n for e in entries or [] if isinstance(e, dict)
+            and (not drawings or e.get("present", True) is not False)
+            and (n := _page_number(e.get("page_index"), pages))
+        }
+
+    written = on(extraction.get("steps")) | on(extraction.get("final_answers"))
+    return written - on(extraction.get("visual_work"), drawings=True)
+
+
 def uploads_look_sideways(pages: list[list[Image]]) -> bool:
     """Any page of the upload lying on its side. A student photographs
     every page the same way, and the drawing page itself is often too
     sparse for `page_looks_sideways` to read, so one sideways page counts
     for the whole upload."""
     return any(page_looks_sideways(data) for imgs in pages for data, _ in imgs)
+
+
+def _confirm_noes(first: list[ItemResult], second: DrawingCheck | None) -> list[ItemResult]:
+    """The first look's results with each "no" kept only when the second
+    look also says no; otherwise it is unclear, for the teacher. A second
+    look that failed or didn't find the drawing confirms nothing. "yes" and
+    "unclear" stand: neither takes points."""
+    again = {r.n: r.verdict for r in second.items} if second and second.in_view != "not_found" else {}
+    return [
+        ItemResult(r.n, "unclear", f"{r.seen} {_UNCONFIRMED}".strip())
+        if r.verdict == "no" and again.get(r.n) != "no" else r
+        for r in first
+    ]
 
 
 def _doubt_noes(results: list[ItemResult], sideways: bool) -> list[ItemResult]:
@@ -262,8 +292,11 @@ async def check_problem_drawing(
     at whole pages, the ones the reader tied to this problem first, until
     one shows the drawing. When none does, every item is unclear, except
     when the reader also recorded no drawing: two looks agree it isn't
-    there, so every item is "no". A check that fails is every item
-    unclear, for the teacher. On a `sideways` upload (`uploads_look_sideways`)
+    there, so every item is "no". That search then skips the pages holding
+    only other problems' written work (`_written_only_pages`). A check
+    that fails is every item unclear, for the teacher. A look's "no"
+    stands only when a second look at the same image says no too
+    (`_confirm_noes`). On a `sideways` upload (`uploads_look_sideways`)
     every "no" the check returns is unclear (`_doubt_noes`)."""
     visuals = [
         v for v in extraction.get("visual_work") or [] if isinstance(v, dict) and v.get("problem_position") == position
@@ -284,8 +317,9 @@ async def check_problem_drawing(
     )
     if not drawn and not steps and not finals and not unattributed:
         return None
+    reader_saw_none = not drawn and not unattributed and any(v.get("present") is False for v in visuals)
 
-    async def look(data: str, media_type: str, bbox: dict[str, Any] | None) -> DrawingCheck:
+    async def one_look(data: str, media_type: str, bbox: dict[str, Any] | None) -> DrawingCheck:
         return await check_drawing(
             data,
             media_type,
@@ -295,6 +329,21 @@ async def check_problem_drawing(
             user_id=user_id,
             submission_id=submission_id,
         )
+
+    async def look(data: str, media_type: str, bbox: dict[str, Any] | None) -> DrawingCheck:
+        # A "no" takes points, and on a borderline sketch one look isn't
+        # steady: the same crop came back yes, unclear and no on three runs
+        # (Nov 2026 graph eval). So a "no" stands only when a second look
+        # says no too (`_confirm_noes`); a look with no "no" stands alone.
+        first = await one_look(data, media_type, bbox)
+        if first.in_view == "not_found" or not any(r.verdict == "no" for r in first.items):
+            return first
+        try:
+            second: DrawingCheck | None = await one_look(data, media_type, bbox)
+        except Exception:  # noqa: BLE001 — an unconfirmed no is the teacher's call
+            logger.exception("graph check second look failed submission=%s problem=%s", submission_id, position)
+            second = None
+        return DrawingCheck(first.step, first.in_view, _confirm_noes(first.items, second))
 
     # Every drawing the reader located is judged: a problem can have more
     # than one (a guide curve, then the graph asked for), and the first
@@ -340,6 +389,14 @@ async def check_problem_drawing(
             if n and n not in located_pages
         ]
         order = hinted + [n for n in range(1, len(pages) + 1) if n not in hinted and n not in located_pages]
+        if reader_saw_none and hinted:
+            # The reader recorded no drawing for this problem. The second
+            # look, which a zero needs, skips only the pages that hold
+            # nothing but other problems' written work: a page with any
+            # drawing on it, or nothing the reader tied to a problem (a
+            # separate sheet of graph paper), is still searched (each
+            # search look is a whole page on the vision model).
+            order = [n for n in order if n in hinted or n not in _written_only_pages(extraction, len(pages))]
         looks = [img for n in order for img in pages[n - 1]][: max(_MAX_PAGE_LOOKS - misses, 0)]
         for data, media_type in looks:
             check = await look(data, media_type, None)

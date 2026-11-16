@@ -82,6 +82,7 @@ class LLMMode:
     CLASSIFY_REQUIRES_DRAWING = "classify_requires_drawing"
     GRAPH_CHECKLIST = "graph_checklist"
     DRAWING_CHECK = "drawing_check"
+    GRAPH_FEEDBACK = "graph_feedback"
 
 _client: anthropic.AsyncAnthropic | None = None
 

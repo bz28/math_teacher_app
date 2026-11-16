@@ -149,3 +149,13 @@ async def test_a_malformed_answer_is_asked_once_more(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(drawing_check, "call_claude_vision", flaky)
     r = await check_drawing(_page(), "image/jpeg", BOX, ITEMS, problem_position=4)
     assert calls == [1, 2] and [i.verdict for i in r.items] == ["yes", "yes"]
+
+
+def test_one_tick_off_is_unclear_not_no() -> None:
+    # B-highest #4 (Nov 2026): a y-intercept one hand-drawn tick off was
+    # marked no and cost the student; it is the teacher's call.
+    from api.core.drawing_check import _CHECK_SYSTEM
+
+    text = " ".join(_CHECK_SYSTEM.split())
+    assert "about one of the student's own ticks from where it should be" in text
+    assert "never mark them no" in text
