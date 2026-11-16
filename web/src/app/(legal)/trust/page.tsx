@@ -25,7 +25,7 @@ const sections = [
     title: "How Veradic Handles Student Data",
     content: `
       <p>Veradic acts as a school official under the direction of each contracting district. Student work, grades, and related records remain under the district's control and are used solely to provide the contracted service.</p>
-      <p><strong>Student data is never used to train AI models</strong>, ours or anyone else's. This applies to student work, conversations with the AI tutor, integrity-review transcripts, grades, and any other student-generated content.</p>
+      <p><strong>Student data is never used to train AI models</strong>, ours or anyone else's. This applies to student work, conversations with the AI tutor, understanding-check conversations, grades, and any other student-generated content.</p>
       <p>Third-party AI service providers used by Veradic to generate tutoring responses receive only the content necessary to do so. They do not receive student identity.</p>
       <p>Veradic does not sell personal information to third parties. We do not use student data for advertising.</p>
     `,

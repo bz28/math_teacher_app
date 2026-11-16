@@ -80,7 +80,7 @@ const sections = [
       <ul>
         <li>Does not collect government identification numbers, financial account information beyond what payment processors handle on Veradic's behalf, or sensitive demographic information beyond grade level</li>
         <li>Does not sell personal information to third parties</li>
-        <li>Does not use student work, conversations with the AI tutor, integrity-review transcripts, or grades to train AI models — Veradic's or anyone else's</li>
+        <li>Does not use student work, conversations with the AI tutor, understanding-check conversations, or grades to train AI models — Veradic's or anyone else's</li>
         <li>Does not share teacher activity data with school districts or third parties beyond what is necessary to provide contracted school-deployment features</li>
         <li>Does not use behavioral profiling for advertising or marketing</li>
       </ul>
