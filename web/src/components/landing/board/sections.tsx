@@ -413,7 +413,7 @@ export function Monday() {
               <b>Ana L.</b>
               <span>Hasn&rsquo;t submitted yet</span>
             </div>
-            <span className={`${s.pill} ${s.pillAmber}`}>Remind</span>
+            <span className={`${s.pill} ${s.pillAmber}`}>Missing</span>
           </div>
         </div>
         <div className={`${s.appSec} ${s.appClass}`}>
@@ -454,7 +454,7 @@ export function Practice() {
         <div
           className={s.pcard}
           role="img"
-          aria-label="Example: an ungraded practice problem. The student picked a wrong answer and can try again or walk through it a step at a time."
+          aria-label="Example: an ungraded practice problem. The student picked a wrong answer and gets one more try. After a second miss, Veradic shows the answer and can walk through it step by step."
         >
           <div className={s.pmeta}>
             <span>A new version of problem 6</span>
@@ -467,11 +467,7 @@ export function Practice() {
             <span>x = 3</span>
             <span>x = 17/5</span>
           </div>
-          <p className={s.nudge}>Not quite. Try again, or walk through it a step at a time.</p>
-          <div className={s.pbtns}>
-            <span>Walk me through it</span>
-            <span className={s.primary}>Try again</span>
-          </div>
+          <p className={s.nudge}>Not quite, try again! Miss it twice and Veradic shows the answer, then walks through it with you.</p>
         </div>
         <div
           className={s.pcard}
@@ -564,7 +560,7 @@ export function Rules() {
         <ul className={s.badges} aria-label="Compliance">
           <li>FERPA</li>
           <li>COPPA</li>
-          <li>Signed NDPA</li>
+          <li>We sign your NDPA</li>
           <li>Hosted in the U.S.</li>
         </ul>
         <p style={{ marginTop: 28 }}>
