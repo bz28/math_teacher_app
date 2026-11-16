@@ -59,7 +59,6 @@ export function BoardNav() {
           <a href="#learn">How students learn</a>
           <a href="#how">How it works</a>
           <a href="#rules">Responsible AI</a>
-          <Link href="/for-districts">For schools &amp; districts</Link>
         </nav>
         <div className={s.navRight}>
           <Link className={s.signin} href="/login">
