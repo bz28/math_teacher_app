@@ -1,13 +1,12 @@
 import type { Metadata } from "next";
 import { Navbar } from "@/components/landing/navbar";
 import { Footer } from "@/components/landing/footer";
-import { InkCtaBand } from "@/components/site/ink-cta-band";
+import { CloseBand } from "@/components/site/close-band";
 import { DistrictsHero } from "@/components/landing/districts/districts-hero";
 import { ComplianceGrid } from "@/components/landing/districts/compliance-grid";
 import { FederalComplianceMatrix } from "@/components/landing/districts/federal-compliance-matrix";
 import { DataModelSafety } from "@/components/landing/districts/data-model-safety";
 import { DeploymentTimeline } from "@/components/landing/districts/deployment-timeline";
-import { PilotDataStrip } from "@/components/landing/districts/pilot-data-strip";
 import { PaperworkBlock } from "@/components/landing/districts/paperwork-block";
 import { DistrictFaq } from "@/components/landing/districts/district-faq";
 import { districtFaqs, faqJsonLd, SITE_URL } from "@/lib/seo";
@@ -47,7 +46,7 @@ export const metadata: Metadata = {
  */
 export default function ForDistrictsPage() {
   return (
-    <div className="site graph-paper flex min-h-full flex-1 flex-col">
+    <div className="site site-page flex min-h-full flex-1 flex-col">
       {/* FAQ JSON-LD scoped to the district FAQ set actually rendered
           on this page — different from the homepage's set, so each
           page exposes its own structured data. */}
@@ -64,10 +63,9 @@ export default function ForDistrictsPage() {
         <FederalComplianceMatrix />
         <DataModelSafety />
         <DeploymentTimeline />
-        <PilotDataStrip />
         <PaperworkBlock />
         <DistrictFaq />
-        <InkCtaBand
+        <CloseBand
           headline="Send us your district’s paperwork. We’ve seen it."
           subhead="We’ll read it and reply within 5 business days. Most districts get a fully countersigned package in under two weeks."
           primaryLabel="Email support@veradicai.com"

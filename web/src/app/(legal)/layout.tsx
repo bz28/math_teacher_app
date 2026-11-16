@@ -8,7 +8,7 @@ export default function LegalLayout({
 }) {
   return (
     // The text pages sit on the notebook's graph paper, like the homepage.
-    <div className="site graph-paper flex min-h-full flex-1 flex-col">
+    <div className="site site-page flex min-h-full flex-1 flex-col">
       {/* WCAG 2.4.1 — keyboard users can bypass the navbar straight to
           content. Visually hidden until focused. */}
       <a

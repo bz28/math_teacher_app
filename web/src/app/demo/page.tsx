@@ -76,10 +76,11 @@ export default function DemoPage() {
   }
 
   return (
-    <div className="site graph-paper flex min-h-full flex-1 flex-col">
+    <div className="site site-page flex min-h-full flex-1 flex-col">
       <Navbar />
       <main className="flex-1">
-        <section className="mx-auto flex max-w-[1200px] flex-wrap items-start gap-x-20 gap-y-14 px-4 pb-20 pt-12 md:px-8 md:pb-28 md:pt-14">
+        <section className="bg-sun">
+      <div className="mx-auto flex max-w-[1200px] flex-wrap items-start gap-x-20 gap-y-14 px-4 pb-20 pt-12 md:px-8 md:pb-28 md:pt-14">
           <div className="min-w-0 flex-[1_1_440px]">
             <h1 className="site-h1">See Veradic on your own chapter.</h1>
             <p className="mt-6 max-w-[30em] text-lg leading-[1.55] text-ink-soft md:text-xl">
@@ -196,7 +197,8 @@ export default function DemoPage() {
               </form>
             )}
           </div>
-        </section>
+        </div>
+    </section>
       </main>
       <Footer />
     </div>

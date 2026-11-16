@@ -1,15 +1,16 @@
 import type { ReactNode } from "react";
 import { subjectBreadcrumbJsonLd, subjectEducationalProgramJsonLd } from "@/lib/seo";
 import { ButtonLink } from "@/components/site/button-link";
-import { InkCtaBand } from "@/components/site/ink-cta-band";
+import { CloseBand } from "@/components/site/close-band";
 
 /**
- * A subject page (math, physics, chemistry) in the notebook design.
+ * A subject page (math, physics, chemistry) in the At the Board design.
  *
  * Hero: the argument on the left; on the right, a student's handwritten
  * homework with one typical mistake circled in red pen, and Veradic's
- * green question about that step. Then the four things that happen to one
- * homework problem, the courses, a short FAQ, and the dark ask.
+ * question about that step, chalked on a small board. Then the four things
+ * that happen to one homework problem, the courses, a short FAQ, and the
+ * yellow ask.
  *
  * Every claim here is the same claim the homepage makes (understanding
  * check, grading by the class's rules, teacher approval, ungraded practice
@@ -69,7 +70,7 @@ const STEPS = [
   },
   {
     title: "Veradic asks about their steps",
-    body: "A short check on their own work. Right answers they can’t explain are flagged for you to look at.",
+    body: "A short conversation about their own work. If they’re stuck, it teaches the step, and you can read how it went.",
   },
   {
     title: "You approve the grade",
@@ -99,7 +100,7 @@ export function SubjectPage(props: SubjectPageProps) {
       <OneProblem />
       <Courses name={name} courses={props.courses} note={props.coursesNote} />
       <Faq name={name} faqs={props.faqs} />
-      <InkCtaBand
+      <CloseBand
         headline="Bring one class. Bring your own chapter."
         subhead="On a 20-minute call we run Veradic on a chapter you’re teaching."
         primaryLabel="Book a 20-minute demo"
@@ -111,13 +112,16 @@ export function SubjectPage(props: SubjectPageProps) {
 
 function Hero({ kicker, headline, intro, sheet, question }: SubjectPageProps) {
   return (
-    <section className="mx-auto flex max-w-[1200px] flex-wrap items-center gap-x-[72px] gap-y-14 px-4 pb-20 pt-12 md:px-8 md:pb-[104px] md:pt-[64px]">
+    <section className="bg-sun">
+      <div className="mx-auto flex max-w-[1200px] flex-wrap items-center gap-x-[72px] gap-y-14 px-4 pb-20 pt-12 md:px-8 md:pb-[104px] md:pt-[64px]">
       <div className="min-w-0 flex-[1.1_1_460px]">
-        <p className="m-0 mb-[18px] text-base font-bold text-veradic">{kicker}</p>
+        <p className="m-0 mb-[18px] text-base font-bold text-ink">{kicker}</p>
         <h1 className="site-h1">{headline}</h1>
-        <p className="mt-7 max-w-[32em] text-lg leading-[1.55] text-ink-soft md:text-xl">{intro}</p>
+        <p className="mt-7 max-w-[32em] text-lg leading-[1.55] text-ink/85 md:text-xl">{intro}</p>
         <div className="mt-9 flex flex-wrap items-center gap-3">
-          <ButtonLink href="/demo">Book a 20-minute demo</ButtonLink>
+          <ButtonLink href="/demo" variant="ink">
+            Book a 20-minute demo
+          </ButtonLink>
           <ButtonLink href="#one-problem" variant="underline">
             What happens to one problem
           </ButtonLink>
@@ -132,6 +136,7 @@ function Hero({ kicker, headline, intro, sheet, question }: SubjectPageProps) {
           <VeradicNote question={question} line={sheet.circled + 1} />
         </div>
       </div>
+    </div>
     </section>
   );
 }
@@ -172,10 +177,10 @@ function VeradicNote({ question, line }: { question: string; line: number }) {
   return (
     <aside
       aria-label="Veradic’s question to the student"
-      className="on-dark relative ml-auto mt-[-56px] w-[270px] max-w-full rounded-[10px] bg-veradic px-[18px] py-4 text-[#F2F7F4] shadow-[0_18px_40px_-18px_rgba(14,82,56,0.7)] sm:absolute sm:-bottom-[40px] sm:right-0 sm:mt-0"
+      className="on-dark relative ml-auto mt-[-56px] w-[280px] max-w-full rounded-[10px] border-[6px] border-[#8C6A44] bg-board px-[18px] py-4 text-chalk shadow-[0_18px_40px_-18px_rgba(10,59,44,0.7)] sm:absolute sm:-bottom-[40px] sm:right-0 sm:mt-0"
     >
-      <p className="m-0 text-[13px] font-bold text-veradic-tint">Veradic, on line {line}</p>
-      <p className="m-0 mt-1.5 text-[15.5px] leading-[1.45]">{question}</p>
+      <p className="m-0 text-[13px] font-bold text-chalk-yellow">Veradic asked, about line {line}</p>
+      <p className="m-0 mt-1.5 font-chalk text-[17px] leading-[1.45] text-chalk-yellow">{question}</p>
     </aside>
   );
 }

@@ -8,7 +8,7 @@ export default function SubjectsLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="site graph-paper flex min-h-full flex-1 flex-col">
+    <div className="site site-page flex min-h-full flex-1 flex-col">
       <Navbar />
       <main className="flex-1">{children}</main>
       <Footer />

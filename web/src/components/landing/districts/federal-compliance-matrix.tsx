@@ -105,7 +105,8 @@ const ROWS: ComplianceRow[] = [
  */
 export function FederalComplianceMatrix() {
   return (
-    <section id="federal-compliance" className="mx-auto max-w-[1200px] scroll-mt-20 px-4 py-20 md:scroll-mt-24 md:px-8 md:py-24">
+    <section id="federal-compliance" className="scroll-mt-20 bg-paper-2 md:scroll-mt-24">
+      <div className="mx-auto max-w-[1200px] px-4 py-20 md:px-8 md:py-24">
       <h2 className="site-h2 max-w-[760px]">The checklist your procurement team runs.</h2>
       <p className="m-0 mt-5 max-w-[36em] text-lg leading-relaxed text-ink-soft">
         Every federal requirement Veradic is asked about in district
@@ -171,6 +172,7 @@ export function FederalComplianceMatrix() {
         </a>
         .
       </p>
+      </div>
     </section>
   );
 }

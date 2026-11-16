@@ -36,7 +36,7 @@ export function DeploymentTimeline() {
       <div className="min-w-0 flex-[1_1_360px]">
         <h2 className="site-h2">Live with students in a week.</h2>
         <p className="m-0 mt-5 text-lg leading-[1.6] text-ink-soft md:text-[19px]">
-          No SSO project. No PII spreadsheet. No IT ticket.
+          Most schools are running within a week. Students join with a class code, so there&rsquo;s nothing for IT to set up.
         </p>
       </div>
       <ol className="m-0 flex min-w-0 flex-[1_1_520px] list-none flex-col gap-6 p-0">
