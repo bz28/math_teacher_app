@@ -1,7 +1,7 @@
 import { createOgImage, ogSize } from "@/lib/og-image";
 import { SITE_URL } from "@/lib/seo";
 
-export const alt = "Veradic AI: Physics for classrooms. Handwritten homework read step by step, graded by your rules, approved by you.";
+export const alt = "Veradic AI: Physics for classrooms. Students explain their own steps; grades are drafted by your rules and approved by you. Shown on a chalkboard: Veradic asks what units 72 km/h needs to be in, and the student converts it to 20 m/s.";
 export const size = ogSize;
 export const contentType = "image/png";
 

@@ -15,7 +15,7 @@ const VARIANTS: Record<Variant, string> = {
   ink: `${BASE} bg-ink px-6 py-4 text-base text-chalk-yellow hover:bg-pencil`,
   // A second action that reads as a link: text with a heavy underline.
   underline:
-    "inline-flex items-center border-b-2 border-ink px-2 py-4 text-base font-bold text-ink transition-colors hover:border-veradic hover:text-veradic",
+    "inline-flex items-center border-b-2 border-ink px-2 py-4 text-base font-bold text-ink transition-colors hover:border-veradic",
 };
 
 export function ButtonLink({
