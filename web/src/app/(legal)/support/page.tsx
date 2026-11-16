@@ -50,7 +50,7 @@ export default function SupportPage() {
               /for-districts (procurement-specific). Pointing
               support traffic at the demo page since that's the
               broader audience match. */}
-          <Link href="/demo#faq" className={`mt-3 inline-block text-[17px] ${LINK}`}>
+          <Link href="/#faq" className={`mt-3 inline-block text-[17px] ${LINK}`}>
             View FAQ
           </Link>
         </section>

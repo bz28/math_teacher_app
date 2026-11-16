@@ -18,7 +18,7 @@ const TOPICS: Topic[] = [
     bullets: [
       "Veradic runs on top of Anthropic’s Claude with a classroom-safety system prompt layered on. The model is instructed not to do students’ homework for them, to refuse off-topic conversations, and to decline requests that would help a student cheat.",
       "In school mode, students only work on what their teacher assigned: they photograph their own homework for grading, and practice on problems their teacher approved. They can ask about a step of a practice problem, but they can’t chat freely with the AI.",
-      "Students only talk to the AI about their own assigned problems. There’s no general-purpose chat for them to misuse.",
+      "In the school app, students only talk to the AI about their own assigned problems. There’s no general-purpose chat for them to misuse.",
     ],
   },
 ];

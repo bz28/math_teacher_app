@@ -618,7 +618,7 @@ const FAQ: [string, string][] = [
 
 export function Faq() {
   return (
-    <Band tone="paper" className={s.faq} labelledBy="h-faq">
+    <Band tone="paper" className={s.faq} id="faq" labelledBy="h-faq">
       <h2 className={s.h2} id="h-faq" style={{ fontSize: "clamp(30px, 3.6vw, 44px)" }}>
         Questions schools ask
       </h2>
