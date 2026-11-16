@@ -9,23 +9,27 @@ import s from "./home.module.css";
  *
  * Rests on the finished page (all four layers), so the server render and a
  * reduced-motion visitor see everything. When it first scrolls into view it
- * builds once, layer by layer; the steps are real tabs after that.
+ * builds once, layer by layer; a click on any step stops the build there.
  */
 const STEPS = [
   {
     title: "The student's own work",
+    said: "Jordan's handwritten homework, before Veradic adds anything.",
     body: "A phone photo of real handwritten homework. Veradic reads every line of the work, not just the final answer.",
   },
   {
     title: "Graded by your rules",
+    said: "A point taken off under Ms. Rivera's rule, and a draft grade of 8 out of 10 that Jordan can't see yet.",
     body: "Write your grading rules once for the class. Every point Veradic takes off says why, and whether it came from your rule or its own judgment.",
   },
   {
     title: "The understanding check",
+    said: "Veradic asked Jordan how he got from 22 to 15. He answered: took 7 off both sides.",
     body: "A short conversation about the student's own steps. You can read every word of it.",
   },
   {
     title: "You approve",
+    said: "Ms. Rivera approved the grade, with every layer above still visible.",
     body: "Nothing reaches a student until you approve it. Change any point in one click.",
   },
 ];
@@ -33,6 +37,11 @@ const STEPS = [
 export function Layers() {
   const [step, setStep] = useState(4);
   const sheetRef = useRef<HTMLDivElement>(null);
+  const timers = useRef<number[]>([]);
+  const stopBuild = () => {
+    timers.current.forEach(clearTimeout);
+    timers.current = [];
+  };
 
   useEffect(() => {
     const el = sheetRef.current;
@@ -40,20 +49,19 @@ export function Layers() {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     if (el.getBoundingClientRect().top < window.innerHeight) return;
 
-    const timers: number[] = [];
     const io = new IntersectionObserver(
       (entries) => {
         if (!entries.some((e) => e.isIntersecting)) return;
         io.disconnect();
         setStep(1);
-        [2, 3, 4].forEach((n, i) => timers.push(window.setTimeout(() => setStep(n), 1500 * (i + 1))));
+        [2, 3, 4].forEach((n, i) => timers.current.push(window.setTimeout(() => setStep(n), 1500 * (i + 1))));
       },
       { threshold: 0.35 },
     );
     io.observe(el);
     return () => {
       io.disconnect();
-      timers.forEach(clearTimeout);
+      stopBuild();
     };
   }, []);
 
@@ -61,16 +69,18 @@ export function Layers() {
 
   return (
     <div className={s.layersGrid}>
-      <ul className={s.steps} role="tablist" aria-label="Layers of a graded homework">
+      <ul className={s.steps} aria-label="Layers of a graded homework">
         {STEPS.map((st, i) => (
-          <li key={st.title} role="presentation">
+          <li key={st.title}>
             <button
               type="button"
-              role="tab"
-              aria-selected={step === i + 1}
+              aria-pressed={step === i + 1}
               aria-controls="layers-sheet"
               className={s.stepBtn}
-              onClick={() => setStep(i + 1)}
+              onClick={() => {
+                stopBuild();
+                setStep(i + 1);
+              }}
             >
               <span className={s.stepN}>{i + 1}</span>
               <span>
@@ -87,7 +97,7 @@ export function Layers() {
         ref={sheetRef}
         className={s.sheet}
         role="img"
-        aria-label="Example: Jordan's homework with Veradic's layers. A point taken off under the teacher's rule, the understanding-check exchange, a draft grade of 8 out of 10, and the teacher's approval stamp."
+        aria-label={`Example, layer ${step} of 4: ${STEPS[step - 1].said}`}
       >
         <div className={`${s.row} ${s.rowSmall}`}>Jordan P. &mdash; Alg II, HW 5.2</div>
         <div className={s.row}>4)&nbsp; 3x + 7 = 22</div>
@@ -128,6 +138,9 @@ export function Layers() {
           <small>Ms. Rivera &middot; Mon 7:42 am</small>
         </div>
       </div>
+      <p className="sr-only" aria-live="polite">
+        {`Layer ${step} of 4: ${STEPS[step - 1].said}`}
+      </p>
     </div>
   );
 }

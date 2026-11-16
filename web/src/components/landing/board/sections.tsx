@@ -460,12 +460,12 @@ export function Practice() {
             <span>A new version of problem 6</span>
             <span>Ungraded</span>
           </div>
-          <p className={s.pq}>Solve the system: 2x + 3y = 12 and x &minus; y = 1</p>
+          <p className={s.pq}>Solve: 5(x &minus; 2) = 15</p>
           <div className={s.opts}>
-            <span>(3, 2)</span>
-            <span className={s.pick}>(2, 3)</span>
-            <span>(4, 3)</span>
-            <span>(6, 0)</span>
+            <span>x = 5</span>
+            <span className={s.pick}>x = 1</span>
+            <span>x = 3</span>
+            <span>x = 17/5</span>
           </div>
           <p className={s.nudge}>Not quite. Try again, or walk through it a step at a time.</p>
           <div className={s.pbtns}>

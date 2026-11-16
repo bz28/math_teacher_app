@@ -85,7 +85,8 @@
     radial-gradient(ellipse at 18% 25%, rgba(255, 255, 255, 0.07), transparent 55%),
     radial-gradient(ellipse at 85% 75%, rgba(255, 255, 255, 0.05), transparent 50%);
 }
-.board :focus-visible {
+.board :focus-visible,
+.foot :focus-visible {
   outline-color: var(--chalk-yellow);
 }
 .h2 {
@@ -826,18 +827,18 @@
   margin-top: 6px;
   line-height: 1.5;
 }
-.stepBtn[aria-selected="true"] {
+.stepBtn[aria-pressed="true"] {
   background: var(--card);
   box-shadow:
     0 1px 0 var(--line),
     0 16px 40px -28px rgba(22, 36, 29, 0.4);
 }
-.stepBtn[aria-selected="true"] .stepN {
+.stepBtn[aria-pressed="true"] .stepN {
   background: var(--green);
   border-color: var(--green);
   color: #fff;
 }
-.stepBtn[aria-selected="true"] .stepD {
+.stepBtn[aria-pressed="true"] .stepD {
   display: block;
 }
 .sheet {
