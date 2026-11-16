@@ -27,7 +27,9 @@ export function Reveal({ className, children }: { className?: string; children: 
           io.disconnect();
         }
       },
-      { threshold: 0.2 },
+      // Any visible part plays it: a block taller than the viewport could
+      // otherwise never reach a ratio threshold.
+      { rootMargin: "0px 0px -15% 0px" },
     );
     io.observe(el);
     return () => io.disconnect();

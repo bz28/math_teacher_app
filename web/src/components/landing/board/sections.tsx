@@ -546,7 +546,7 @@ export function Prep() {
 
 const RULES: [string, string][] = [
   ["The teacher approves every grade.", "AI drafts. Nothing reaches a student until you say so."],
-  ["It never gives students the answer.", "It explains why, then hands the next step back."],
+  ["It never does students’ homework for them.", "The understanding check never gives the answer. In practice it shows one only after two tries, then walks through it."],
   ["It helps students think, and never accuses them.", "It asks them to explain. You decide what their answers mean."],
   ["You review every problem before students see it.", "Each one comes with a full worked solution you can read and edit."],
   ["Student work never trains AI.", "Not ours, not anyone else’s."],

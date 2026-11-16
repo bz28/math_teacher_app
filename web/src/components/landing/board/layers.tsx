@@ -38,7 +38,9 @@ export function Layers() {
   const [step, setStep] = useState(4);
   const sheetRef = useRef<HTMLDivElement>(null);
   const timers = useRef<number[]>([]);
+  const observer = useRef<IntersectionObserver | null>(null);
   const stopBuild = () => {
+    observer.current?.disconnect();
     timers.current.forEach(clearTimeout);
     timers.current = [];
   };
@@ -58,6 +60,7 @@ export function Layers() {
       },
       { threshold: 0.35 },
     );
+    observer.current = io;
     io.observe(el);
     return () => {
       io.disconnect();
