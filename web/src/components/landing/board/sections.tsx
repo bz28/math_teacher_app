@@ -511,8 +511,8 @@ export function Prep() {
           Sunday-night prep takes five minutes.
         </h2>
         <p className={s.lead}>
-          Point Veradic at your own chapter. It writes the problems with full worked solutions, and checks every answer
-          before you see it.
+          Point Veradic at your own chapter. It writes the problems with full worked solutions, and nothing goes to
+          students until you&rsquo;ve reviewed it.
         </p>
       </div>
       <ol className={s.flow}>
@@ -526,10 +526,10 @@ export function Prep() {
           </div>
         </li>
         <li>
-          <b>Every answer re-solved</b>
-          <p>Each problem is solved a second time, independently. If the two don&rsquo;t match, you never see it.</p>
+          <b>Review every solution</b>
+          <p>Every problem comes with a full worked solution. Read it step by step, change anything, and approve only what you&rsquo;d hand out.</p>
           <div className={s.mini}>
-            <span className={s.ok}>&#10003; 10 of 10 answers confirmed</span>
+            <span className={s.ok}>10 problems with solutions, ready for your review</span>
           </div>
         </li>
         <li>
@@ -548,7 +548,7 @@ const RULES: [string, string][] = [
   ["The teacher approves every grade.", "AI drafts. Nothing reaches a student until you say so."],
   ["It never gives students the answer.", "It explains why, then hands the next step back."],
   ["It helps students think, and never accuses them.", "It asks them to explain. You decide what their answers mean."],
-  ["Every problem is checked before you see it.", "Answers are solved twice, independently."],
+  ["You review every problem before students see it.", "Each one comes with a full worked solution you can read and edit."],
   ["Student work never trains AI.", "Not ours, not anyone else’s."],
   ["Your data stays your district’s.", "Export or delete it any time."],
 ];
