@@ -21,7 +21,7 @@ export function AuthShell({
   switchHref?: string;
 }) {
   return (
-    <div className="site graph-paper flex min-h-full flex-1 flex-col">
+    <div className="site flex min-h-full flex-1 flex-col bg-paper-2">
       <header className="mx-auto flex h-16 w-full max-w-[1200px] items-center gap-3 px-4 md:h-[84px] md:px-8">
         <Logo href="/" />
         {switchLabel && switchHref && (
