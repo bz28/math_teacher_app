@@ -54,6 +54,10 @@
 .home p {
   margin: 0;
 }
+/* Keep anything scrolled to or focused clear of the sticky top bar. */
+html:has(.home) {
+  scroll-padding-top: 88px;
+}
 .home :focus-visible {
   outline: 3px solid var(--green);
   outline-offset: 3px;
@@ -971,8 +975,12 @@
   border-radius: 8px;
   z-index: 3;
 }
+.noteRed b:first-child {
+  margin-top: 0;
+}
 .noteRed b {
   display: block;
+  margin-top: 6px;
   font-size: 13px;
   opacity: 0.85;
 }
@@ -1084,7 +1092,7 @@
 }
 @media (max-width: 560px) {
   .sheet {
-    min-height: 780px;
+    min-height: 860px;
   }
   .noteRed,
   .noteYellow {
@@ -1206,7 +1214,7 @@
 .meter i {
   display: block;
   height: 100%;
-  width: 64%;
+  width: 61%;
   background: var(--red);
 }
 @media (max-width: 920px) {

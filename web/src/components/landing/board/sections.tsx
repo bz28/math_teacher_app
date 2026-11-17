@@ -377,14 +377,14 @@ export function Monday() {
         </p>
         <ul className={s.todo} aria-label="Example to-do list">
           <li>Talk to Sam before 1st period</li>
-          <li>Reteach problem 5 (14 of 22 missed it)</li>
-          <li>Review the last 2 drafts</li>
+          <li>Reteach problem 5 (14 of 23 missed it)</li>
+          <li>Review Sam&rsquo;s draft after you talk</li>
         </ul>
       </div>
       <div
         className={s.app}
         role="img"
-        aria-label="Example teacher view on Monday: three students across your classes who need you today, the problem most of one class missed, and HW 5.2 with 2 grades left to review."
+        aria-label="Example teacher view on Monday: three students across your classes who need you today, the problem most of one class missed, and HW 5.2 with 1 grade left to review."
       >
         <div className={s.appBar}>
           <b>Your classes</b>
@@ -402,7 +402,7 @@ export function Monday() {
           <div className={s.appRow}>
             <div>
               <b>Devon K.</b>
-              <span>HW 5.2 &middot; Algebra II &middot; Period 3</span>
+              <span>HW 5.3 &middot; Algebra II &middot; Period 3 &middot; due Wednesday</span>
             </div>
             <span className={`${s.pill} ${s.pillAmber}`}>Ungraded</span>
           </div>
@@ -417,7 +417,7 @@ export function Monday() {
         <div className={`${s.appSec} ${s.appClass}`}>
           <h4>Student Insights &middot; Algebra II, HW 5.2</h4>
           <div>
-            <b>Problem 5, distributing</b> &middot; 14 of 22 got it wrong
+            <b>Problem 5, distributing</b> &middot; 14 of 23 got it wrong
           </div>
           <div className={s.meter}>
             <i />
@@ -427,9 +427,9 @@ export function Monday() {
           <div className={s.appRow}>
             <div>
               <b>HW 5.2 grades</b>
-              <span>22 posted, 2 drafts left.</span>
+              <span>23 posted, 1 draft left.</span>
             </div>
-            <span>2 to review</span>
+            <span>1 to review</span>
           </div>
         </div>
       </div>
