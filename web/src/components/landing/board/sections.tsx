@@ -38,41 +38,6 @@ function Band({
   );
 }
 
-function LogoMark() {
-  return (
-    <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true">
-      <circle cx="14" cy="14" r="12.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeDasharray="70 9" />
-      <path d="M8.5 9.5 L14 19.5 L19.5 9.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-export function BoardNav() {
-  return (
-    <header className={`${s.nav} ${s.band}`}>
-      <div className={s.inner}>
-        <Link href="/" className={s.logo} aria-label="Veradic home">
-          <LogoMark />
-          Veradic
-        </Link>
-        <nav className={s.navLinks} aria-label="Main">
-          <a href="#learn">How students learn</a>
-          <a href="#how">How it works</a>
-          <a href="#rules">Responsible AI</a>
-        </nav>
-        <div className={s.navRight}>
-          <Link className={s.signin} href="/login">
-            Sign in
-          </Link>
-          <Link className={`${s.btn} ${s.btnInk}`} href="/demo">
-            Book a demo
-          </Link>
-        </div>
-      </div>
-    </header>
-  );
-}
-
 export function Hero() {
   return (
     <section aria-labelledby="h-hero" className={`${s.hero} ${s.band}`}>
@@ -653,7 +618,7 @@ const FAQ: [string, string][] = [
 
 export function Faq() {
   return (
-    <Band tone="paper" className={s.faq} labelledBy="h-faq">
+    <Band tone="paper" className={s.faq} id="faq" labelledBy="h-faq">
       <h2 className={s.h2} id="h-faq" style={{ fontSize: "clamp(30px, 3.6vw, 44px)" }}>
         Questions schools ask
       </h2>
@@ -688,44 +653,3 @@ export function Close() {
   );
 }
 
-export function BoardFooter() {
-  return (
-    <footer className={`${s.foot} ${s.band}`}>
-      <div className={s.inner}>
-        <div className={s.footBrand}>
-          <Link href="/" className={s.logo} style={{ color: "var(--chalk)" }}>
-            <LogoMark />
-            Veradic
-          </Link>
-          <p>Classroom AI that helps students understand their math homework, and shows teachers who does.</p>
-        </div>
-        <nav aria-labelledby="f-product">
-          <h2 id="f-product">Product</h2>
-          <a href="#learn">How students learn</a>
-          <a href="#how">How it works</a>
-          <a href="#rules">Responsible AI</a>
-          <Link href="/for-districts">For districts</Link>
-          <Link href="/demo">Book a demo</Link>
-        </nav>
-        <nav aria-labelledby="f-subjects">
-          <h2 id="f-subjects">Subjects</h2>
-          <Link href="/subjects/math">Math</Link>
-          <Link href="/subjects/physics">Physics</Link>
-          <Link href="/subjects/chemistry">Chemistry</Link>
-        </nav>
-        <nav aria-labelledby="f-company">
-          <h2 id="f-company">Company</h2>
-          <Link href="/trust">Trust &amp; security</Link>
-          <Link href="/privacy">Privacy</Link>
-          <Link href="/terms">Terms</Link>
-          <Link href="/support">Support</Link>
-          <Link href="/login">Sign in</Link>
-        </nav>
-        <div className={s.footSmall}>
-          <span>&copy; {new Date().getFullYear()} Veradic LLC. All rights reserved.</span>
-          <span>Students and classes shown are examples.</span>
-        </div>
-      </div>
-    </footer>
-  );
-}

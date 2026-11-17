@@ -1,18 +1,19 @@
-import { createSubjectOgImage, ogSize } from "@/lib/og-image";
+import { createOgImage, ogSize } from "@/lib/og-image";
 import { SITE_URL } from "@/lib/seo";
 
-export const alt = "Veradic AI: Math for classrooms. Handwritten homework read step by step, graded by your rules, approved by you.";
+export const alt = "Veradic AI: Math for classrooms. Students explain their own steps; grades are drafted by your rules and approved by you. Shown on a chalkboard: Veradic asks a student how they got from 22 to 15 in 3x + 7 = 22.";
 export const size = ogSize;
 export const contentType = "image/png";
 
 export default function OpenGraphImage() {
-  return createSubjectOgImage({
+  return createOgImage({
     title: "AI math for classrooms",
-    subtitle: "Reads every step of handwritten homework. Drafts the grade from your rules. You approve it.",
+    subtitle: "Students explain their own steps. Drafted by your rules, approved by you.",
     url: `${SITE_URL.replace(/^https?:\/\//, "")}/subjects/math`,
-    tags: ["Algebra", "Calculus", "Geometry", "Word Problems"],
-    color: "#0E5238",
-    colorLight: "#5BC298",
-    bgGradient: ["#102018", "#0D0C14", "#0A2418"],
+    board: {
+      problem: "3x + 7 = 22",
+      ask: "How did you get from 22 to 15?",
+      reply: "took 7 off both sides",
+    },
   });
 }

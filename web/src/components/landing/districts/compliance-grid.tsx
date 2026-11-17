@@ -27,7 +27,7 @@ const ITEMS: ComplianceItem[] = [
   {
     label: "NDPA standard template",
     body: "We sign the National Data Privacy Agreement template most US districts already use. Send us your filled version and we'll countersign.",
-    implication: "No bespoke negotiation needed for most districts.",
+    implication: "Use the template you already have.",
     link: { label: "Request the DPA", href: mailto("DPA request") },
   },
   {
@@ -38,7 +38,7 @@ const ITEMS: ComplianceItem[] = [
   },
   {
     label: "Never trained on",
-    body: "Student work, conversations with the AI tutor, integrity-check transcripts and grades are never used to train AI models, ours or anyone else's. Period.",
+    body: "Student work, conversations with the AI tutor, understanding-check conversations and grades are never used to train AI models, ours or anyone else's.",
     implication: "Your students' data does not leave your control.",
     link: { label: "Trust & security", href: "/trust#data-handling" },
   },
@@ -60,8 +60,7 @@ export function ComplianceGrid() {
       <div className="mx-auto max-w-[1200px] px-4 py-20 md:px-8 md:py-24">
         <h2 className="site-h2 max-w-[760px]">Every law your district lawyer asks about, answered.</h2>
         <p className="m-0 mt-5 max-w-[36em] text-lg leading-relaxed text-ink-soft">
-          We&rsquo;ve done the paperwork before. Here&rsquo;s what we do and
-          what it means for you, in plain English.
+          What we do under each law, and what it means for your district.
         </p>
 
         <ul className="m-0 mt-11 list-none border-t-2 border-ink p-0">

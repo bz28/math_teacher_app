@@ -21,19 +21,23 @@ const CHECKED = [
  */
 export function DistrictsHero() {
   return (
-    <section className="mx-auto flex max-w-[1200px] flex-wrap items-center gap-x-[72px] gap-y-14 px-4 pb-24 pt-12 md:px-8 md:pb-[112px] md:pt-16">
+    <section className="bg-sun">
+      <div className="mx-auto flex max-w-[1200px] flex-wrap items-center gap-x-[72px] gap-y-14 px-4 pb-24 pt-12 md:px-8 md:pb-[112px] md:pt-16">
       <div className="min-w-0 flex-[1_1_480px]">
-        <p className="m-0 mb-[18px] text-base font-bold text-veradic">
+        <p className="m-0 mb-[18px] text-base font-bold text-ink">
           For superintendents and curriculum directors
         </p>
         <h1 className="site-h1">Built for your teachers. Ready for your procurement team.</h1>
-        <p className="m-0 mt-7 max-w-[32em] text-lg leading-[1.55] text-ink-soft md:text-xl">
-          Veradic grades homework, checks real understanding and gives every
-          student practice, always under teacher control. Below: the privacy
-          rules, the paperwork and the pilot path, in plain English.
+        <p className="m-0 mt-7 max-w-[32em] text-lg leading-[1.55] text-ink/85 md:text-xl">
+          Veradic helps students understand their math homework, drafts every
+          grade by the teacher&rsquo;s rules, and shows teachers who still needs
+          them. This page covers the privacy rules, the paperwork, and how a
+          pilot works.
         </p>
         <div className="mt-9 flex flex-wrap items-center gap-3">
-          <ButtonLink href={DPA_MAILTO}>Request the DPA and pilot info</ButtonLink>
+          <ButtonLink href={DPA_MAILTO} variant="ink">
+            Request the DPA and pilot info
+          </ButtonLink>
           <ButtonLink href="#compliance" variant="underline">
             See the compliance checklist
           </ButtonLink>
@@ -69,14 +73,15 @@ export function DistrictsHero() {
           </figure>
           <aside
             aria-label="Veradic's answer"
-            className="on-dark relative ml-auto mt-[-18px] w-[236px] max-w-full rounded-[10px] bg-veradic px-4 py-3.5 text-[#F2F7F4] shadow-[0_18px_40px_-18px_rgba(14,82,56,0.7)] sm:absolute sm:-bottom-[26px] sm:right-0 sm:mt-0"
+            className="on-dark relative ml-auto mt-[-18px] w-[250px] max-w-full rounded-[10px] border-[6px] border-[#8C6A44] bg-board px-[18px] py-4 text-chalk shadow-[0_18px_40px_-18px_rgba(10,59,44,0.7)] sm:absolute sm:-bottom-[26px] sm:right-0 sm:mt-0"
           >
-            <p className="m-0 text-[15px] leading-[1.45]">
+            <p className="m-0 font-chalk text-[17px] leading-[1.45] text-chalk-yellow">
               Send us your state&rsquo;s addendum. We redline it within 5 business days.
             </p>
           </aside>
         </div>
       </div>
+    </div>
     </section>
   );
 }

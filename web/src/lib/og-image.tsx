@@ -1,23 +1,28 @@
 import { ImageResponse } from "next/og";
 
-interface SubjectOgConfig {
+/**
+ * The link-preview card for the marketing site, in the "At the Board" look:
+ * school-bus yellow, the headline in ink on the left, and a small framed
+ * chalkboard on the right with one exchange in chalk (the problem, Veradic's
+ * question in yellow chalk, the student's answer).
+ */
+export interface OgConfig {
   title: string;
   subtitle: string;
   url: string;
-  tags: string[];
-  /** Primary color for accents, e.g. "#0E5238" */
-  color: string;
-  /** Lighter shade for text/dots, e.g. "#5BC298" */
-  colorLight: string;
-  /** Background gradient stops: [start, mid, end] */
-  bgGradient: [string, string, string];
+  board: { problem: string; ask: string; reply: string };
 }
 
 export const ogSize = { width: 1200, height: 630 };
 
-export function createSubjectOgImage(config: SubjectOgConfig) {
-  const { title, subtitle, url, tags, color, colorLight, bgGradient } = config;
+const SUN = "#FFCE3A";
+const INK = "#16241D";
+const BOARD = "#14644A";
+const FRAME = "#8C6A44";
+const CHALK = "#F6F8F0";
+const CHALK_YELLOW = "#FFD84A";
 
+export function createOgImage({ title, subtitle, url, board }: OgConfig) {
   return new ImageResponse(
     (
       <div
@@ -25,70 +30,60 @@ export function createSubjectOgImage(config: SubjectOgConfig) {
           width: "100%",
           height: "100%",
           display: "flex",
-          flexDirection: "column",
-          background: `linear-gradient(135deg, ${bgGradient[0]} 0%, ${bgGradient[1]} 60%, ${bgGradient[2]} 100%)`,
-          padding: "60px 80px",
-          fontFamily: "Inter, sans-serif",
-          position: "relative",
-          overflow: "hidden",
+          background: SUN,
+          padding: "56px 64px",
+          gap: 48,
+          alignItems: "center",
+          fontFamily: "sans-serif",
         }}
       >
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, height: "100%", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 14, color: INK, fontSize: 30, fontWeight: 800 }}>
+            <svg width="40" height="40" viewBox="0 0 28 28">
+              <circle cx="14" cy="14" r="12.5" fill="none" stroke={INK} strokeWidth="2.2" strokeDasharray="70 9" />
+              <path d="M8.5 9.5 L14 19.5 L19.5 9.5" fill="none" stroke={INK} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            Veradic
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+            <div style={{ fontSize: 56, fontWeight: 800, color: INK, lineHeight: 1.05, letterSpacing: -1.5 }}>{title}</div>
+            <div style={{ fontSize: 26, color: INK, opacity: 0.8, lineHeight: 1.4 }}>{subtitle}</div>
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 700, color: INK }}>{url}</div>
+        </div>
         <div
           style={{
-            position: "absolute",
-            top: -120,
-            right: -120,
-            width: 500,
-            height: 500,
-            borderRadius: "50%",
-            background: `radial-gradient(circle, ${color}40 0%, transparent 70%)`,
             display: "flex",
+            flexDirection: "column",
+            width: 420,
+            background: BOARD,
+            border: `14px solid ${FRAME}`,
+            borderRadius: 10,
+            padding: "30px 30px",
+            gap: 18,
+            transform: "rotate(2deg)",
           }}
-        />
-        <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+        >
+          <div style={{ fontSize: 32, color: CHALK }}>{board.problem}</div>
           <div
             style={{
-              width: 56,
-              height: 56,
-              borderRadius: 14,
-              background: `linear-gradient(135deg, ${color} 0%, ${colorLight} 100%)`,
               display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
+              flexDirection: "column",
+              border: `2px dashed ${CHALK_YELLOW}`,
+              borderRadius: 10,
+              padding: "12px 16px",
+              color: CHALK_YELLOW,
+              fontSize: 24,
+              lineHeight: 1.35,
             }}
           >
-            <svg width="36" height="36" viewBox="0 0 512 512" fill="none">
-              <path d="M160 148 L256 380 L352 148" stroke="white" strokeWidth="52" strokeLinecap="round" strokeLinejoin="round" />
-              <circle cx="352" cy="148" r="18" fill={colorLight} opacity="0.9" />
-            </svg>
+            <span style={{ fontSize: 15, fontWeight: 700 }}>Veradic asked</span>
+            {board.ask}
           </div>
-          <span style={{ color: colorLight, fontSize: 24, fontWeight: 600, letterSpacing: 1.5 }}>VERADIC AI</span>
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", flex: 1, justifyContent: "center", gap: 24 }}>
-          <div style={{ fontSize: 60, fontWeight: 800, color: "#FFFFFF", lineHeight: 1.15, letterSpacing: -1, display: "flex", flexDirection: "column" }}>
-            <span>{title}</span>
-          </div>
-          <div style={{ fontSize: 28, color: `${colorLight}AA`, lineHeight: 1.5, maxWidth: 700 }}>
-            {subtitle}
-          </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          {/* URL uses colorLight rather than color so subjects whose
-              primary brand color is dark (e.g. the new academic-green
-              math) still meet contrast on the dark OG gradient. The
-              dark `color` is reserved for chip backgrounds where it's
-              intentionally subtle. */}
-          <span style={{ color: colorLight, fontSize: 20, fontWeight: 600 }}>{url}</span>
-          <div style={{ display: "flex", gap: 12 }}>
-            {tags.map((tag) => (
-              <div key={tag} style={{ background: `${color}26`, border: `1px solid ${color}4D`, borderRadius: 100, padding: "8px 20px", color: colorLight, fontSize: 15, fontWeight: 500 }}>
-                {tag}
-              </div>
-            ))}
-          </div>
+          <div style={{ fontSize: 24, color: CHALK, lineHeight: 1.35 }}>{board.reply}</div>
         </div>
       </div>
     ),
-    { ...ogSize }
+    { ...ogSize },
   );
 }

@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { SkipToMainLink } from "@/components/shared/skip-to-main-link";
 import s from "@/components/landing/board/home.module.css";
+import { Footer } from "@/components/landing/footer";
+import { Navbar } from "@/components/landing/navbar";
 import {
-  BoardFooter,
-  BoardNav,
   Close,
   Faq,
   FoundingSchools,
@@ -37,7 +37,7 @@ export default function Home() {
   return (
     <div className={`${s.home} flex min-h-full flex-1 flex-col`}>
       <SkipToMainLink />
-      <BoardNav />
+      <Navbar />
       <main id="main-content" className="flex-1">
         <Hero />
         <WhyNow />
@@ -52,7 +52,7 @@ export default function Home() {
         <Faq />
         <Close />
       </main>
-      <BoardFooter />
+      <Footer />
     </div>
   );
 }

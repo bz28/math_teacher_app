@@ -1,18 +1,19 @@
-import { createSubjectOgImage, ogSize } from "@/lib/og-image";
+import { createOgImage, ogSize } from "@/lib/og-image";
 import { SITE_URL } from "@/lib/seo";
 
-export const alt = "Veradic AI: Physics for classrooms. Handwritten homework read step by step, graded by your rules, approved by you.";
+export const alt = "Veradic AI: Physics for classrooms. Students explain their own steps; grades are drafted by your rules and approved by you. Shown on a chalkboard: Veradic asks what units 72 km/h needs to be in, and the student converts it to 20 m/s.";
 export const size = ogSize;
 export const contentType = "image/png";
 
 export default function OpenGraphImage() {
-  return createSubjectOgImage({
+  return createOgImage({
     title: "AI physics for classrooms",
-    subtitle: "Reads every step of handwritten homework. Drafts the grade from your rules. You approve it.",
+    subtitle: "Students explain their own steps. Drafted by your rules, approved by you.",
     url: `${SITE_URL.replace(/^https?:\/\//, "")}/subjects/physics`,
-    tags: ["Mechanics", "Energy", "Waves", "Electricity"],
-    color: "#0984E3",
-    colorLight: "#74B9FF",
-    bgGradient: ["#0D1F30", "#0D0C14", "#0D2540"],
+    board: {
+      problem: "72 km/h → 0 in 4.0 s",
+      ask: "What units does 72 need to be in first?",
+      reply: "oh, m/s! that’s 20 m/s",
+    },
   });
 }

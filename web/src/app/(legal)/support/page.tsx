@@ -45,12 +45,9 @@ export default function SupportPage() {
           <p className="m-0 mt-4 text-[17px] leading-[1.7] text-[#2F3947]">
             Find quick answers to common questions about Veradic.
           </p>
-          {/* Homepage no longer has an inline FAQ section; the
-              canonical FAQ surface lives at /demo (general) and
-              /for-districts (procurement-specific). Pointing
-              support traffic at the demo page since that's the
-              broader audience match. */}
-          <Link href="/demo#faq" className={`mt-3 inline-block text-[17px] ${LINK}`}>
+          {/* The general FAQ is on the homepage (/#faq); the
+              procurement FAQ is on /for-districts. */}
+          <Link href="/#faq" className={`mt-3 inline-block text-[17px] ${LINK}`}>
             View FAQ
           </Link>
         </section>

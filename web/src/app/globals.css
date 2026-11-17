@@ -287,8 +287,8 @@
    Fixed values, not the app's theme variables: the marketing site keeps
    one look in every subject and theme. Tailwind only emits a utility when
    a class uses it, so these add nothing to the logged-in app.
-     paper      page background, under the graph grid
-     ink        headings and body text; also the dark CTA band
+     paper      page background
+     ink        headings and body text; also the closing band's button
      ink-soft   secondary text (7:1 on paper)
      veradic    Veradic's own voice: its notes and the primary buttons
      veradic-tint  light green text on a veradic background
@@ -297,19 +297,29 @@
      rule       notebook rule lines;  margin-line  the red margin
      hairline   card and section borders */
 @theme {
-  --color-paper: #F6F4EC;
-  --color-ink: #1D2633;
-  --color-ink-soft: #4A5565;
-  --color-veradic: #0E5238;
-  --color-veradic-dark: #0A3D2A;
+  /* Marketing site, "At the Board" (the homepage's palette; its own copy
+     of these lives on .home in components/landing/board/home.module.css). */
+  --color-paper: #FFFFFF;
+  --color-paper-2: #EFF6F1;
+  --color-ink: #16241D;
+  --color-ink-soft: #4A5850;
+  --color-veradic: #0F6B4C;
+  --color-veradic-dark: #0A3B2C;
   --color-veradic-tint: #9FD0B6;
-  --color-redpen: #B3261E;
-  --color-pencil: #2B3440;
+  --color-redpen: #B9302A;
+  --color-pencil: #24352C;
+  --color-sun: #FFCE3A;
+  --color-board: #14644A;
+  --color-board-deep: #0A3B2C;
+  --color-chalk: #F6F8F0;
+  --color-chalk-yellow: #FFD84A;
   --color-rule: #C9DCEB;
   --color-margin-line: #E8A3A0;
-  --color-hairline: #E3DFD2;
+  --color-hairline: #DCE6DE;
 
-  --font-site: var(--font-schibsted), system-ui, sans-serif;
+  --font-site: var(--font-hanken), system-ui, sans-serif;
+  --font-site-display: var(--font-bricolage), system-ui, sans-serif;
+  --font-chalk: var(--font-architects), cursive;
   --font-hand: var(--font-kalam), cursive;
 }
 
@@ -529,13 +539,9 @@ html {
     font-feature-settings: normal;
   }
   
-  /* Graph paper: the page itself. */
-  .graph-paper {
+  /* The page itself: plain white paper, like the homepage's teacher bands. */
+  .site-page {
     background-color: var(--color-paper);
-    background-image:
-      linear-gradient(rgba(61, 108, 150, 0.07) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(61, 108, 150, 0.07) 1px, transparent 1px);
-    background-size: 28px 28px;
   }
   
   /* A ruled notebook sheet. --rule-gap is the line pitch, so text set at
@@ -555,19 +561,20 @@ html {
   /* Headings: heavy and tight, balanced so they never leave a widow. */
   .site-h1,
   .site-h2 {
-    font-weight: 900;
+    font-family: var(--font-site-display);
+    font-weight: 800;
     text-wrap: balance;
     margin: 0;
   }
   .site-h1 {
     font-size: clamp(2.5rem, 4.4vw, 3.875rem);
-    line-height: 0.98;
-    letter-spacing: -0.04em;
+    line-height: 1;
+    letter-spacing: -0.035em;
   }
   .site-h2 {
     font-size: clamp(2rem, 3.6vw, 3rem);
     line-height: 1.04;
-    letter-spacing: -0.035em;
+    letter-spacing: -0.03em;
   }
 }
 
@@ -581,5 +588,5 @@ html {
 /* On the dark band and on green notes the green ring would vanish. */
 .site .on-dark *:focus-visible,
 .site .on-dark:focus-visible {
-  outline-color: var(--color-paper);
+  outline-color: var(--color-chalk-yellow);
 }

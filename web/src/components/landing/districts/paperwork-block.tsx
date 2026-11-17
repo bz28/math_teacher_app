@@ -14,7 +14,7 @@ const HANDLED = [
  */
 export function PaperworkBlock() {
   return (
-    <section id="paperwork" className="border-y border-hairline bg-white">
+    <section id="paperwork" className="bg-paper-2">
       <div className="mx-auto flex max-w-[1200px] flex-wrap gap-x-[72px] gap-y-10 px-4 py-20 md:px-8 md:py-24">
         <div className="min-w-0 flex-[1_1_360px]">
           <h2 className="site-h2">We work through your paperwork.</h2>

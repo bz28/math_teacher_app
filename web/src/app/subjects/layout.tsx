@@ -1,16 +1,18 @@
+import { SkipToMainLink } from "@/components/shared/skip-to-main-link";
 import { Navbar } from "@/components/landing/navbar";
 import { Footer } from "@/components/landing/footer";
 
-/** Subject pages share the homepage's notebook look: graph paper under everything. */
+/** Subject pages share the homepage's look, nav and footer. */
 export default function SubjectsLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
   return (
-    <div className="site graph-paper flex min-h-full flex-1 flex-col">
+    <div className="site site-page flex min-h-full flex-1 flex-col">
+      <SkipToMainLink />
       <Navbar />
-      <main className="flex-1">{children}</main>
+      <main id="main-content" className="flex-1">{children}</main>
       <Footer />
     </div>
   );
