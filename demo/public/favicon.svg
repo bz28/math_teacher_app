@@ -1,4 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="6" fill="#1a1a1a" />
-  <path d="M8 9 L16 23 L24 9" fill="none" stroke="#f5f3ee" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" />
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="512" height="512">
+  <!-- Veradic "Balanced" mark on the board green. Source: web/src/lib/brand-mark.ts -->
+  <rect width="64" height="64" rx="14" fill="#14644A"/>
+  <g transform="translate(32 32) scale(0.8) translate(-32 -32.6)" fill="none" stroke-width="8.5" stroke-linecap="round">
+    <path d="M13 24 H51" stroke="#F6F8F0"/>
+    <path d="M13 41 C19.5 38.8 24.5 42.4 31 40.8 S43.5 38.9 51 40.6" stroke="#FFCE3A"/>
+  </g>
 </svg>

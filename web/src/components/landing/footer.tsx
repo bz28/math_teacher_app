@@ -12,7 +12,7 @@ export function Footer() {
       <div className={s.inner}>
         <div className={s.footBrand}>
           <Link href="/" className={s.logo} style={{ color: "var(--chalk)" }}>
-            <LogoMark />
+            <LogoMark accent="var(--chalk-yellow)" />
             Veradic
           </Link>
           <p>Classroom AI that helps students understand their math homework, and shows teachers who does.</p>

@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { BRAND, MARK_BOTTOM, MARK_STROKE, MARK_TOP, MARK_VIEWBOX } from "@/lib/brand-mark";
 
 /**
  * The link-preview card for the marketing site, in the "At the Board" look:
@@ -39,9 +40,9 @@ export function createOgImage({ title, subtitle, url, board }: OgConfig) {
       >
         <div style={{ display: "flex", flexDirection: "column", flex: 1, height: "100%", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 14, color: INK, fontSize: 30, fontWeight: 800 }}>
-            <svg width="40" height="40" viewBox="0 0 28 28">
-              <circle cx="14" cy="14" r="12.5" fill="none" stroke={INK} strokeWidth="2.2" strokeDasharray="70 9" />
-              <path d="M8.5 9.5 L14 19.5 L19.5 9.5" fill="none" stroke={INK} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+            <svg width="48" height="30" viewBox={MARK_VIEWBOX}>
+              <path d={MARK_TOP} fill="none" stroke={INK} strokeWidth={MARK_STROKE} strokeLinecap="round" />
+              <path d={MARK_BOTTOM} fill="none" stroke={BRAND.green} strokeWidth={MARK_STROKE} strokeLinecap="round" />
             </svg>
             Veradic
           </div>
