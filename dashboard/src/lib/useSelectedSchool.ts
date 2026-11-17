@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { api, type SchoolListItem } from "./api";
 
 /**
@@ -123,10 +123,32 @@ export function useSelectedSchool(): SelectedSchool {
   // every page to nothing, with a switcher that can't display it. Fall
   // back to All schools once the list proves it's gone. Only on a
   // successful, non-empty load — a failed fetch proves nothing.
+  //
+  // "Proves" means a list fetched AFTER the id was chosen. The list is
+  // loaded once per session, so a school created since (Add school, or
+  // converting a lead) is missing from it while being perfectly real —
+  // opening it would otherwise be undone straight away. So a missing id
+  // first refetches the list, once per id, and only a second miss resets.
+  const recheckedFor = useRef<string | null>(null);
   useEffect(() => {
-    if (schools && schools.length > 0 && id && !schools.some((s) => s.id === id)) {
+    if (!schools || schools.length === 0 || !id || schools.some((s) => s.id === id)) return;
+    if (recheckedFor.current === id) {
       setSchoolScope(null);
+      return;
     }
+    recheckedFor.current = id;
+    let cancelled = false;
+    api
+      .schools()
+      .then((r) => {
+        if (!cancelled) setSchools(r.schools);
+      })
+      // A failed refetch proves nothing either: keep the scope. The
+      // strip still names it and offers "Show all schools".
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, [schools, id]);
 
   return useMemo(

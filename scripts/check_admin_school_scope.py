@@ -7,7 +7,11 @@ Pins behaviour a backend test can't see:
      school (never as "All schools") and can be cleared;
   3. /schools/:id sets the scope even when that list fails;
   4. the school page's LLM-calls links carry the school explicitly;
-  5. ?school= / ?school_id= deep links scope LLM calls / Audit log.
+  5. ?school= / ?school_id= deep links scope LLM calls / Audit log;
+  6. a school created after the console loaded can still be scoped;
+  7. a non-UUID /schools/:id never becomes the stored scope.
+
+Check 6 creates a school in the target DB on every run.
 
 Prerequisites: an API on a scratch DB seeded by
 `scripts.seed_admin_school_scope`, and the dashboard pointed at it
@@ -86,6 +90,17 @@ def visit(p: Any, path: str, wait: int = 2500) -> None:
     p.wait_for_timeout(wait)
 
 
+def spa_go(p: Any, path: str, wait: int = 2500) -> None:
+    """Client-side navigation — no reload, so in-memory state (the
+    console's school list) survives, as it does when an operator clicks."""
+    p.evaluate(
+        "(path) => { history.pushState({}, '', path);"
+        " dispatchEvent(new PopStateEvent('popstate')); }",
+        path,
+    )
+    p.wait_for_timeout(wait)
+
+
 def scoped_to(reqs: list[str], frag: str, school: str | None) -> tuple[bool, str]:
     """Was the latest `frag` request scoped to `school` (None = unscoped)?"""
     url = last(reqs, frag)
@@ -150,6 +165,27 @@ with sync_playwright() as pw:
     visit(p, f"/audit-logs?school_id={LINCOLN}")
     check("?school_id= deep link scopes Audit log",
           *scoped_to(reqs, "/audit-logs/timeline", LINCOLN))
+
+    # 6. A school created AFTER the console loaded its school list can be
+    #    scoped: opening it refetches the list instead of resetting to All.
+    p, reqs = fresh(b, {})
+    visit(p, "/overview")  # the list is loaded now, without the new school
+    created = _get_json(f"{API}/admin/schools", {
+        "name": "Brand New Academy", "contact_name": "N",
+        "contact_email": f"new{os.getpid()}{len(results)}@newacademy.org",
+    }, token=tok["access_token"])["id"]
+    spa_go(p, f"/schools/{created}")
+    check("new school: route scope kept after list recheck", stored(p) == created, str(stored(p)))
+    spa_go(p, "/overview")
+    check("new school: pages scoped to it", *scoped_to(reqs, "/admin/overview", created))
+    check("new school: strip names it", "Brand New Academy" in p.inner_text(".scope-line"),
+          p.inner_text(".scope-line"))
+
+    # 7. A non-UUID school route never becomes the scope.
+    p, reqs = fresh(b, {SCOPE_KEY: LINCOLN})
+    visit(p, "/overview")
+    spa_go(p, "/schools/not-a-school")
+    check("bad /schools/:id leaves scope alone", stored(p) == LINCOLN, str(stored(p)))
 
     b.close()
 

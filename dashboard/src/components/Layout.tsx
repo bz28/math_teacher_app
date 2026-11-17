@@ -67,8 +67,12 @@ const SECONDARY: NavItem[] = [
  */
 function routeSchoolId(pathname: string): string | null {
   const m = /^\/schools\/([^/?#]+)/.exec(pathname);
-  return m ? m[1] : null;
+  // UUIDs only: a hand-typed /schools/foo must not become a stored scope
+  // that scopes every page to nothing.
+  return m && UUID_RE.test(m[1]) ? m[1] : null;
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * One line above every page saying what it is showing, so a number is
@@ -119,7 +123,6 @@ function ScopeLine({ school }: { school: SelectedSchool }) {
 /** A school named in a scoped page's URL — `?school=` (LLM calls' old
  *  deep links) or `?school_id=` (Audit log's) — or null. UUIDs only, so
  *  a mangled link can't scope every page to nothing. */
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function urlSchoolParam(params: URLSearchParams): string | null {
   const v = params.get("school") ?? params.get("school_id");
   return v && UUID_RE.test(v) ? v : null;
