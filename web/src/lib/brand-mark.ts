@@ -4,7 +4,7 @@
  * The two match, which is what the understanding check confirms.
  *
  * One drawing on a 64-unit grid, used by every surface that draws the mark
- * (site nav and footer, the app's tile mark, the Apple icon, link-preview
+ * (site nav and footer, the sign-in/register logo, the app's tile mark, the Apple icon, link-preview
  * images). Static copies of the same paths live in web/src/app/icon.svg,
  * demo/public/favicon.svg, dashboard/public/favicon.svg and
  * scripts/regen_app_icons.py (mobile + favicon.ico); change them together.
