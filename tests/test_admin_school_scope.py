@@ -188,12 +188,11 @@ async def test_overview_is_scoped(client: AsyncClient, world: dict[str, Any]) ->
     assert (a["total_cost"], a["total_calls"]) == (1.0, 1)
     assert (b["total_cost"], b["total_calls"]) == (2.0, 1)
     assert (every["total_cost"], every["total_calls"]) == (7.0, 3)
-    # Sessions follow their user. Alpha's preview student ran one too;
-    # sessions are activity, not a census, so it counts (as it does in
-    # "All schools").
-    assert a["total_sessions"] == 2
+    # Sessions follow their user. Alpha's preview student ran one too,
+    # and it is excluded in every scope, so A + B == All.
+    assert a["total_sessions"] == 1
     assert b["total_sessions"] == 2
-    assert every["total_sessions"] == 4
+    assert every["total_sessions"] == 3
     # Users: teacher + real students, never the preview account.
     assert a["total_users"] == 2
     assert b["total_users"] == 3

@@ -4,7 +4,7 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import Date, cast, func, select
+from sqlalchemy import Date, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
@@ -32,6 +32,13 @@ async def overview(
     session_filters = [Session.created_at >= since]
     llm_filters = [LLMCall.created_at >= since]
     user_filters: list[Any] = [User.is_preview.is_(False)]
+    # Preview (shadow) students are a teacher trying the student view,
+    # not usage — excluded from sessions the same way they already are
+    # from the user counts and top spenders. Sessions with no user stay.
+    preview_users = select(User.id).where(User.is_preview.is_(True)).scalar_subquery()
+    session_filters.append(
+        or_(Session.user_id.is_(None), Session.user_id.not_in(preview_users))
+    )
     if grade is not None:
         grade_users = select(User.id).where(User.grade_level == grade).scalar_subquery()
         session_filters.append(Session.user_id.in_(grade_users))

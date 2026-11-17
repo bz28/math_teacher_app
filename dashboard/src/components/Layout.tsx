@@ -123,8 +123,7 @@ export default function Layout() {
   // Only for schools the switcher lists, so it can always display the
   // result; any other id would be reset to All schools by
   // useSelectedSchool and the two would fight.
-  const { pathname, search } = useLocation();
-  const kind = pageScope(pathname, search);
+  const { pathname } = useLocation();
   const routeId = routeSchoolId(pathname);
   const listed = school.schools.some((s) => s.id === routeId);
   useEffect(() => {
@@ -200,11 +199,13 @@ export default function Layout() {
       </nav>
       <main className="main-content">
         <ScopeLine school={school} />
-        {/* A scoped page remounts when the scope changes, so nothing
-            local to the old school survives the switch — a page offset
-            past the end of the new list, an open drill-in on the old
-            school's row. Every other page keeps a stable key. */}
-        <Outlet key={kind === "school" ? `scope:${school.id ?? "all"}` : "page"} />
+        {/* The page remounts when the scope changes, so nothing local to
+            the old school survives the switch — a page offset past the
+            end of the new list, an open drill-in on the old school's row.
+            Keyed on the scope ALONE, never on the page's kind: a URL that
+            changes kind on the same route (LLM calls gaining ?user=, Users
+            flipping to the Admins preset) must not wipe its local filters. */}
+        <Outlet key={`scope:${school.id ?? "all"}`} />
       </main>
     </div>
   );
