@@ -287,8 +287,8 @@
    Fixed values, not the app's theme variables: the marketing site keeps
    one look in every subject and theme. Tailwind only emits a utility when
    a class uses it, so these add nothing to the logged-in app.
-     paper      page background, under the graph grid
-     ink        headings and body text; also the dark CTA band
+     paper      page background
+     ink        headings and body text; also the closing band's button
      ink-soft   secondary text (7:1 on paper)
      veradic    Veradic's own voice: its notes and the primary buttons
      veradic-tint  light green text on a veradic background

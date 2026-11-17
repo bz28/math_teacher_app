@@ -1,3 +1,4 @@
+import { SkipToMainLink } from "@/components/shared/skip-to-main-link";
 import type { Metadata } from "next";
 import { Navbar } from "@/components/landing/navbar";
 import { Footer } from "@/components/landing/footer";
@@ -56,8 +57,9 @@ export default function ForDistrictsPage() {
           __html: JSON.stringify(faqJsonLd(districtFaqs)),
         }}
       />
+      <SkipToMainLink />
       <Navbar />
-      <main className="flex-1 overflow-x-clip">
+      <main id="main-content" className="flex-1 overflow-x-clip">
         <DistrictsHero />
         <ComplianceGrid />
         <FederalComplianceMatrix />
