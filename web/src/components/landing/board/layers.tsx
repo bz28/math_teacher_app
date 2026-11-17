@@ -19,7 +19,7 @@ const STEPS = [
   },
   {
     title: "Graded by your rules",
-    said: "His answer to problem 5 is right, but he skipped the distribution, so one point off under Ms. Rivera's rule, and a draft grade of 9 out of 10 that Jordan can't see yet.",
+    said: "His answer to problem 5 is right, but he showed no steps, so one point off under Ms. Rivera's rule, and a draft grade of 9 out of 10 that Jordan can't see yet.",
     body: "Write your grading rules once for the class. Every point Veradic takes off says why, and whether it came from your rule or its own judgment.",
   },
   {
@@ -125,7 +125,7 @@ export function Layers() {
         <div className={s.row}>4)&nbsp; 3x + 7 = 22</div>
         <div className={`${s.row} ${s.ind}`}>3x = 15 &nbsp;&nbsp; x = 5</div>
         <div className={s.row}>5)&nbsp; 2(x &minus; 4) = 10</div>
-        <div className={`${s.row} ${s.ind}`}>x &minus; 4 = 5 &nbsp;&nbsp; x = 9</div>
+        <div className={`${s.row} ${s.ind}`}>x = 9</div>
         <div className={s.row}>6)&nbsp; 4(x + 1) = 24</div>
         <div className={`${s.row} ${s.ind}`}>4x + 4 = 24 &nbsp;&nbsp; x = 5</div>
 
@@ -138,13 +138,13 @@ export function Layers() {
         <div className={`${s.lay} ${s.hlRed}`} data-on={on(2)} />
         <div className={`${s.lay} ${s.noteRed}`} data-on={on(2)} data-focus-step="2">
           <b>&minus;1 &middot; Class rule</b>
-          Right answer, but your rule: show the distribution, 2x &minus; 8 = 10.
+          Right answer, but your rule: show your work. No steps between the equation and x = 9.
 
         </div>
         <div className={`${s.lay} ${s.rulesCard}`} data-on={on(2)}>
           <p>Ms. Rivera&rsquo;s rules &middot; Algebra II</p>
           <ul>
-            <li>Show the distribution &mdash; 1 pt</li>
+            <li>Show your work &mdash; 1 pt</li>
             <li>Units on final answers &mdash; 1 pt</li>
           </ul>
         </div>
