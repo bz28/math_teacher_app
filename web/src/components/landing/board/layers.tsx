@@ -29,7 +29,7 @@ const STEPS = [
   },
   {
     title: "You approve",
-    said: "Ms. Rivera approved the grade. Jordan sees it once she publishes.",
+    said: "All four layers: Jordan's handwritten work; one point off under Ms. Rivera's rule, for 9 out of 10; his answer in the understanding check, took 7 off both sides; and her approval, not published yet.",
     body: "Nothing reaches a student until you approve and publish it. Change any point in one click.",
   },
 ];
@@ -91,6 +91,13 @@ export function Layers() {
                 stopBuild();
                 setStep(i + 1);
                 setChosen(true);
+                // Stacked layout: the sheet is below the steps, so bring it
+                // into view or the tap looks like it did nothing.
+                const sheet = sheetRef.current;
+                if (sheet && window.matchMedia("(max-width: 960px)").matches) {
+                  const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+                  sheet.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
+                }
               }}
             >
               <span className={s.stepN}>{i + 1}</span>
