@@ -306,7 +306,7 @@ export function LearnStory() {
           </div>
           <div className={s.seenRow}>
             <b>Priya S.</b>
-            <span>Got problem 5 wrong, was taught distributing in the chat</span>
+            <span>Got the homework wrong, was taught distributing in the chat</span>
             <em className={`${s.pill} ${s.pillAmber}`}>Tutored</em>
           </div>
           <div className={s.seenRow}>
@@ -384,7 +384,7 @@ export function Monday() {
       <div
         className={s.app}
         role="img"
-        aria-label="Example teacher view on Monday: three students across your classes who need you today, the problem most of one class missed, and 3 grades left to review."
+        aria-label="Example teacher view on Monday: three students across your classes who need you today, the problem most of one class missed, and HW 5.2 with 24 grades still to post."
       >
         <div className={s.appBar}>
           <b>Your classes</b>
@@ -395,21 +395,21 @@ export function Monday() {
           <div className={s.appRow}>
             <div>
               <b>Sam T.</b>
-              <span>Couldn&rsquo;t explain his own work on problem 6</span>
+              <span>HW 5.2 &middot; Algebra II &middot; Period 3</span>
             </div>
             <span className={`${s.pill} ${s.pillRed}`}>Flagged</span>
           </div>
           <div className={s.appRow}>
             <div>
               <b>Devon K.</b>
-              <span>Submitted Thursday, not graded yet</span>
+              <span>HW 5.2 &middot; Algebra II &middot; Period 3</span>
             </div>
             <span className={`${s.pill} ${s.pillAmber}`}>Ungraded</span>
           </div>
           <div className={s.appRow}>
             <div>
               <b>Ana L.</b>
-              <span>HW 5.1, past due and not graded yet</span>
+              <span>HW 5.1 &middot; Geometry &middot; Period 5 &middot; 2 days overdue</span>
             </div>
             <span className={`${s.pill} ${s.pillAmber}`}>Overdue</span>
           </div>
@@ -427,9 +427,9 @@ export function Monday() {
           <div className={s.appRow}>
             <div>
               <b>HW 5.2 grades</b>
-              <span>Drafted, each point explained. Nothing posted yet.</span>
+              <span>21 approved, 3 drafts left. Nothing posted yet.</span>
             </div>
-            <span className={`${s.pill} ${s.pillAmber}`}>3 to review</span>
+            <span className={`${s.pill} ${s.pillAmber}`}>24 to review</span>
           </div>
         </div>
       </div>
@@ -473,8 +473,8 @@ export function Practice() {
           aria-label="Example: on 3(x + 2) = 21 a student asks why they multiply the 3 by the 2. Veradic explains the 3 multiplies everything in the brackets and asks what 3 times 2 is. The student answers 6."
         >
           <div className={s.pmeta}>
-            <span>Practice &middot; step 1 of 3</span>
-            <span>Asked why</span>
+            <span>Practice &middot; problem 2 of 5</span>
+            <span>Step 1 of 3</span>
           </div>
           <p className={s.handStep}>3(x + 2) = 21</p>
           <div className={s.stu}>why do I multiply the 3 by the 2?</div>

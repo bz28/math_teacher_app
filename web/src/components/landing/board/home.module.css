@@ -786,6 +786,11 @@
 }
 
 /* ---------- layers ---------- */
+/* The hidden approval stamp is drawn scaled up before it lands; clip it to
+   the band so it can never widen the page on a phone. */
+.layers {
+  overflow-x: clip;
+}
 .layers .inner {
   padding-block: 120px;
 }
