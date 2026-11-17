@@ -1396,8 +1396,8 @@ export interface TeacherStudentsData {
     subscription_status: string;
     school_id: string | null;
     /** School context for the header breadcrumb. `kind` is
-     *  "institutional" (→ School page) or "individual" (indie → the
-     *  Independent Teachers list). Null for a school-less teacher. */
+     *  "institutional" (→ School page) for every invite-only teacher;
+     *  anything else falls back to the Users directory. */
     school: { id: string; name: string; kind: string } | null;
     /** Latest of: a logged action, something they created, or a call
      *  they caused — drives the header active/dormant verdict. Was

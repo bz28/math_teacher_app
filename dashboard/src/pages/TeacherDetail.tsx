@@ -13,8 +13,8 @@ import TeacherSubmissions from "../components/TeacherSubmissions";
 import { useScopeToSchool } from "../lib/useSelectedSchool";
 
 // Per-teacher drill-in — the "what is this pilot teacher actually doing"
-// view. Lives at /teachers/:teacherId, reachable from the Independent
-// Teachers list and from any school's roster. One fetch resolves the
+// view. Lives at /teachers/:teacherId, reachable from the Users
+// directory and from any school's roster. One fetch resolves the
 // teacher, their usage rollup, sections, and student roster; the AI
 // generations + activity timeline load lazily inside
 // TeacherActivitySection. Matches the Overview aesthetic (StatTile grid,
@@ -61,7 +61,7 @@ export default function TeacherDetail() {
       <div className="page-header">
         <h1>Teacher not found</h1>
         <p>{error}</p>
-        <Link to="/teachers/independent" className="link-btn">← Back to Independent teachers</Link>
+        <Link to="/users?role=teacher" className="link-btn">← Back to teachers</Link>
       </div>
     );
   }
@@ -72,13 +72,13 @@ export default function TeacherDetail() {
   const isPro = t.subscription_tier === "pro";
   const health = activityPill(activityStatus(t.last_active_at));
 
-  // Breadcrumb: institutional teachers trail back to their School page;
-  // indie teachers (individual synthetic school, or none) to the
-  // Independent Teachers list. Fixes the old hardcoded "Independent".
+  // Breadcrumb: a teacher trails back to their School page. Signup is
+  // invite-only, so every teacher has an institutional school; the Users
+  // directory is the fallback for a row that somehow doesn't.
   const breadcrumb =
     t.school && t.school.kind === "institutional"
       ? { to: `/schools/${t.school.id}`, label: t.school.name }
-      : { to: "/teachers/independent", label: "Independent teachers" };
+      : { to: "/users?role=teacher", label: "Teachers" };
 
   const gradedPct =
     u.submissions_received > 0

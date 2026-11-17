@@ -289,8 +289,8 @@ export default function Users() {
     catch (e) { toast((e as Error).message); }
   };
 
-  // Delegates to the shared flow so this page, the school page and the
-  // independent-users panel all gate a delete the same way. The old
+  // Delegates to the shared flow so this page and the school page gate
+  // a delete the same way. The old
   // dialog here said only "will be removed permanently", which for a
   // teacher understated it by every homework they ever wrote plus
   // every student submission and grade on it.

@@ -1642,7 +1642,7 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
 }
 
 /* ──────────────────────────────────────────────────────────────────
-   List rows — used by Schools, Independent students/teachers, Leads
+   List rows — used by Schools, Leads
    for the "no table chrome, just hairlines" presentation.
    ────────────────────────────────────────────────────────────────── */
 

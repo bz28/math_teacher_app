@@ -168,8 +168,8 @@ export default function SchoolDetail() {
   };
 
   // Account-level actions on the people inside the school. Both go
-  // through the shared flow (lib/deleteUserFlow) so this page, the
-  // Users directory and the independent-users panel gate a deletion
+  // through the shared flow (lib/deleteUserFlow) so this page and the
+  // Users directory gate a deletion
   // identically — the dangerous surface must not be the casual one.
   const handleDeleteUser = async (userId: string, label: string) => {
     try {
