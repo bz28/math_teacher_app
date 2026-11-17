@@ -847,7 +847,7 @@
   line-height: 1.2;
 }
 .stepD {
-  display: none;
+  display: block;
   font-size: 17px;
   color: var(--ink-soft);
   margin-top: 6px;
@@ -863,9 +863,6 @@
   background: var(--green);
   border-color: var(--green);
   color: #fff;
-}
-.stepBtn[aria-pressed="true"] .stepD {
-  display: block;
 }
 .sheet {
   position: relative;
@@ -1209,7 +1206,7 @@
 .meter i {
   display: block;
   height: 100%;
-  width: 67%;
+  width: 64%;
   background: var(--red);
 }
 @media (max-width: 920px) {
@@ -1698,5 +1695,13 @@
     opacity: 1 !important;
     transform: none !important;
     transition: none !important;
+  }
+  /* Collapsed FAQ answers print too. */
+  .faq details::details-content {
+    content-visibility: visible;
+    display: block;
+  }
+  .faq details > p {
+    display: block;
   }
 }

@@ -377,14 +377,14 @@ export function Monday() {
         </p>
         <ul className={s.todo} aria-label="Example to-do list">
           <li>Talk to Sam before 1st period</li>
-          <li>Reteach problem 5 (14 of 21 missed it)</li>
-          <li>Review the last 3 drafts</li>
+          <li>Reteach problem 5 (14 of 22 missed it)</li>
+          <li>Review the last 2 drafts</li>
         </ul>
       </div>
       <div
         className={s.app}
         role="img"
-        aria-label="Example teacher view on Monday: three students across your classes who need you today, the problem most of one class missed, and HW 5.2 with 3 grades left to review."
+        aria-label="Example teacher view on Monday: three students across your classes who need you today, the problem most of one class missed, and HW 5.2 with 2 grades left to review."
       >
         <div className={s.appBar}>
           <b>Your classes</b>
@@ -417,7 +417,7 @@ export function Monday() {
         <div className={`${s.appSec} ${s.appClass}`}>
           <h4>Student Insights &middot; Algebra II, HW 5.2</h4>
           <div>
-            <b>Problem 5, distributing</b> &middot; 14 of 21 got it wrong
+            <b>Problem 5, distributing</b> &middot; 14 of 22 got it wrong
           </div>
           <div className={s.meter}>
             <i />
@@ -427,9 +427,9 @@ export function Monday() {
           <div className={s.appRow}>
             <div>
               <b>HW 5.2 grades</b>
-              <span>21 approved, 3 drafts left. Nothing posted yet.</span>
+              <span>22 posted, 2 drafts left.</span>
             </div>
-            <span>3 to review</span>
+            <span>2 to review</span>
           </div>
         </div>
       </div>
@@ -671,7 +671,7 @@ export function Faq() {
 
 export function Close() {
   return (
-    <section aria-labelledby="h-close" className={`${s.close} ${s.band}`}>
+    <section aria-label="Book a demo" className={`${s.close} ${s.band}`}>
       <div className={s.inner}>
         <h2 id="h-close">AI can give them the answer. Veradic helps them understand it.</h2>
         <div className={s.ctas}>
