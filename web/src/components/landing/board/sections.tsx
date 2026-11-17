@@ -271,7 +271,7 @@ export function LearnStory() {
               <b>Couldn&rsquo;t explain his own work at first.</b> Said he used an app. Learned distributing in the chat,
               then found a faster method himself. Worth a check-in.
             </p>
-            <span>Read the full conversation</span>
+            <span>View conversation &rarr;</span>
           </div>
         </aside>
       </Reveal>
@@ -387,7 +387,7 @@ export function Monday() {
         aria-label="Example teacher view on Monday: three students across your classes who need you today, the problem most of one class missed, and HW 5.2 with 1 grade left to review."
       >
         <div className={s.appBar}>
-          <b>Your classes</b>
+          <b>Your courses</b>
           <span>Monday</span>
         </div>
         <div className={s.appSec}>
@@ -401,17 +401,17 @@ export function Monday() {
           </div>
           <div className={s.appRow}>
             <div>
-              <b>Devon K.</b>
-              <span>HW 5.3 &middot; Algebra II &middot; Period 3 &middot; due Wednesday</span>
-            </div>
-            <span className={`${s.pill} ${s.pillAmber}`}>Ungraded</span>
-          </div>
-          <div className={s.appRow}>
-            <div>
               <b>Ana L.</b>
               <span>HW 5.1 &middot; Geometry &middot; Period 5 &middot; 2 days overdue</span>
             </div>
             <span className={`${s.pill} ${s.pillAmber}`}>Overdue</span>
+          </div>
+          <div className={s.appRow}>
+            <div>
+              <b>Devon K.</b>
+              <span>HW 5.3 &middot; Algebra II &middot; Period 3 &middot; due Wednesday</span>
+            </div>
+            <span className={`${s.pill} ${s.pillAmber}`}>Ungraded</span>
           </div>
         </div>
         <div className={`${s.appSec} ${s.appClass}`}>

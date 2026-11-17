@@ -19,7 +19,7 @@ const STEPS = [
   },
   {
     title: "Graded by your rules",
-    said: "One point off under Ms. Rivera's rule, one for the wrong answer as Veradic's own judgment, and a draft grade of 8 out of 10 that Jordan can't see yet.",
+    said: "One point off under Ms. Rivera's rule, and a draft grade of 9 out of 10 that Jordan can't see yet.",
     body: "Write your grading rules once for the class. Every point Veradic takes off says why, and whether it came from your rule or its own judgment.",
   },
   {
@@ -128,8 +128,7 @@ export function Layers() {
         <div className={`${s.lay} ${s.noteRed}`} data-on={on(2)}>
           <b>&minus;1 &middot; Class rule</b>
           Show the distribution: the 2 multiplies both terms.
-          <b>&minus;1 &middot; AI judgment</b>
-          So x = 7 is wrong; it should be 9.
+
         </div>
         <div className={`${s.lay} ${s.rulesCard}`} data-on={on(2)}>
           <p>Ms. Rivera&rsquo;s rules &middot; Algebra II</p>
@@ -138,22 +137,21 @@ export function Layers() {
             <li>Units on final answers &mdash; 1 pt</li>
           </ul>
         </div>
-        <div className={`${s.lay} ${s.grade}`} data-on={on(2)}>
-          <span className={s.gradeScore}>8/10</span>
+        <div className={`${s.lay} ${s.grade}`} data-on={on(2)} data-approved={step >= 4 ? "true" : "false"}>
+          <span className={s.gradeScore}>9/10</span>
           <span className={s.gradeLbl}>
-            {step >= 4 ? (
-              <>
-                Approved, not
-                <br />
-                published yet.
-              </>
-            ) : (
-              <>
-                Draft. Jordan can&rsquo;t
-                <br />
-                see it yet.
-              </>
-            )}
+            {/* Both rendered; CSS shows the one that fits (and print, which
+                shows every layer, always shows the approved one). */}
+            <span className={s.lblApproved}>
+              Approved, not
+              <br />
+              published yet.
+            </span>
+            <span className={s.lblDraft}>
+              Draft. Jordan can&rsquo;t
+              <br />
+              see it yet.
+            </span>
           </span>
         </div>
         <div className={`${s.lay} ${s.stamp}`} data-on={on(4)}>

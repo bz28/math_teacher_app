@@ -61,7 +61,6 @@ html:has(.home) {
 .home :focus-visible {
   outline: 3px solid var(--green);
   outline-offset: 3px;
-  border-radius: 4px;
 }
 
 /* ---------- shared ---------- */
@@ -375,7 +374,7 @@ html:has(.home) {
     0 40px 70px -30px rgba(60, 40, 0, 0.55),
     inset 0 0 60px rgba(0, 0, 0, 0.18);
   transform: rotate(-1.2deg);
-  background-image: radial-gradient(ellipse at 25% 20%, rgba(255, 255, 255, 0.08), transparent 60%);
+  background-image: radial-gradient(ellipse at 25% 20%, rgba(255, 255, 255, 0.05), transparent 60%);
 }
 .who {
   display: block;
@@ -974,6 +973,10 @@ html:has(.home) {
   padding: 10px 14px;
   border-radius: 8px;
   z-index: 3;
+}
+.grade[data-approved="true"] .lblDraft,
+.grade[data-approved="false"] .lblApproved {
+  display: none;
 }
 .noteRed b:first-child {
   margin-top: 0;
@@ -1703,6 +1706,13 @@ html:has(.home) {
     opacity: 1 !important;
     transform: none !important;
     transition: none !important;
+  }
+  /* Print shows every layer, so the grade reads as approved. */
+  .lblDraft {
+    display: none !important;
+  }
+  .lblApproved {
+    display: inline !important;
   }
   /* Collapsed FAQ answers print too. */
   .faq details::details-content {
