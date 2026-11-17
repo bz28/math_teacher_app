@@ -19,7 +19,7 @@ const STEPS = [
   },
   {
     title: "Graded by your rules",
-    said: "One point off under Ms. Rivera's rule, and a draft grade of 9 out of 10 that Jordan can't see yet.",
+    said: "His answer to problem 5 is right, but he skipped the distribution, so one point off under Ms. Rivera's rule, and a draft grade of 9 out of 10 that Jordan can't see yet.",
     body: "Write your grading rules once for the class. Every point Veradic takes off says why, and whether it came from your rule or its own judgment.",
   },
   {
@@ -93,10 +93,14 @@ export function Layers() {
                 setChosen(true);
                 // Stacked layout: the sheet is below the steps, so bring it
                 // into view or the tap looks like it did nothing.
+                // Scroll to the part this step adds (step 1 is the sheet
+                // itself), centred, so it's on screen even on short phones.
                 const sheet = sheetRef.current;
                 if (sheet && window.matchMedia("(max-width: 960px)").matches) {
                   const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-                  sheet.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
+                  const target =
+                    i === 0 ? sheet : sheet.querySelector<HTMLElement>(`[data-focus-step="${i + 1}"]`) ?? sheet;
+                  target.scrollIntoView({ behavior: still ? "auto" : "smooth", block: i === 0 ? "start" : "center" });
                 }
               }}
             >
@@ -121,20 +125,20 @@ export function Layers() {
         <div className={s.row}>4)&nbsp; 3x + 7 = 22</div>
         <div className={`${s.row} ${s.ind}`}>3x = 15 &nbsp;&nbsp; x = 5</div>
         <div className={s.row}>5)&nbsp; 2(x &minus; 4) = 10</div>
-        <div className={`${s.row} ${s.ind}`}>2x &minus; 4 = 10 &nbsp;&nbsp; x = 7</div>
+        <div className={`${s.row} ${s.ind}`}>x &minus; 4 = 5 &nbsp;&nbsp; x = 9</div>
         <div className={s.row}>6)&nbsp; 4(x + 1) = 24</div>
         <div className={`${s.row} ${s.ind}`}>4x + 4 = 24 &nbsp;&nbsp; x = 5</div>
 
         <div className={`${s.lay} ${s.hlYellow}`} data-on={on(3)} />
-        <div className={`${s.lay} ${s.noteYellow}`} data-on={on(3)}>
+        <div className={`${s.lay} ${s.noteYellow}`} data-on={on(3)} data-focus-step="3">
           <small>Veradic asked Jordan</small>
           How did you get from 22 to 15?
           <span>took 7 off both sides</span>
         </div>
         <div className={`${s.lay} ${s.hlRed}`} data-on={on(2)} />
-        <div className={`${s.lay} ${s.noteRed}`} data-on={on(2)}>
+        <div className={`${s.lay} ${s.noteRed}`} data-on={on(2)} data-focus-step="2">
           <b>&minus;1 &middot; Class rule</b>
-          Show the distribution: the 2 multiplies both terms.
+          Right answer, but your rule: show the distribution, 2x &minus; 8 = 10.
 
         </div>
         <div className={`${s.lay} ${s.rulesCard}`} data-on={on(2)}>
@@ -161,7 +165,7 @@ export function Layers() {
             </span>
           </span>
         </div>
-        <div className={`${s.lay} ${s.stamp}`} data-on={on(4)}>
+        <div className={`${s.lay} ${s.stamp}`} data-on={on(4)} data-focus-step="4">
           Approved
           <small>Ms. Rivera &middot; Mon 7:42 am</small>
         </div>
