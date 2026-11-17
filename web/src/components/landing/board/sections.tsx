@@ -384,7 +384,7 @@ export function Monday() {
       <div
         className={s.app}
         role="img"
-        aria-label="Example teacher view on Monday: three students across your classes who need you today, the problem most of one class missed, and HW 5.2 with 24 grades still to post."
+        aria-label="Example teacher view on Monday: three students across your classes who need you today, the problem most of one class missed, and HW 5.2 with 3 grades left to review."
       >
         <div className={s.appBar}>
           <b>Your classes</b>
@@ -429,7 +429,7 @@ export function Monday() {
               <b>HW 5.2 grades</b>
               <span>21 approved, 3 drafts left. Nothing posted yet.</span>
             </div>
-            <span className={`${s.pill} ${s.pillAmber}`}>24 to review</span>
+            <span>3 to review</span>
           </div>
         </div>
       </div>
