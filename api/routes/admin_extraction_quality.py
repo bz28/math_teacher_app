@@ -154,6 +154,7 @@ async def extraction_quality(
     ),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    school_id: uuid.UUID | None = Query(default=None),
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -162,20 +163,31 @@ async def extraction_quality(
     def _joined(stmt: Any) -> Any:
         # select_from is explicit because the aggregate selects below name
         # no Submission column, and SQLAlchemy cannot infer the left side
-        # of the join from `func.count()` alone.
+        # of the join from `func.count()` alone. The student join is
+        # one-to-one (a submission has one student), so it cannot fan
+        # the counts out.
         return (
             stmt.select_from(Submission)
             .join(Assignment, Assignment.id == Submission.assignment_id)
             .join(Course, Course.id == Assignment.course_id)
+            .join(User, User.id == Submission.student_id)
         )
+
+    # Every query on this page shares these. Preview (shadow) students
+    # are a teacher trying the student view, not a real read — the
+    # grading report excludes them the same way.
+    scope_filters: list[Any] = [User.is_preview.is_(False)]
+    if subject:
+        scope_filters.append(Course.subject == subject)
+    if school_id is not None:
+        scope_filters.append(Course.school_id == school_id)
 
     settled_filters = [
         Submission.extraction.is_not(None),
         _RULED_AT.is_not(None),
         _RULED_AT >= since,
+        *scope_filters,
     ]
-    if subject:
-        settled_filters.append(Course.subject == subject)
 
     # ── The board. Counted in one pass so the buckets can never disagree
     #    with each other the way two independent queries could drift.
@@ -207,9 +219,8 @@ async def extraction_quality(
         Submission.extraction_confirmed_at.is_(None),
         Submission.extraction_flagged_at.is_(None),
         Submission.submitted_at >= since,
+        *scope_filters,
     ]
-    if subject:
-        awaiting_filters.append(Course.subject == subject)
     awaiting = (await db.execute(
         _joined(select(func.count())).where(*awaiting_filters)
     )).scalar_one() or 0

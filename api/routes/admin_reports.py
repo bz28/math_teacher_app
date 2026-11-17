@@ -195,18 +195,22 @@ def _serialize(r: TeacherReport, page_label: str | None = None) -> dict[str, Any
 async def list_reports(
     status_filter: str = Query(default=REPORT_STATUS_OPEN, alias="status"),
     limit: int = Query(default=100, ge=1, le=500),
+    school_id: uuid.UUID | None = Query(default=None),
     _: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     if status_filter not in (*REPORT_STATUSES, "all"):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Bad status filter")
-    q = select(TeacherReport).order_by(TeacherReport.created_at.desc()).limit(limit)
+    # The school is snapshotted on the report at filing time, so the
+    # inbox and its tab counts scope on the same column.
+    scope = [TeacherReport.school_id == school_id] if school_id is not None else []
+    q = select(TeacherReport).where(*scope).order_by(TeacherReport.created_at.desc()).limit(limit)
     if status_filter != "all":
         q = q.where(TeacherReport.status == status_filter)
     rows = (await db.execute(q)).scalars().all()
     counts: dict[str, int] = {
         row[0]: int(row[1]) for row in (await db.execute(
-            select(TeacherReport.status, func.count()).group_by(TeacherReport.status)
+            select(TeacherReport.status, func.count()).where(*scope).group_by(TeacherReport.status)
         )).all()
     }
     labels = await _page_labels(db, list(rows))
