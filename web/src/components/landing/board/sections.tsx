@@ -409,7 +409,7 @@ export function Monday() {
           <div className={s.appRow}>
             <div>
               <b>Devon K.</b>
-              <span>HW 5.3 &middot; Algebra II &middot; Period 3 &middot; due Wednesday</span>
+              <span>HW 5.3 &middot; Algebra II &middot; Period 3 &middot; Due Wed</span>
             </div>
             <span className={`${s.pill} ${s.pillAmber}`}>Ungraded</span>
           </div>
@@ -465,7 +465,7 @@ export function Practice() {
             <span>x = 3</span>
             <span>x = 17/5</span>
           </div>
-          <p className={s.nudge}>Not quite, try again! Miss it twice and Veradic shows the answer, then walks through it with you.</p>
+          <p className={s.nudge}>Not quite, try again! Miss it twice and Veradic shows the answer. Then you can ask it to walk you through it.</p>
         </div>
         <div
           className={s.pcard}
@@ -540,7 +540,7 @@ export function Prep() {
 
 const RULES: [string, string][] = [
   ["The teacher approves every grade.", "AI drafts. Nothing reaches a student until you say so."],
-  ["It never does students’ homework for them.", "The understanding check never gives the answer. In practice it shows one only after two tries, then walks through it."],
+  ["It never does students’ homework for them.", "The understanding check never gives the answer. In practice it shows one only after two tries, and the student can ask for a step-by-step walkthrough."],
   ["It helps students think, and never accuses them.", "It asks them to explain. You decide what their answers mean."],
   ["You review every problem before students see it.", "Each one comes with a full worked solution you can read and edit."],
   ["Student work never trains AI.", "Not ours, not anyone else’s."],
