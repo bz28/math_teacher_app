@@ -4,7 +4,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, AreaChart, Area, LineChart, Line,
 } from "recharts";
-import { api, type LLMCallsData, type SchoolListItem } from "../lib/api";
+import { api, type LLMCallsData } from "../lib/api";
+import { scopeParams, useSchoolScope } from "../lib/useSelectedSchool";
 import { formatRelativeDate, shortModel, shortId, fmtCost } from "../lib/format";
 import { windowLabel } from "../lib/definitions";
 import { BOARD_PAGE_SIZE } from "../lib/pagination";
@@ -42,11 +43,20 @@ export default function LLMCalls() {
   const [search, setSearch] = useState("");
   // URL-driven scopes (deep-linkable, and the single source of truth so the
   // shown value and the URL can never disagree): user, submission, session,
-  // school, status.
+  // status.
   const userFilter = searchParams.get("user") ?? "";
   const submissionFilter = searchParams.get("submission") ?? "";
   const sessionFilter = searchParams.get("session") ?? "";
-  const schoolFilter = searchParams.get("school") ?? "";
+  // The school comes from the rail's scope — except when the URL already
+  // names one user, submission or session. Those identify their own rows,
+  // and ANDing a school on top can only hide them: an admin's calls belong
+  // to no school, and a trace link followed under another school's scope
+  // would land on an empty list. pageScope() treats these URLs as
+  // single-thing pages for the same reason, so the rail doesn't claim a
+  // scope the request isn't using.
+  const scope = useSchoolScope();
+  const entityFilter = Boolean(userFilter || submissionFilter || sessionFilter);
+  const schoolFilter = entityFilter ? null : scope;
   const status: Status = ((): Status => {
     const s = searchParams.get("status");
     return s === "ok" || s === "failed" ? s : "";
@@ -64,17 +74,6 @@ export default function LLMCalls() {
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
-  // Schools list for the School dropdown. Loaded once — cheap and rarely
-  // changes; if it fails the dropdown just hides and the URL filter still works.
-  const [schools, setSchools] = useState<SchoolListItem[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    api.schools()
-      .then((d) => { if (!cancelled) setSchools(d.schools); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, []);
-
   useEffect(() => {
     let cancelled = false;
     api.llmCalls({
@@ -83,7 +82,7 @@ export default function LLMCalls() {
       user_id: userFilter,
       submission_id: submissionFilter,
       session_id: sessionFilter,
-      school_id: schoolFilter,
+      ...scopeParams(schoolFilter),
       search,
       ...(status === "ok" ? { success: "true" } : status === "failed" ? { success: "false" } : {}),
       limit: String(BOARD_PAGE_SIZE),
@@ -208,12 +207,6 @@ export default function LLMCalls() {
           <option value="">All users</option>
           {data.users.map((u) => <option key={u.id} value={u.id}>{u.email}</option>)}
         </select>
-        {schools.length > 0 && (
-          <select aria-label="Filter by school" value={schoolFilter} onChange={(e) => setParam("school", e.target.value)}>
-            <option value="">All schools</option>
-            {schools.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-        )}
         <select aria-label="Filter by function" value={fnFilter} onChange={(e) => setFnFilter(e.target.value)}>
           <option value="">All functions</option>
           {fnOptions.map((f) => <option key={f} value={f}>{f}</option>)}

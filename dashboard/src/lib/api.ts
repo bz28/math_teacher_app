@@ -751,9 +751,9 @@ export const api = {
   teacherStudents: (teacherId: string, params?: Record<string, string>) =>
     request<TeacherStudentsData>(`/admin/users/${teacherId}/students`, params),
   // Teacher reports ("Report a problem")
-  reports: (status: ReportStatus | "all") =>
+  reports: (status: ReportStatus | "all", params?: Record<string, string>) =>
     request<{ reports: TeacherReportData[]; counts: Record<ReportStatus, number> }>(
-      "/admin/reports", { status },
+      "/admin/reports", { status, ...params },
     ),
   report: (id: string) => request<TeacherReportData>(`/admin/reports/${id}`),
   updateReport: (id: string, patch: { status: ReportStatus; resolution_note?: string | null }) =>

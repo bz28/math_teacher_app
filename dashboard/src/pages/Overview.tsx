@@ -5,6 +5,7 @@ import {
 } from "recharts";
 import { api, type OverviewData, type SchoolListItem } from "../lib/api";
 import { fmtCost } from "../lib/format";
+import { scopeParams, useSchoolScope } from "../lib/useSelectedSchool";
 import { STALE_AFTER_DAYS, isAtRisk, windowLabel } from "../lib/definitions";
 import StatTile from "../components/StatTile";
 import StatusPill, { type PillTone } from "../components/StatusPill";
@@ -50,11 +51,12 @@ export default function Overview() {
   const [reloadKey, setReloadKey] = useState(0);
   const [hours, setHours] = useState("24");
   const [grade, setGrade] = useState("");
+  const scope = useSchoolScope();
 
   useEffect(() => {
     let cancelled = false;
     const load = () => {
-      api.overview({ hours, grade })
+      api.overview({ hours, grade, ...scopeParams(scope) })
         .then((d) => { if (!cancelled) { setData(d); setError(null); } })
         .catch((e) => { if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load overview."); });
       // Enrichers for the attention band. Best-effort: a failure here
@@ -76,11 +78,15 @@ export default function Overview() {
     load();
     const interval = setInterval(load, 30_000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [hours, grade, reloadKey]);
+  }, [hours, grade, scope, reloadKey]);
 
+  // Scoped, the question is whether THIS school is at risk, not how many
+  // others are.
   const atRiskSchools = useMemo(
-    () => schools.filter((s) => s.is_active && isAtRisk({ lastActiveAt: s.last_active_at, failedCalls: s.failed_calls_24h })).length,
-    [schools],
+    () => schools
+      .filter((s) => scope === null || s.id === scope)
+      .filter((s) => s.is_active && isAtRisk({ lastActiveAt: s.last_active_at, failedCalls: s.failed_calls_24h })).length,
+    [schools, scope],
   );
 
   const win = windowLabel(Number(hours));
@@ -113,19 +119,23 @@ export default function Overview() {
     }
     if (atRiskSchools > 0) {
       items.push({
-        id: "at-risk-schools", severity: "warn", to: "/schools",
-        node: <><b>{atRiskSchools}</b> active school{atRiskSchools === 1 ? "" : "s"} at risk — quiet {STALE_AFTER_DAYS}+ days</>,
+        id: "at-risk-schools", severity: "warn", to: scope ? `/schools/${scope}` : "/schools",
+        node: scope
+          ? <>This school is at risk — quiet {STALE_AFTER_DAYS}+ days or failing calls</>
+          : <><b>{atRiskSchools}</b> active school{atRiskSchools === 1 ? "" : "s"} at risk — quiet {STALE_AFTER_DAYS}+ days</>,
       });
     }
+    // Harness runs are synthetic — they belong to no school — so they are
+    // a platform signal in every scope, and say so when a school is picked.
     if (failedRuns > 0) {
       items.push({
         id: "harness", severity: "warn", to: "/harness-runs",
-        node: <><b>{failedRuns}</b> harness run{failedRuns === 1 ? "" : "s"} failing in the last {HARNESS_WINDOW_DAYS}d</>,
+        node: <><b>{failedRuns}</b> harness run{failedRuns === 1 ? "" : "s"} failing in the last {HARNESS_WINDOW_DAYS}d{scope ? " (platform-wide)" : ""}</>,
       });
     }
     // Danger before warn so the worst thing is always on top.
     return items.sort((a, b) => (a.severity === b.severity ? 0 : a.severity === "danger" ? -1 : 1));
-  }, [data, atRiskSchools, failedRuns, win]);
+  }, [data, atRiskSchools, failedRuns, win, scope]);
 
   // Only surface the error panel when there's nothing to show. A blip
   // during 30s polling keeps the last-good view rather than yanking it.

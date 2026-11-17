@@ -21,6 +21,7 @@ import StatusPill, { type PillTone } from "../components/StatusPill";
 import ExtractionReadout from "../components/ExtractionReadout";
 import { STAGE_META, isStalled, noCallsDiagnosis } from "../lib/stages";
 import { useConfirm } from "../lib/confirm";
+import { useScopeToSchool } from "../lib/useSelectedSchool";
 import { useProblemHash, useScrollToProblem } from "../lib/anchor";
 
 // SubmissionTrace — the per-submission case file. Traces ONE student
@@ -146,6 +147,9 @@ export default function SubmissionTrace() {
   }, [submissionId]);
 
   // `#p3` from a report: land on Problem 3's rows once the work is in.
+  // Keep the rail honest about which school this submission is in.
+  useScopeToSchool(data?.submission?.school_id);
+
   const targetProblem = useProblemHash();
   useScrollToProblem(targetProblem, workLoaded && data !== null, "student-work");
 

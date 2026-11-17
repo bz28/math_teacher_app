@@ -6,6 +6,7 @@ import {
   type SolutionOutcome,
   type SolutionRepairHistory,
 } from "../lib/api";
+import { scopeParams, useSchoolScope } from "../lib/useSelectedSchool";
 import StatTile from "../components/StatTile";
 import StatusPill from "../components/StatusPill";
 import DataTable, { type Column } from "../components/DataTable";
@@ -116,6 +117,7 @@ export default function Quality() {
   // usual cancelled-flag because the retry button calls load() directly,
   // outside any effect that could clean itself up.
   const loadSeq = useRef(0);
+  const scope = useSchoolScope();
 
   const load = useCallback(async () => {
     const seq = ++loadSeq.current;
@@ -131,6 +133,7 @@ export default function Quality() {
         limit: String(BOARD_PAGE_SIZE),
         offset: String(offset),
         ...(outcome ? { outcome } : {}),
+        ...scopeParams(scope),
       });
       if (seq === loadSeq.current) setData(d);
     } catch (e) {
@@ -141,7 +144,7 @@ export default function Quality() {
       // A superseded load must not clear the spinner the newer one owns.
       if (seq === loadSeq.current) setLoading(false);
     }
-  }, [outcome, offset]);
+  }, [outcome, offset, scope]);
 
   useEffect(() => { void load(); }, [load]);
 

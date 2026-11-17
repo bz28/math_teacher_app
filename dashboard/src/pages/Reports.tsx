@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, type ReportStatus, type TeacherReportData } from "../lib/api";
+import { scopeParams, useSchoolScope } from "../lib/useSelectedSchool";
 import { formatRelativeDate } from "../lib/format";
 import {
   KIND_LABEL,
@@ -41,11 +42,12 @@ export default function Reports() {
   // itself. Loading/error flip inside the promise chain, not the
   // effect body, which is what the set-state-in-effect rule wants.
   const [attempt, setAttempt] = useState(0);
+  const scope = useSchoolScope();
 
   useEffect(() => {
     let cancelled = false;
     api
-      .reports(filter)
+      .reports(filter, scopeParams(scope))
       .then((d) => {
         if (cancelled) return;
         setRows(d.reports);
@@ -61,7 +63,7 @@ export default function Reports() {
     return () => {
       cancelled = true;
     };
-  }, [filter, attempt]);
+  }, [filter, scope, attempt]);
   const load = useCallback(() => {
     setLoading(true);
     setAttempt((n) => n + 1);

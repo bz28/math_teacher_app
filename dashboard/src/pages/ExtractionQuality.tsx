@@ -6,6 +6,7 @@ import {
   type ExtractionDetail,
   type ExtractionBucket,
 } from "../lib/api";
+import { scopeParams, useSchoolScope } from "../lib/useSelectedSchool";
 import StatTile from "../components/StatTile";
 import StatusPill from "../components/StatusPill";
 import DataTable, { type Column } from "../components/DataTable";
@@ -114,6 +115,7 @@ export default function ExtractionQuality() {
   // the offset being asked about — see Users.tsx.
   const [loadedOffset, setLoadedOffset] = useState<number | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  const scope = useSchoolScope();
 
   useEffect(() => {
     let cancelled = false;
@@ -121,7 +123,10 @@ export default function ExtractionQuality() {
       // Paged on the server. Sending no limit took the endpoint's default
       // 50 while the count in the heading read the true total, so the table
       // showed a prefix and said nothing about it.
-      .extractionQuality({ hours, bucket, limit: String(BOARD_PAGE_SIZE), offset: String(offset) })
+      .extractionQuality({
+        hours, bucket, limit: String(BOARD_PAGE_SIZE), offset: String(offset),
+        ...scopeParams(scope),
+      })
       .then((d) => { if (!cancelled) { setData(d); setLoadedOffset(offset); setError(null); } })
       .catch((e) => {
         if (cancelled) return;
@@ -130,7 +135,7 @@ export default function ExtractionQuality() {
         setError(e instanceof Error ? e.message : "Failed to load extraction quality.");
       });
     return () => { cancelled = true; };
-  }, [hours, bucket, offset, reloadKey]);
+  }, [hours, bucket, offset, scope, reloadKey]);
 
   const cols: Column<ExtractionCase>[] = useMemo(() => [
     {

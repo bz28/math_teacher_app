@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { api, getUserId, type SchoolListItem, type UsersData } from "../lib/api";
+import { api, getUserId, type UsersData } from "../lib/api";
+import { scopeParams, useSchoolScope } from "../lib/useSelectedSchool";
 import { formatRelativeDate, fmtCost } from "../lib/format";
 import { BOARD_PAGE_SIZE } from "../lib/pagination";
 import { activityPill, activityStatus, daysSince, windowLabel } from "../lib/definitions";
@@ -123,11 +124,13 @@ export default function Users() {
   const [reloadKey, setReloadKey] = useState(0);
   const [hours, setHours] = useState("720");
   const [plan, setPlan] = useState("");
-  const [schoolId, setSchoolId] = useState("");
+  // The rail's scope. Admins belong to no school, so the Admin preset
+  // ignores it (pageScope() marks that view platform-wide).
+  const scope = useSchoolScope();
+  const schoolId = isAdminView ? null : scope;
   const [search, setSearch] = useState("");
   const [offset, setOffset] = useState(0);
   const [loadedOffset, setLoadedOffset] = useState<number | null>(null);
-  const [schools, setSchools] = useState<SchoolListItem[]>([]);
 
   // The console must not offer an admin destructive actions against
   // their own account — the API 400s both, so the only outcome was an
@@ -153,11 +156,11 @@ export default function Users() {
         limit: String(BOARD_PAGE_SIZE),
         offset: String(offset),
         ...(role ? { role } : {}),
-        // Plan / school selects are hidden on the Admin preset, so
-        // don't let a value left over from another view silently
-        // filter the admin list into an empty, unexplained state.
+        // The plan select is hidden on the Admin preset, so don't let a
+        // value left over from another view silently filter the admin
+        // list into an empty, unexplained state.
         ...(!isAdminView && plan ? { plan } : {}),
-        ...(!isAdminView && schoolId ? { school_id: schoolId } : {}),
+        ...scopeParams(schoolId),
         ...(search ? { search } : {}),
       })
       .then((d) => {
@@ -192,11 +195,6 @@ export default function Users() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { reload(); }, [hours, role, plan, schoolId, search, offset, reloadKey]);
 
-  // Institutional schools power the school filter. Best-effort — a
-  // failure just leaves the dropdown with "All schools".
-  useEffect(() => {
-    api.schools().then((r) => setSchools(r.schools)).catch(() => {});
-  }, []);
 
   // Close the action menu on any outside click or scroll.
   useEffect(() => {
@@ -490,19 +488,11 @@ export default function Users() {
       <div className="filters">
         <SearchInput value={search} onChange={onFilter(setSearch)} placeholder="Search by name or email…" />
         {!isAdminView && (
-          <>
-            <select value={plan} onChange={(e) => onFilter(setPlan)(e.target.value)} aria-label="Filter by plan">
-              <option value="">All plans</option>
-              <option value="pro">Pro</option>
-              <option value="free">Free</option>
-            </select>
-            <select value={schoolId} onChange={(e) => onFilter(setSchoolId)(e.target.value)} aria-label="Filter by school">
-              <option value="">All schools</option>
-              {schools.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-          </>
+          <select value={plan} onChange={(e) => onFilter(setPlan)(e.target.value)} aria-label="Filter by plan">
+            <option value="">All plans</option>
+            <option value="pro">Pro</option>
+            <option value="free">Free</option>
+          </select>
         )}
         <select value={hours} onChange={(e) => onFilter(setHours)(e.target.value)} aria-label="Activity window">
           <option value="24">Last 24 hours</option>

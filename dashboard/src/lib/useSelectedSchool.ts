@@ -1,43 +1,38 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { useLocation } from "react-router-dom";
 import { api, type SchoolListItem } from "./api";
 
 /**
- * Which school the console is scoped to.
+ * Which school the console is scoped to — or `null` for All schools.
  *
- * Everything under "This school" in the rail is scoped by this, so a
- * school stops being a place you navigate *to* and becomes the context you
- * work *inside*. That removes a click from the journey that matters most:
- * with one customer, "Schools" is a list of one, and walking a list to
- * reach its only row conveys nothing.
+ * This is the console's scope. Every page whose data belongs to schools
+ * (Overview, the AI-quality tabs, Teacher reports, LLM calls, Users,
+ * Audit log) reads it and sends it as `school_id`; the backend filters on
+ * it. Pages whose data belongs to no school (Schools directory, Leads,
+ * Evals, Harness) ignore it, and the rail's scope line says so.
  *
- * Selection resolves in this order, and the order is the point:
+ * `null` means All schools: the endpoints are called with no `school_id`,
+ * so they answer exactly as they did before the switcher scoped anything
+ * — every row, counted once. That is the default for an operator who has
+ * never picked a school.
  *
- *   1. the school in the URL, when there is one — a shared or bookmarked
- *      link must beat anything remembered locally, or the rail would claim
- *      a different school than the page is showing;
- *   2. the last school this operator chose (localStorage);
- *   3. the first school in the list.
+ * A module-level external store rather than React context because the
+ * writers (the switcher, a school page, a teacher page) and the readers
+ * (every page) have no common parent below the router; it is the same
+ * `useSyncExternalStore` pattern `apiHealth` uses. The choice persists
+ * in localStorage so a reload keeps the operator where they were.
  */
 
 const STORAGE_KEY = "veradic_admin_school";
 
-/**
- * The scope, as an external store.
- *
- * A page that shows something belonging to a school — a teacher, say —
- * publishes that school here, and the rail follows. Without it the rail
- * asserted whatever it last remembered: open a Riverside teacher from a
- * platform-wide list and the switcher still said "Holy Ghost Prep",
- * directly contradicting the breadcrumb an inch away. Two school names on
- * one screen meaning different things is the confusion this whole
- * restructure exists to remove.
- *
- * An external store rather than state-in-a-parent because the publisher
- * (a deep page) and the reader (the rail) have no component relationship;
- * `useSyncExternalStore` is the same pattern `apiHealth` already uses.
- */
-let current: string | null = null;
+function readStored(): string | null {
+  try {
+    return localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return null; // private mode / storage disabled — All schools
+  }
+}
+
+let scope: string | null = readStored();
 const listeners = new Set<() => void>();
 
 function subscribe(fn: () => void): () => void {
@@ -46,62 +41,57 @@ function subscribe(fn: () => void): () => void {
 }
 
 function snapshot(): string | null {
-  return current;
+  return scope;
 }
 
-export function rememberSchool(id: string): void {
+/** Set the scope. `null` = All schools. Persisted. */
+export function setSchoolScope(id: string | null): void {
   try {
-    localStorage.setItem(STORAGE_KEY, id);
+    if (id) localStorage.setItem(STORAGE_KEY, id);
+    else localStorage.removeItem(STORAGE_KEY);
   } catch {
-    // Non-fatal: the switcher still works, it just won't persist.
+    // Non-fatal: the scope still applies, it just won't survive a reload.
   }
-  if (current === id) return;
-  current = id;
+  if (scope === id) return;
+  scope = id;
   listeners.forEach((fn) => fn());
 }
 
+/** The current scope: a school id, or `null` for All schools. */
+export function useSchoolScope(): string | null {
+  return useSyncExternalStore(subscribe, snapshot, snapshot);
+}
+
+/** The query params that carry the scope. Empty for All schools. */
+export function scopeParams(schoolId: string | null): Record<string, string> {
+  return schoolId ? { school_id: schoolId } : {};
+}
+
 /**
- * Publish the school a non-school-scoped page is showing, so the rail
- * agrees with the page. Call it from an effect, not during render.
+ * A page showing one entity that belongs to a school (a teacher, a
+ * student) keeps the rail honest: if the scope names a DIFFERENT school,
+ * the scope follows the page. Under All schools it is left alone — the
+ * entity is already inside "all", and silently collapsing the scope to
+ * one school just because an operator opened a teacher would quietly
+ * narrow every page they visit next.
  */
 export function useScopeToSchool(schoolId: string | null | undefined): void {
   useEffect(() => {
-    if (schoolId) rememberSchool(schoolId);
+    if (schoolId && scope !== null && scope !== schoolId) setSchoolScope(schoolId);
   }, [schoolId]);
 }
 
-function remembered(): string | null {
-  try {
-    return localStorage.getItem(STORAGE_KEY);
-  } catch {
-    return null; // private mode / storage disabled — fall through to first
-  }
-}
-
-/**
- * The school id in the URL, or null.
- *
- * Read off the pathname rather than useParams: this runs inside the
- * LAYOUT, and a layout's useParams only sees params matched by its own
- * route and its ancestors — `:schoolId` belongs to a descendant route, so
- * it would always come back undefined here.
- */
-function routeSchoolId(pathname: string): string | null {
-  const m = /^\/schools\/([^/?#]+)/.exec(pathname);
-  return m ? m[1] : null;
-}
-
 export interface SelectedSchool {
+  /** The scoped school, or null for All schools. */
   id: string | null;
+  /** Its name, or null for All schools / a school not in the list. */
   name: string | null;
   schools: SchoolListItem[];
   loading: boolean;
 }
 
 export function useSelectedSchool(): SelectedSchool {
-  const { pathname } = useLocation();
-  const routeId = routeSchoolId(pathname);
-  const published = useSyncExternalStore(subscribe, snapshot, snapshot);
+  const id = useSchoolScope();
   const [schools, setSchools] = useState<SchoolListItem[] | null>(null);
 
   useEffect(() => {
@@ -121,28 +111,23 @@ export function useSelectedSchool(): SelectedSchool {
     };
   }, []);
 
-  const id = useMemo(() => {
-    // The URL wins UNCONDITIONALLY when there is one, even if the school
-    // isn't in the switcher's list. `api.schools()` returns only
-    // institutional schools, while GET /schools/{id} has no such filter —
-    // so an indie teacher's synthetic school (reachable from a submission
-    // trace) renders a page the list has never heard of. Falling through
-    // there would leave the rail confidently naming a DIFFERENT school
-    // than the page is showing, which is the one outcome this ordering
-    // exists to prevent.
-    if (routeId) return routeId;
-    // What the current page says it is showing beats anything remembered.
-    if (published) return published;
-    if (!schools || schools.length === 0) return null;
-    const saved = remembered();
-    if (saved && schools.some((s) => s.id === saved)) return saved;
-    return schools[0].id;
-  }, [schools, routeId, published]);
+  // A remembered school that no longer exists (deleted since) would scope
+  // every page to nothing, with a switcher that can't display it. Fall
+  // back to All schools once the list proves it's gone. Only on a
+  // successful, non-empty load — a failed fetch proves nothing.
+  useEffect(() => {
+    if (schools && schools.length > 0 && id && !schools.some((s) => s.id === id)) {
+      setSchoolScope(null);
+    }
+  }, [schools, id]);
 
-  return {
-    id,
-    name: schools?.find((s) => s.id === id)?.name ?? null,
-    schools: schools ?? [],
-    loading: schools === null,
-  };
+  return useMemo(
+    () => ({
+      id,
+      name: schools?.find((s) => s.id === id)?.name ?? null,
+      schools: schools ?? [],
+      loading: schools === null,
+    }),
+    [id, schools],
+  );
 }

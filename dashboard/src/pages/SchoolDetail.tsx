@@ -460,7 +460,7 @@ export default function SchoolDetail() {
         action={
           teacherCount > 0 ? (
             <Link
-              to={`/llm-calls?school=${detail.id}&hours=720`}
+              to="/llm-calls?hours=720"
               className="link-btn"
               style={{ fontSize: 12 }}
               title="LLM calls for everyone at this school (teachers + students)"
@@ -536,7 +536,7 @@ export default function SchoolDetail() {
         label="Cost"
         action={
           <Link
-            to={`/llm-calls?school=${detail.id}&hours=720`}
+            to="/llm-calls?hours=720"
             className="link-btn"
             style={{ fontSize: 12 }}
           >
@@ -616,12 +616,12 @@ export default function SchoolDetail() {
           <HealthBlock
             label="Failed calls (24h)"
             count={overview.failed_calls_24h}
-            href={`/llm-calls?school=${detail.id}&status=failed&hours=24`}
+            href="/llm-calls?status=failed&hours=24"
           />
           <HealthBlock
             label="Failed calls (7d)"
             count={overview.failed_calls_7d}
-            href={`/llm-calls?school=${detail.id}&status=failed&hours=168`}
+            href="/llm-calls?status=failed&hours=168"
           />
         </div>
       </Section>
