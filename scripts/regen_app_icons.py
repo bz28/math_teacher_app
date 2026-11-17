@@ -1,209 +1,109 @@
-"""Regenerate Veradic mobile icons in the editorial green palette.
+"""Regenerate Veradic's raster icons from the "Balanced" mark.
 
-Mirrors the web SVG at web/src/app/icon.svg:
-  background: linear gradient #1F6B47 (top-left) -> #0A3D2A (bottom-right)
-  V mark:     white stroke, rounded caps + join, with a white dot at the
-              upper-right tip.
+The mark is an equals sign: a clean top bar (the answer) over a hand-drawn
+bottom bar (the student's own reasoning). Its geometry mirrors
+web/src/lib/brand-mark.ts (64-unit grid); change the two together.
 
-Outputs to mobile/assets/, overwriting the existing purple-theme PNGs.
+Outputs:
+  mobile/assets/  icon, splash, Android adaptive layers, monochrome, favicon
+  web/src/app/favicon.ico  (16, 32, 48)
+
 Run from the repo root: python scripts/regen_app_icons.py
 """
 
-from PIL import Image, ImageDraw, ImageFilter
 from pathlib import Path
+
+from PIL import Image, ImageDraw
 
 REPO = Path(__file__).resolve().parents[1]
 OUT = REPO / "mobile" / "assets"
+FAVICON_ICO = REPO / "web" / "src" / "app" / "favicon.ico"
 
-BG_TOP = (31, 107, 71)    # #1F6B47
-BG_BOT = (10, 61, 42)     # #0A3D2A
-WHITE = (255, 255, 255)
-DOT_WHITE = (255, 255, 255, 242)  # ~95% opacity
+BOARD = (20, 100, 74)      # #14644A
+CHALK = (246, 248, 240)    # #F6F8F0
+SUN = (255, 206, 58)       # #FFCE3A
+INK = (22, 36, 29)         # #16241D
+GREEN = (15, 107, 76)      # #0F6B4C
+PAPER = (255, 255, 255)
 
-# Stroke gradient: pure white at top -> very pale mint at bottom.
-V_TOP = (255, 255, 255)
-V_BOT = (230, 240, 234)   # #E6F0EA
+SS = 4  # supersample factor
 
-SUPERSAMPLE = 2  # render 2x then downsample for antialiasing
-
-
-def diag_gradient(size, c1, c2):
-    """Diagonal top-left -> bottom-right gradient."""
-    W, H = size
-    # Build at 1/16 res for speed, then resize. The result is visually
-    # indistinguishable from per-pixel because the gradient is smooth.
-    sw, sh = max(W // 16, 64), max(H // 16, 64)
-    img = Image.new("RGB", (sw, sh))
-    px = img.load()
-    denom = (sw - 1) + (sh - 1) or 1
-    for y in range(sh):
-        for x in range(sw):
-            t = (x + y) / denom
-            r = round(c1[0] + (c2[0] - c1[0]) * t)
-            g = round(c1[1] + (c2[1] - c1[1]) * t)
-            b = round(c1[2] + (c2[2] - c1[2]) * t)
-            px[x, y] = (r, g, b)
-    return img.resize((W, H), Image.BICUBIC)
+# Mark geometry on the 64 grid (web/src/lib/brand-mark.ts).
+TOP = [(13, 24), (51, 24)]
+BOTTOM = [  # two cubic segments: C then S (reflected first control point)
+    ((13, 41), (19.5, 38.8), (24.5, 42.4), (31, 40.8)),
+    ((31, 40.8), (37.5, 39.2), (43.5, 38.9), (51, 40.6)),
+]
+STROKE = 8.5
+CENTER_Y = 32.6  # optical centre of the mark's ink
 
 
-def vertical_gradient(size, c1, c2):
-    """Top -> bottom gradient. Returns RGB image."""
-    W, H = size
-    img = Image.new("RGB", (1, H))
-    px = img.load()
-    for y in range(H):
-        t = y / (H - 1) if H > 1 else 0
-        r = round(c1[0] + (c2[0] - c1[0]) * t)
-        g = round(c1[1] + (c2[1] - c1[1]) * t)
-        b = round(c1[2] + (c2[2] - c1[2]) * t)
-        px[0, y] = (r, g, b)
-    return img.resize((W, H), Image.BICUBIC)
+def _cubic(p0, p1, p2, p3, n=80):
+    pts = []
+    for i in range(n + 1):
+        t = i / n
+        u = 1 - t
+        x = u**3 * p0[0] + 3 * u * u * t * p1[0] + 3 * u * t * t * p2[0] + t**3 * p3[0]
+        y = u**3 * p0[1] + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1] + t**3 * p3[1]
+        pts.append((x, y))
+    return pts
 
 
-def draw_v_mark(size, stroke_color_img, scale_box=0.42, stroke_frac=0.105,
-                dot_color=DOT_WHITE):
-    """Return RGBA layer with the V mark + dot, transparent background.
+def _stroke(draw, pts, width, fill):
+    """A round-capped stroke: discs along a densely sampled path."""
+    r = width / 2
+    dense = []
+    for a, b in zip(pts, pts[1:]):
+        steps = max(1, int(((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5 / (r / 4)))
+        for i in range(steps):
+            t = i / steps
+            dense.append((a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t))
+    dense.append(pts[-1])
+    for x, y in dense:
+        draw.ellipse((x - r, y - r, x + r, y + r), fill=fill)
 
-    The V geometry mirrors web/src/app/icon.svg path:
-      M 160 148 L 256 380 L 352 148  (on a 512 grid)
-    scaled into the requested (W, H).
 
-    stroke_color_img can be an RGB Image the same size; the V stroke
-    samples from it (lets us paint a vertical white->mint gradient on
-    the stroke). Pass None for pure white.
+def draw_mark(size, top_color, bottom_color, scale=0.8, bg=None, radius=0.0):
+    """RGBA image of the mark centred in a square of `size` px.
+
+    `scale` is the mark's size relative to the 64 grid filling the square
+    (0.8 matches the web tile). `bg` paints a (rounded, if `radius` > 0)
+    background square.
     """
-    W, H = size
-    layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    S = size * SS
+    img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    if bg is not None:
+        d.rounded_rectangle((0, 0, S - 1, S - 1), radius=round(radius * S), fill=bg + (255,))
+    k = S / 64 * scale
 
-    # Render at supersampled resolution then shrink for smooth edges.
-    SW, SH = W * SUPERSAMPLE, H * SUPERSAMPLE
-    big = Image.new("RGBA", (SW, SH), (0, 0, 0, 0))
-    mask = Image.new("L", (SW, SH), 0)
-    md = ImageDraw.Draw(mask)
+    def m(p):  # grid -> pixels, centred like the SVG transform
+        return (S / 2 + (p[0] - 32) * k, S / 2 + (p[1] - CENTER_Y) * k)
 
-    # Normalize web SVG coords (0..512) to current canvas.
-    def n(p):
-        return (round(p[0] / 512 * SW), round(p[1] / 512 * SH))
-
-    tl = n((160, 148))
-    bot = n((256, 380))
-    tr = n((352, 148))
-    stroke_w = round(52 / 512 * SW)
-    half = stroke_w / 2
-    dot_r = round(18 / 512 * SW)
-
-    # Two straight segments forming the V. Rounded caps + join come
-    # from drawing filled circles at every endpoint after the lines.
-    md.line([tl, bot], fill=255, width=stroke_w)
-    md.line([bot, tr], fill=255, width=stroke_w)
-    for cx, cy in (tl, bot, tr):
-        md.ellipse((cx - half, cy - half, cx + half, cy + half), fill=255)
-
-    # Paint the stroke using stroke_color_img (or solid white).
-    if stroke_color_img is not None:
-        paint = stroke_color_img.resize((SW, SH), Image.BICUBIC).convert("RGBA")
-    else:
-        paint = Image.new("RGBA", (SW, SH), WHITE + (255,))
-    big.paste(paint, (0, 0), mask)
-
-    # Dot at the upper-right tip, drawn on top of the V stroke.
-    dd = ImageDraw.Draw(big)
-    dd.ellipse(
-        (tr[0] - dot_r, tr[1] - dot_r, tr[0] + dot_r, tr[1] + dot_r),
-        fill=dot_color,
-    )
-
-    layer = big.resize((W, H), Image.LANCZOS)
-    return layer
-
-
-def make_icon():
-    """1024x1024 iOS app icon: green gradient bg + white-mint V + dot."""
-    W = H = 1024
-    bg = diag_gradient((W, H), BG_TOP, BG_BOT)
-    stroke = vertical_gradient((W, H), V_TOP, V_BOT)
-    v = draw_v_mark((W, H), stroke)
-    out = bg.convert("RGBA")
-    out.alpha_composite(v)
-    out.convert("RGB").save(OUT / "icon.png", optimize=True)
-
-
-def make_splash():
-    """1024x1024 splash. Original was a colored V on white; keep that
-    formula but flip purple -> editorial green. The V uses a vertical
-    gradient (deep green at top to lighter at bottom) so it carries the
-    same warmth as the launch screen background (#F7F5F0)."""
-    W = H = 1024
-    stroke = vertical_gradient((W, H), (14, 82, 56), (47, 143, 102))  # #0E5238 -> #2F8F66
-    v = draw_v_mark((W, H), stroke, dot_color=(14, 82, 56, 235))
-    out = Image.new("RGBA", (W, H), (247, 245, 240, 255))  # #F7F5F0 paper
-    out.alpha_composite(v)
-    out.convert("RGB").save(OUT / "splash-icon.png", optimize=True)
-
-
-def make_android_foreground():
-    """Android adaptive icon foreground: white V on transparent.
-    Android composes this above the background layer with a 25-33%
-    safe-zone outset, so the V already sits at ~80% of canvas — same
-    proportions the source PNG used."""
-    W = H = 512
-    stroke = vertical_gradient((W, H), V_TOP, V_BOT)
-    v = draw_v_mark((W, H), stroke)
-    v.save(OUT / "android-icon-foreground.png", optimize=True)
-
-
-def make_android_background():
-    """Solid green gradient panel that sits behind the foreground V."""
-    W = H = 512
-    bg = diag_gradient((W, H), BG_TOP, BG_BOT)
-    bg.convert("RGBA").save(OUT / "android-icon-background.png", optimize=True)
-
-
-def make_android_monochrome():
-    """Themed-icon silhouette: solid white V on transparent, no dot.
-    Android tints this with the user's accent color at runtime."""
-    W = H = 432
-    SW, SH = W * SUPERSAMPLE, H * SUPERSAMPLE
-    mask = Image.new("L", (SW, SH), 0)
-    md = ImageDraw.Draw(mask)
-
-    def n(p):
-        return (round(p[0] / 512 * SW), round(p[1] / 512 * SH))
-
-    tl, bot, tr = n((160, 148)), n((256, 380)), n((352, 148))
-    stroke_w = round(52 / 512 * SW)
-    half = stroke_w / 2
-    md.line([tl, bot], fill=255, width=stroke_w)
-    md.line([bot, tr], fill=255, width=stroke_w)
-    for cx, cy in (tl, bot, tr):
-        md.ellipse((cx - half, cy - half, cx + half, cy + half), fill=255)
-
-    big = Image.new("RGBA", (SW, SH), (0, 0, 0, 0))
-    white = Image.new("RGBA", (SW, SH), WHITE + (255,))
-    big.paste(white, (0, 0), mask)
-    big.resize((W, H), Image.LANCZOS).save(OUT / "android-icon-monochrome.png", optimize=True)
-
-
-def make_favicon():
-    """48x48 web favicon: full miniature design."""
-    W = H = 48
-    bg = diag_gradient((W, H), BG_TOP, BG_BOT)
-    stroke = vertical_gradient((W, H), V_TOP, V_BOT)
-    v = draw_v_mark((W, H), stroke)
-    out = bg.convert("RGBA")
-    out.alpha_composite(v)
-    out.save(OUT / "favicon.png", optimize=True)
+    _stroke(d, [m(p) for p in TOP], STROKE * k, top_color + (255,))
+    bottom = []
+    for seg in BOTTOM:
+        bottom += _cubic(*[m(p) for p in seg])
+    _stroke(d, bottom, STROKE * k, bottom_color + (255,))
+    return img.resize((size, size), Image.LANCZOS)
 
 
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
-    make_icon()
-    make_splash()
-    make_android_foreground()
-    make_android_background()
-    make_android_monochrome()
-    make_favicon()
-    print("Wrote 6 icons to", OUT)
+    # iOS app icon: full-bleed board green (iOS masks the corners).
+    draw_mark(1024, CHALK, SUN, scale=0.62, bg=BOARD).convert("RGB").save(OUT / "icon.png", optimize=True)
+    # Splash: the mark on white, ink + green.
+    draw_mark(1024, INK, GREEN, scale=0.5, bg=PAPER).convert("RGB").save(OUT / "splash-icon.png", optimize=True)
+    # Android adaptive: foreground inside the 66% safe zone, solid background.
+    draw_mark(512, CHALK, SUN, scale=0.5).save(OUT / "android-icon-foreground.png", optimize=True)
+    Image.new("RGBA", (512, 512), BOARD + (255,)).save(OUT / "android-icon-background.png", optimize=True)
+    # Themed (monochrome) icon: one colour, Android tints it.
+    draw_mark(432, (255, 255, 255), (255, 255, 255), scale=0.5).save(OUT / "android-icon-monochrome.png", optimize=True)
+    # Expo web favicon.
+    draw_mark(48, CHALK, SUN, bg=BOARD, radius=14 / 64).save(OUT / "favicon.png", optimize=True)
+    # Website favicon.ico (browsers that skip icon.svg).
+    big = draw_mark(256, CHALK, SUN, bg=BOARD, radius=14 / 64)
+    big.save(FAVICON_ICO, format="ICO", sizes=[(16, 16), (32, 32), (48, 48)])
 
 
 if __name__ == "__main__":

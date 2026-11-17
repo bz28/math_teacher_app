@@ -1,9 +1,15 @@
-/** The Veradic mark: the V inside an open circle. */
-export function LogoMark() {
+import { MARK_BOTTOM, MARK_STROKE, MARK_TOP, MARK_VIEWBOX } from "@/lib/brand-mark";
+
+/**
+ * The Veradic mark beside the wordmark. The clean bar takes the text colour
+ * (currentColor); the hand-drawn bar takes `accent`: green on light bands,
+ * sun yellow on the board.
+ */
+export function LogoMark({ accent = "#0F6B4C", width = 32 }: { accent?: string; width?: number }) {
   return (
-    <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true">
-      <circle cx="14" cy="14" r="12.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeDasharray="70 9" />
-      <path d="M8.5 9.5 L14 19.5 L19.5 9.5" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+    <svg width={width} height={(width * 30) / 48} viewBox={MARK_VIEWBOX} aria-hidden="true">
+      <path d={MARK_TOP} fill="none" stroke="currentColor" strokeWidth={MARK_STROKE} strokeLinecap="round" />
+      <path d={MARK_BOTTOM} fill="none" stroke={accent} strokeWidth={MARK_STROKE} strokeLinecap="round" />
     </svg>
   );
 }

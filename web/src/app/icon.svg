@@ -1,15 +1,8 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <defs>
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#1F6B47"/>
-      <stop offset="100%" stop-color="#0A3D2A"/>
-    </linearGradient>
-    <linearGradient id="vGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#FFFFFF"/>
-      <stop offset="100%" stop-color="#E6F0EA"/>
-    </linearGradient>
-  </defs>
-  <rect width="512" height="512" rx="108" fill="url(#bg)"/>
-  <path d="M160 148 L256 380 L352 148" fill="none" stroke="url(#vGrad)" stroke-width="52" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="352" cy="148" r="18" fill="#FFFFFF" opacity="0.95"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="512" height="512">
+  <!-- Veradic "Balanced" mark on the board green. Source: web/src/lib/brand-mark.ts -->
+  <rect width="64" height="64" rx="14" fill="#14644A"/>
+  <g transform="translate(32 32) scale(0.8) translate(-32 -32.6)" fill="none" stroke-width="8.5" stroke-linecap="round">
+    <path d="M13 24 H51" stroke="#F6F8F0"/>
+    <path d="M13 41 C19.5 38.8 24.5 42.4 31 40.8 S43.5 38.9 51 40.6" stroke="#FFCE3A"/>
+  </g>
 </svg>
