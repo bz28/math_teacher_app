@@ -128,27 +128,46 @@ export function useSelectedSchool(): SelectedSchool {
   // loaded once per session, so a school created since (Add school, or
   // converting a lead) is missing from it while being perfectly real —
   // opening it would otherwise be undone straight away. So a missing id
-  // first refetches the list, once per id, and only a second miss resets.
+  // first refetches the list, and only a miss in a list fetched after that
+  // id was chosen resets.
+  //
+  // `recheckedFor` is marked only when a fresh list has actually been
+  // APPLIED. A refetch that fails proves nothing and leaves it unmarked,
+  // so the next visit tries again; one that resolves after the operator
+  // has already moved on is still applied — a newer list is a better list
+  // whoever asked for it — rather than dropped, which used to leave the id
+  // marked as checked against a list that never arrived.
   const recheckedFor = useRef<string | null>(null);
+  const inFlightFor = useRef<string | null>(null);
+  const mounted = useRef(true);
+  useEffect(() => {
+    // Set on mount too: StrictMode mounts, unmounts and remounts.
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   useEffect(() => {
     if (!schools || schools.length === 0 || !id || schools.some((s) => s.id === id)) return;
     if (recheckedFor.current === id) {
       setSchoolScope(null);
       return;
     }
-    recheckedFor.current = id;
-    let cancelled = false;
+    if (inFlightFor.current === id) return;
+    inFlightFor.current = id;
     api
       .schools()
       .then((r) => {
-        if (!cancelled) setSchools(r.schools);
+        if (!mounted.current) return;
+        recheckedFor.current = id;
+        setSchools(r.schools);
       })
       // A failed refetch proves nothing either: keep the scope. The
       // strip still names it and offers "Show all schools".
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
+      .catch(() => {})
+      .finally(() => {
+        if (inFlightFor.current === id) inFlightFor.current = null;
+      });
   }, [schools, id]);
 
   return useMemo(

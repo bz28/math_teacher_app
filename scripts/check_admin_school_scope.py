@@ -9,9 +9,10 @@ Pins behaviour a backend test can't see:
   4. the school page's LLM-calls links carry the school explicitly;
   5. ?school= / ?school_id= deep links scope LLM calls / Audit log;
   6. a school created after the console loaded can still be scoped;
-  7. a non-UUID /schools/:id never becomes the stored scope.
+  7. a non-UUID /schools/:id never becomes the stored scope;
+  8. a failed recheck of the school list doesn't count as a recheck.
 
-Check 6 creates a school in the target DB on every run.
+Checks 6 and 8 create a school in the target DB on every run.
 
 Prerequisites: an API on a scratch DB seeded by
 `scripts.seed_admin_school_scope`, and the dashboard pointed at it
@@ -180,6 +181,35 @@ with sync_playwright() as pw:
     check("new school: pages scoped to it", *scoped_to(reqs, "/admin/overview", created))
     check("new school: strip names it", "Brand New Academy" in p.inner_text(".scope-line"),
           p.inner_text(".scope-line"))
+
+    # 8. A recheck that FAILED is not a recheck: once the list is
+    #    reachable again, reopening the new school must refetch and keep
+    #    it, not reset to All schools against the stale list.
+    # Fail exactly the next list fetch after the school exists. (Counting
+    # calls from page load is unreliable: StrictMode doubles the mount
+    # fetch in dev.)
+    fail_next = {"armed": False}
+
+    def _flaky(route: Any) -> None:
+        if fail_next["armed"]:
+            fail_next["armed"] = False
+            route.fulfill(status=500, body="boom")
+        else:
+            route.continue_()
+
+    p, reqs = fresh(b, {})
+    p.context.route("**/v1/admin/schools", _flaky)
+    visit(p, "/overview")  # list loaded, without the new school
+    created = _get_json(f"{API}/admin/schools", {
+        "name": "Second New Academy", "contact_name": "N",
+        "contact_email": f"second{os.getpid()}{len(results)}@newacademy.org",
+    }, token=tok["access_token"])["id"]
+    fail_next["armed"] = True
+    spa_go(p, f"/schools/{created}")  # the recheck fails
+    check("failed recheck: the recheck was attempted", not fail_next["armed"])
+    spa_go(p, f"/schools/{LINCOLN}")
+    spa_go(p, f"/schools/{created}")  # must recheck again, and succeed
+    check("failed recheck: new school still scopable", stored(p) == created, str(stored(p)))
 
     # 7. A non-UUID school route never becomes the scope.
     p, reqs = fresh(b, {SCOPE_KEY: LINCOLN})

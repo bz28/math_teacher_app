@@ -907,6 +907,9 @@ export interface SubmissionSummary {
   student_name: string | null;
   school_id: string | null;
   school_name: string | null;
+  /** "institutional" for a real school. Anything else is a school the
+   *  rail's switcher doesn't list, so it is never published as scope. */
+  school_kind: string | null;
   assignment_title: string | null;
   assignment_type: string | null;
   ai_score: number | null;

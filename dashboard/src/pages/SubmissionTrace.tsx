@@ -148,7 +148,12 @@ export default function SubmissionTrace() {
 
   // `#p3` from a report: land on Problem 3's rows once the work is in.
   // Keep the rail honest about which school this submission is in.
-  useScopeToSchool(data?.submission?.school_id);
+  // Institutional only, like the teacher and student pages: any other
+  // school isn't in the switcher's list, so publishing it would just be
+  // reset to All schools — silently dropping the operator's scope.
+  useScopeToSchool(
+    data?.submission?.school_kind === "institutional" ? data.submission.school_id : null,
+  );
 
   const targetProblem = useProblemHash();
   useScrollToProblem(targetProblem, workLoaded && data !== null, "student-work");
