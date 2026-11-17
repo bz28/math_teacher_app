@@ -22,10 +22,18 @@ import { api, type SchoolListItem } from "./api";
  * in localStorage so a reload keeps the operator where they were.
  */
 
-const STORAGE_KEY = "veradic_admin_school";
+// A NEW key, deliberately. The previous one ("veradic_admin_school")
+// was written every time an operator opened any school, teacher or
+// student page, back when the value only steered one rail link. Read as
+// a scope it would open nearly every existing operator's console
+// narrowed to whichever school they last brushed past — the opposite of
+// the All-schools default. So the old value is discarded, not migrated.
+const STORAGE_KEY = "veradic_admin_scope";
+const RETIRED_KEY = "veradic_admin_school";
 
 function readStored(): string | null {
   try {
+    localStorage.removeItem(RETIRED_KEY);
     return localStorage.getItem(STORAGE_KEY);
   } catch {
     return null; // private mode / storage disabled — All schools

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { apiHealth, getToken, setToken } from "../lib/api";
 import SchoolSwitcher from "./SchoolSwitcher";
 import { setSchoolScope, useSelectedSchool, type SelectedSchool } from "../lib/useSelectedSchool";
@@ -90,8 +90,7 @@ function ScopeLine({ school }: { school: SelectedSchool }) {
     );
   }
 
-  const picked = school.schools.find((s) => s.id === school.id);
-  if (!picked) {
+  if (school.id === null) {
     return (
       <div className="scope-line" role="note">
         <span className="scope-line-label">Scope</span>
@@ -99,15 +98,31 @@ function ScopeLine({ school }: { school: SelectedSchool }) {
       </div>
     );
   }
+  // A school IS being sent. Say so even when the list can't name it (the
+  // schools fetch failed, or this school isn't in it) — claiming All
+  // schools here would misdescribe every number below — and always keep
+  // the way out, since the switcher can't render without the list.
+  const picked = school.schools.find((s) => s.id === school.id);
   return (
     <div className="scope-line scope-line-school" role="note">
       <span className="scope-line-label">Scope</span>
-      <span><b>{schoolLabel(picked)}</b> only</span>
+      {picked
+        ? <span><b>{schoolLabel(picked)}</b> only</span>
+        : <span><b>Selected school</b> only (school list unavailable)</span>}
       <button type="button" className="link-btn scope-line-clear" onClick={() => setSchoolScope(null)}>
         Show all schools
       </button>
     </div>
   );
+}
+
+/** A school named in a scoped page's URL — `?school=` (LLM calls' old
+ *  deep links) or `?school_id=` (Audit log's) — or null. UUIDs only, so
+ *  a mangled link can't scope every page to nothing. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function urlSchoolParam(params: URLSearchParams): string | null {
+  const v = params.get("school") ?? params.get("school_id");
+  return v && UUID_RE.test(v) ? v : null;
 }
 
 export default function Layout() {
@@ -120,15 +135,31 @@ export default function Layout() {
 
   // Opening a school's page — from the Schools directory, a breadcrumb, a
   // shared link — is choosing that school, so the scope follows the URL.
-  // Only for schools the switcher lists, so it can always display the
-  // result; any other id would be reset to All schools by
-  // useSelectedSchool and the two would fight.
-  const { pathname } = useLocation();
+  // Straight from the route, NOT gated on the schools list: if that fetch
+  // fails, the page's own "this school's calls" links must still land on
+  // this school rather than whatever was saved before. (An id the list
+  // later proves unknown is reset to All schools by useSelectedSchool;
+  // this effect only re-runs when the route changes, so the two can't
+  // ping-pong.)
+  const { pathname, search } = useLocation();
+  const navigate = useNavigate();
   const routeId = routeSchoolId(pathname);
-  const listed = school.schools.some((s) => s.id === routeId);
   useEffect(() => {
-    if (routeId && listed) setSchoolScope(routeId);
-  }, [routeId, listed]);
+    if (routeId) setSchoolScope(routeId);
+  }, [routeId]);
+
+  // A shared link that names a school (`/llm-calls?school=…`,
+  // `/audit-logs?school_id=…`) sets the scope, then drops the param so
+  // the URL and the rail can't disagree later.
+  useEffect(() => {
+    const params = new URLSearchParams(search);
+    const fromUrl = urlSchoolParam(params);
+    if (!fromUrl || pageScope(pathname, search) !== "school") return;
+    setSchoolScope(fromUrl);
+    params.delete("school");
+    params.delete("school_id");
+    navigate({ pathname, search: params.toString() }, { replace: true });
+  }, [pathname, search, navigate]);
 
   return (
     <div style={{ display: "flex", minHeight: "100vh" }}>
