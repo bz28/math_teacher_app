@@ -1,8 +1,9 @@
 import Link from "next/link";
+import { LogoMark } from "@/components/landing/board/logo-mark";
 
 /**
- * The marketing-site logo: a green outlined circle with a heavy "V", then
- * the wordmark. Colours are fixed (not the app's `primary` token, which
+ * The marketing-site logo: the Balanced mark (ink over green), then the
+ * wordmark. Colours are fixed (not the app's `primary` token, which
  * subject pages reassign), so the mark is the same everywhere.
  *
  * `href` makes it a home link (the navbar); without it, it is just the mark
@@ -11,11 +12,8 @@ import Link from "next/link";
 export function Logo({ href }: { href?: string }) {
   const mark = (
     <>
-      <span
-        aria-hidden="true"
-        className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full border-[2.5px] border-veradic text-[17px] font-black leading-none text-veradic"
-      >
-        V
+      <span className="flex text-ink">
+        <LogoMark />
       </span>
       <span className="text-xl font-extrabold tracking-[-0.02em] text-ink">Veradic</span>
     </>
