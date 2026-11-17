@@ -426,8 +426,8 @@ export function Monday() {
         <div className={s.appSec}>
           <div className={s.appRow}>
             <div>
-              <b>HW 5.2 grades</b>
-              <span>23 posted, 1 draft left.</span>
+              <b>HW 5.2</b>
+              <span>24 of 24 submitted &middot; &#9873; 1 flagged</span>
             </div>
             <span>1 to review</span>
           </div>

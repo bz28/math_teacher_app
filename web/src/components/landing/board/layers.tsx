@@ -110,7 +110,7 @@ export function Layers() {
         role="img"
         aria-label={`Example, layer ${step} of 4: ${STEPS[step - 1].said}`}
       >
-        <div className={`${s.row} ${s.rowSmall}`}>Jordan P. &mdash; Alg II, HW 5.2</div>
+        <div className={`${s.row} ${s.rowSmall}`}>Jordan P. &mdash; Alg II, HW 4.6</div>
         <div className={s.row}>4)&nbsp; 3x + 7 = 22</div>
         <div className={`${s.row} ${s.ind}`}>3x = 15 &nbsp;&nbsp; x = 5</div>
         <div className={s.row}>5)&nbsp; 2(x &minus; 4) = 10</div>
