@@ -9,7 +9,7 @@ type LinkItem = { label: string; href: string };
 // The top bar carries only sign-in and book-a-demo, so the page links
 // (how it works, for districts, trust) live here.
 const classroomLinks: LinkItem[] = [
-  { label: "How it works", href: "/#integrity" },
+  { label: "How it works", href: "/#how" },
   { label: "For districts", href: "/for-districts" },
   { label: "Book a demo", href: "/demo" },
 ];

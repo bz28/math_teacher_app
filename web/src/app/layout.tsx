@@ -1,5 +1,15 @@
 import type { Metadata } from "next";
-import { Inter, Instrument_Serif, Fraunces, Geist_Mono, Schibsted_Grotesk, Kalam } from "next/font/google";
+import {
+  Inter,
+  Instrument_Serif,
+  Fraunces,
+  Geist_Mono,
+  Schibsted_Grotesk,
+  Kalam,
+  Bricolage_Grotesque,
+  Hanken_Grotesk,
+  Architects_Daughter,
+} from "next/font/google";
 import Script from "next/script";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
@@ -67,6 +77,33 @@ const kalam = Kalam({
   variable: "--font-kalam",
   subsets: ["latin"],
   weight: ["400", "700"],
+  display: "swap",
+  preload: false,
+});
+
+// Homepage ("At the Board"). Like the faces above, not preloaded: only the
+// homepage uses them. Bricolage for headlines, Hanken Grotesk for text,
+// Architects Daughter for chalk. (Not Atkinson Hyperlegible: its slashed
+// zero reads as the empty set on a page full of math.)
+const bricolage = Bricolage_Grotesque({
+  variable: "--font-bricolage",
+  subsets: ["latin"],
+  display: "swap",
+  preload: false,
+});
+
+const hanken = Hanken_Grotesk({
+  variable: "--font-hanken",
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+  display: "swap",
+  preload: false,
+});
+
+const architects = Architects_Daughter({
+  variable: "--font-architects",
+  subsets: ["latin"],
+  weight: "400",
   display: "swap",
   preload: false,
 });
@@ -140,7 +177,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${instrumentSerif.variable} ${fraunces.variable} ${geistMono.variable} ${schibsted.variable} ${kalam.variable} h-full antialiased`}
+      className={`${inter.variable} ${instrumentSerif.variable} ${fraunces.variable} ${geistMono.variable} ${schibsted.variable} ${kalam.variable} ${bricolage.variable} ${hanken.variable} ${architects.variable} h-full antialiased`}
       suppressHydrationWarning
     >
       <head>

@@ -1,45 +1,58 @@
-import { Navbar } from "@/components/landing/navbar";
-import { Hero } from "@/components/landing/hero";
-import { HomeIntegrity } from "@/components/landing/home-integrity";
-import { HomeGrading } from "@/components/landing/home-grading";
-import { HomeWorkspace } from "@/components/landing/home-workspace";
-import { HomeCuriosity, HomePractice, HomeTrust } from "@/components/landing/home-students";
-import { InkCtaBand } from "@/components/site/ink-cta-band";
-import { Footer } from "@/components/landing/footer";
+import type { Metadata } from "next";
+import { SkipToMainLink } from "@/components/shared/skip-to-main-link";
+import s from "@/components/landing/board/home.module.css";
+import {
+  BoardFooter,
+  BoardNav,
+  Close,
+  Faq,
+  FoundingSchools,
+  Hero,
+  HowItWorks,
+  LearnStory,
+  Monday,
+  Outcomes,
+  Practice,
+  Prep,
+  Rules,
+  WhyNow,
+} from "@/components/landing/board/sections";
+
+export const metadata: Metadata = {
+  title: { absolute: "Veradic AI: AI that helps students understand their math homework" },
+  description:
+    "AI can give students the answer. Veradic helps them understand it. Students explain their own steps, teachers get every grade drafted by their rules, and see who still needs them.",
+  alternates: { canonical: "https://veradicai.com" },
+};
 
 /**
- * Proof-forward landing, teacher side first, then the student side:
- * Hook → understanding check → grading by your rules → homework from your
- * chapter → practice → learning to use AI well → safe for students → Ask.
- * Each section shows a real product surface rather than asserting a claim.
- *
- * The notebook design ("the student's page"): the whole page is graph
- * paper, and every other section is a white band, so the rhythm is
- * grid, white, grid, white… ending on the dark ink ask. Demo sides
- * alternate so no two neighbouring sections share a shape.
+ * The homepage, "At the Board". The story, top to bottom:
+ * the answer is easy now → why now → a copied answer becomes a lesson
+ * (the understanding check teaches; the teacher's view is the side effect)
+ * → what builds test scores → how it works → the teacher's Monday →
+ * students learn to use AI well → prep → responsible AI → founding schools
+ * → questions → the ask.
  */
 export default function Home() {
   return (
-    <div className="site graph-paper flex min-h-full flex-1 flex-col">
-      <Navbar />
-      <main className="flex-1">
+    <div className={`${s.home} flex min-h-full flex-1 flex-col`}>
+      <SkipToMainLink />
+      <BoardNav />
+      <main id="main-content" className="flex-1">
         <Hero />
-        <HomeIntegrity />
-        <HomeGrading />
-        <HomeWorkspace />
-        <HomePractice />
-        <HomeCuriosity />
-        <HomeTrust />
-        <InkCtaBand
-          headline="Bring Veradic to your school."
-          subhead="Book a 20-minute walkthrough — we'll show you the whole loop on your own material and get your classes set up."
-          primaryLabel="Book a demo"
-          primaryHref="/demo"
-          secondaryLabel="For schools & districts"
-          secondaryHref="/for-districts"
-        />
+        <WhyNow />
+        <LearnStory />
+        <Outcomes />
+        <HowItWorks />
+        <Monday />
+        <Practice />
+        <Prep />
+        <Rules />
+        <FoundingSchools />
+        <Faq />
+        <Close />
       </main>
-      <Footer />
+      <BoardFooter />
     </div>
   );
 }
