@@ -26,6 +26,7 @@ averages, or per-problem AI-vs-teacher score pairs — never an individual
 student's identity or their written work.
 """
 
+import uuid
 from collections import defaultdict
 from typing import Any
 
@@ -72,6 +73,7 @@ async def _reviewed_rows(
     since: Any,
     subject: str | None,
     course: str | None = None,
+    school_id: uuid.UUID | None = None,
 ) -> list[Row[Any]]:
     """The eligible reviewed/published AI grades in-window, one row per
     submission grade: (ai_breakdown, breakdown, effective_at, subject,
@@ -97,6 +99,8 @@ async def _reviewed_rows(
         filters.append(Course.subject == subject)
     if course:
         filters.append(Course.name == course)
+    if school_id is not None:
+        filters.append(Course.school_id == school_id)
 
     return list((await db.execute(
         select(
@@ -118,11 +122,12 @@ async def _reviewed_rows(
 async def grading_quality(
     hours: int = Query(default=2160, ge=1, le=87600),
     subject: str | None = Query(default=None),
+    school_id: uuid.UUID | None = Query(default=None),
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     since = time_range(hours)
-    rows = await _reviewed_rows(db, since, subject)
+    rows = await _reviewed_rows(db, since, subject, school_id=school_id)
 
     # Submissions compare_grade could not align at all. They were dropped
     # silently before, so the page could report "across 19 reviewed
@@ -164,7 +169,7 @@ async def grading_quality(
     # speak for that reviewed slice; the rest is ungraded-by-a-human.
     # Counted independently over `graded_at` so the numerator is always a
     # subset of the denominator (coverage can never exceed 100%).
-    coverage = await _coverage_counts(db, since, subject)
+    coverage = await _coverage_counts(db, since, subject, school_id)
     summary["ai_graded_submissions"] = coverage["total"]
     summary["reviewed_ai_grades"] = coverage["reviewed"]
     # What the numbers above do NOT speak for.
@@ -205,7 +210,7 @@ async def grading_quality(
 
 
 async def _coverage_counts(
-    db: AsyncSession, since: Any, subject: str | None
+    db: AsyncSession, since: Any, subject: str | None, school_id: uuid.UUID | None,
 ) -> dict[str, int]:
     """Count AI grades produced in-window and how many a teacher reviewed.
 
@@ -227,6 +232,8 @@ async def _coverage_counts(
     ]
     if subject:
         filters.append(Course.subject == subject)
+    if school_id is not None:
+        filters.append(Course.school_id == school_id)
 
     row = (await db.execute(
         select(
@@ -262,6 +269,7 @@ async def grading_quality_overrides(
     course: str | None = Query(default=None),
     from_status: str | None = Query(default=None),
     to_status: str | None = Query(default=None),
+    school_id: uuid.UUID | None = Query(default=None),
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -275,7 +283,7 @@ async def grading_quality_overrides(
     size (biggest misgrades first) and capped at ``_DRILL_LIMIT``.
     """
     since = time_range(hours)
-    rows = await _reviewed_rows(db, since, subject, course)
+    rows = await _reviewed_rows(db, since, subject, course, school_id)
 
     cases: list[dict[str, Any]] = []
     for ai_breakdown, breakdown, at, subj, course_name in rows:

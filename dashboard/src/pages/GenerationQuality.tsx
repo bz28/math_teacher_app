@@ -6,6 +6,7 @@ import {
   type GenerationOutcome,
   type QuestionEditHistory,
 } from "../lib/api";
+import { scopeParams, useSchoolScope } from "../lib/useSelectedSchool";
 import { formatRelativeDate } from "../lib/format";
 import StatTile from "../components/StatTile";
 import StatusPill from "../components/StatusPill";
@@ -307,6 +308,7 @@ export default function GenerationQuality() {
   // retry button calls load() directly, so a sequence beats a
   // cancelled-flag scoped to an effect.
   const loadSeq = useRef(0);
+  const scope = useSchoolScope();
 
   const load = useCallback(async () => {
     const seq = ++loadSeq.current;
@@ -320,6 +322,7 @@ export default function GenerationQuality() {
         limit: String(BOARD_PAGE_SIZE),
         offset: String(offset),
         ...(outcome ? { outcome } : {}),
+        ...scopeParams(scope),
       });
       if (seq !== loadSeq.current) return;
       setBoard(brd);
@@ -331,7 +334,7 @@ export default function GenerationQuality() {
     } finally {
       if (seq === loadSeq.current) setLoading(false);
     }
-  }, [outcome, offset]);
+  }, [outcome, offset, scope]);
 
   useEffect(() => {
     void load();

@@ -7630,6 +7630,7 @@ export interface operations {
                 bucket?: string | null;
                 limit?: number;
                 offset?: number;
+                school_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -7701,6 +7702,7 @@ export interface operations {
                 outcome?: string | null;
                 limit?: number;
                 offset?: number;
+                school_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -8040,6 +8042,7 @@ export interface operations {
             query?: {
                 hours?: number;
                 subject?: string | null;
+                school_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -8077,6 +8080,7 @@ export interface operations {
                 course?: string | null;
                 from_status?: string | null;
                 to_status?: string | null;
+                school_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -8741,6 +8745,7 @@ export interface operations {
             query?: {
                 hours?: number;
                 grade?: number | null;
+                school_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -8778,6 +8783,7 @@ export interface operations {
                 outcome?: string | null;
                 limit?: number;
                 offset?: number;
+                school_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -8845,6 +8851,7 @@ export interface operations {
             query?: {
                 status?: string;
                 limit?: number;
+                school_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -9289,12 +9296,6 @@ export interface operations {
                 role?: string | null;
                 plan?: string | null;
                 school_id?: string | null;
-                no_school?: boolean;
-                has_classroom?: boolean;
-                active_classroom?: boolean;
-                at_limit_today?: boolean;
-                free_heavy?: boolean;
-                pro_inactive?: boolean;
             };
             header?: never;
             path?: never;

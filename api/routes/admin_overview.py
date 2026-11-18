@@ -1,9 +1,10 @@
 """Admin overview dashboard endpoint."""
 
+import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import Date, cast, func, select
+from sqlalchemy import Date, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
@@ -21,18 +22,37 @@ router = APIRouter()
 async def overview(
     hours: int = Query(default=24, ge=1, le=87600),
     grade: int | None = Query(default=None),
+    school_id: uuid.UUID | None = Query(default=None),
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     since = time_range(hours)
 
-    # Build session filters (optionally scoped to grade)
+    # Build session filters (optionally scoped to grade and school)
     session_filters = [Session.created_at >= since]
     llm_filters = [LLMCall.created_at >= since]
+    user_filters: list[Any] = [User.is_preview.is_(False)]
+    # Preview (shadow) students are a teacher trying the student view,
+    # not usage — excluded from sessions the same way they already are
+    # from the user counts and top spenders. Sessions with no user stay.
+    preview_users = select(User.id).where(User.is_preview.is_(True)).scalar_subquery()
+    session_filters.append(
+        or_(Session.user_id.is_(None), Session.user_id.not_in(preview_users))
+    )
     if grade is not None:
         grade_users = select(User.id).where(User.grade_level == grade).scalar_subquery()
         session_filters.append(Session.user_id.in_(grade_users))
         llm_filters.append(LLMCall.user_id.in_(grade_users))
+    if school_id is not None:
+        # Sessions carry no school of their own, so they follow their
+        # user. LLM calls are scoped by their own snapshotted school_id
+        # — the same column /llm-calls and the school page filter on —
+        # so a school's cost here matches its cost everywhere else, and
+        # admin/system calls (school_id IS NULL) never land in a school.
+        school_users = select(User.id).where(User.school_id == school_id).scalar_subquery()
+        session_filters.append(Session.user_id.in_(school_users))
+        llm_filters.append(LLMCall.school_id == school_id)
+        user_filters.append(User.school_id == school_id)
 
     # Sessions in period
     total_sessions = (await db.execute(
@@ -47,13 +67,13 @@ async def overview(
     # New users registered in period (excludes preview/shadow accounts)
     new_users = (await db.execute(
         select(func.count()).select_from(User).where(
-            User.created_at >= since, User.is_preview.is_(False),
+            User.created_at >= since, *user_filters,
         )
     )).scalar() or 0
 
     # Total registered users (lifetime, excludes preview)
     total_users = (await db.execute(
-        select(func.count()).select_from(User).where(User.is_preview.is_(False))
+        select(func.count()).select_from(User).where(*user_filters)
     )).scalar() or 0
 
     # Total cost in period
@@ -127,13 +147,17 @@ async def overview(
         .group_by(Session.subject)
     )).all()
 
-    # Deleted accounts (lifetime counter — not filtered by time range)
+    # Deleted accounts (lifetime counter — not filtered by time range).
+    # A single platform-wide counter with no school attribution, so it
+    # cannot be scoped; the dashboard does not display it.
     deleted_accounts = (await db.execute(
         select(AppStat.value).where(AppStat.key == "deleted_accounts")
     )).scalar() or 0
 
     # Top spenders in period (preview accounts excluded — they're internal)
-    spender_filters = [LLMCall.created_at >= since, User.is_preview.is_(False)]
+    # Same population as the cost tile: llm_filters carries the window
+    # and the school scope.
+    spender_filters = [*llm_filters, User.is_preview.is_(False)]
     top_spenders = (await db.execute(
         select(
             User.name,

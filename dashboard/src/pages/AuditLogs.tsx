@@ -2,10 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   api,
-  type SchoolListItem,
   type TimelineData,
   type TimelineEntry,
 } from "../lib/api";
+import { useSchoolScope } from "../lib/useSelectedSchool";
 import { renderChipValue, shortId } from "../lib/format";
 import { windowLabel } from "../lib/definitions";
 import { BOARD_PAGE_SIZE } from "../lib/pagination";
@@ -48,14 +48,15 @@ export default function AuditLogs() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [data, setData] = useState<TimelineData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [schools, setSchools] = useState<SchoolListItem[]>([]);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   const hours = searchParams.get("hours") ?? DEFAULT_HOURS;
   const q = searchParams.get("q") ?? "";
-  const schoolId = searchParams.get("school_id") ?? "";
+  // The rail's scope, not a page-local select: one school control for
+  // the whole console.
+  const schoolId = useSchoolScope();
   const facet = searchParams.get("facet") ?? "";
   const typeFilter = searchParams.get("type") ?? "";
   const target = searchParams.get("target") ?? "";
@@ -105,19 +106,6 @@ export default function AuditLogs() {
       cancelled = true;
     };
   }, [filterParams, offset, reloadKey]);
-
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .schools()
-      .then((r) => {
-        if (!cancelled) setSchools(r.schools);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   function setParam(key: string, value: string) {
     const params = new URLSearchParams(searchParams);
@@ -252,18 +240,6 @@ export default function AuditLogs() {
           placeholder="Actor or student — name / email"
           ariaLabel="Search by actor or student name or email"
         />
-        <select
-          aria-label="School"
-          value={schoolId}
-          onChange={(e) => setParam("school_id", e.target.value)}
-        >
-          <option value="">All schools</option>
-          {schools.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
         <select
           aria-label="Event kind"
           value={facet}

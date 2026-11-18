@@ -6,8 +6,7 @@ import type { ConfirmFn } from "./confirm";
  *
  * ## Why it's shared
  *
- * Delete-user already shipped on the Users page and the independent
- * teachers/students panel, and is now on the school page too. Three
+ * Delete-user ships on both the Users page and the school page. Two
  * call sites each writing their own dialog is how you end up with the
  * dangerous one being the least careful — so the decision lives here
  * and the surfaces just call it.

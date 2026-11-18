@@ -751,9 +751,9 @@ export const api = {
   teacherStudents: (teacherId: string, params?: Record<string, string>) =>
     request<TeacherStudentsData>(`/admin/users/${teacherId}/students`, params),
   // Teacher reports ("Report a problem")
-  reports: (status: ReportStatus | "all") =>
+  reports: (status: ReportStatus | "all", params?: Record<string, string>) =>
     request<{ reports: TeacherReportData[]; counts: Record<ReportStatus, number> }>(
-      "/admin/reports", { status },
+      "/admin/reports", { status, ...params },
     ),
   report: (id: string) => request<TeacherReportData>(`/admin/reports/${id}`),
   updateReport: (id: string, patch: { status: ReportStatus; resolution_note?: string | null }) =>
@@ -907,6 +907,9 @@ export interface SubmissionSummary {
   student_name: string | null;
   school_id: string | null;
   school_name: string | null;
+  /** "institutional" for a real school. Anything else is a school the
+   *  rail's switcher doesn't list, so it is never published as scope. */
+  school_kind: string | null;
   assignment_title: string | null;
   assignment_type: string | null;
   ai_score: number | null;
@@ -1396,8 +1399,8 @@ export interface TeacherStudentsData {
     subscription_status: string;
     school_id: string | null;
     /** School context for the header breadcrumb. `kind` is
-     *  "institutional" (→ School page) or "individual" (indie → the
-     *  Independent Teachers list). Null for a school-less teacher. */
+     *  "institutional" (→ School page) for every invite-only teacher;
+     *  anything else falls back to the Users directory. */
     school: { id: string; name: string; kind: string } | null;
     /** Latest of: a logged action, something they created, or a call
      *  they caused — drives the header active/dormant verdict. Was

@@ -335,7 +335,7 @@ export default function StudentDetail() {
   const breadcrumb =
     s.school && s.school.kind === "institutional"
       ? { to: `/schools/${s.school.id}`, label: s.school.name }
-      : { to: "/students/independent", label: "Independent students" };
+      : { to: "/users?role=student", label: "Students" };
 
   const truncated = total !== null && rows !== null && total > rows.length;
 

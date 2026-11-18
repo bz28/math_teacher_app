@@ -8252,6 +8252,23 @@
               "title": "Offset",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "school_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "School Id"
+            }
           }
         ],
         "responses": {
@@ -8396,6 +8413,22 @@
               "minimum": 0,
               "title": "Offset",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "school_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "School Id"
             }
           }
         ],
@@ -9061,6 +9094,23 @@
               ],
               "title": "Subject"
             }
+          },
+          {
+            "in": "query",
+            "name": "school_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "School Id"
+            }
           }
         ],
         "responses": {
@@ -9177,6 +9227,23 @@
                 }
               ],
               "title": "To Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "school_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "School Id"
             }
           }
         ],
@@ -10449,6 +10516,23 @@
               ],
               "title": "Grade"
             }
+          },
+          {
+            "in": "query",
+            "name": "school_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "School Id"
+            }
           }
         ],
         "responses": {
@@ -10540,6 +10624,23 @@
               "minimum": 0,
               "title": "Offset",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "school_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "School Id"
             }
           }
         ],
@@ -10653,6 +10754,23 @@
               "minimum": 1,
               "title": "Limit",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "school_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "School Id"
             }
           }
         ],
@@ -11450,66 +11568,6 @@
                 }
               ],
               "title": "School Id"
-            }
-          },
-          {
-            "in": "query",
-            "name": "no_school",
-            "required": false,
-            "schema": {
-              "default": false,
-              "title": "No School",
-              "type": "boolean"
-            }
-          },
-          {
-            "in": "query",
-            "name": "has_classroom",
-            "required": false,
-            "schema": {
-              "default": false,
-              "title": "Has Classroom",
-              "type": "boolean"
-            }
-          },
-          {
-            "in": "query",
-            "name": "active_classroom",
-            "required": false,
-            "schema": {
-              "default": false,
-              "title": "Active Classroom",
-              "type": "boolean"
-            }
-          },
-          {
-            "in": "query",
-            "name": "at_limit_today",
-            "required": false,
-            "schema": {
-              "default": false,
-              "title": "At Limit Today",
-              "type": "boolean"
-            }
-          },
-          {
-            "in": "query",
-            "name": "free_heavy",
-            "required": false,
-            "schema": {
-              "default": false,
-              "title": "Free Heavy",
-              "type": "boolean"
-            }
-          },
-          {
-            "in": "query",
-            "name": "pro_inactive",
-            "required": false,
-            "schema": {
-              "default": false,
-              "title": "Pro Inactive",
-              "type": "boolean"
             }
           }
         ],

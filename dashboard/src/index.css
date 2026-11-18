@@ -191,6 +191,33 @@ select:focus-visible {
 
 .school-switcher-select:hover { color: var(--accent); }
 
+/* What the page below is showing. A hairline strip, not a banner: it is
+   context to glance at, and it must never outrank the page's own header.
+   The scoped state carries the accent rule because it is the one where a
+   number could be misread as everyone's. */
+.scope-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: -16px 0 22px;
+  padding: 6px 0 6px 10px;
+  border-left: 2px solid var(--rule-strong);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.scope-line b { color: var(--ink); font-weight: 600; }
+.scope-line-school { border-left-color: var(--accent); }
+.scope-line-platform { color: var(--muted-2); }
+.scope-line-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted-2);
+}
+.scope-line-clear { font-size: 12.5px; }
+
 .school-switcher-select:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
@@ -1642,7 +1669,7 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
 }
 
 /* ──────────────────────────────────────────────────────────────────
-   List rows — used by Schools, Independent students/teachers, Leads
+   List rows — used by Schools, Leads
    for the "no table chrome, just hairlines" presentation.
    ────────────────────────────────────────────────────────────────── */
 

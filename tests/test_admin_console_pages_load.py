@@ -2,11 +2,11 @@
 
 ## Why this exists
 
-The Independent teachers page 500'd on every request and nobody knew.
-It shipped broken and stayed broken, because:
+The (since removed) Independent teachers page 500'd on every request
+and nobody knew. It shipped broken and stayed broken, because:
 
   * no test hit `GET /admin/users` with the filter combination that
-    page sends (`role=teacher&no_school=true`), and
+    page sent (`role=teacher&no_school=true`), and
   * an unhandled 500 reached the browser without a CORS header, so the
     console reported it as an unreachable server rather than an error.
 
@@ -27,7 +27,7 @@ makes, so adding a page without covering it is a visible omission
 rather than a silent one.
 
 The query strings are copied from `dashboard/src/lib/api.ts` rather
-than simplified. `role=teacher&no_school=true` is exactly the pair
+than simplified. `role=teacher&no_school=true` was exactly the pair
 that triggered the auto-correlation crash, and a tidied-up
 `?role=teacher` would have passed while the real page kept failing.
 """
@@ -50,6 +50,9 @@ from api.models.school import (
 from api.models.user import User
 from tests.conftest import auth_headers
 
+# A school id for the scoped variants below. Deliberately not seeded.
+_SCOPE = "00000000-0000-4000-8000-000000000001"
+
 # One entry per request an admin console page makes on load, with the
 # query string the UI actually sends.
 CONSOLE_REQUESTS = [
@@ -67,24 +70,31 @@ CONSOLE_REQUESTS = [
     # ── Customers ──
     ("schools", "/v1/admin/schools"),
     ("leads", "/v1/admin/leads?limit=25&offset=0"),
-    # The two that were broken. The filter pair is the whole point —
-    # `role=teacher` alone did not reproduce the crash.
-    (
-        "independent-teachers",
-        "/v1/admin/users?hours=720&sort_by=total_cost&limit=25&offset=0"
-        "&role=teacher&no_school=true",
-    ),
-    (
-        "independent-students",
-        "/v1/admin/users?hours=720&sort_by=total_cost&limit=25&offset=0"
-        "&role=student&no_school=true",
-    ),
     # ── System ──
     ("users", "/v1/admin/users?hours=720&limit=25&offset=0"),
     ("users-admins", "/v1/admin/users?hours=720&limit=25&offset=0&role=admin"),
     ("activity", "/v1/admin/activity?hours=720&limit=25"),
     ("audit-timeline", "/v1/admin/audit-logs/timeline?limit=25"),
     ("audit-student-access", "/v1/admin/audit-logs/student-access?limit=25"),
+    # ── The same pages scoped by the rail's school switcher ──
+    # Every school-scoped page sends `school_id`; a filter that builds
+    # bad SQL only fails once it is actually applied, so each one gets
+    # its own case. The id need not exist — the query still runs.
+    *[
+        (f"{page}-scoped", f"{url}{'&' if '?' in url else '?'}school_id={_SCOPE}")
+        for page, url in [
+            ("overview", "/v1/admin/overview?hours=720"),
+            ("llm-calls", "/v1/admin/llm-calls?hours=720&limit=25&offset=0"),
+            ("reports", "/v1/admin/reports?status=open"),
+            ("grading-quality", "/v1/admin/grading-quality?hours=720"),
+            ("grading-quality-overrides", "/v1/admin/grading-quality/overrides?hours=720"),
+            ("extraction-quality", "/v1/admin/extraction-quality?hours=720&limit=25"),
+            ("generation-board", "/v1/admin/generation-quality/board?limit=25"),
+            ("solution-quality", "/v1/admin/quality?limit=25"),
+            ("users", "/v1/admin/users?hours=720&limit=25&offset=0"),
+            ("audit-timeline", "/v1/admin/audit-logs/timeline?limit=25"),
+        ]
+    ],
 ]
 
 

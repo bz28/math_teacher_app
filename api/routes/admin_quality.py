@@ -51,6 +51,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
+from api.models.course import Course
 from api.models.question_bank import QuestionBankItem
 from api.models.question_edit import (
     EDIT_KINDS,
@@ -109,6 +110,7 @@ async def solution_quality(
     outcome: str | None = Query(default=None, description="clean | repaired"),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
+    school_id: uuid.UUID | None = Query(default=None),
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
@@ -135,6 +137,14 @@ async def solution_quality(
         QuestionBankItem.source.in_(sources),
         QuestionBankItem.created_at >= TRACKING_SINCE,
     ]
+    if school_id is not None:
+        # A question belongs to the school of the course it was written
+        # in. Courses carry their school directly, so this needs no walk
+        # through the teacher — and a course with no school is in no
+        # school's scope.
+        scope.append(QuestionBankItem.course_id.in_(
+            select(Course.id).where(Course.school_id == school_id)
+        ))
 
     # Approved only. A rejected question's solution never got a real
     # look, and a pending one has not been judged yet — counting either

@@ -11,6 +11,7 @@ import {
   type GradingDirection,
   type GradingOverridesData,
 } from "../lib/api";
+import { scopeParams, useSchoolScope } from "../lib/useSelectedSchool";
 import StatTile from "../components/StatTile";
 import StatusPill from "../components/StatusPill";
 import DataTable, { type Column } from "../components/DataTable";
@@ -578,22 +579,24 @@ export default function GradingQuality() {
   const [hours, setHours] = useState("2160");
   const [subject, setSubject] = useState("");
   const [drill, setDrill] = useState<DrillTarget | null>(null);
+  const scope = useSchoolScope();
 
   useEffect(() => {
     let active = true;
     api
-      .gradingQuality({ hours, subject })
+      .gradingQuality({ hours, subject, ...scopeParams(scope) })
       .then((d) => { if (!active) return; setData(d); setError(null); })
       .catch((e) => { if (active) setError(e instanceof Error ? e.message : "Failed to load"); });
     return () => { active = false; };
-  }, [hours, subject]);
+  }, [hours, subject, scope]);
 
-  // Base params every drill inherits — the active window + subject filter.
+  // Base params every drill inherits — the active window, subject filter
+  // and school scope, so a drill can't show cases the summary didn't count.
   const baseParams = useMemo(() => {
-    const p: Record<string, string> = { hours };
+    const p: Record<string, string> = { hours, ...scopeParams(scope) };
     if (subject) p.subject = subject;
     return p;
-  }, [hours, subject]);
+  }, [hours, subject, scope]);
 
   if (error) {
     return (

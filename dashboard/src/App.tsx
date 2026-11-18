@@ -20,8 +20,6 @@ import ReportDetail from "./pages/ReportDetail";
 import Reports from "./pages/Reports";
 import Schools from "./pages/Schools";
 import SchoolDetail from "./pages/SchoolDetail";
-import IndependentStudents from "./pages/IndependentStudents";
-import IndependentTeachers from "./pages/IndependentTeachers";
 import StudentDetail from "./pages/StudentDetail";
 import TeacherDetail from "./pages/TeacherDetail";
 import AuditLogs from "./pages/AuditLogs";
@@ -58,18 +56,7 @@ export default function App() {
           <Route path="/leads/:leadId" element={<LeadDetail />} />
           <Route path="/schools" element={<Schools />} />
           <Route path="/schools/:schoolId" element={<SchoolDetail />} />
-          <Route
-            path="/students/independent"
-            element={<IndependentStudents />}
-          />
-          {/* /students/independent still resolves to the list: React
-              Router ranks by specificity, so its literal segment beats
-              this param regardless of declaration order. */}
           <Route path="/students/:studentId" element={<StudentDetail />} />
-          <Route
-            path="/teachers/independent"
-            element={<IndependentTeachers />}
-          />
           <Route path="/teachers/:teacherId" element={<TeacherDetail />} />
           {/* Admins consolidated into the role-filtered Users tab.
               /admins stays as a redirect so old bookmarks/links land
