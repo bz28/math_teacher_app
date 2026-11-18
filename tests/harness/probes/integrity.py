@@ -94,9 +94,12 @@ DEFAULT_TURN_BUDGET = 6
 # adds roughly one turn to the verified cases; this asserts that addition
 # stayed cheap and never ballooned the interview into an interrogation. If a
 # future change makes the agent over-probe, the mean rises and this fails on
-# the $0 replay gate. Baseline mean was ~2.36; the probe lifts it modestly,
-# so 3.5 leaves headroom without licensing a runaway.
-NONNUISANCE_MEAN_TURN_CAP = 3.5
+# the $0 replay gate. Baseline mean was ~2.36; the probe lifted it to ~3.2.
+# Teach-before-close then adds a hint exchange or two for a student who
+# misses the check or is stuck (instead of lecturing and closing), lifting it
+# to ~3.9 while fluent understanders still finish in 2. 4.0 allows that
+# deliberate teaching and still fails a runaway.
+NONNUISANCE_MEAN_TURN_CAP = 4.0
 
 # Sent once the scripted lines run out but the agent is still probing — a
 # neutral "I've said what I can" so the conversation terminates instead of
@@ -143,6 +146,11 @@ class IntegrityCase:
     # each scripted student line, in order (lines past the end, e.g. the
     # fallback, are unconstrained). None = engagement isn't asserted.
     expected_engagement: list[set[str]] | None = None
+    # Teach-before-close cases only: the 1-based student turn whose wrong or
+    # stuck reply must get a HINT back — the agent's reply to that turn must
+    # not call finish_check and must ask the student something, instead of
+    # explaining the answer and closing. None = not asserted.
+    hint_after_turn: int | None = None
 
 
 def _ext(steps: list[tuple[int, str, str]], final: str) -> dict[str, Any]:
@@ -169,11 +177,11 @@ def _ext(steps: list[tuple[int, str, str]], final: str) -> dict[str, Any]:
 
 
 # ── The golden set ────────────────────────────────────────────────────────
-# 22 cases (14 base + 8 hard adversarial) spanning the four dispositions and
-# the three harm fears. Correct-on-
-# paper cases use a final answer byte-equal to the answer key so the
-# correctness check trivially matches (verified tier, no extra LLM call);
-# wrong/blank cases drop to the struggling tier.
+# 23 cases (14 base + 8 hard adversarial + 1 teach-before-close) spanning the
+# four dispositions and the three harm fears. Correct-on-paper cases use a
+# final answer byte-equal to the answer key so the correctness check
+# trivially matches (verified tier, no extra LLM call); wrong/blank cases
+# drop to the struggling tier.
 
 GOLDEN_CASES: list[IntegrityCase] = [
     # ── pass: correct + genuinely explains ──────────────────────────────
@@ -196,14 +204,18 @@ GOLDEN_CASES: list[IntegrityCase] = [
             "22 minus 7 is 15, so 3x = 15 — then I divided both sides by 3 "
             "since x is multiplied by 3, and 15 divided by 3 is 5, so x = 5.",
             # Answers the understanding-check probe with a RELATIONAL read
-            # that covers whichever element the agent twists (the right side
-            # or the subtracted 7) — genuine grasp a memorizer can't produce.
+            # that covers whichever element the agent twists (the right side,
+            # the 7 — its size or its sign — or the 3) — genuine grasp a
+            # memorizer can't produce. It has to cover all of them: a twist
+            # the reply doesn't answer is a missed check, not a pass.
             "It depends which number changes — if the 22 on the right got "
             "bigger, x would get bigger too, since there's more left to split "
             "after I subtract 7. If instead the 7 I subtract were bigger, x "
             "would come out smaller, because I'd take more away before "
-            "dividing by 3. Either way x just tracks how big 3x is right "
-            "before the divide.",
+            "dividing by 3 — and if it were a -7, I'd add 7 instead, so 3x "
+            "would be 29 and x bigger. If the 3 got bigger, x gets smaller, "
+            "since the same 15 is split into more pieces. Either way x just "
+            "tracks how big 3x is right before the divide.",
             "I subtracted 7 specifically because it was being added to 3x, "
             "and subtracting is the inverse of adding, so it cancels and "
             "leaves 3x by itself.",
@@ -631,6 +643,14 @@ GOLDEN_CASES: list[IntegrityCase] = [
             "I subtracted five from both sides because five was added to "
             "the term four x; this yields four x equals sixteen. Then I "
             "divided both sides by four to obtain x equals four.",
+            # The understanding-check reply, in the same bookish voice and
+            # covering whichever number the agent twists: the persona is a
+            # genuine understander, so they answer the twist when asked.
+            "Were the constant larger, x would be smaller, since more is "
+            "subtracted before dividing by four; were it negative, one would "
+            "add it instead, so x would be larger. A larger right-hand side "
+            "makes x larger, and a larger coefficient makes x smaller, since "
+            "the same quantity is divided by more.",
             "Five is the constant added to the variable term, so its "
             "inverse operation, subtraction, removes it. Four is the "
             "coefficient, so division by four isolates x.",
@@ -858,6 +878,67 @@ GOLDEN_CASES: list[IntegrityCase] = [
             "fluency tempts a PASS."
         ),
     ),
+    # ── teach before close: a wrong understanding-check reply gets a hint ──
+    # The prod bug this pins: a student who walked through their correct work
+    # fluently answered the conceptual probe wrong, and the agent wrote out
+    # the whole explanation and called finish_check in the same response —
+    # no chance to think. The agent must instead reply with a hint or a
+    # stepping-stone question (turn 2 below is asserted), let the student
+    # get there, and only then close — with the verdict still scored from
+    # the wrong pre-help reply, so the teaching never inflates it to pass.
+    IntegrityCase(
+        name="fluent-wrong-on-twist-gets-hint",
+        persona="honest-fluent",
+        question=(
+            "The depth of water at a dock is modeled by "
+            "d(t) = 12 - 4cos(πt/6) feet, where t is hours after midnight. "
+            "Find all times during the first 12 hours (0 ≤ t < 12) when the "
+            "water depth is exactly 14 feet."
+        ),
+        correct_answer="t = 4, 8",
+        difficulty="hard",
+        extraction=_ext(
+            [
+                (1, "12 - 4\\cos(\\frac{\\pi t}{6}) = 14", "set the depth to 14"),
+                (2, "\\cos(\\frac{\\pi t}{6}) = -\\frac{1}{2}", "isolate the cosine"),
+                (
+                    3,
+                    "\\frac{\\pi t}{6} = \\frac{2\\pi}{3}, \\frac{4\\pi}{3}",
+                    "the two angles in one period where cosine is -1/2",
+                ),
+                (4, "t = 4, 8", "multiply by 6/π"),
+            ],
+            "t = 4, 8",
+        ),
+        student_script=[
+            "First I set the depth equal to 14, so 12 - 4cos(πt/6) = 14. I "
+            "subtracted 12 from both sides to get -4cos(πt/6) = 2, then "
+            "divided by -4, so cos(πt/6) = -1/2. Cosine is -1/2 at 2π/3 and "
+            "4π/3 in one period, and since t only goes to 12 that's one full "
+            "period, so I set πt/6 equal to each and multiplied by 6/π to get "
+            "t = 4 and t = 8.",
+            # A confident wrong guess — what should get a hint, not a lecture.
+            # Worded to be wrong for whichever twist the agent picks (a new
+            # depth, a new coefficient, cos = -1): none of them adds solutions.
+            "more i think?? bc the wave would hit it more times",
+            # Reaches the idea once nudged, in their own words.
+            "ohh ok so i'd isolate the cos again like before and see what "
+            "value it equals, then count the angles in one period that give "
+            "it. anything strictly between -1 and 1 gets crossed twice, so "
+            "it's not more — and -1 or 1 only gets touched once",
+        ],
+        gold=DISPOSITION_NEEDS_PRACTICE,
+        accepts={DISPOSITION_NEEDS_PRACTICE},
+        hint_after_turn=2,
+        rationale=(
+            "Correct on paper and a fluent, specific walkthrough of their own "
+            "work, then the wrong direction on the twist. Reply 2 must get a "
+            "hint, not a lecture + close; the student then reaches the idea "
+            "themselves. Verdict stays needs_practice (scored pre-help), "
+            "never pass (teaching can't inflate it) and never flag (they "
+            "explained their own work)."
+        ),
+    ),
 ]
 
 _A, _C, _N = "answering", "honest_confusion", "not_trying"
@@ -943,9 +1024,10 @@ ENGAGEMENT_CASES: list[IntegrityCase] = [
             "I subtracted 7 from both sides to get 3x alone, so 3x = 15, then "
             "divided by 3 because x is being multiplied by 3, so x = 5.",
             "Depends what changes. A bigger 22 makes x bigger, since there's "
-            "more left after taking away 7. A bigger 7 makes x smaller. And a "
-            "bigger 3 makes x smaller too, because the same 15 gets split "
-            "into more pieces.",
+            "more left after taking away 7. A bigger 7 makes x smaller, and a "
+            "-7 instead of a +7 makes x bigger, since I'd add 7 and get "
+            "3x = 29. And a bigger 3 makes x smaller too, because the same "
+            "15 gets split into more pieces.",
             "Subtracting undoes the +7, it's the inverse, so it cancels out.",
         ],
         gold=DISPOSITION_PASS,
@@ -1004,6 +1086,9 @@ class CaseResult:
     # Streamed text that isn't, in order, a message the turn showed —
     # always empty when streaming is right (see _streamed_mismatches).
     stream_mismatches: list[str] = field(default_factory=list)
+    # Per student turn, in order: did the check finish on it, and what the
+    # agent showed the student in reply.
+    turn_log: list[dict[str, Any]] = field(default_factory=list)
 
 
 async def _seed_case_rows(
@@ -1117,6 +1202,7 @@ async def drive_case(case: IntegrityCase, ctx: HarnessContext) -> CaseResult:
         terminal = {STATUS_COMPLETE, STATUS_SKIPPED_UNREADABLE}
         turns = 0
         stream_mismatches: list[str] = []
+        turn_log: list[dict[str, Any]] = []
         while check.status not in terminal and turns < case.turn_budget:
             msg = (
                 case.student_script[turns]
@@ -1154,6 +1240,9 @@ async def drive_case(case: IntegrityCase, ctx: HarnessContext) -> CaseResult:
                     [streamed[b].strip() for b in sorted(streamed)], shown,
                 )
             ]
+            turn_log.append({
+                "finished": check.status in terminal, "shown": shown,
+            })
             turns += 1
 
         problem = (await db.execute(
@@ -1180,6 +1269,7 @@ async def drive_case(case: IntegrityCase, ctx: HarnessContext) -> CaseResult:
             summary=check.overall_summary,
             engagements=engagements,
             stream_mismatches=stream_mismatches,
+            turn_log=turn_log,
         )
 
 
@@ -1309,7 +1399,7 @@ class IntegrityProbe(Probe):
     name = "integrity"
     needs_browser = False
     default_constraint = (
-        "Integrity-judgment golden set: 22 scripted transcripts across the "
+        "Integrity-judgment golden set: 23 scripted transcripts across the "
         "hard personas (honest-fluent, honest-inarticulate, memorized-fluent, "
         "copied-correct, uncertain-blank, prompt-injection, struggling). "
         "Asserts the agent's disposition lands in the labeled band and that "
@@ -1367,6 +1457,8 @@ class IntegrityProbe(Probe):
                 "rationale": case.rationale,
                 "engagements": result.engagements,
                 "stream_mismatches": result.stream_mismatches,
+                "turn_log": result.turn_log,
+                "hint_after_turn": case.hint_after_turn,
                 "expected_engagement": (
                     [sorted(e) for e in case.expected_engagement]
                     if case.expected_engagement is not None
@@ -1472,6 +1564,26 @@ class IntegrityProbe(Probe):
                 "" if mean_ok
                 else f"mean {mean_turns} > {NONNUISANCE_MEAN_TURN_CAP} — "
                 "understanding check ballooned the interview",
+            ))
+
+        hint_turn = raw.get("hint_after_turn")
+        if hint_turn is not None:
+            # Teach before close: the reply to a wrong/stuck turn is a hint —
+            # the chat stays open and the agent asks the student something.
+            log = list(raw.get("turn_log") or [])
+            entry = log[hint_turn - 1] if len(log) >= hint_turn else None
+            if entry is None:
+                why = "no reply recorded"
+            elif entry["finished"]:
+                why = "closed the check instead of hinting"
+            elif not any("?" in m for m in entry["shown"]):
+                why = f"no question in reply: {entry['shown']!r}"[:300]
+            else:
+                why = ""
+            checks.append(CheckResult(
+                f"reply to student turn {hint_turn} is a hint, not a close",
+                not why,
+                why,
             ))
 
         expected = raw.get("expected_engagement")
