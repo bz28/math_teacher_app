@@ -28,6 +28,7 @@ from api.models.school import School
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.user import User
+from api.routes.teacher_insights import _WRONG_BELOW_PERCENT, _is_flagged, counted_breakdown
 from scripts.demo_school_content import TURN_INS
 from scripts.demo_school_pages import Placed, WrittenProblem, render_pages
 from scripts.seed_demo_school import COURSE_NAME, RefusedError, seed_demo_school
@@ -97,11 +98,11 @@ async def test_builds_the_demo_class(demo_school: dict[str, Any]) -> None:
         report = await _seed(db, demo_school["school"])
         course_id = report.course_id
 
-        assert await _count(db, Section, Section.course_id == course_id) == 2
+        assert await _count(db, Section, Section.course_id == course_id) == 1
         hws = (await db.execute(select(Assignment).where(Assignment.course_id == course_id))).scalars().all()
         assert sorted(a.title[:3] for a in hws) == ["4.2", "4.4", "5.1"]
         assert all(a.status == "published" for a in hws)
-        assert await _count(db, AssignmentSection, AssignmentSection.assignment_id.in_([a.id for a in hws])) == 6
+        assert await _count(db, AssignmentSection, AssignmentSection.assignment_id.in_([a.id for a in hws])) == 3
         students = (await db.execute(select(User).where(User.email.like("fake\\_%")))).scalars().all()
         assert sorted(u.name for u in students) == ["fake_1", "fake_2", "fake_3", "fake_4", "fake_5"]
         assert all(u.school_id == demo_school["school"] and u.email.endswith("@demo-students.invalid")
@@ -111,35 +112,55 @@ async def test_builds_the_demo_class(demo_school: dict[str, Any]) -> None:
             select(Submission, SubmissionGrade).join(SubmissionGrade).join(Assignment)
             .where(Assignment.course_id == course_id)
         )).all()
-        assert len(subs) == len(TURN_INS) == 14
+        assert len(subs) == len(TURN_INS) == 13
         by = {(s.student_id, s.assignment_id): (s, g) for s, g in subs}
         hw = {a.title[:3]: a for a in hws}
         sid = {u.name: u.id for u in students}
+        now = datetime.now(UTC)
 
-        # 4.2 and 4.4: everything approved and published, snapshot clean.
+        # 4.2 and 4.4: everything turned in is approved and published, snapshot clean.
         for key in ("4.2", "4.4"):
             for name in sid:
+                if (sid[name], hw[key].id) not in by:
+                    continue
                 s, g = by[(sid[name], hw[key].id)]
                 assert g.grade_published_at and g.reviewed_at and g.published_breakdown == g.breakdown
                 assert g.published_final_score == g.final_score
-        # 5.1: two waiting on the teacher, one approved not published, one late, fake_5 missing.
+        # 4.4: fake_4 a day late, fake_5 missing past the due date.
+        assert (sid["fake_5"], hw["4.4"].id) not in by and hw["4.4"].due_at < now
+        late_sub, late_grade = by[(sid["fake_4"], hw["4.4"].id)]
+        assert late_sub.is_late and late_grade.late_penalty > 0 and late_grade.published_late_penalty > 0
+        # 5.1 is still open: three waiting on the teacher, one approved not published, fake_5 not in yet.
         g51 = {name: by.get((sid[name], hw["5.1"].id)) for name in sid}
-        assert g51["fake_5"] is None and hw["5.1"].due_at < datetime.now(UTC)
-        assert all(g.reviewed_at is None and g.grade_published_at is None for _, g in (g51["fake_1"], g51["fake_2"]))
+        assert hw["5.1"].due_at > now and g51["fake_5"] is None
+        assert all(g.reviewed_at is None and g.grade_published_at is None
+                   for _, g in (g51["fake_1"], g51["fake_2"], g51["fake_4"]))
         assert g51["fake_3"][1].reviewed_at and g51["fake_3"][1].grade_published_at is None
-        late_sub, late_grade = g51["fake_4"]
-        assert late_sub.is_late and late_grade.late_penalty > 0 and late_grade.grade_published_at is None
+        assert not any(s.is_late for s, _ in (v for v in g51.values() if v))
 
-        # Understanding checks: one per turn-in, the mix of outcomes, one flag with activity.
+        # Understanding checks: one per turn-in, the mix of outcomes, one flag with no tab-out or paste.
         checks = (await db.execute(
             select(IntegrityCheckSubmission).where(IntegrityCheckSubmission.submission_id.in_([s.id for s, _ in subs]))
         )).scalars().all()
-        assert len(checks) == 14 and all(c.status == "complete" for c in checks)
+        assert len(checks) == 13 and all(c.status == "complete" for c in checks)
         assert {c.disposition for c in checks} == {"pass", "needs_practice", "flag_for_review"}
         flagged = [c for c in checks if c.disposition == "flag_for_review"]
-        assert len(flagged) == 1 and flagged[0].activity_summary["totals"]["paste_count"] == 1
-        assert flagged[0].activity_summary["notable_turns"]
-        # The shared weak spot: three of four 5.1 turn-ins under half on #2.
+        assert len(flagged) == 1
+        assert flagged[0].activity_summary["totals"]["paste_count"] == 0
+        assert flagged[0].activity_summary["totals"]["tab_out_count"] == 0
+
+        # Insights flags 4.2 #4 (the quadrant sign), and only it, by the endpoint's own rule.
+        for key, flagged_positions in (("4.2", [4]), ("4.4", []), ("5.1", [])):
+            tally: dict[str, list[int]] = {}
+            for name in sid:
+                row = by.get((sid[name], hw[key].id))
+                for e in (counted_breakdown(row[1]) or []) if row else []:
+                    t = tally.setdefault(e["problem_id"], [0, 0])
+                    t[0] += 1
+                    t[1] += e["percent"] < _WRONG_BELOW_PERCENT
+            ids = hw[key].content["problem_ids"]
+            assert [i + 1 for i, pid in enumerate(ids) if _is_flagged(*tally.get(pid, [0, 0]))] == flagged_positions
+        # ... and the same three repeat the pattern on 5.1 #2.
         p2 = hw["5.1"].content["problem_ids"][1]
         wrong = [n for n in ("fake_1", "fake_2", "fake_3", "fake_4")
                  if next(e for e in g51[n][1].breakdown if e["problem_id"] == p2)["percent"] < 50]
@@ -158,7 +179,7 @@ async def test_rerun_resets_and_leaves_everyone_else_alone(demo_school: dict[str
         assert await _count(db, User, User.id.in_(list(first.student_ids.values()))) == 0
         assert await _count(db, Course, Course.name == COURSE_NAME) == 1
         assert await _count(db, User, User.email.like("fake\\_%")) == 5
-        assert await _count(db, Submission) == 14
+        assert await _count(db, Submission) == 13
         # The teacher, their preview student, the real student and their course are untouched.
         for uid in (demo_school["teacher"], demo_school["preview"], demo_school["real"]):
             assert await _count(db, User, User.id == uid) == 1

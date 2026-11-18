@@ -1,7 +1,7 @@
 """Fill a school with a lived-in Trig/Precalculus class to film a demo.
 
 Three weeks into a trig unit: three homeworks, five students (fake_1 …
-fake_5) across Period 2 and Period 4, handwritten photo turn-ins, the
+fake_5) in Period 2, handwritten photo turn-ins, the
 reader's transcripts, AI-style grades and feedback, understanding-check
 conversations, and the review state of a class mid-unit (see
 `scripts/demo_school_content.py` for exactly what).
@@ -138,7 +138,7 @@ from scripts.demo_school_pages import WrittenProblem, render_pages, to_plain  # 
 
 COURSE_NAME = "Trig/Precalculus"
 UNIT_NAMES = {4: "Unit 4 · Trigonometric Functions", 5: "Unit 5 · Trigonometric Equations"}
-SECTION_NAMES = ("Period 2", "Period 4")
+SECTION_NAMES = ("Period 2",)
 INVITE_SECTION = "Period 2"
 FAKE_DOMAIN = "demo-students.invalid"
 # The demo is filmed in Eastern time; due dates read 11:59 PM there.
@@ -665,7 +665,8 @@ def _print(report: SeedReport, committed: bool) -> None:
         print(f"  {v:>4} {k}")
     print("\n  hw   student section   score               state      check")
     print("\n".join(report.lines))
-    print("  5.1  fake_5  Period 4  — never turned in (overdue)")
+    print("  4.4  fake_5  Period 2  — never turned in (missing)")
+    print("  5.1  fake_5  Period 2  — not turned in yet (due Friday)")
     code = report.join_codes.get(INVITE_SECTION)
     print(f"\nJoin {INVITE_SECTION} on camera: sign up at {settings.frontend_url}/register as a student "
           f"with class code {code} (any email works).")

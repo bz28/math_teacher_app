@@ -6,16 +6,19 @@ grader's per-problem calls, the understanding-check conversations and
 verdicts, the silent per-problem diagnoses — is authored here by hand.
 Nothing in this file is copied from real student data.
 
-The shape of the class at "now":
-  4.2 and 4.4  graded, approved and published for everyone.
-  5.1          fake_1 and fake_2 graded and waiting on the teacher
-               (fake_2's check is flagged, with tab-outs and a paste),
-               fake_3 approved but not published, fake_4 turned in a
-               day late, fake_5 never turned it in.
-  The shared weak spot: on 5.1 #2 (sin θ = −1/2) fake_1, fake_3 and
-  fake_4 put the π/6 reference angle in Quadrants I/II, where sine is
-  positive — every one scored under half, which is what Insights counts
-  as "got it wrong".
+The shape of the class at "now" (everyone in Period 2):
+  4.2  graded, approved and published for all five.
+  4.4  approved and published; fake_4 turned it in a day late (−10%),
+       fake_5 never turned it in (missing).
+  5.1  open, due Friday. fake_1, fake_2 and fake_4 turned in early and are
+       AI-graded, waiting on the teacher (fake_2's check is flagged: the
+       page is right but they couldn't explain it); fake_3 is approved
+       but not published; fake_5 hasn't turned it in yet.
+  The weak spot is the quadrant setting the sign. On 4.2 #4, csc(7π/6),
+  fake_1, fake_3 and fake_4 take sin(7π/6) as +1/2 and score under half:
+  3 of 5 counted, which Insights flags (more than half wrong, at least
+  5 counted). On 5.1 #2, sin θ = −1/2, the same three put the π/6
+  reference angle in Quadrants I/II, where sine is positive.
 """
 
 from __future__ import annotations
@@ -25,8 +28,7 @@ from dataclasses import dataclass
 from scripts.demo_school_pages import Line
 
 STUDENTS = ["fake_1", "fake_2", "fake_3", "fake_4", "fake_5"]
-SECTION_OF = {"fake_1": "Period 2", "fake_2": "Period 2", "fake_3": "Period 2",
-              "fake_4": "Period 4", "fake_5": "Period 4"}
+SECTION_OF = {name: "Period 2" for name in STUDENTS}
 
 STUCK = "I'm stuck — I'm not sure how to explain this."
 
@@ -247,7 +249,7 @@ HW_44 = Homework(
 HW_51 = Homework(
     key="5.1", title="5.1 Solving Basic Trig Equations", unit=5,
     description="Give every solution in [0, 2π). Exact values unless the problem says to round.",
-    created_days_ago=7, published_days_ago=6, due_days_ago=2, grades_published=False,
+    created_days_ago=5, published_days_ago=4, due_days_ago=-3, grades_published=False,
     problems=(
         Problem("Solve 2cos θ − 1 = 0", r"Solve $2\cos\theta - 1 = 0$ for $0 \le \theta < 2\pi$.",
                 r"$\theta = \frac{\pi}{3}, \frac{5\pi}{3}$", "easy", (
@@ -332,14 +334,14 @@ TURN_INS: tuple[TurnIn, ...] = (
              full("Reference value tan(π/4) = 1 with the Quadrant IV sign gives −1.", "Correct.")),
         Work((L(r"\csc = \frac{1}{\sin}"), L(r"\sin\frac{7\pi}{6}: \text{ ref } \frac{\pi}{6}"),
               B(r"\csc\frac{7\pi}{6} = \frac{1}{1/2} = 2")), "2",
-             partial(50, "Reciprocal identity and reference angle are right, but 7π/6 is in Quadrant III where sine "
-                         "(and cosecant) are negative — the answer is −2.",
-                     "You set up the reciprocal correctly — check the quadrant: 7π/6 is in QIII, so the sign flips.",
-                     ((50, "Sign — dropped the Quadrant III negative; csc(7π/6) = −2", 3),)),
-             ("procedural_slip", "fake_1 used the reciprocal identity and the π/6 reference angle correctly but "
-                                 "took sin(7π/6) as +1/2. They applied the quadrant sign correctly on #2 and #3, so "
-                                 "this looks like a skipped sign check rather than a misunderstanding of "
-                                 "Quadrant III.")),
+             partial(40, "Reciprocal identity and reference angle are right, but 7π/6 is in Quadrant III where sine "
+                         "(and cosecant) are negative — sin(7π/6) = −1/2, so the answer is −2.",
+                     "You set up the reciprocal correctly — check the quadrant: 7π/6 is in QIII, where sine is "
+                     "negative.",
+                     ((60, "Sign — took sin(7π/6) as +1/2; sine is negative in Quadrant III, so csc(7π/6) = −2", 3),)),
+             ("conceptual_gap", "fake_1 used the reciprocal identity and the π/6 reference angle correctly but "
+                                "took sin(7π/6) as +1/2. The quadrant of 7π/6 never reached the sign of sine — the "
+                                "same Quadrant III sign question three classmates missed on this problem.")),
         Work((L(r"\sin 60^\circ = \frac{h}{20}"), L(r"h = 20\sin 60^\circ"),
               L(r"h = 20 \cdot \frac{\sqrt{3}}{2} = 10\sqrt{3}"), B(r"h \approx 17.3 \text{ ft}")),
              r"10\sqrt{3} \approx 17.3 \text{ ft}",
@@ -408,9 +410,15 @@ TURN_INS: tuple[TurnIn, ...] = (
              ("procedural_slip", "fake_3 found the π/4 reference angle and tan(π/4) = 1 but never applied the "
                                  "Quadrant IV sign. They did adjust the sign for Quadrant III on #2, so this is "
                                  "likely a skipped step rather than a gap.")),
-        Work((L(r"\csc\theta = \frac{1}{\sin\theta}"), L(r"\sin\frac{7\pi}{6} = -\frac{1}{2}"),
-              B(r"\csc\frac{7\pi}{6} = -2")), "-2",
-             full("Reciprocal of sin(7π/6) = −1/2 is −2.", "Correct.")),
+        Work((L(r"\csc\theta = \frac{1}{\sin\theta}"), L(r"\sin\frac{7\pi}{6} = \frac{1}{2}"),
+              B(r"\csc\frac{7\pi}{6} = 2")), "2",
+             partial(40, "Reciprocal set up correctly, but sin(7π/6) is −1/2: 7π/6 is in Quadrant III, where sine is "
+                         "negative. The answer is −2.",
+                     "Good reciprocal — but 7π/6 is in Quadrant III, so sin(7π/6) is negative and so is csc.",
+                     ((60, "Sign — sin(7π/6) taken as +1/2; in Quadrant III it is −1/2, so csc = −2", 2),)),
+             ("conceptual_gap", "fake_3 wrote sin(7π/6) = 1/2 — the reference value with no Quadrant III sign — and "
+                                "took its reciprocal correctly. With the tangent sign also missed on #3, they seem "
+                                "to stop at the reference angle without asking which quadrant the angle is in.")),
         Work((L(r"\sin 60 = \frac{h}{20}"), L(r"h = 20\sin 60"), B(r"h = 10\sqrt{3} = 17.3")),
              r"10\sqrt{3} = 17.3",
              full("Correct setup with sine; exact 10√3 and 17.3 are both right (no units written).",
@@ -448,14 +456,15 @@ TURN_INS: tuple[TurnIn, ...] = (
                                 "quadrant of the angle to the sign of the result.")),
         Work((L(r"\frac{7\pi}{4} \text{ QIV}"), L(r"\tan \text{ neg in QIV}"), B(r"\tan\frac{7\pi}{4} = -1")), "-1",
              full("Quadrant IV, tangent negative — −1 is correct.", "Correct.")),
-        Work((L(r"\csc\frac{7\pi}{6}"), L(r"\sin\frac{7\pi}{6} = -\frac{1}{2}"), B(r"\csc = -\frac{1}{2}")),
-             r"-\frac{1}{2}",
-             partial(25, "Found sin(7π/6) = −1/2 correctly but stopped there; cosecant is the reciprocal, so the "
-                         "answer is −2.",
-                     "You found sine correctly — cosecant is 1 over sine, so flip it: −2.",
-                     ((75, "Reciprocal — reported sin(7π/6) instead of 1/sin(7π/6) = −2", 3),)),
-             ("conceptual_gap", "fake_4 evaluated sin(7π/6) = −1/2 correctly and then gave that value as the "
-                                "cosecant. They may not be using the reciprocal relationship csc θ = 1/sin θ yet.")),
+        Work((L(r"\csc\frac{7\pi}{6}"), L(r"\sin\frac{7\pi}{6} = \frac{1}{2}"), B(r"\csc\frac{7\pi}{6} = 2")),
+             "2",
+             partial(40, "Took the reciprocal correctly, but sin(7π/6) is −1/2, not 1/2 — 7π/6 is in Quadrant III, "
+                         "where sine is negative. The answer is −2.",
+                     "The reciprocal step is right. 7π/6 is in Quadrant III, so sine — and cosecant — are negative.",
+                     ((60, "Sign — sine is negative in Quadrant III; sin(7π/6) = −1/2, so csc = −2", 2),)),
+             ("conceptual_gap", "fake_4 took sin(7π/6) as +1/2 and its reciprocal as 2. Together with the cosine "
+                                "sign missed on #2, the quadrant of the angle isn't yet deciding the sign of the "
+                                "answer.")),
         Work((L(r"\cos 60^\circ = \frac{h}{20}"), L(r"h = 20\cos 60^\circ"), B(r"h = 20 \cdot \frac{1}{2} = 10")),
              "10",
              partial(50, "Used cosine, which gives the distance along the ground (adjacent side), not the height; "
@@ -621,7 +630,7 @@ TURN_INS: tuple[TurnIn, ...] = (
               S("fewer. it only does 1 whole cycle by 4pi, regular cos would do 2", 39),
               A("Exactly right — a stretched period means fewer cycles. Thanks, that's everything!")))),
 
-    TurnIn("fake_4", "4.4", 2.0, "published", 0.92, (
+    TurnIn("fake_4", "4.4", -13.0, "published", 0.92, (
         Work((L("A = 3"), B(r"\text{period} = \frac{2\pi}{2} = \pi")), r"A = 3,\ \text{period } \pi",
              full("Amplitude 3 and period π are correct.", "Correct.")),
         Work((L("A = -2"), L(r"\text{period} = 2\pi \cdot \frac{1}{2} = \pi"), B("y = 1")),
@@ -667,37 +676,8 @@ TURN_INS: tuple[TurnIn, ...] = (
               A("Exactly — the 2 squeezes the graph so it repeats twice as fast. That's why the period is π. Good "
                 "work getting there.")))),
 
-    TurnIn("fake_5", "4.4", 25.0, "published", 0.95, (
-        Work((L(r"\text{amp } 3"), B(r"\text{per} = \frac{2\pi}{2} = \pi")), r"\text{amp } 3,\ \text{per } \pi",
-             full("Amplitude 3 and period π are correct.", "Correct.")),
-        Work((L(r"\text{amp} = 2"), L(r"\text{per} = \frac{2\pi}{0.5} = 4\pi"), B(r"\text{midline } y = 1")),
-             r"2,\ 4\pi,\ y = 1", full("All three parts correct.", "Correct.")),
-        Work((L(r"\cos x = 1 \to x = 0"), B("y = 4 - 1 = 3")), r"3 \text{ at } x = 0", _missed_two_pi(1),
-             ("procedural_slip", "fake_5 got the maximum value 3 from cos x = 1 at x = 0 but missed x = 2π at the "
-                                 "end of the closed interval.")),
-        Work((L(r"h = 25 + 20 = 45 \text{ ft}"), B(r"\text{one rev} = 2\pi \text{ s}")),
-             r"45 \text{ ft},\ 2\pi \text{ s}",
-             partial(50, "Maximum height 45 ft is correct; one revolution is 2π ÷ (π/15) = 30 s, not 2π s.",
-                     "Max height is right. The period here is 2π ÷ (π/15) = 30 seconds.",
-                     ((50, "Period — gave 2π s; T = 2π/(π/15) = 30 s", 2),)),
-             ("conceptual_gap", "fake_5 found the 45 ft maximum but gave 2π seconds for one revolution, the period "
-                                "of cos t. They computed 2π/B correctly on #1 and #2, so they may not recognize "
-                                "π/15 as B when it sits next to t.")),
-    ), Check(2, "pass", "Clear on amplitude and midline",
-             "fake_5 explained why amplitude ignores the negative sign (it's a distance from the midline; the sign "
-             "flips the graph) and correctly predicted only the midline changes with a +3 shift.",
-             rubric("high", "high", transfer="high"),
-             "Explained amplitude as a distance and the sign as a reflection; transferred correctly to a changed "
-             "vertical shift.",
-             (A("Hi! Let's chat about problem 2. You wrote amp = 2 even though there's a −2 in front. Why not −2?"),
-              S("amplitude is like the height from the middle so it cant be negative. the minus just flips it "
-                "upside down", 46),
-              A("Perfect. If we changed the +1 at the end to +3, which of your three answers would change?"),
-              S("just the midline, it would be y=3", 21),
-              A("Exactly. Nice clear thinking — that's all for this one!")))),
-
     # ── 5.1 ──
-    TurnIn("fake_1", "5.1", 6.5, "to_review", 0.95, (
+    TurnIn("fake_1", "5.1", 77.5, "to_review", 0.95, (
         Work((L(r"2\cos\theta = 1"), L(r"\cos\theta = \frac{1}{2}"), B(r"\theta = \frac{\pi}{3}, \frac{5\pi}{3}")),
              r"\frac{\pi}{3}, \frac{5\pi}{3}",
              full("Both solutions in Quadrants I and IV, where cosine is positive — correct.", "Correct.")),
@@ -735,7 +715,7 @@ TURN_INS: tuple[TurnIn, ...] = (
               A("Exactly — opposite over hypotenuse is sine, so your setup was right. Thanks for sticking with "
                 "it!")))),
 
-    TurnIn("fake_2", "5.1", 31.0, "to_review", 0.97, (
+    TurnIn("fake_2", "5.1", 100.0, "to_review", 0.97, (
         Work((L(r"\cos\theta = \frac{1}{2}"), B(r"\theta = \frac{\pi}{3}, \frac{5\pi}{3}")),
              r"\frac{\pi}{3}, \frac{5\pi}{3}", full("Both solutions correct.", "Correct.")),
         Work((L(r"\sin\theta = -\frac{1}{2}"), L(r"\text{QIII, QIV}"), B(r"\theta = \frac{7\pi}{6}, \frac{11\pi}{6}")),
@@ -746,28 +726,35 @@ TURN_INS: tuple[TurnIn, ...] = (
              full("Both solutions correct.", "Correct.")),
         Work((L(r"\sin\theta = \frac{2}{24}"), L(r"\theta = \sin^{-1}\left(\frac{1}{12}\right)"),
               B(r"\theta \approx 4.8^\circ")), r"4.8^\circ", full("Correct setup and value.", "Correct.")),
-    ), Check(2, "flag_for_review", "Correct work, couldn't apply the reasoning",
-             "fake_2's written answers are all correct, but the explanation of the quadrants was pasted in after "
-             "leaving the tab for about 40 seconds, and they couldn't adapt it to sin θ = +1/2. Worth a quick "
-             "conversation to see whether the work is their own.",
-             rubric("low", "low", prediction="low"),
-             "The first explanation arrived as a single paste after a 41-second tab-out and reads unlike the "
-             "student's other replies. Asked to apply the same idea to sin θ = +1/2, they suggested the same "
-             "angles and couldn't name the Quadrant I/II angles even after the question was narrowed.",
-             (A("Hi! Your 5.1 looks great. I'd like to hear about problem 2. You wrote QIII and QIV — how did you "
-                "know the answers would be in those two quadrants?"),
-              S("Since sine corresponds to the y-coordinate on the unit circle, and the y-coordinate is negative "
-                "below the x-axis, the solutions to sin θ = −1/2 lie in Quadrants III and IV, where the terminal "
-                "side is below the x-axis.", 96, tab_outs_ms=(41_200,), paste=True),
-              A("That's a clear statement! Let's put it in your own words with a quick one: if the equation were "
-                "sin θ = +1/2 instead, which two angles would you get?"),
-              S("idk the same ones?", 18, "honest_confusion"),
-              A("Let's narrow it down. For sin θ = +1/2, should the point on the unit circle be above or below the "
-                "x-axis?"),
-              S("above i guess. im not sure which ones tho", 24, "honest_confusion", tab_outs_ms=(6_300,)),
-              A("Thanks for being honest — that's really helpful to know. That's all for today.")))),
+    ), Check(2, "flag_for_review", "Couldn't explain the quadrant step on their page",
+             "fake_2's answers are all correct, but they couldn't say why their page reads \"QIII, QIV\" — \"i "
+             "just remember its those ones\" — and used the stuck button when asked whether sin θ = −1/2 is above "
+             "or below the x-axis. Once the idea was explained they applied it to sin θ = +1/2 correctly. The "
+             "written work is more fluent than the explanation; worth a quick conversation about how they "
+             "solved it.",
+             rubric("low", "low", transfer="mid"),
+             "Couldn't give any reason for the QIII/QIV line on their own page and couldn't place sin θ = −1/2 "
+             "above or below the x-axis unprompted. After sine was explained as the unit-circle y-coordinate, they "
+             "chose Quadrants I and II for sin θ = +1/2 with the right angles — the idea landed only once it was "
+             "given to them.",
+             (A("Hi! Your 5.1 looks great. On problem 2 you wrote \"QIII, QIV\" under sin θ = −1/2. What does "
+                "that line mean?"),
+              S("its the quadrants the answers are in", 21),
+              A("Right, those are quadrants. What about sin θ = −1/2 tells you the answers are in III and IV, and "
+                "not I and II?"),
+              S("i just remember its those ones for this", 26),
+              A("Let's narrow it down. On the unit circle, sin θ is the y-coordinate of the point. Is a "
+                "y-coordinate of −1/2 above or below the x-axis?"),
+              STUCK_TAP(17),
+              A("No problem — here's the idea. The point at angle θ is (cos θ, sin θ), so sin θ is how high the "
+                "point sits. A negative sine means the point is below the x-axis, and the two quadrants below the "
+                "x-axis are III and IV. That's where both of your answers live. Try it the other way: if the "
+                "equation were sin θ = +1/2, which quadrants would the answers be in?"),
+              S("above the axis so 1 and 2? so pi/6 and 5pi/6", 34),
+              A("Exactly — positive sine is above the axis, so Quadrants I and II. That's the same reasoning behind "
+                "your QIII, QIV line. Thanks for working through it with me!")))),
 
-    TurnIn("fake_3", "5.1", 7.5, "approved", 0.94, (
+    TurnIn("fake_3", "5.1", 98.0, "approved", 0.94, (
         Work((L(r"2\cos\theta = 1"), L(r"\cos\theta = \frac{1}{2}"), B(r"\theta = \frac{\pi}{3}, \frac{5\pi}{3}")),
              r"\frac{\pi}{3}, \frac{5\pi}{3}", full("Both solutions correct.", "Correct.")),
         Work((L(r"\sin\theta = -\frac{1}{2}"), L(r"\text{ref} = \frac{\pi}{6}"),
@@ -796,7 +783,7 @@ TURN_INS: tuple[TurnIn, ...] = (
               A("That's a great explanation — both coordinates flip sign, so y/x stays the same. You're all "
                 "set!")))),
 
-    TurnIn("fake_4", "5.1", -20.0, "to_review", 0.92, (
+    TurnIn("fake_4", "5.1", 76.0, "to_review", 0.92, (
         Work((L(r"\cos\theta = \frac{1}{2}"), B(r"\theta = \frac{\pi}{3}")), r"\frac{\pi}{3}",
              partial(50, "π/3 is correct; cosine is also positive in Quadrant IV, so 5π/3 is missing.",
                      "Good — cosine is positive in Quadrant IV too, so there's a second answer: 5π/3.",
