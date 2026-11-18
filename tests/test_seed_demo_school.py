@@ -1,0 +1,312 @@
+"""scripts/seed_demo_school.py — the demo class it builds, its reset, and
+what it must never touch.
+
+The handwriting renderer is stubbed to one tiny page per turn-in (it
+takes about a second a turn-in); one test renders a real page."""
+
+from __future__ import annotations
+
+import io
+import uuid
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime
+from typing import Any
+from unittest.mock import patch
+
+import pytest
+from PIL import Image
+from sqlalchemy import func, select, text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from api.core.auth import hash_password
+from api.database import get_session_factory
+from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
+from api.models.course import Course, CourseTeacher
+from api.models.integrity_check import IntegrityCheckProblem, IntegrityCheckSubmission
+from api.models.llm_call import LLMCall
+from api.models.school import School
+from api.models.section import Section
+from api.models.section_enrollment import SectionEnrollment
+from api.models.user import User
+from api.routes.teacher_insights import _WRONG_BELOW_PERCENT, _is_flagged, counted_breakdown
+from scripts.demo_school_content import TURN_INS
+from scripts.demo_school_pages import Placed, WrittenProblem, render_pages
+from scripts.seed_demo_school import (
+    COURSE_NAME,
+    RefusedError,
+    adopt_student,
+    adopted_submission_id,
+    seed_demo_school,
+)
+
+TEACHER = "teacher@demo-school.test"
+
+
+def _jpeg() -> bytes:
+    buf = io.BytesIO()
+    Image.new("RGB", (40, 50), "white").save(buf, format="JPEG")
+    return buf.getvalue()
+
+
+def _fake_render(
+    hand_of: str, header: list[str], problems: list[WrittenProblem], seed: int,
+) -> tuple[list[bytes], Placed]:
+    placed = Placed({(p, ln): 1 for p, prob in enumerate(problems) for ln in range(len(prob.lines))})
+    return [_jpeg()], placed
+
+
+@pytest.fixture
+async def demo_school() -> AsyncIterator[dict[str, Any]]:
+    async with get_session_factory()() as db:
+        await db.execute(text("TRUNCATE TABLE schools, users RESTART IDENTITY CASCADE"))
+        school = School(name="Demo School", contact_name="T", contact_email=TEACHER)
+        other = School(name="Other School", contact_name="O", contact_email="o@other.test")
+        db.add_all([school, other])
+        await db.flush()
+        teacher = User(email=TEACHER, name="Ms. Teacher", password_hash=hash_password("x"), grade_level=12,
+                       role="teacher", school_id=school.id)
+        db.add(teacher)
+        await db.flush()
+        preview = User(email="preview+t@veradic.ai", name="Ms. Teacher (Preview)", password_hash=hash_password("x"),
+                       grade_level=12, role="student", school_id=school.id, is_preview=True,
+                       preview_owner_id=teacher.id)
+        real = User(email="real@demo-school.test", name="Real Kid", password_hash=hash_password("x"),
+                    grade_level=11, role="student", school_id=school.id)
+        db.add_all([preview, real])
+        # The teacher's real course, with a real student in it.
+        algebra = Course(school_id=school.id, name="Algebra 2", subject="math", status="active")
+        db.add(algebra)
+        await db.flush()
+        db.add(CourseTeacher(course_id=algebra.id, teacher_id=teacher.id, role="owner"))
+        sec = Section(course_id=algebra.id, name="Period 1", join_code="ALGB21")
+        db.add(sec)
+        await db.flush()
+        db.add(SectionEnrollment(section_id=sec.id, course_id=algebra.id, student_id=real.id))
+        await db.commit()
+        yield {"school": school.id, "other": other.id, "teacher": teacher.id, "preview": preview.id,
+               "real": real.id, "algebra": algebra.id}
+
+
+async def _seed(db: AsyncSession, school_id: uuid.UUID, **kw: Any) -> Any:
+    with patch("scripts.seed_demo_school.render_pages", _fake_render):
+        report = await seed_demo_school(db, school_id=school_id, teacher_email=TEACHER, **kw)
+    await db.commit()
+    return report
+
+
+async def _count(db: AsyncSession, model: Any, *where: Any) -> int:
+    return int((await db.execute(select(func.count()).select_from(model).where(*where))).scalar_one())
+
+
+async def test_builds_the_demo_class(demo_school: dict[str, Any]) -> None:
+    async with get_session_factory()() as db:
+        llm_before = await _count(db, LLMCall)
+        report = await _seed(db, demo_school["school"])
+        course_id = report.course_id
+
+        assert await _count(db, Section, Section.course_id == course_id) == 1
+        hws = (await db.execute(select(Assignment).where(Assignment.course_id == course_id))).scalars().all()
+        assert sorted(a.title[:3] for a in hws) == ["4.2", "4.4", "5.1"]
+        assert all(a.status == "published" for a in hws)
+        assert await _count(db, AssignmentSection, AssignmentSection.assignment_id.in_([a.id for a in hws])) == 3
+        students = (await db.execute(select(User).where(User.email.like("fake\\_%")))).scalars().all()
+        assert sorted(u.name for u in students) == ["fake_1", "fake_2", "fake_3", "fake_4", "fake_5"]
+        assert all(u.school_id == demo_school["school"] and u.email.endswith("@demo-students.invalid")
+                   for u in students)
+
+        subs = (await db.execute(
+            select(Submission, SubmissionGrade).join(SubmissionGrade).join(Assignment)
+            .where(Assignment.course_id == course_id)
+        )).all()
+        assert len(subs) == len(TURN_INS) == 14
+        by = {(s.student_id, s.assignment_id): (s, g) for s, g in subs}
+        hw = {a.title[:3]: a for a in hws}
+        sid = {u.name: u.id for u in students}
+        now = datetime.now(UTC)
+
+        # 4.2 and 4.4: all five turned in, approved and published, snapshot clean.
+        for key in ("4.2", "4.4"):
+            for name in sid:
+                s, g = by[(sid[name], hw[key].id)]
+                assert g.grade_published_at and g.reviewed_at and g.published_breakdown == g.breakdown
+                assert g.published_final_score == g.final_score
+        # 4.4: fake_4 a day late.
+        late_sub, late_grade = by[(sid["fake_4"], hw["4.4"].id)]
+        assert late_sub.is_late and late_grade.late_penalty > 0 and late_grade.published_late_penalty > 0
+        # 5.1 is still open: three waiting on the teacher, one approved not published, fake_5 not in yet.
+        g51 = {name: by.get((sid[name], hw["5.1"].id)) for name in sid}
+        assert hw["5.1"].due_at > now and g51["fake_5"] is None
+        assert all(g.reviewed_at is None and g.grade_published_at is None
+                   for _, g in (g51["fake_1"], g51["fake_2"], g51["fake_4"]))
+        assert g51["fake_3"][1].reviewed_at and g51["fake_3"][1].grade_published_at is None
+        assert not any(s.is_late for s, _ in (v for v in g51.values() if v))
+
+        # Understanding checks: one per turn-in, the mix of outcomes, one flag with no tab-out or paste.
+        checks = (await db.execute(
+            select(IntegrityCheckSubmission).where(IntegrityCheckSubmission.submission_id.in_([s.id for s, _ in subs]))
+        )).scalars().all()
+        assert len(checks) == 14 and all(c.status == "complete" for c in checks)
+        assert {c.disposition for c in checks} == {"pass", "needs_practice", "flag_for_review"}
+        flagged = [c for c in checks if c.disposition == "flag_for_review"]
+        assert len(flagged) == 1
+        assert flagged[0].activity_summary["totals"]["paste_count"] == 0
+        assert flagged[0].activity_summary["totals"]["tab_out_count"] == 0
+
+        # Insights flags 4.2 #4 (the quadrant sign), and only it, by the endpoint's own rule.
+        for key, flagged_positions in (("4.2", [4]), ("4.4", []), ("5.1", [])):
+            tally: dict[str, list[int]] = {}
+            for name in sid:
+                row = by.get((sid[name], hw[key].id))
+                for e in (counted_breakdown(row[1]) or []) if row else []:
+                    t = tally.setdefault(e["problem_id"], [0, 0])
+                    t[0] += 1
+                    t[1] += e["percent"] < _WRONG_BELOW_PERCENT
+            ids = hw[key].content["problem_ids"]
+            assert [i + 1 for i, pid in enumerate(ids) if _is_flagged(*tally.get(pid, [0, 0]))] == flagged_positions
+        # ... and the same three repeat the pattern on 5.1 #2.
+        p2 = hw["5.1"].content["problem_ids"][1]
+        wrong = [n for n in ("fake_1", "fake_2", "fake_3", "fake_4")
+                 if next(e for e in g51[n][1].breakdown if e["problem_id"] == p2)["percent"] < 50]
+        assert wrong == ["fake_1", "fake_3", "fake_4"]
+        assert await _count(db, IntegrityCheckProblem, IntegrityCheckProblem.status == "diagnosis_only") > 0
+
+        assert await _count(db, LLMCall) == llm_before
+
+
+async def test_rerun_resets_and_leaves_everyone_else_alone(demo_school: dict[str, Any]) -> None:
+    async with get_session_factory()() as db:
+        first = await _seed(db, demo_school["school"])
+        second = await _seed(db, demo_school["school"])
+        assert second.removed and first.course_id != second.course_id
+        assert await _count(db, Course, Course.id == first.course_id) == 0
+        assert await _count(db, User, User.id.in_(list(first.student_ids.values()))) == 0
+        assert await _count(db, Course, Course.name == COURSE_NAME) == 1
+        assert await _count(db, User, User.email.like("fake\\_%")) == 5
+        assert await _count(db, Submission) == 14
+        # The teacher, their preview student, the real student and their course are untouched.
+        for uid in (demo_school["teacher"], demo_school["preview"], demo_school["real"]):
+            assert await _count(db, User, User.id == uid) == 1
+        assert await _count(db, SectionEnrollment, SectionEnrollment.course_id == demo_school["algebra"]) == 1
+
+
+async def test_refuses_when_a_real_student_is_in_the_demo_course(demo_school: dict[str, Any]) -> None:
+    async with get_session_factory()() as db:
+        report = await _seed(db, demo_school["school"])
+        sec = (await db.execute(select(Section).where(Section.course_id == report.course_id))).scalars().first()
+        db.add(SectionEnrollment(section_id=sec.id, course_id=report.course_id, student_id=demo_school["real"]))
+        await db.commit()
+        with pytest.raises(RefusedError, match="--adopt-student"):
+            await _seed(db, demo_school["school"])
+        await db.rollback()
+        assert await _count(db, Course, Course.id == report.course_id) == 1
+
+
+async def _adopt(db: AsyncSession, school_id: uuid.UUID, email: str) -> Any:
+    with patch("scripts.seed_demo_school.render_pages", _fake_render):
+        report = await adopt_student(db, school_id=school_id, teacher_email=TEACHER, student_email=email)
+    await db.commit()
+    return report
+
+
+async def _join_period_2(db: AsyncSession, course_id: uuid.UUID, student_id: uuid.UUID) -> Section:
+    sec = (await db.execute(select(Section).where(Section.course_id == course_id))).scalar_one()
+    db.add(SectionEnrollment(section_id=sec.id, course_id=course_id, student_id=student_id))
+    await db.commit()
+    return sec
+
+
+async def _user_row(db: AsyncSession, uid: uuid.UUID) -> dict[str, Any]:
+    return dict((await db.execute(select(User.__table__).where(User.__table__.c.id == uid))).mappings().one())
+
+
+async def test_adopt_gives_a_joined_real_student_the_history(demo_school: dict[str, Any]) -> None:
+    real = demo_school["real"]
+    async with get_session_factory()() as db:
+        seeded = await _seed(db, demo_school["school"])
+        sec = await _join_period_2(db, seeded.course_id, real)
+        hw = {a.title[:3]: a for a in (await db.execute(
+            select(Assignment).where(Assignment.course_id == seeded.course_id))).scalars()}
+        # Their live 5.1 turn-in, which the adopt must never touch.
+        live = Submission(assignment_id=hw["5.1"].id, student_id=real, section_id=sec.id, status="submitted")
+        db.add(live)
+        await db.commit()
+        row_before = await _user_row(db, real)
+        llm_before = await _count(db, LLMCall)
+
+        first = await _adopt(db, demo_school["school"], "REAL@demo-school.test")
+        ours = {adopted_submission_id(real, hw[k].id) for k in ("4.2", "4.4")}
+        assert set(first.submission_ids.values()) == ours and not first.removed
+        second = await _adopt(db, demo_school["school"], "real@demo-school.test")
+        assert set(second.submission_ids.values()) == ours and len(second.removed) == 2
+
+        assert await _user_row(db, real) == row_before
+        assert await _count(db, LLMCall) == llm_before
+        assert await _count(db, Submission, Submission.id == live.id) == 1
+        assert await _count(db, SubmissionGrade, SubmissionGrade.submission_id == live.id) == 0
+        assert await _count(db, Submission, Submission.student_id == real) == 3
+        assert await _count(db, IntegrityCheckSubmission, IntegrityCheckSubmission.submission_id.in_(ours)) == 2
+
+        # 4.2 and 4.4 stay complete with six in the class (the homework
+        # tab's Completed rule), and 4.2 #4 still flags: 4 of 6 wrong.
+        roster = await _count(db, SectionEnrollment, SectionEnrollment.course_id == seeded.course_id)
+        assert roster == 6
+        for key, flagged_positions in (("4.2", [4]), ("4.4", [])):
+            rows = (await db.execute(select(SubmissionGrade).join(Submission)
+                                     .where(Submission.assignment_id == hw[key].id))).scalars().all()
+            assert len(rows) == roster and all(g.grade_published_at for g in rows)
+            tally: dict[str, list[int]] = {}
+            for g in rows:
+                for e in counted_breakdown(g) or []:
+                    t = tally.setdefault(e["problem_id"], [0, 0])
+                    t[0] += 1
+                    t[1] += e["percent"] < _WRONG_BELOW_PERCENT
+            ids = hw[key].content["problem_ids"]
+            assert [i + 1 for i, pid in enumerate(ids) if _is_flagged(*tally[pid])] == flagged_positions
+        p4 =hw["4.2"].content["problem_ids"][3]
+        wrong_42 = [e for g in (await db.execute(select(SubmissionGrade).join(Submission).where(
+            Submission.assignment_id == hw["4.2"].id))).scalars() for e in g.published_breakdown
+            if e["problem_id"] == p4 and e["percent"] < _WRONG_BELOW_PERCENT]
+        assert len(wrong_42) == 4
+
+
+async def test_adopt_refuses_anyone_it_should_not_touch(demo_school: dict[str, Any]) -> None:
+    real = demo_school["real"]
+    async with get_session_factory()() as db:
+        seeded = await _seed(db, demo_school["school"])
+        # Not in the course yet.
+        with pytest.raises(RefusedError, match="not enrolled"):
+            await _adopt(db, demo_school["school"], "real@demo-school.test")
+        await db.rollback()
+        # The teacher's preview student, a demo fake, an unknown address.
+        for email in ("preview+t@veradic.ai", "fake_1@demo-students.invalid", "nobody@x.test"):
+            with pytest.raises(RefusedError):
+                await _adopt(db, demo_school["school"], email)
+            await db.rollback()
+        # Their own 4.2 work is never replaced.
+        sec = await _join_period_2(db, seeded.course_id, real)
+        hw42 = (await db.execute(select(Assignment).where(
+            Assignment.course_id == seeded.course_id, Assignment.title.like("4.2%")))).scalar_one()
+        own = Submission(id=uuid.uuid4(), assignment_id=hw42.id, student_id=real, section_id=sec.id,
+                         status="submitted")
+        own_id = own.id
+        db.add(own)
+        await db.commit()
+        with pytest.raises(RefusedError, match="themselves"):
+            await _adopt(db, demo_school["school"], "real@demo-school.test")
+        await db.rollback()
+        assert await _count(db, Submission, Submission.student_id == real) == 1
+        assert await _count(db, SubmissionGrade, SubmissionGrade.submission_id == own_id) == 0
+
+
+async def test_refuses_a_school_the_teacher_is_not_in(demo_school: dict[str, Any]) -> None:
+    async with get_session_factory()() as db:
+        with pytest.raises(RefusedError):
+            await _seed(db, demo_school["other"])
+
+
+def test_renders_a_real_photo_page() -> None:
+    t = TURN_INS[0]
+    pages, placed = render_pages(t.student, ["fake_1"], [WrittenProblem("1)", list(w.lines)) for w in t.work[:2]], 1)
+    img = Image.open(io.BytesIO(pages[0]))
+    assert img.format == "JPEG" and img.width == 1500
+    assert set(placed.pages.values()) == {1}
