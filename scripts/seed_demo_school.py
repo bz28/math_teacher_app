@@ -665,7 +665,6 @@ def _print(report: SeedReport, committed: bool) -> None:
         print(f"  {v:>4} {k}")
     print("\n  hw   student section   score               state      check")
     print("\n".join(report.lines))
-    print("  4.4  fake_5  Period 2  — never turned in (missing)")
     print("  5.1  fake_5  Period 2  — not turned in yet (due Friday)")
     code = report.join_codes.get(INVITE_SECTION)
     print(f"\nJoin {INVITE_SECTION} on camera: sign up at {settings.frontend_url}/register as a student "

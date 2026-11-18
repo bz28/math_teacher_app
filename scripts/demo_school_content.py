@@ -8,8 +8,8 @@ Nothing in this file is copied from real student data.
 
 The shape of the class at "now" (everyone in Period 2):
   4.2  graded, approved and published for all five.
-  4.4  approved and published; fake_4 turned it in a day late (−10%),
-       fake_5 never turned it in (missing).
+  4.4  graded, approved and published for all five; fake_4 turned it
+       in a day late (−10%).
   5.1  open, due Friday. fake_1, fake_2 and fake_4 turned in early and are
        AI-graded, waiting on the teacher (fake_2's check is flagged: the
        page is right but they couldn't explain it); fake_3 is approved
@@ -675,6 +675,35 @@ TURN_INS: tuple[TurnIn, ...] = (
               S("2pi. oh so it finishes the cycle at pi already, its squished", 33),
               A("Exactly — the 2 squeezes the graph so it repeats twice as fast. That's why the period is π. Good "
                 "work getting there.")))),
+
+    TurnIn("fake_5", "4.4", 25.0, "published", 0.95, (
+        Work((L(r"\text{amp } 3"), B(r"\text{per} = \frac{2\pi}{2} = \pi")), r"\text{amp } 3,\ \text{per } \pi",
+             full("Amplitude 3 and period π are correct.", "Correct.")),
+        Work((L(r"\text{amp} = 2"), L(r"\text{per} = \frac{2\pi}{0.5} = 4\pi"), B(r"\text{midline } y = 1")),
+             r"2,\ 4\pi,\ y = 1", full("All three parts correct.", "Correct.")),
+        Work((L(r"\cos x = 1 \to x = 0"), B("y = 4 - 1 = 3")), r"3 \text{ at } x = 0", _missed_two_pi(1),
+             ("procedural_slip", "fake_5 got the maximum value 3 from cos x = 1 at x = 0 but missed x = 2π at the "
+                                 "end of the closed interval.")),
+        Work((L(r"h = 25 + 20 = 45 \text{ ft}"), B(r"\text{one rev} = 2\pi \text{ s}")),
+             r"45 \text{ ft},\ 2\pi \text{ s}",
+             partial(50, "Maximum height 45 ft is correct; one revolution is 2π ÷ (π/15) = 30 s, not 2π s.",
+                     "Max height is right. The period here is 2π ÷ (π/15) = 30 seconds.",
+                     ((50, "Period — gave 2π s; T = 2π/(π/15) = 30 s", 2),)),
+             ("conceptual_gap", "fake_5 found the 45 ft maximum but gave 2π seconds for one revolution, the period "
+                                "of cos t. They computed 2π/B correctly on #1 and #2, so they may not recognize "
+                                "π/15 as B when it sits next to t.")),
+    ), Check(2, "pass", "Clear on amplitude and midline",
+             "fake_5 explained why amplitude ignores the negative sign (it's a distance from the midline; the sign "
+             "flips the graph) and correctly predicted only the midline changes with a +3 shift.",
+             rubric("high", "high", transfer="high"),
+             "Explained amplitude as a distance and the sign as a reflection; transferred correctly to a changed "
+             "vertical shift.",
+             (A("Hi! Let's chat about problem 2. You wrote amp = 2 even though there's a −2 in front. Why not −2?"),
+              S("amplitude is like the height from the middle so it cant be negative. the minus just flips it "
+                "upside down", 46),
+              A("Perfect. If we changed the +1 at the end to +3, which of your three answers would change?"),
+              S("just the midline, it would be y=3", 21),
+              A("Exactly. Nice clear thinking — that's all for this one!")))),
 
     # ── 5.1 ──
     TurnIn("fake_1", "5.1", 77.5, "to_review", 0.95, (

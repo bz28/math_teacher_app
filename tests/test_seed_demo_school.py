@@ -112,22 +112,19 @@ async def test_builds_the_demo_class(demo_school: dict[str, Any]) -> None:
             select(Submission, SubmissionGrade).join(SubmissionGrade).join(Assignment)
             .where(Assignment.course_id == course_id)
         )).all()
-        assert len(subs) == len(TURN_INS) == 13
+        assert len(subs) == len(TURN_INS) == 14
         by = {(s.student_id, s.assignment_id): (s, g) for s, g in subs}
         hw = {a.title[:3]: a for a in hws}
         sid = {u.name: u.id for u in students}
         now = datetime.now(UTC)
 
-        # 4.2 and 4.4: everything turned in is approved and published, snapshot clean.
+        # 4.2 and 4.4: all five turned in, approved and published, snapshot clean.
         for key in ("4.2", "4.4"):
             for name in sid:
-                if (sid[name], hw[key].id) not in by:
-                    continue
                 s, g = by[(sid[name], hw[key].id)]
                 assert g.grade_published_at and g.reviewed_at and g.published_breakdown == g.breakdown
                 assert g.published_final_score == g.final_score
-        # 4.4: fake_4 a day late, fake_5 missing past the due date.
-        assert (sid["fake_5"], hw["4.4"].id) not in by and hw["4.4"].due_at < now
+        # 4.4: fake_4 a day late.
         late_sub, late_grade = by[(sid["fake_4"], hw["4.4"].id)]
         assert late_sub.is_late and late_grade.late_penalty > 0 and late_grade.published_late_penalty > 0
         # 5.1 is still open: three waiting on the teacher, one approved not published, fake_5 not in yet.
@@ -142,7 +139,7 @@ async def test_builds_the_demo_class(demo_school: dict[str, Any]) -> None:
         checks = (await db.execute(
             select(IntegrityCheckSubmission).where(IntegrityCheckSubmission.submission_id.in_([s.id for s, _ in subs]))
         )).scalars().all()
-        assert len(checks) == 13 and all(c.status == "complete" for c in checks)
+        assert len(checks) == 14 and all(c.status == "complete" for c in checks)
         assert {c.disposition for c in checks} == {"pass", "needs_practice", "flag_for_review"}
         flagged = [c for c in checks if c.disposition == "flag_for_review"]
         assert len(flagged) == 1
@@ -179,7 +176,7 @@ async def test_rerun_resets_and_leaves_everyone_else_alone(demo_school: dict[str
         assert await _count(db, User, User.id.in_(list(first.student_ids.values()))) == 0
         assert await _count(db, Course, Course.name == COURSE_NAME) == 1
         assert await _count(db, User, User.email.like("fake\\_%")) == 5
-        assert await _count(db, Submission) == 13
+        assert await _count(db, Submission) == 14
         # The teacher, their preview student, the real student and their course are untouched.
         for uid in (demo_school["teacher"], demo_school["preview"], demo_school["real"]):
             assert await _count(db, User, User.id == uid) == 1
