@@ -49,6 +49,7 @@ from api.core.llm_client import (
 )
 from api.core.llm_schemas import (
     INTEGRITY_ANSWER_EQUIVALENCE_SCHEMA,
+    INTEGRITY_CHECK_REPLY_VALUES,
     INTEGRITY_ENGAGEMENT_VALUES,
 )
 from api.database import get_session_factory
@@ -1779,26 +1780,31 @@ async def _all_verdicts_in(check_id: uuid.UUID, db: AsyncSession) -> bool:
     return int(pending) == 0
 
 
-async def _understanding_check_missed(
+async def _taught_after_missed_check(
     check_id: uuid.UUID, db: AsyncSession,
 ) -> bool:
-    """True when any `label_student_reply` call this session marked a reply
-    `understanding_check=missed`. Read from the persisted tool-call turns
-    (their content is the tool input as JSON), so no extra column."""
-    contents = (await db.execute(
-        select(IntegrityConversationTurn.content).where(
-            IntegrityConversationTurn.integrity_check_submission_id == check_id,
-            IntegrityConversationTurn.role == ROLE_TOOL_CALL,
-            IntegrityConversationTurn.tool_name == TOOL_LABEL_REPLY,
-        )
-    )).scalars().all()
-    for content in contents:
-        try:
-            label = json.loads(content or "{}")
-        except ValueError:
-            continue
-        if isinstance(label, dict) and label.get("understanding_check") == "missed":
+    """True when a `label_student_reply` call marked a reply
+    `understanding_check=missed` AND the student spoke again after it — i.e.
+    the agent taught (hinted) rather than closing on the miss. That guided
+    recovery is the only thing that can inflate the verdict; a miss the agent
+    closed on straight away is scored from pre-help evidence anyway. Read
+    from the persisted turns (a tool call's content is its input as JSON),
+    so no extra column."""
+    missed_at: int | None = None
+    for turn in await _load_turns(check_id, db):
+        if missed_at is not None and turn.role == ROLE_STUDENT:
             return True
+        if (
+            missed_at is None
+            and turn.role == ROLE_TOOL_CALL
+            and turn.tool_name == TOOL_LABEL_REPLY
+        ):
+            try:
+                label = json.loads(turn.content or "{}")
+            except ValueError:
+                continue
+            if isinstance(label, dict) and label.get("understanding_check") == "missed":
+                missed_at = turn.ordinal
     return False
 
 
@@ -1815,6 +1821,15 @@ def _apply_label_reply(
         return (
             "rejected: engagement must be one of "
             + ", ".join(INTEGRITY_ENGAGEMENT_VALUES)
+        )
+    # Agent tools aren't sent in strict mode, so a required field can still
+    # be left out. A missing `understanding_check` would silently open the
+    # pass gate (see _taught_after_missed_check), so reject it and let the
+    # agent relabel in the same turn, while it still knows the answer.
+    if raw_input.get("understanding_check") not in INTEGRITY_CHECK_REPLY_VALUES:
+        return (
+            "rejected: understanding_check must be one of "
+            + ", ".join(INTEGRITY_CHECK_REPLY_VALUES)
         )
     if student_turn is None:
         return "rejected: there is no student message to label"
@@ -2160,16 +2175,17 @@ async def _apply_finish_check(
     # reads, to the model, like one who understood all along (it re-scores
     # `transfer` from the guided recovery and passes them). So the agent
     # labels that first reply in the same response as its hint, before any
-    # recovery, and a `missed` label rules out `pass` here, deterministically.
-    if disposition == DISPOSITION_PASS and await _understanding_check_missed(
+    # recovery, and a `missed` label followed by guided turns rules out
+    # `pass` here, deterministically.
+    if disposition == DISPOSITION_PASS and await _taught_after_missed_check(
         check.id, db,
     ):
         return (
             "rejected: disposition=pass is not available — you labelled the "
-            "student's first reply to the understanding check `missed`. "
-            "Getting there once you guided them is learning, not proof they "
-            "understood it on their own. Pick needs_practice (they explained "
-            "their own work) or flag_for_review (they couldn't)."
+            "student's first reply to the understanding check `missed` and "
+            "then guided them. Getting there once guided is learning, not "
+            "proof they understood it on their own. Pick needs_practice (they "
+            "explained their own work) or flag_for_review (they couldn't)."
         )
 
     # Understanding-check gate (verified tier only). A correct-on-paper

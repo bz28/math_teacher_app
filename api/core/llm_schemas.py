@@ -1570,11 +1570,13 @@ INTEGRITY_LABEL_REPLY_SCHEMA: ToolSchema = {
                 "enum": list(INTEGRITY_CHECK_REPLY_VALUES),
                 "description": (
                     "Only for the student's FIRST reply to your "
-                    "understanding-check probe: handled = right direction "
-                    "and why, on their own. missed = wrong, stuck, or a "
-                    "dodge. Every other message is not_a_check_reply. A "
-                    "missed check rules out a pass, however well they do "
-                    "once you guide them."
+                    "understanding-check probe: handled = they get your "
+                    "twist right (direction and why) on their own — even "
+                    "inside a broader answer that covers other cases too. "
+                    "missed = wrong, stuck, or no answer to your twist. "
+                    "Every other message is not_a_check_reply. Once you "
+                    "guide them after a missed check, a pass is ruled out, "
+                    "however well they do."
                 ),
             },
         },

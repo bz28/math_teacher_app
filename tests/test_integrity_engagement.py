@@ -42,7 +42,10 @@ def _reply(
         make_text(text),
         make_tool_use(
             "label_student_reply",
-            {"engagement": engagement, "wrapping_up": wrapping_up},
+            {
+                "engagement": engagement, "wrapping_up": wrapping_up,
+                "understanding_check": "not_a_check_reply",
+            },
             use_id=use_id,
         ),
     ]
@@ -118,7 +121,9 @@ async def test_label_without_text_keeps_looping_for_the_reply(
 ) -> None:
     submission_id = await _start(client, world)
     set_agent_script([
-        [make_tool_use("label_student_reply", {"engagement": "honest_confusion"})],
+        [make_tool_use("label_student_reply", {
+            "engagement": "honest_confusion", "understanding_check": "not_a_check_reply",
+        })],
         [make_text("Good question — slope is how steep the line is.")],
     ])
     r = await _post_turn(client, world, submission_id, {"message": "what does slope mean here?"})
@@ -185,7 +190,9 @@ async def test_only_the_first_label_per_reply_counts(
     submission_id = await _start(client, world)
     set_agent_script([
         [
-            make_tool_use("label_student_reply", {"engagement": "answering"}, use_id="a"),
+            make_tool_use("label_student_reply", {
+                "engagement": "answering", "understanding_check": "not_a_check_reply",
+            }, use_id="a"),
         ],
         _reply("Nice.", "not_trying", use_id="b"),
     ])
