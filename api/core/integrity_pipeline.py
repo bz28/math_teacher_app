@@ -1779,6 +1779,29 @@ async def _all_verdicts_in(check_id: uuid.UUID, db: AsyncSession) -> bool:
     return int(pending) == 0
 
 
+async def _understanding_check_missed(
+    check_id: uuid.UUID, db: AsyncSession,
+) -> bool:
+    """True when any `label_student_reply` call this session marked a reply
+    `understanding_check=missed`. Read from the persisted tool-call turns
+    (their content is the tool input as JSON), so no extra column."""
+    contents = (await db.execute(
+        select(IntegrityConversationTurn.content).where(
+            IntegrityConversationTurn.integrity_check_submission_id == check_id,
+            IntegrityConversationTurn.role == ROLE_TOOL_CALL,
+            IntegrityConversationTurn.tool_name == TOOL_LABEL_REPLY,
+        )
+    )).scalars().all()
+    for content in contents:
+        try:
+            label = json.loads(content or "{}")
+        except ValueError:
+            continue
+        if isinstance(label, dict) and label.get("understanding_check") == "missed":
+            return True
+    return False
+
+
 def _apply_label_reply(
     student_turn: IntegrityConversationTurn | None,
     raw_input: dict[str, Any],
@@ -2130,6 +2153,24 @@ async def _apply_finish_check(
                 "actually thin, or pick 'pass' if the student understood "
                 "their own work."
             )
+
+    # Teaching never raises the verdict. When the student's first reply to
+    # the understanding check was wrong, stuck or a dodge, the agent teaches
+    # instead of closing — and a student who gets there with its hints then
+    # reads, to the model, like one who understood all along (it re-scores
+    # `transfer` from the guided recovery and passes them). So the agent
+    # labels that first reply in the same response as its hint, before any
+    # recovery, and a `missed` label rules out `pass` here, deterministically.
+    if disposition == DISPOSITION_PASS and await _understanding_check_missed(
+        check.id, db,
+    ):
+        return (
+            "rejected: disposition=pass is not available — you labelled the "
+            "student's first reply to the understanding check `missed`. "
+            "Getting there once you guided them is learning, not proof they "
+            "understood it on their own. Pick needs_practice (they explained "
+            "their own work) or flag_for_review (they couldn't)."
+        )
 
     # Understanding-check gate (verified tier only). A correct-on-paper
     # answer narrated fluently maxes both required dimensions without
