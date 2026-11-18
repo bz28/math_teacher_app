@@ -25,6 +25,17 @@ other courses, other schools and real students are never touched.
     # Keep it.
     python scripts/seed_demo_school.py --school-id <uuid> --teacher-email <email> --commit
 
+Once a real student has joined Period 2 with the class code, the reset
+refuses (it would delete their work). `--adopt-student` is additive
+instead: it gives that student the same authored 4.2 and 4.4 history as
+the fakes, so both homeworks stay complete with them in the class. It
+replaces only the two turn-ins an earlier adopt run made (their ids are
+derived from student + homework), refuses if the student turned either
+in themselves, and never touches their account or any other work.
+
+    python scripts/seed_demo_school.py --school-id <uuid> --teacher-email <email> \\
+        --adopt-student <student email> [--commit]
+
 Settings come from the environment like the app's (DATABASE_URL,
 PHOTO_BUCKET…). A `postgresql://` URL (Railway's public one) is accepted
 and driven through asyncpg.
@@ -133,6 +144,7 @@ from scripts.demo_school_content import (  # noqa: E402
     TURN_INS,
     Homework,
     TurnIn,
+    adopted_turn_ins,
 )
 from scripts.demo_school_pages import WrittenProblem, render_pages, to_plain  # noqa: E402
 
@@ -225,7 +237,7 @@ async def _demo_courses(db: AsyncSession, school_id: uuid.UUID, teacher_id: uuid
     )).scalars())
 
 
-async def _check_and_reset(
+async def _school_and_teacher(
     db: AsyncSession, school_id: uuid.UUID, teacher_email: str, report: SeedReport,
 ) -> tuple[School, User]:
     school = await db.get(School, school_id)
@@ -241,7 +253,13 @@ async def _check_and_reset(
     if teacher.role != "teacher" or teacher.school_id != school.id or teacher.is_preview:
         raise RefusedError(f"{teacher_email} is not a teacher of {school.name!r}.")
     report.school_name, report.teacher_name = school.name, teacher.name
+    return school, teacher
 
+
+async def _check_and_reset(
+    db: AsyncSession, school_id: uuid.UUID, teacher_email: str, report: SeedReport,
+) -> tuple[School, User]:
+    school, teacher = await _school_and_teacher(db, school_id, teacher_email, report)
     fakes = list((await db.execute(
         select(User).where(func.lower(User.email).in_(list(FAKE_EMAILS.values())))
     )).scalars())
@@ -268,9 +286,16 @@ async def _check_and_reset(
                    or_(User.is_preview.is_(False), User.preview_owner_id != teacher.id))
         )).scalar_one()
         if others or other_work:
+            who = ", ".join(sorted(others)) or "none enrolled now"
             raise RefusedError(
-                f"{COURSE_NAME!r} ({course.id}) has students who aren't fake_N demo students "
-                f"({len(others)} enrolled, {other_work} turn-ins). Remove them or rename the course first."
+                f"{COURSE_NAME!r} ({course.id}) has real students ({who}; {other_work} turn-ins). A full "
+                "reset deletes the course, which would take their enrollment and their work with it, so "
+                "this script won't.\n"
+                "  - To give an enrolled real student the demo history on 4.2 and 4.4, leave the course "
+                "alone and run with --adopt-student <their email> instead.\n"
+                "  - To rebuild from scratch anyway, delete this course yourself in the app first, knowing "
+                "it deletes those students' work in it, then run this again; they rejoin with the new class "
+                "code."
             )
     for u in fakes:
         elsewhere = (await db.execute(
@@ -540,72 +565,87 @@ async def build(
     for n, t in enumerate(TURN_INS):
         hw = next(h for h in HOMEWORKS if h.key == t.hw)
         a, bank_ids, items = hw_by_key[t.hw]
-        student = students[t.student]
-        section = sections[SECTION_OF[t.student]]
-        due = clock.due(hw)
-        submitted = due - timedelta(hours=t.hours_before_due) + timedelta(minutes=(n * 17) % 41)
-
-        sub_id = uuid.uuid4()
-        written = [WrittenProblem(f"{i + 1})", list(w.lines)) for i, w in enumerate(t.work)]
-        jpegs, placed = render_pages(t.student, [t.student, SECTION_OF[t.student], f"HW {hw.key}"], written,
-                                     seed=zlib.crc32(f"{t.student}:{t.hw}".encode()))
-        files = await photo_store.store_pages(sub_id, [
-            {"data": base64.b64encode(j).decode("ascii"), "media_type": "image/jpeg",
-             "filename": f"IMG_{4100 + n * 3 + k}.jpg"}
-            for k, j in enumerate(jpegs)
-        ])
-        report.new_pages += files
-        extraction = _extraction(t, placed.pages)
-        confirmed = submitted + timedelta(minutes=2, seconds=10 + (n * 23) % 50)
-        sub = Submission(
-            id=sub_id, assignment_id=a.id, student_id=student.id, section_id=section.id, status="submitted",
-            files=files, extraction=extraction, extraction_confirmed_at=confirmed,
-            submitted_at=submitted, is_late=days_late(submitted, due) > 0,
-        )
-        db.add(sub)
-        await db.flush()
-        report.submission_ids[(t.student, t.hw)] = sub.id
-        report.bump("turn-ins")
-        report.bump("photo pages", len(files))
-
-        # Grade: the grader's own post-processing over the authored calls.
-        raw = _raw_grades(t)
-        pos_to_bid = {i + 1: str(b) for i, b in enumerate(bank_ids)}
-        steps_per_pos = {i + 1: sum(1 for ln in w.lines if not ln.crossed) for i, w in enumerate(t.work)}
-        breakdown, ai_score = _build_breakdown(
-            raw, pos_to_bid, submission_id=str(sub.id), pos_to_step_count=steps_per_pos,
-            rules={}, rule_texts={}, points=assignment_points(a),
-        )
-        graded = confirmed + timedelta(seconds=40 + (n * 13) % 30)
-        grade = SubmissionGrade(
-            submission_id=sub.id, ai_score=ai_score,
-            ai_breakdown={"grades": raw, "problem_percents": {e["problem_id"]: e["percent"] for e in breakdown}},
-            breakdown=breakdown, graded_at=graded, late_penalty_waived=False,
-            rubric_snapshot=effective_rubric(course.rubric, a.rubric),
-        )
-        set_final_score(grade, ai_score, penalty_percent(a.late_policy, days_late(submitted, due)))
-        if t.state in ("published", "approved"):
-            k = review_order[t.hw] = review_order.get(t.hw, 0) + 1
-            sitting = due + timedelta(hours=16, minutes=10) if hw.grades_published \
-                else clock.local(0, 14, 20)
-            grade.reviewed_by, grade.reviewed_at = teacher.id, sitting + timedelta(minutes=4 * k)
-        if t.state == "published":
-            grade.grade_published_at = due + timedelta(hours=16, minutes=42)
-            grade.published_final_score = grade.final_score
-            grade.published_late_penalty = grade.late_penalty
-            grade.published_breakdown = breakdown
-            grade.published_teacher_notes = None
-        db.add(grade)
-        report.bump("grades")
-
-        await _write_check(db, t, sub, extraction, bank_ids, items,
-                           confirmed + timedelta(seconds=25), report)
-        report.lines.append(
-            f"  {t.hw:<4} {t.student:<7} {SECTION_OF[t.student]:<9} {grade.final_score:5.1f}"
-            f"{' (late −' + format(grade.late_penalty, '.1f') + ')' if grade.late_penalty else '':<14}"
-            f" {t.state:<10} check: {t.check.disposition}"
+        k = review_order[t.hw] = review_order.get(t.hw, 0) + 1
+        sitting = None if hw.grades_published else clock.local(0, 14, 20)
+        await _write_turn_in(
+            db, t, n, hw=hw, a=a, bank_ids=bank_ids, items=items, student_id=students[t.student].id,
+            section=sections[SECTION_OF[t.student]], display_name=t.student, reviewer_id=teacher.id,
+            review_k=k, approved_sitting=sitting, rubric_snapshot=effective_rubric(course.rubric, a.rubric),
+            report=report,
         )
     await db.flush()
+
+
+async def _write_turn_in(
+    db: AsyncSession, t: TurnIn, n: int, *, hw: Homework, a: Assignment, bank_ids: list[uuid.UUID],
+    items: dict[uuid.UUID, QuestionBankItem], student_id: uuid.UUID, section: Section, display_name: str,
+    reviewer_id: uuid.UUID, review_k: int, approved_sitting: datetime | None, rubric_snapshot: Any,
+    report: SeedReport, sub_id: uuid.UUID | None = None,
+) -> Submission:
+    """One turn-in: photo pages, the reader's extraction, the grade (and its
+    review/publish), and the understanding check. Times hang off the
+    homework's stored due date, so a later run lines up with an earlier one."""
+    assert a.due_at is not None
+    due = a.due_at
+    submitted = due - timedelta(hours=t.hours_before_due) + timedelta(minutes=(n * 17) % 41)
+
+    sub_id = sub_id or uuid.uuid4()
+    written = [WrittenProblem(f"{i + 1})", list(w.lines)) for i, w in enumerate(t.work)]
+    jpegs, placed = render_pages(t.student, [display_name, section.name, f"HW {hw.key}"], written,
+                                 seed=zlib.crc32(f"{t.student}:{t.hw}".encode()))
+    files = await photo_store.store_pages(sub_id, [
+        {"data": base64.b64encode(j).decode("ascii"), "media_type": "image/jpeg",
+         "filename": f"IMG_{4100 + n * 3 + k}.jpg"}
+        for k, j in enumerate(jpegs)
+    ])
+    report.new_pages += files
+    extraction = _extraction(t, placed.pages)
+    confirmed = submitted + timedelta(minutes=2, seconds=10 + (n * 23) % 50)
+    sub = Submission(
+        id=sub_id, assignment_id=a.id, student_id=student_id, section_id=section.id, status="submitted",
+        files=files, extraction=extraction, extraction_confirmed_at=confirmed,
+        submitted_at=submitted, is_late=days_late(submitted, due) > 0,
+    )
+    db.add(sub)
+    await db.flush()
+    report.submission_ids[(t.student, t.hw)] = sub.id
+    report.bump("turn-ins")
+    report.bump("photo pages", len(files))
+
+    # Grade: the grader's own post-processing over the authored calls.
+    raw = _raw_grades(t)
+    pos_to_bid = {i + 1: str(b) for i, b in enumerate(bank_ids)}
+    steps_per_pos = {i + 1: sum(1 for ln in w.lines if not ln.crossed) for i, w in enumerate(t.work)}
+    breakdown, ai_score = _build_breakdown(
+        raw, pos_to_bid, submission_id=str(sub.id), pos_to_step_count=steps_per_pos,
+        rules={}, rule_texts={}, points=assignment_points(a),
+    )
+    graded = confirmed + timedelta(seconds=40 + (n * 13) % 30)
+    grade = SubmissionGrade(
+        submission_id=sub.id, ai_score=ai_score,
+        ai_breakdown={"grades": raw, "problem_percents": {e["problem_id"]: e["percent"] for e in breakdown}},
+        breakdown=breakdown, graded_at=graded, late_penalty_waived=False, rubric_snapshot=rubric_snapshot,
+    )
+    set_final_score(grade, ai_score, penalty_percent(a.late_policy, days_late(submitted, due)))
+    if t.state in ("published", "approved"):
+        sitting = approved_sitting or due + timedelta(hours=16, minutes=10)
+        grade.reviewed_by, grade.reviewed_at = reviewer_id, sitting + timedelta(minutes=4 * review_k)
+    if t.state == "published":
+        grade.grade_published_at = due + timedelta(hours=16, minutes=42)
+        grade.published_final_score = grade.final_score
+        grade.published_late_penalty = grade.late_penalty
+        grade.published_breakdown = breakdown
+        grade.published_teacher_notes = None
+    db.add(grade)
+    report.bump("grades")
+
+    await _write_check(db, t, sub, extraction, bank_ids, items, confirmed + timedelta(seconds=25), report)
+    report.lines.append(
+        f"  {t.hw:<4} {display_name[:16]:<16} {section.name:<9} {grade.final_score:5.1f}"
+        f"{' (late −' + format(grade.late_penalty, '.1f') + ')' if grade.late_penalty else '':<14}"
+        f" {t.state:<10} check: {t.check.disposition}"
+    )
+    return sub
 
 
 async def _assert_scope(db: AsyncSession, report: SeedReport, teacher: User, school: School) -> None:
@@ -655,6 +695,150 @@ async def seed_demo_school(
     return report
 
 
+# ── Adopt a real student ─────────────────────────────────────────────
+
+ADOPT_HOMEWORK = ("4.2", "4.4")
+# Turn-ins made by --adopt-student get an id derived from (student,
+# homework) under this namespace. That is how a re-run knows a row is its
+# own: any other submission of theirs, whatever it is, is never touched.
+ADOPT_NAMESPACE = uuid.UUID("6f0c1d2e-5b7a-4c3e-9d8f-a1b2c3d4e5f6")
+
+
+def adopted_submission_id(student_id: uuid.UUID, assignment_id: uuid.UUID) -> uuid.UUID:
+    return uuid.uuid5(ADOPT_NAMESPACE, f"{student_id}:{assignment_id}")
+
+
+async def _row(db: AsyncSession, user_id: uuid.UUID) -> dict[str, Any]:
+    """The user's row as stored, to prove the run didn't change it."""
+    row = (await db.execute(select(User.__table__).where(User.__table__.c.id == user_id))).mappings().one()
+    return dict(row)
+
+
+async def adopt_student(
+    db: AsyncSession, *, school_id: uuid.UUID, teacher_email: str, student_email: str,
+) -> SeedReport:
+    """Give a real student, already enrolled in the demo course's Period 2,
+    the authored history on 4.2 and 4.4 (pages, reading, grade approved and
+    published, understanding check), replacing only what an earlier adopt
+    run made for them. Never commits; same contract as `seed_demo_school`."""
+    report = SeedReport()
+    school, teacher = await _school_and_teacher(db, school_id, teacher_email, report)
+    courses = await _demo_courses(db, school.id, teacher.id)
+    if len(courses) != 1:
+        raise RefusedError(f"Expected one {COURSE_NAME!r} course of {teacher_email} in {school.name!r}, "
+                           f"found {len(courses)}. Seed the class first.")
+    course = courses[0]
+    report.course_id = course.id
+
+    student = (await db.execute(
+        select(User).where(func.lower(User.email) == student_email.strip().lower())
+    )).scalar_one_or_none()
+    if student is None:
+        raise RefusedError(f"No user with email {student_email!r}. They sign up with the class code first.")
+    if student.role != "student" or student.is_preview or student.school_id != school.id \
+            or student.email.lower().endswith("@" + FAKE_DOMAIN):
+        raise RefusedError(f"{student.email} is not a real student of {school.name!r} "
+                           "(wrong role or school, a preview student, or a demo fake).")
+    enrollment = (await db.execute(
+        select(SectionEnrollment, Section).join(Section, Section.id == SectionEnrollment.section_id)
+        .where(SectionEnrollment.course_id == course.id, SectionEnrollment.student_id == student.id)
+    )).first()
+    if enrollment is None or enrollment[1].name != INVITE_SECTION:
+        raise RefusedError(f"{student.email} is not enrolled in {INVITE_SECTION} of {COURSE_NAME!r} "
+                           f"({course.id}). They join with that section's class code first.")
+    section = enrollment[1]
+
+    hws = {h.key: h for h in HOMEWORKS}
+    assignments: dict[str, Assignment] = {}
+    for key in ADOPT_HOMEWORK:
+        a = (await db.execute(
+            select(Assignment).where(Assignment.course_id == course.id, Assignment.title == hws[key].title)
+        )).scalar_one_or_none()
+        if a is None or a.due_at is None:
+            raise RefusedError(f"{COURSE_NAME!r} has no homework {hws[key].title!r}. Seed the class first.")
+        assignments[key] = a
+
+    ours = {key: adopted_submission_id(student.id, a.id) for key, a in assignments.items()}
+    before_row = await _row(db, student.id)
+    others_before = set((await db.execute(
+        select(Submission.id).where(Submission.student_id == student.id, Submission.id.notin_(ours.values()))
+    )).scalars())
+    enrollments_before = set((await db.execute(
+        select(SectionEnrollment.id).where(SectionEnrollment.student_id == student.id)
+    )).scalars())
+
+    # Their own work on 4.2/4.4 (not ours) is theirs: refuse rather than replace it.
+    for key, a in assignments.items():
+        theirs = (await db.execute(
+            select(Submission.id).where(Submission.assignment_id == a.id, Submission.student_id == student.id,
+                                        Submission.id != ours[key])
+        )).scalar_one_or_none()
+        if theirs is not None:
+            raise RefusedError(f"{student.email} already turned in {a.title!r} ({theirs}) themselves; "
+                               "not replacing their own work.")
+
+    # Replace what an earlier adopt run made.
+    old = list((await db.execute(select(Submission).where(Submission.id.in_(ours.values())))).scalars())
+    if old:
+        report.old_pages += await photo_store.pages_of_submissions(db, Submission.id.in_([s.id for s in old]))
+        for s in old:
+            report.removed.append(f"turn-in {s.id} from an earlier --adopt-student run")
+            await db.delete(s)
+        await db.flush()
+
+    try:
+        for i, t in enumerate(adopted_turn_ins(student.name)):
+            a = assignments[t.hw]
+            bank_ids = [uuid.UUID(b) for b in (a.content or {})["problem_ids"]]
+            items = {q.id: q for q in (await db.execute(
+                select(QuestionBankItem).where(QuestionBankItem.id.in_(bank_ids))
+            )).scalars()}
+            await _write_turn_in(
+                db, t, len(TURN_INS) + i, hw=hws[t.hw], a=a, bank_ids=bank_ids, items=items,
+                student_id=student.id, section=section, display_name=student.name, reviewer_id=teacher.id,
+                review_k=len(STUDENTS) + 1, approved_sitting=None,
+                rubric_snapshot=effective_rubric(course.rubric, a.rubric), report=report, sub_id=ours[t.hw],
+            )
+        await db.flush()
+
+        # Scope: only the two turn-ins, nothing else of theirs, no AI.
+        assert await _row(db, student.id) == before_row, "the student's user row changed"
+        assert set((await db.execute(
+            select(Submission.id).where(Submission.student_id == student.id, Submission.id.notin_(ours.values()))
+        )).scalars()) == others_before, "the student's other work changed"
+        assert set((await db.execute(
+            select(SectionEnrollment.id).where(SectionEnrollment.student_id == student.id)
+        )).scalars()) == enrollments_before, "the student's enrollments changed"
+        assert set(report.submission_ids.values()) == set(ours.values())
+        llm = (await db.execute(select(func.count(LLMCall.id)).where(
+            LLMCall.submission_id.in_(list(ours.values()))
+        ))).scalar_one()
+        assert llm == 0, "llm_calls rows reference the adopted turn-ins"
+    except BaseException:
+        await photo_store.delete_pages(report.new_pages)
+        report.new_pages = []
+        raise
+    report.student_ids[student.email] = student.id
+    return report
+
+
+def _print_adopt(report: SeedReport, committed: bool) -> None:
+    print(f"\nSchool: {report.school_name}   Teacher: {report.teacher_name}   Course: {report.course_id}")
+    print("Replaced from an earlier adopt run:" if report.removed else "Nothing from an earlier adopt run.")
+    for r in report.removed:
+        print(f"  - {r}")
+    who = next(iter(report.student_ids), "")
+    print(f"\nAdopted {who}:")
+    for k, v in report.created.items():
+        print(f"  {v:>4} {k}")
+    print("\n  hw   student          section   score               state      check")
+    print("\n".join(report.lines))
+    print("  5.1  (theirs to do live; untouched)")
+    print(f"\nLLM calls made: 0. Emails sent: 0. Their account (email, name, password) untouched. Photo store: "
+          f"{'S3 bucket ' + settings.photo_bucket if settings.photo_bucket else 'local dir'}.")
+    print("COMMITTED." if committed else "DRY RUN — rolled back; nothing was saved. Re-run with --commit to keep it.")
+
+
 def _print(report: SeedReport, committed: bool) -> None:
     print(f"\nSchool: {report.school_name}   Teacher: {report.teacher_name}")
     print("Removed from the earlier run:" if report.removed else "Nothing from an earlier run to remove.")
@@ -663,9 +847,9 @@ def _print(report: SeedReport, committed: bool) -> None:
     print(f"\nCreated {COURSE_NAME!r} ({report.course_id}):")
     for k, v in report.created.items():
         print(f"  {v:>4} {k}")
-    print("\n  hw   student section   score               state      check")
+    print("\n  hw   student          section   score               state      check")
     print("\n".join(report.lines))
-    print("  5.1  fake_5  Period 2  — not turned in yet (due Friday)")
+    print("  5.1  fake_5           Period 2  — not turned in yet (due Friday)")
     code = report.join_codes.get(INVITE_SECTION)
     print(f"\nJoin {INVITE_SECTION} on camera: sign up at {settings.frontend_url}/register as a student "
           f"with class code {code} (any email works).")
@@ -682,17 +866,25 @@ async def main() -> int:
     parser.add_argument("--school-id", required=True, type=uuid.UUID)
     parser.add_argument("--teacher-email", required=True)
     parser.add_argument("--invite-email", help="also create a pending Period 2 invite for this address (no email)")
+    parser.add_argument("--adopt-student", metavar="EMAIL",
+                        help="instead of resetting, give this real Period 2 student the 4.2/4.4 history")
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--dry-run", action="store_true", default=True, help="roll back at the end (default)")
-    mode.add_argument("--commit", action="store_true", help="commit the reset and the new class")
+    mode.add_argument("--commit", action="store_true", help="commit the result")
     args = parser.parse_args()
+    if args.adopt_student and args.invite_email:
+        parser.error("--adopt-student doesn't take --invite-email")
 
     from api.database import get_session_factory
 
     async with get_session_factory()() as db:
         try:
-            report = await seed_demo_school(db, school_id=args.school_id, teacher_email=args.teacher_email,
-                                            invite_email=args.invite_email)
+            if args.adopt_student:
+                report = await adopt_student(db, school_id=args.school_id, teacher_email=args.teacher_email,
+                                             student_email=args.adopt_student)
+            else:
+                report = await seed_demo_school(db, school_id=args.school_id, teacher_email=args.teacher_email,
+                                                invite_email=args.invite_email)
         except RefusedError as e:
             await db.rollback()
             print(f"REFUSED: {e}\nNothing was changed.", file=sys.stderr)
@@ -703,7 +895,7 @@ async def main() -> int:
         else:
             await db.rollback()
             await photo_store.delete_pages(report.new_pages)
-    _print(report, args.commit)
+    (_print_adopt if args.adopt_student else _print)(report, args.commit)
     return 0
 
 

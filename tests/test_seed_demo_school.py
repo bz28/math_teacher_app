@@ -31,7 +31,13 @@ from api.models.user import User
 from api.routes.teacher_insights import _WRONG_BELOW_PERCENT, _is_flagged, counted_breakdown
 from scripts.demo_school_content import TURN_INS
 from scripts.demo_school_pages import Placed, WrittenProblem, render_pages
-from scripts.seed_demo_school import COURSE_NAME, RefusedError, seed_demo_school
+from scripts.seed_demo_school import (
+    COURSE_NAME,
+    RefusedError,
+    adopt_student,
+    adopted_submission_id,
+    seed_demo_school,
+)
 
 TEACHER = "teacher@demo-school.test"
 
@@ -189,10 +195,107 @@ async def test_refuses_when_a_real_student_is_in_the_demo_course(demo_school: di
         sec = (await db.execute(select(Section).where(Section.course_id == report.course_id))).scalars().first()
         db.add(SectionEnrollment(section_id=sec.id, course_id=report.course_id, student_id=demo_school["real"]))
         await db.commit()
-        with pytest.raises(RefusedError):
+        with pytest.raises(RefusedError, match="--adopt-student"):
             await _seed(db, demo_school["school"])
         await db.rollback()
         assert await _count(db, Course, Course.id == report.course_id) == 1
+
+
+async def _adopt(db: AsyncSession, school_id: uuid.UUID, email: str) -> Any:
+    with patch("scripts.seed_demo_school.render_pages", _fake_render):
+        report = await adopt_student(db, school_id=school_id, teacher_email=TEACHER, student_email=email)
+    await db.commit()
+    return report
+
+
+async def _join_period_2(db: AsyncSession, course_id: uuid.UUID, student_id: uuid.UUID) -> Section:
+    sec = (await db.execute(select(Section).where(Section.course_id == course_id))).scalar_one()
+    db.add(SectionEnrollment(section_id=sec.id, course_id=course_id, student_id=student_id))
+    await db.commit()
+    return sec
+
+
+async def _user_row(db: AsyncSession, uid: uuid.UUID) -> dict[str, Any]:
+    return dict((await db.execute(select(User.__table__).where(User.__table__.c.id == uid))).mappings().one())
+
+
+async def test_adopt_gives_a_joined_real_student_the_history(demo_school: dict[str, Any]) -> None:
+    real = demo_school["real"]
+    async with get_session_factory()() as db:
+        seeded = await _seed(db, demo_school["school"])
+        sec = await _join_period_2(db, seeded.course_id, real)
+        hw = {a.title[:3]: a for a in (await db.execute(
+            select(Assignment).where(Assignment.course_id == seeded.course_id))).scalars()}
+        # Their live 5.1 turn-in, which the adopt must never touch.
+        live = Submission(assignment_id=hw["5.1"].id, student_id=real, section_id=sec.id, status="submitted")
+        db.add(live)
+        await db.commit()
+        row_before = await _user_row(db, real)
+        llm_before = await _count(db, LLMCall)
+
+        first = await _adopt(db, demo_school["school"], "REAL@demo-school.test")
+        ours = {adopted_submission_id(real, hw[k].id) for k in ("4.2", "4.4")}
+        assert set(first.submission_ids.values()) == ours and not first.removed
+        second = await _adopt(db, demo_school["school"], "real@demo-school.test")
+        assert set(second.submission_ids.values()) == ours and len(second.removed) == 2
+
+        assert await _user_row(db, real) == row_before
+        assert await _count(db, LLMCall) == llm_before
+        assert await _count(db, Submission, Submission.id == live.id) == 1
+        assert await _count(db, SubmissionGrade, SubmissionGrade.submission_id == live.id) == 0
+        assert await _count(db, Submission, Submission.student_id == real) == 3
+        assert await _count(db, IntegrityCheckSubmission, IntegrityCheckSubmission.submission_id.in_(ours)) == 2
+
+        # 4.2 and 4.4 stay complete with six in the class (the homework
+        # tab's Completed rule), and 4.2 #4 still flags: 4 of 6 wrong.
+        roster = await _count(db, SectionEnrollment, SectionEnrollment.course_id == seeded.course_id)
+        assert roster == 6
+        for key, flagged_positions in (("4.2", [4]), ("4.4", [])):
+            rows = (await db.execute(select(SubmissionGrade).join(Submission)
+                                     .where(Submission.assignment_id == hw[key].id))).scalars().all()
+            assert len(rows) == roster and all(g.grade_published_at for g in rows)
+            tally: dict[str, list[int]] = {}
+            for g in rows:
+                for e in counted_breakdown(g) or []:
+                    t = tally.setdefault(e["problem_id"], [0, 0])
+                    t[0] += 1
+                    t[1] += e["percent"] < _WRONG_BELOW_PERCENT
+            ids = hw[key].content["problem_ids"]
+            assert [i + 1 for i, pid in enumerate(ids) if _is_flagged(*tally[pid])] == flagged_positions
+        p4 =hw["4.2"].content["problem_ids"][3]
+        wrong_42 = [e for g in (await db.execute(select(SubmissionGrade).join(Submission).where(
+            Submission.assignment_id == hw["4.2"].id))).scalars() for e in g.published_breakdown
+            if e["problem_id"] == p4 and e["percent"] < _WRONG_BELOW_PERCENT]
+        assert len(wrong_42) == 4
+
+
+async def test_adopt_refuses_anyone_it_should_not_touch(demo_school: dict[str, Any]) -> None:
+    real = demo_school["real"]
+    async with get_session_factory()() as db:
+        seeded = await _seed(db, demo_school["school"])
+        # Not in the course yet.
+        with pytest.raises(RefusedError, match="not enrolled"):
+            await _adopt(db, demo_school["school"], "real@demo-school.test")
+        await db.rollback()
+        # The teacher's preview student, a demo fake, an unknown address.
+        for email in ("preview+t@veradic.ai", "fake_1@demo-students.invalid", "nobody@x.test"):
+            with pytest.raises(RefusedError):
+                await _adopt(db, demo_school["school"], email)
+            await db.rollback()
+        # Their own 4.2 work is never replaced.
+        sec = await _join_period_2(db, seeded.course_id, real)
+        hw42 = (await db.execute(select(Assignment).where(
+            Assignment.course_id == seeded.course_id, Assignment.title.like("4.2%")))).scalar_one()
+        own = Submission(id=uuid.uuid4(), assignment_id=hw42.id, student_id=real, section_id=sec.id,
+                         status="submitted")
+        own_id = own.id
+        db.add(own)
+        await db.commit()
+        with pytest.raises(RefusedError, match="themselves"):
+            await _adopt(db, demo_school["school"], "real@demo-school.test")
+        await db.rollback()
+        assert await _count(db, Submission, Submission.student_id == real) == 1
+        assert await _count(db, SubmissionGrade, SubmissionGrade.submission_id == own_id) == 0
 
 
 async def test_refuses_a_school_the_teacher_is_not_in(demo_school: dict[str, Any]) -> None:

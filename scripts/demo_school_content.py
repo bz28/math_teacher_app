@@ -853,3 +853,77 @@ TURN_INS: tuple[TurnIn, ...] = (
               A("Exactly — adding π gets you to the matching Quadrant III angle. Nice work thinking it "
                 "through.")))),
 )
+
+
+# ── An adopted student ───────────────────────────────────────────────
+# `--adopt-student` gives a real student, already enrolled in Period 2,
+# this history on 4.2 and 4.4 so the class reads complete with them in
+# it. They miss 4.2 #4 the same quadrant way (4 of 6 under half, still
+# flagged) and miss the 2π endpoint on 4.4 #3. 5.1 is left for them to
+# do live.
+
+
+def adopted_turn_ins(name: str) -> tuple[TurnIn, ...]:
+    return (
+        TurnIn("adopted", "4.2", 22.0, "published", 0.95, (
+            Work((L(r"\frac{5\pi}{6} \text{ in QII, ref } \frac{\pi}{6}"), B(r"\sin\frac{5\pi}{6} = \frac{1}{2}")),
+                 r"\frac{1}{2}", full("Quadrant II, reference angle π/6, sine positive — 1/2 is correct.",
+                                      "Correct, with the quadrant shown.")),
+            Work((L(r"\frac{4\pi}{3} \text{ in QIII, ref } \frac{\pi}{3}"), B(r"\cos\frac{4\pi}{3} = -\frac{1}{2}")),
+                 r"-\frac{1}{2}", full("Quadrant III, reference angle π/3, cosine negative — −1/2 is correct.",
+                                       "Correct.")),
+            Work((L(r"\text{ref } \frac{\pi}{4}, \text{ QIV}"), B(r"\tan\frac{7\pi}{4} = -1")), "-1",
+                 full("Tangent is negative in Quadrant IV; −1 is correct.", "Correct.")),
+            Work((L(r"\csc\theta = \frac{1}{\sin\theta}"),
+                  L(r"\text{ref } \frac{\pi}{6} \Rightarrow \sin = \frac{1}{2}"),
+                  B(r"\csc\frac{7\pi}{6} = 2")), "2",
+                 partial(40, "Reciprocal and π/6 reference angle are right, but 7π/6 is in Quadrant III, where sine is "
+                             "negative: sin(7π/6) = −1/2, so the answer is −2.",
+                         "Good reciprocal setup — 7π/6 is in Quadrant III, so sine and cosecant are negative.",
+                         ((60, "Sign — sine is negative in Quadrant III; sin(7π/6) = −1/2, so csc = −2", 2),)),
+                 ("conceptual_gap", f"{name} took the π/6 reference value straight to sin(7π/6) = 1/2 without "
+                                    "applying the Quadrant III sign, though they marked quadrants on #1–#3 — the "
+                                    "same sign step most of the class missed on this problem.")),
+            Work((L(r"\sin 60^\circ = \frac{h}{20}"), L(r"h = 20 \cdot \frac{\sqrt{3}}{2} = 10\sqrt{3}"),
+                  B(r"h \approx 17.3 \text{ ft}")), r"10\sqrt{3} \approx 17.3 \text{ ft}",
+                 full("Sine from opposite over hypotenuse; 10√3 ≈ 17.3 ft is correct.", "Nice, both forms given.")),
+        ), Check(5, "pass", "Explained the ladder setup in their own words",
+                 f"{name} explained choosing sine (the height is opposite the 60° angle, the ladder is the "
+                 "hypotenuse) and correctly predicted that a shorter ladder at the same angle reaches lower. "
+                 "Understanding matches the written work.",
+                 rubric("high", "mid", prediction="high"),
+                 "Named the opposite side and hypotenuse unprompted and predicted the 15 ft case correctly, "
+                 "reasoning that the ratio stays the same.",
+                 (A("Hi! Thanks for turning in 4.2. Let's talk about problem 5, the ladder. You started with "
+                    "sin 60° = h/20 — why sine for this one?"),
+                  S("the height is opposite the 60 degree angle and 20 is the ladder which is the hypotenuse", 41),
+                  A("Right. If the ladder were 15 ft at the same 60° angle, would the top be higher or lower, and "
+                    "how would you find it?"),
+                  S("lower. same ratio so h = 15 sin 60 which is like 13 ft", 39),
+                  A("Exactly — the ratio stays √3/2, so the height scales with the ladder. Nice work, thanks!")))),
+
+        TurnIn("adopted", "4.4", 9.5, "published", 0.94, (
+            Work((L(r"A = 3"), B(r"T = \frac{2\pi}{2} = \pi")), r"A = 3,\ T = \pi",
+                 full("Amplitude 3 and period π are correct.", "Correct.")),
+            Work((L(r"A = |-2| = 2"), L(r"T = \frac{2\pi}{1/2} = 4\pi"), B(r"\text{midline } y = 1")),
+                 r"2,\ 4\pi,\ y = 1", full("Amplitude, period and midline are all correct.", "Correct.")),
+            Work((L(r"\cos x = 1"), L(r"y = 4 - 1 = 3"), B(r"\max = 3 \text{ at } x = 0")),
+                 r"3 \text{ at } x = 0", _missed_two_pi(3),
+                 ("procedural_slip", f"{name} found the maximum 3 at x = 0 but didn't check the right endpoint of "
+                                     "the closed interval, where cos x = 1 again at 2π.")),
+            Work((L(r"\text{max at } \cos = -1"), L(r"h = 25 + 20 = 45 \text{ ft}"),
+                  B(r"T = \frac{2\pi}{\pi/15} = 30 \text{ s}")), r"45 \text{ ft},\ 30 \text{ s}",
+                 full("Maximum 45 ft and a 30 s revolution are correct.", "Both parts right, with units.")),
+        ), Check(4, "pass", "Clear on why cos = −1 gives the top",
+                 f"{name} explained that the minus sign makes cos = −1 the highest point and predicted a faster "
+                 "revolution for a larger B. Understanding matches the work.",
+                 rubric("high", "high", prediction="high"),
+                 "Explained the role of the minus sign in their own words and predicted the period for "
+                 "B = π/10 correctly.",
+                 (A("Hi! On problem 4, the Ferris wheel, you found the max when cos = −1. Why −1 and not 1?"),
+                  S("its 25 minus 20cos, so cos = -1 makes it 25 + 20. thats the top", 37),
+                  A("Right. If the formula were 25 − 20cos(π/10 · t), would a revolution take more or less than "
+                    "30 seconds?"),
+                  S("less, 2pi over pi/10 is 20 seconds", 29),
+                  A("Exactly — a bigger B spins faster. Thanks, nice reasoning!")))),
+    )
