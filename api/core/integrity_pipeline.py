@@ -49,7 +49,6 @@ from api.core.llm_client import (
 )
 from api.core.llm_schemas import (
     INTEGRITY_ANSWER_EQUIVALENCE_SCHEMA,
-    INTEGRITY_CHECK_REPLY_VALUES,
     INTEGRITY_ENGAGEMENT_VALUES,
 )
 from api.database import get_session_factory
@@ -1822,15 +1821,12 @@ def _apply_label_reply(
             "rejected: engagement must be one of "
             + ", ".join(INTEGRITY_ENGAGEMENT_VALUES)
         )
-    # Agent tools aren't sent in strict mode, so a required field can still
-    # be left out. A missing `understanding_check` would silently open the
-    # pass gate (see _taught_after_missed_check), so reject it and let the
-    # agent relabel in the same turn, while it still knows the answer.
-    if raw_input.get("understanding_check") not in INTEGRITY_CHECK_REPLY_VALUES:
-        return (
-            "rejected: understanding_check must be one of "
-            + ", ".join(INTEGRITY_CHECK_REPLY_VALUES)
-        )
+    # `understanding_check` (required in the schema, but agent tools aren't
+    # strict) is never a reason to drop the engagement label: rejecting it
+    # can't buy a relabel — the loop ends this turn on reply text + label —
+    # and a lost engagement breaks the not_trying streak behind the nudge and
+    # the teacher's note. It's read straight from the persisted tool input by
+    # _taught_after_missed_check; a missing one just means no extra gate.
     if student_turn is None:
         return "rejected: there is no student message to label"
     if student_turn.engagement is not None:

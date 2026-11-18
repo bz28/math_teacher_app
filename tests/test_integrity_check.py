@@ -3102,13 +3102,14 @@ async def test_finish_check_rejects_pass_after_missed_understanding_check(
         assert any("understanding check `missed`" in t for t in tool_results)
 
 
-async def test_label_without_understanding_check_is_rejected(
+async def test_label_without_understanding_check_still_stores_engagement(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
     """Agent tools aren't strict, so the model can drop the required
-    `understanding_check` — which would silently open the pass gate. A label
-    without it is rejected (and stores no engagement), so the agent gets a
-    corrective result and relabels while it still knows the answer."""
+    `understanding_check`. That must never cost the engagement label: the
+    loop ends this turn on reply text + label, so a rejection can't buy a
+    relabel, and a NULL engagement breaks the not_trying streak behind the
+    own-words nudge and the teacher's "didn't engage" note."""
     set_agent_script([[make_text("Opener.")]])
     r = await _submit(client, world)
     submission_id = r.json()["submission_id"]
@@ -3136,9 +3137,8 @@ async def test_label_without_understanding_check_is_rejected(
             select(IntegrityConversationTurn)
             .where(IntegrityConversationTurn.integrity_check_submission_id == check.id)
         )).scalars().all()
-        results = [t.content for t in rows if t.role == "tool_result"]
-        assert any("rejected: understanding_check must be one of" in t for t in results)
-        assert all(t.engagement is None for t in rows if t.role == "student")
+        assert [t.content for t in rows if t.role == "tool_result"] == ["recorded"]
+        assert [t.engagement for t in rows if t.role == "student"] == ["answering"]
 
 
 async def test_finish_check_allows_pass_when_missed_label_was_not_taught(
