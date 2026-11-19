@@ -66,6 +66,11 @@ SPECS: list[tuple[str, str, str | None, str, float]] = [
     ("Find the angle of depression.", r"$4.8^\circ$", r"$4.8^\circ$", "full", 0.95),
     ("Compute the 7×5 product matrix.", f"$${BIG_MATRIX}$$", BIG_MATRIX, "full", 0.92),
     ("Solve $2x + 3 = 11$.", "$x = 4$", "$x = 4$", "full", 0.98),
+    # No break points anywhere: one unbreakable KaTeX run, wider than a cell.
+    ("Describe where $f(x) = x^2$ is monotonic.",
+     r"$\text{decreasing on }(-\infty,0)\text{ and increasing on }(0,\infty)$",
+     r"$\text{increasing on }(0,\infty)\text{ and decreasing on }(-\infty,0)$",
+     "full", 0.93),
     ("Solve $\\sin x = \\frac12$ on $[0, 2\\pi)$.",
      r"$x = \frac{\pi}{6}, \frac{5\pi}{6}$", r"$x = \frac{\pi}{6}$", "partial", 0.6),
 ]
