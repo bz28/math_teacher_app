@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, use, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   READING_TRUST_COPY,
   needsReadingCheck,
@@ -5813,7 +5813,9 @@ function ProblemGradeRow({
   const answerBoxRef = useRef<HTMLSpanElement>(null);
   const answerContentRef = useRef<HTMLSpanElement>(null);
   const [answerOverflows, setAnswerOverflows] = useState(false);
-  useEffect(() => {
+  // Layout effect: the first measure lands before paint, so "Show all"
+  // doesn't pop in a frame late and shift every row below it.
+  useLayoutEffect(() => {
     const box = answerBoxRef.current;
     const content = answerContentRef.current;
     if (!collapsed || !box || !content) return;
@@ -5826,7 +5828,9 @@ function ProblemGradeRow({
     const measure = () => {
       const tall =
         content.getBoundingClientRect().height > box.getBoundingClientRect().height + 1;
-      const wide = Array.from(content.querySelectorAll(".katex")).some((k) => {
+      // `svg, img` too: anything unbreakable MathText can emit, not
+      // only KaTeX (KaTeX's own inner svgs sit inside its box anyway).
+      const wide = Array.from(content.querySelectorAll(".katex, svg, img")).some((k) => {
         const cell = k.closest("[data-answer-cell]");
         return !!cell && k.getBoundingClientRect().right > cell.getBoundingClientRect().right + 1;
       });
@@ -5995,8 +5999,12 @@ function ProblemGradeRow({
                   `[&_div]` / `.katex-display` overrides keep it in the
                   flow of the row.
                 - Each value cell clips sideways (`overflow-x: clip`, which
-                  leaves KaTeX's vertical overhang visible), so a box with
-                  no break points can never paint over the other cell.
+                  leaves KaTeX's vertical overhang visible; `hidden` where
+                  clip is unsupported), so a box with no break points can
+                  never paint over the other cell.
+                - MathText's prose spans carry an inline `pre-wrap`; reset
+                  to `normal` so a stray newline or indent in an extracted
+                  answer doesn't add blank lines to a scannable row.
                 - A generous safety cap (9rem: ~4 lines of fraction-height
                   math, ~6 of plain text) remains for
                   genuinely huge answers. Hitting it is never silent:
@@ -6009,16 +6017,18 @@ function ProblemGradeRow({
           <span className="flex min-w-[min(12rem,100%)] flex-1 flex-col items-start gap-0.5">
             <span
               ref={answerBoxRef}
-              className="block max-h-[9rem] w-full overflow-hidden @container"
+              // py-0.5: headroom so the clip never shaves a radical bar
+              // or accent overhanging the first/last line box.
+              className="block max-h-[9rem] w-full overflow-hidden py-0.5 @container"
             >
               <span
                 ref={answerContentRef}
-                className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1 text-[13px] leading-[1.75] @md:grid @md:grid-cols-[fit-content(60%)_minmax(0,1fr)] [&_.katex-display]:!my-0 [&_.katex-display]:!inline-block [&_div]:!my-0 [&_div]:!inline"
+                className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1 text-[13px] leading-[1.75] @md:grid @md:grid-cols-[fit-content(60%)_minmax(0,1fr)] [&_.katex-display]:!my-0 [&_.katex-display]:!inline-block [&_div]:!my-0 [&_div]:!inline [&_span[style*='pre-wrap']]:!whitespace-normal"
               >
                 {problem.student_answer ? (
                   <span
                     data-answer-cell
-                    className="min-w-0 max-w-full font-semibold text-text-primary [overflow-wrap:anywhere] [overflow-x:clip]"
+                    className="min-w-0 max-w-full font-semibold text-text-primary [overflow-wrap:anywhere] [overflow-x:hidden] supports-[overflow:clip]:[overflow-x:clip]"
                     title={mathPlainText(problem.student_answer)}
                   >
                     <MathText text={problem.student_answer} breakInline />
@@ -6036,7 +6046,7 @@ function ProblemGradeRow({
                   </span>
                   <span
                     data-answer-cell
-                    className="min-w-0 text-text-secondary [overflow-wrap:anywhere] [overflow-x:clip]"
+                    className="min-w-0 text-text-secondary [overflow-wrap:anywhere] [overflow-x:hidden] supports-[overflow:clip]:[overflow-x:clip]"
                     title={problem.final_answer ? mathPlainText(problem.final_answer) : undefined}
                   >
                     {problem.final_answer ? (
