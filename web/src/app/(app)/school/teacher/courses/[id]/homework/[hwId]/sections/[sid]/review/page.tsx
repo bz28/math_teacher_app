@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, use, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   READING_TRUST_COPY,
   needsReadingCheck,
@@ -20,6 +20,7 @@ import {
   ActivityDigest,
   ActivityPill,
   ActivityTurnMarker,
+  formatMs,
   integrityNeedsResolution,
   ResolveIntegrityControl,
   RowDispositionPill,
@@ -519,6 +520,14 @@ function HomeworkSectionReview({
   // Whether the pinned work rail (wide layout) shows the photo inline.
   // A session preference — lifted here so it persists across students.
   const [photoPinned, setPhotoPinned] = useState(true);
+  // Whether the integrity card shows its Details (summary + activity
+  // digest). Collapsed by default; a session preference like photoPinned,
+  // shared by the rail card (xl) and the grade-column card (below xl).
+  const [integrityDetailsOpen, setIntegrityDetailsOpen] = useState(false);
+  const toggleIntegrityDetails = useCallback(
+    () => setIntegrityDetailsOpen((v) => !v),
+    [],
+  );
   const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
@@ -2204,6 +2213,8 @@ function HomeworkSectionReview({
                 onGradeProblem={setProblemGrade}
                 onFeedbackChange={setProblemFeedback}
                 onIntegrityResolved={handleIntegrityResolved}
+                integrityDetailsOpen={integrityDetailsOpen}
+                onToggleIntegrityDetails={toggleIntegrityDetails}
                 onMarkReviewed={() =>
                   void handleMarkReviewed(selectedEntry.submission!.id)
                 }
@@ -2268,22 +2279,46 @@ function HomeworkSectionReview({
             )}
           </section>
 
-          {/* Pinned student-work rail — wide (xl) layout only. Reads the
-              current detail's files; unpins below xl (the strip thumbnail
-              in the grade column handles it there). */}
-          <aside className="hidden xl:block">
-            <PinnedWorkRail
-              files={
-                detailIsCurrent && detail && selectedEntry?.submission
-                  ? detail.files
-                  : null
-              }
-              studentName={
-                detailIsCurrent && detail ? detail.student_name : null
-              }
-              pinned={photoPinned}
-              onTogglePinned={() => setPhotoPinned((v) => !v)}
-            />
+          {/* Pinned rail — wide (xl) layout only: the compact integrity
+              card over the student's work, in one sticky column sized to
+              the viewport. Below xl the card sits in the grade column and
+              the strip thumbnail stands in for the photo. self-stretch
+              overrides the grid's items-start so the aside spans the whole
+              row — sticky needs a taller parent to travel in. */}
+          <aside className="hidden self-stretch xl:block">
+            <div className="sticky top-3 flex max-h-[calc(100vh-4rem)] flex-col gap-3">
+              {detailIsCurrent && detail && selectedEntry?.submission && (
+                // Never squeezed by the photo; capped so a long expanded
+                // summary scrolls inside the card instead of pushing the
+                // photo off-screen. The photo takes the rest of the column.
+                <div className="max-h-[60vh] shrink-0 overflow-y-auto empty:hidden">
+                  <IntegrityCard
+                    integrity={
+                      integrity?.submission_id === selectedSubmissionId
+                        ? integrity
+                        : null
+                    }
+                    overviewFallback={selectedEntry.submission.integrity_overview}
+                    unfinished={selectedEntry.submission.unfinished_check}
+                    onResolved={handleIntegrityResolved}
+                    detailsOpen={integrityDetailsOpen}
+                    onToggleDetails={toggleIntegrityDetails}
+                  />
+                </div>
+              )}
+              <PinnedWorkRail
+                files={
+                  detailIsCurrent && detail && selectedEntry?.submission
+                    ? detail.files
+                    : null
+                }
+                studentName={
+                  detailIsCurrent && detail ? detail.student_name : null
+                }
+                pinned={photoPinned}
+                onTogglePinned={() => setPhotoPinned((v) => !v)}
+              />
+            </div>
           </aside>
         </div>
       )}
@@ -3635,6 +3670,8 @@ function SubmissionDetailPanel({
   onGradeProblem,
   onFeedbackChange,
   onIntegrityResolved,
+  integrityDetailsOpen,
+  onToggleIntegrityDetails,
   onMarkReviewed,
   onUnmarkReviewed,
   onGraphVerdict,
@@ -3687,6 +3724,9 @@ function SubmissionDetailPanel({
     submissionId: string,
     resolution: IntegrityResolutionOutcome,
   ) => void;
+  /** Session-level open/closed for the integrity card's Details. */
+  integrityDetailsOpen: boolean;
+  onToggleIntegrityDetails: () => void;
   onMarkReviewed: () => void;
   onUnmarkReviewed: () => void;
   /** The teacher's ✓ / ✗ on an unclear graph checklist item. */
@@ -4747,15 +4787,20 @@ function SubmissionDetailPanel({
         />
       )}
 
-      {/* Integrity verdict — the #1 trust signal. First full content
-          block so the teacher sees the verdict before they start
-          grading. Hides when HW had integrity disabled / no check. */}
-      <IntegrityBanner
-        integrity={integrity}
-        overviewFallback={row?.integrity_overview ?? null}
-        unfinished={row?.unfinished_check ?? null}
-        onResolved={onIntegrityResolved}
-      />
+      {/* Integrity verdict — the #1 trust signal. Below xl (no rail)
+          the compact card sits here, ahead of grading; on xl it moves
+          to the top of the pinned rail instead. Hides when HW had
+          integrity disabled / no check. */}
+      <div className="xl:hidden">
+        <IntegrityCard
+          integrity={integrity}
+          overviewFallback={row?.integrity_overview ?? null}
+          unfinished={row?.unfinished_check ?? null}
+          onResolved={onIntegrityResolved}
+          detailsOpen={integrityDetailsOpen}
+          onToggleDetails={onToggleIntegrityDetails}
+        />
+      </div>
 
       {/* Rubric drift banner — only renders when the assignment's live
           rubric differs from the one this submission was graded against.
@@ -7181,18 +7226,27 @@ function KeyboardShortcutsModal({ onClose }: { onClose: () => void }) {
 }
 
 /**
- * Top-of-pane integrity verdict. Shows the overall badge + AI summary
- * inline, and exposes the full agent↔student conversation behind a
- * "View conversation" button. When the full `TeacherIntegrityDetail`
+ * Compact integrity verdict card. Collapsed by default: verdict icon +
+ * headline, the activity flags as chips, and a footer with the Details
+ * toggle, "Conversation ↗", and — on an open flag — "Mark reviewed" as
+ * the one primary action. Details holds the AI summary, the activity
+ * digest, and (once resolved) the resolution chip with Change.
+ *
+ * Lives at the top of the pinned right rail on xl, and in the grade
+ * column below xl, so the verdict no longer pushes PROBLEMS down the
+ * page. Open/closed is a session preference lifted to the page so it
+ * persists across students. When the full `TeacherIntegrityDetail`
  * hasn't loaded yet, falls back to the overview on the submission row
  * so the teacher still sees the verdict/in-progress state during the
  * brief fetch gap. Hides entirely when there's no integrity signal.
  */
-function IntegrityBanner({
+function IntegrityCard({
   integrity,
   overviewFallback,
   unfinished,
   onResolved,
+  detailsOpen,
+  onToggleDetails,
 }: {
   integrity: TeacherIntegrityDetail | null;
   overviewFallback: TeacherSubmissionRow["integrity_overview"] | null;
@@ -7204,8 +7258,11 @@ function IntegrityBanner({
     submissionId: string,
     resolution: IntegrityResolutionOutcome,
   ) => void;
+  detailsOpen: boolean;
+  onToggleDetails: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const detailsId = useId();
 
   // Prefer full detail. If it's missing (fetch pending / 404), use
   // the overview so the disposition signal still surfaces without
@@ -7267,45 +7324,81 @@ function IntegrityBanner({
           ? ` They answered ${answered} ${answered === 1 ? "time" : "times"} before leaving — open the conversation to see how far they got.`
           : "")
       : summary;
-  // Hide "View conversation" until at least one student turn exists.
+  // Hide "Conversation" until at least one student turn exists.
   // For awaiting_student the transcript may carry the AI opener alone;
   // there's nothing meaningful for the teacher to read yet.
   const hasMeaningfulTranscript =
     !!integrity && integrity.transcript.some((t) => t.role === "student");
 
   const activitySummary = integrity?.activity_summary ?? null;
+  const totals = activitySummary?.totals ?? null;
+  // "Mark reviewed" is the one primary action on an open flag, so it
+  // sits on the collapsed card. Needs full detail (resolution +
+  // resolved-by); hidden during the overview-only gap. Once resolved,
+  // the resolution chip (with Change) moves into Details.
+  const showMarkReviewed =
+    !!integrity &&
+    integrityNeedsResolution(integrity) &&
+    integrity.resolution === "unresolved";
+  const inProgressCount = key === "in_progress" && overviewFallback;
+  const hasDetails =
+    !!shownSummary ||
+    key === "unfinished" ||
+    !!integrity?.didnt_engage ||
+    !!inProgressCount ||
+    !!activitySummary ||
+    resolved;
 
   return (
     <>
-      <div className="space-y-2">
-        <div
-          className={`rounded-[--radius-xl] border ${style.border} ${style.bg} p-3`}
-          role="status"
-          aria-live="polite"
-        >
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            {/* basis: on a phone the text keeps a readable width and the
-             * "View conversation" button wraps below it instead of
-             * squeezing the copy into a one-word column. */}
-            <div className="flex min-w-0 flex-1 basis-[16rem] items-start gap-3">
-              <span
-                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-sm font-bold ${style.iconBg}`}
-                aria-hidden
-              >
-                {style.icon}
-              </span>
-              <div className="min-w-0 flex-1">
-                {/* Activity pill lives only on the sidebar student row,
-                 * where it carries unique scan-path signal (passing
-                 * student with flagged activity vs clean). Inside the
-                 * focused detail view the disposition label and the
-                 * Activity panel below already convey understanding +
-                 * behavior; an extra pill here was redundant. */}
-                <p className="text-sm font-semibold text-text-primary">
-                  {title}
-                </p>
+      <div
+        className={`rounded-[--radius-xl] border ${style.border} ${style.bg} p-3.5`}
+        role="status"
+        aria-live="polite"
+      >
+        <div className="flex min-w-0 items-start gap-2.5">
+          <span
+            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-sm font-bold ${style.iconBg}`}
+            aria-hidden
+          >
+            {style.icon}
+          </span>
+          <p className="min-w-0 flex-1 pt-0.5 text-sm font-semibold leading-snug text-text-primary">
+            {title}
+          </p>
+        </div>
+
+        {/* Activity flags — only what actually happened. A summary with
+            nothing in it gets one quiet line; no summary, nothing. */}
+        {totals &&
+          (totals.tab_out_count > 0 || totals.paste_count > 0 ? (
+            <div className="mt-2.5 flex flex-wrap gap-1.5">
+              {totals.tab_out_count > 0 && (
+                <span className="rounded-full border border-border-light bg-surface px-2.5 py-0.5 text-[11px] font-semibold text-text-primary">
+                  Tabbed out {totals.tab_out_count}× · {formatMs(totals.tab_out_total_ms)}
+                </span>
+              )}
+              {totals.paste_count > 0 && (
+                <span className="rounded-full border border-border-light bg-surface px-2.5 py-0.5 text-[11px] font-semibold text-text-primary">
+                  Pasted {totals.paste_total_chars} chars
+                </span>
+              )}
+            </div>
+          ) : (
+            <p className="mt-2 text-[11px] text-text-muted">
+              No tab-outs or pastes
+            </p>
+          ))}
+
+        {detailsOpen && hasDetails && (
+          <div id={detailsId} className="mt-3 space-y-2.5">
+            {(shownSummary ||
+              key === "unfinished" ||
+              integrity?.didnt_engage ||
+              inProgressCount) && (
+              <div>
                 {shownSummary && (
-                  <p className="mt-1.5 text-xs leading-relaxed text-text-secondary">
+                  <p className="text-xs leading-relaxed text-text-secondary">
                     {shownSummary}
                   </p>
                 )}
@@ -7322,49 +7415,69 @@ function IntegrityBanner({
                     Didn&rsquo;t engage with the questions.
                   </p>
                 )}
-                {key === "in_progress" && overviewFallback && (
+                {inProgressCount && (
                   <p className="mt-1.5 text-xs text-text-muted">
                     {overviewFallback.complete_count} of{" "}
                     {overviewFallback.problem_count} sampled problems graded.
                   </p>
                 )}
-                {/* "Mark reviewed" — only on checks that need attention
-                    (or already resolved). Clearing one drops it from the
-                    roster flagged filter. Needs full detail (resolution
-                    + resolved-by); hidden during the overview-only gap. */}
-                {integrity &&
-                  (integrityNeedsResolution(integrity) ||
-                    integrity.resolution !== "unresolved") && (
-                    <div className="mt-2.5">
-                      <ResolveIntegrityControl
-                        submissionId={integrity.submission_id}
-                        resolution={integrity.resolution}
-                        resolvedByName={integrity.resolved_by_name}
-                        resolvedAt={integrity.resolved_at}
-                        onResolved={(r) =>
-                          onResolved(integrity.submission_id, r)
-                        }
-                      />
-                    </div>
-                  )}
               </div>
-            </div>
-            {hasMeaningfulTranscript && (
-              <button
-                type="button"
-                onClick={() => setOpen(true)}
-                className="shrink-0 rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-semibold text-text-secondary hover:border-primary/40 hover:text-primary focus:border-primary focus:outline-none"
-              >
-                View conversation →
-              </button>
+            )}
+            {/* Always neutral-styled — the card carries the verdict
+                color; the digest is supporting evidence. */}
+            <ActivityDigest summary={activitySummary} />
+            {integrity && resolved && (
+              <ResolveIntegrityControl
+                submissionId={integrity.submission_id}
+                resolution={integrity.resolution}
+                resolvedByName={integrity.resolved_by_name}
+                resolvedAt={integrity.resolved_at}
+                onResolved={(r) => onResolved(integrity.submission_id, r)}
+              />
             )}
           </div>
-        </div>
-        {/* Session digest sits below the banner so the totals don't
-         * crowd the disposition label. Hides itself on null.
-         * Always neutral-styled — banner above carries the verdict
-         * color; digest is supporting evidence, not a second alarm. */}
-        <ActivityDigest summary={activitySummary} />
+        )}
+
+        {(hasDetails || hasMeaningfulTranscript || showMarkReviewed) && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            {hasDetails ? (
+              <button
+                type="button"
+                onClick={onToggleDetails}
+                aria-expanded={detailsOpen}
+                aria-controls={detailsOpen ? detailsId : undefined}
+                className="rounded-[--radius-sm] text-xs font-semibold text-text-secondary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+              >
+                {detailsOpen ? "Hide details ▴" : "Details ▾"}
+              </button>
+            ) : (
+              <span />
+            )}
+            <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
+              {/* "Mark reviewed" — clearing a flag drops it from the
+                  roster Flagged filter. */}
+              {showMarkReviewed && (
+                <ResolveIntegrityControl
+                  primary
+                  submissionId={integrity.submission_id}
+                  resolution={integrity.resolution}
+                  resolvedByName={integrity.resolved_by_name}
+                  resolvedAt={integrity.resolved_at}
+                  onResolved={(r) => onResolved(integrity.submission_id, r)}
+                />
+              )}
+              {hasMeaningfulTranscript && (
+                <button
+                  type="button"
+                  onClick={() => setOpen(true)}
+                  className="shrink-0 rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-semibold text-text-secondary hover:border-primary/40 hover:text-primary focus:border-primary focus:outline-none"
+                >
+                  Conversation ↗
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
       {integrity && (
         <ConversationModal
@@ -7591,7 +7704,7 @@ function PinnedWorkRail({
   const firstName = studentName ? studentName.split(" ")[0] : null;
   const hasFiles = !!files && files.length > 0;
   return (
-    <div className="sticky top-3 overflow-hidden rounded-[--radius-xl] border border-border-light bg-surface shadow-md">
+    <div className="flex min-h-0 flex-col overflow-hidden rounded-[--radius-xl] border border-border-light bg-surface shadow-md">
       <div className="flex items-center justify-between gap-2 border-b border-border-light px-3 py-2.5">
         <span className="truncate text-[11px] font-bold uppercase tracking-[0.16em] text-[color:var(--color-text-secondary)]">
           {firstName ? `${firstName}'s work` : "Student's work"}
@@ -7626,7 +7739,7 @@ function PinnedWorkRail({
           No photo on this submission.
         </div>
       ) : pinned ? (
-        <div className="max-h-[calc(100vh-7rem)] overflow-y-auto bg-[color:var(--color-surface-alt-2)]/40 p-2">
+        <div className="min-h-48 flex-1 overflow-y-auto bg-[color:var(--color-surface-alt-2)]/40 p-2">
           <div className="flex flex-col gap-2">
             {files!.map((f, i) => {
               if (f.media_type === "application/pdf") {

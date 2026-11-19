@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 // ── Disposition badge ──
 
 /** Format milliseconds as "Xm Ys" or "Ys" for short intervals. */
-function formatMs(ms: number): string {
+export function formatMs(ms: number): string {
   const seconds = Math.round(ms / 1000);
   if (seconds < 60) return `${seconds}s`;
   const m = Math.floor(seconds / 60);
@@ -430,12 +430,16 @@ export function ResolveIntegrityControl({
   resolvedByName,
   resolvedAt,
   onResolved,
+  primary = false,
 }: {
   submissionId: string;
   resolution: IntegrityResolution;
   resolvedByName: string | null;
   resolvedAt: string | null;
   onResolved: (resolution: IntegrityResolutionOutcome) => void;
+  /** Render the unresolved "Mark reviewed" button as the filled primary
+   *  action — where it's the one thing left to do on a flagged check. */
+  primary?: boolean;
 }) {
   const [picking, setPicking] = useState(false);
   const [submitting, setSubmitting] =
@@ -484,7 +488,12 @@ export function ResolveIntegrityControl({
       <button
         type="button"
         onClick={() => setPicking(true)}
-        className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-semibold text-text-secondary hover:border-primary/40 hover:text-primary focus:border-primary focus:outline-none"
+        className={cn(
+          "rounded-[--radius-md] px-3 py-1.5 text-xs font-semibold",
+          primary
+            ? "bg-primary text-white shadow-sm transition-colors hover:bg-primary-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            : "border border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:text-primary focus:border-primary focus:outline-none",
+        )}
       >
         Mark reviewed
       </button>
