@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, use, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Suspense, use, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   READING_TRUST_COPY,
   needsReadingCheck,
@@ -5654,6 +5654,13 @@ function pageLabelFor(pages: number[]): string | null {
 // the typed value. Full/Zero clicks commit immediately.
 // ────────────────────────────────────────────────────────────────────
 
+// The collapsed row's two answer cells wrap anywhere and clip sideways:
+// `clip` (not `hidden`) leaves KaTeX's vertical overhang visible; `hidden`
+// is the fallback where clip is unsupported (Safari < 16), since an
+// unbreakable student answer painting over the key is the worse failure.
+const ANSWER_CELL_CLIP =
+  "[overflow-wrap:anywhere] [overflow-x:hidden] supports-[overflow:clip]:[overflow-x:clip]";
+
 function ProblemGradeRow({
   problem,
   entry,
@@ -5849,6 +5856,69 @@ function ProblemGradeRow({
     return () => ro.disconnect();
   }, [problem.question]);
 
+  // Collapsed-row answer comparison. It wraps to show both answers in
+  // full; only a genuinely huge one (a matrix, display math) hits the
+  // ~4-line cap, and then the row says so ("Show all") instead of
+  // clipping silently. Measured like the question clamp. Observing the
+  // inner content too: once the cap is hit the box stops resizing, so
+  // late KaTeX/font layout only shows up as the content's size changing.
+  const answerBoxRef = useRef<HTMLSpanElement>(null);
+  const answerContentRef = useRef<HTMLSpanElement>(null);
+  const [answerOverflows, setAnswerOverflows] = useState(false);
+  // Layout effect: the first measure lands before paint, so "Show all"
+  // doesn't pop in a frame late and shift every row below it.
+  useLayoutEffect(() => {
+    const box = answerBoxRef.current;
+    const content = answerContentRef.current;
+    if (!collapsed || !box || !content) return;
+    // Vertical: compare layout boxes, not scrollHeight — KaTeX's
+    // struts and vlists overhang their line boxes by a few px, so
+    // scrollHeight reports "overflow" for a lone \frac that is fully
+    // visible. Measured against the box's content area (its height minus
+    // the py-0.5 headroom), so a last line cut by even 2px still counts.
+    // Horizontal: each value cell clips sideways; compare the right edge
+    // of every real layout box against its cell — KaTeX's `.base` runs,
+    // and any canvas/svg/img that isn't KaTeX's own. Not scrollWidth:
+    // that also counts ink-less KaTeX internals (a \sqrt's `.vlist-s`
+    // spacer, its 400em self-clipped svg, the hidden MathML) and flagged
+    // a fully visible 2√2.
+    const cs = getComputedStyle(box);
+    const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+    const measure = () => {
+      const tall = content.getBoundingClientRect().height > box.clientHeight - padY + 1;
+      const wide = Array.from(content.querySelectorAll<HTMLElement>("[data-answer-cell]")).some(
+        (cell) => {
+          const right = cell.getBoundingClientRect().right + 1;
+          return Array.from(cell.querySelectorAll(".katex-html > .base, canvas, svg, img")).some(
+            (el) =>
+              (el.classList.contains("base") || !el.closest(".katex")) &&
+              el.getBoundingClientRect().right > right,
+          );
+        },
+      );
+      setAnswerOverflows(tall || wide);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(box);
+    ro.observe(content);
+    // The observed boxes' widths are set by the row, not the math, so a
+    // KaTeX font swap that only widens a matrix wouldn't re-fire the
+    // observer. Re-measure whenever a font load finishes (not only the
+    // first `ready`, which may already have resolved before this row's
+    // KaTeX fonts were requested).
+    let live = true;
+    void document.fonts?.ready.then(() => {
+      if (live) measure();
+    });
+    document.fonts?.addEventListener("loadingdone", measure);
+    return () => {
+      live = false;
+      ro.disconnect();
+      document.fonts?.removeEventListener("loadingdone", measure);
+    };
+  }, [collapsed, problem.student_answer, problem.final_answer]);
+
   // Student work step list. Same clamp-and-expand pattern as the
   // question — long extracted work (15+ steps from a verbose student)
   // would otherwise push the AI verdict and grade buttons way down
@@ -5918,6 +5988,11 @@ function ProblemGradeRow({
   // Same rowRef + focus model as the expanded row so keyboard nav, the
   // focus ring, and screen-reader tracking are identical.
   if (collapsed && aiGrade) {
+    // Trimmed: a stray newline from the extractor shouldn't add blank
+    // lines, and a whitespace-only read is "No answer extracted", not
+    // an empty cell the teacher might confirm past.
+    const studentAnswer = problem.student_answer?.trim() || null;
+    const keyAnswer = problem.final_answer?.trim() || null;
     const verdict =
       aiGrade.score_status === "full"
         // Was a hard-coded #22a06b that sat outside the palette and put
@@ -5954,15 +6029,15 @@ function ProblemGradeRow({
           // Wraps rather than clips: in the narrow middle column (or on a
           // phone) the verdict drops under the answer instead of
           // squeezing the answer to "⚠ No ⁝".
-          className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-[--radius-sm]"
+          className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-[--radius-sm]"
           // Spell the comparison out for screen readers rather than
           // leaving them the bare position. Delimiters stripped: these
           // values are LaTeX source, not plain text — the API wraps the
           // extractor's read as `$…$` precisely so it renders as math.
           aria-label={
-            problem.student_answer
-              ? `Expand problem ${problem.position} to inspect. Student answered ${mathPlainText(problem.student_answer)}; answer key is ${problem.final_answer ? mathPlainText(problem.final_answer) : "not set"}.`
-              : `Expand problem ${problem.position} to inspect. No answer extracted. Answer key is ${problem.final_answer ? mathPlainText(problem.final_answer) : "not set"}.`
+            studentAnswer
+              ? `Expand problem ${problem.position} to inspect. Student answered ${mathPlainText(studentAnswer)}; answer key is ${keyAnswer ? mathPlainText(keyAnswer) : "not set"}.`
+              : `Expand problem ${problem.position} to inspect. No answer extracted. Answer key is ${keyAnswer ? mathPlainText(keyAnswer) : "not set"}.`
           }
           aria-expanded={false}
         >
@@ -5975,48 +6050,94 @@ function ProblemGradeRow({
               whether the AI's call is right. What decides it is the
               student's answer against the key, so that is what the row
               carries. The question is one click away on expand. */}
-          {/* Two overrides, both load-bearing, both about keeping this a
-              scannable column of equal-height one-liners:
-                - `[&_span]:!whitespace-nowrap` — MathText sets
-                  `white-space: pre-wrap` as an INLINE style on its text
-                  segments, and an inline style beats `truncate`'s class.
-                - `[&_div]:!my-0 [&_div]:!inline` — an answer in display
-                  math ($$…$$, or a bare \begin{…} environment, which is
-                  exactly the shape the AI grader returns for a matrix)
-                  makes MathText emit a BLOCK div with vertical margins,
-                  dropped into a truncating flex item. That grows the row
-                  well past one line. Inlining keeps the row honest, and
-                  `max-h` hard-caps anything still too tall. */}
-          <span className="flex max-h-6 min-w-[12rem] flex-1 items-baseline gap-1.5 overflow-hidden text-[13px] [&_div]:!my-0 [&_div]:!inline [&_span]:!whitespace-nowrap">
-            {problem.student_answer ? (
+          {/* Both answers are shown IN FULL — the row exists so the
+              teacher can check the AI's call at a glance, and a clipped
+              fraction or a cut-off solution list ("x = π 7·") is exactly
+              what she can't check. So nothing here truncates:
+                - Each side wraps (MathText `breakInline` lets a
+                  multi-part answer break after its separating commas),
+                  and the line boxes grow to fit tall math — there is no
+                  one-line height cap any more.
+                - Wide container: [student | → key] as a grid. The
+                  student column is fit-content(60%), so a short answer
+                  stays the same compact one-liner as before and a long
+                  one wraps within 60%; the key takes the rest.
+                  Narrow container (<28rem): plain flex-wrap, so a long
+                  answer takes its own line and "→ key" wraps under it.
+                - Display math ($$…$$, or a bare \begin{…} environment —
+                  the shape the AI grader returns for a matrix) makes
+                  MathText emit a BLOCK div with vertical margins; the
+                  `[&_div]` / `.katex-display` overrides keep it in the
+                  flow of the row.
+                - Each value cell clips sideways (`overflow-x: clip`, which
+                  leaves KaTeX's vertical overhang visible; `hidden` where
+                  clip is unsupported), so a box with no break points can
+                  never paint over the other cell.
+                - Answers are trimmed, so a stray leading/trailing newline
+                  from the extractor doesn't add blank lines; interior line
+                  breaks (a system's `x = 2<br>y = 3`) keep their shape.
+                - A generous safety cap (9rem: ~4 lines of fraction-height
+                  math, ~6 of plain text) remains for
+                  genuinely huge answers. Hitting it is never silent:
+                  the row shows "Show all", and clicking (this whole
+                  button) expands the row to the full grading body. */}
+          {/* min(12rem, 100%): 12rem keeps the answer from being squeezed
+              beside the verdict on a wide row, but on a phone the button
+              is narrower than 12rem and a hard minimum pushed the answer
+              out over the Confirm button. */}
+          <span className="flex min-w-[min(12rem,100%)] flex-1 flex-col items-start gap-0.5">
+            <span
+              ref={answerBoxRef}
+              // py-0.5: headroom so the clip never shaves a radical bar
+              // or accent overhanging the first/last line box.
+              className="block max-h-[9rem] w-full overflow-hidden py-0.5 @container"
+            >
               <span
-                className="min-w-0 max-w-[50%] truncate font-semibold text-text-primary"
-                title={mathPlainText(problem.student_answer)}
+                ref={answerContentRef}
+                className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1 text-[13px] leading-[1.75] @md:grid @md:grid-cols-[fit-content(60%)_minmax(0,1fr)] [&_.katex-display]:!my-0 [&_.katex-display]:!inline-block [&_div]:!my-0 [&_div]:!inline"
               >
-                <MathText text={problem.student_answer} />
+                {studentAnswer ? (
+                  <span
+                    data-answer-cell
+                    className={`min-w-0 max-w-full font-semibold text-text-primary ${ANSWER_CELL_CLIP}`}
+                    title={mathPlainText(studentAnswer)}
+                  >
+                    <MathText text={studentAnswer} breakInline />
+                  </span>
+                ) : (
+                  <span className="min-w-0 text-xs font-semibold text-[color:var(--color-warning-dark)]">
+                    <span aria-hidden>⚠</span> No answer extracted
+                  </span>
+                )}
+                {/* Arrow + key travel together, so a wrap never strands
+                    the "→" on a line of its own. */}
+                <span className="flex min-w-0 max-w-full items-baseline gap-x-1.5">
+                  <span aria-hidden className="shrink-0 text-[11px] text-text-muted">
+                    →
+                  </span>
+                  <span
+                    data-answer-cell
+                    className={`min-w-0 text-text-secondary ${ANSWER_CELL_CLIP}`}
+                    title={keyAnswer ? mathPlainText(keyAnswer) : undefined}
+                  >
+                    {keyAnswer ? (
+                      <MathText text={keyAnswer} breakInline />
+                    ) : (
+                      <span className="italic text-text-muted">no key</span>
+                    )}
+                  </span>
+                </span>
               </span>
-            ) : (
-              <span className="shrink-0 text-xs font-semibold text-[color:var(--color-warning-dark)]">
-                <span aria-hidden>⚠</span> No answer extracted
+            </span>
+            {answerOverflows && (
+              // Inside the expand button, so it's a label, not a nested
+              // control: the click lands on the button (onToggleExpand),
+              // and the button's aria-label already carries both answers
+              // in full for screen readers.
+              <span aria-hidden className="text-[11px] font-semibold text-primary">
+                Show all <span>▾</span>
               </span>
             )}
-            <span aria-hidden className="shrink-0 text-[11px] text-text-muted">
-              →
-            </span>
-            {/* Long values truncate rather than wrap. `title` keeps the
-                full text reachable on hover without expanding the row,
-                and the button's aria-label carries both in full for
-                screen readers. */}
-            <span
-              className="min-w-0 flex-1 truncate text-text-secondary"
-              title={problem.final_answer ? mathPlainText(problem.final_answer) : undefined}
-            >
-              {problem.final_answer ? (
-                <MathText text={problem.final_answer} />
-              ) : (
-                <span className="italic text-text-muted">no key</span>
-              )}
-            </span>
           </span>
           <span className="flex shrink-0 items-center gap-1.5 text-[11px] font-bold tracking-[0.04em] text-text-muted">
             <span aria-hidden>🤖</span>
