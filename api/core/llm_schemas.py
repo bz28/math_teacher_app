@@ -1531,6 +1531,10 @@ INTEGRITY_GENERATE_VARIANT_SCHEMA: ToolSchema = {
 # student turn and drives the "answer in your own words" nudge + the
 # teacher's "didn't engage" note from it (api/core/integrity_pipeline.py).
 INTEGRITY_ENGAGEMENT_VALUES = ("answering", "honest_confusion", "not_trying")
+# The agent's read of the student's first reply to the understanding check,
+# made in the same response as its hint — before any guided recovery can
+# colour it. `missed` locks out `pass` (see _apply_finish_check).
+INTEGRITY_CHECK_REPLY_VALUES = ("not_a_check_reply", "handled", "missed")
 INTEGRITY_LABEL_REPLY_SCHEMA: ToolSchema = {
     "name": "label_student_reply",
     "description": (
@@ -1561,8 +1565,22 @@ INTEGRITY_LABEL_REPLY_SCHEMA: ToolSchema = {
                     "student to answer."
                 ),
             },
+            "understanding_check": {
+                "type": "string",
+                "enum": list(INTEGRITY_CHECK_REPLY_VALUES),
+                "description": (
+                    "Only for the student's FIRST reply to your "
+                    "understanding-check probe: handled = they get your "
+                    "twist right (direction and why) on their own — even "
+                    "inside a broader answer that covers other cases too. "
+                    "missed = wrong, stuck, or no answer to your twist. "
+                    "Every other message is not_a_check_reply. Once you "
+                    "guide them after a missed check, a pass is ruled out, "
+                    "however well they do."
+                ),
+            },
         },
-        "required": ["engagement", "wrapping_up"],
+        "required": ["engagement", "wrapping_up", "understanding_check"],
     },
 }
 

@@ -1779,6 +1779,34 @@ async def _all_verdicts_in(check_id: uuid.UUID, db: AsyncSession) -> bool:
     return int(pending) == 0
 
 
+async def _taught_after_missed_check(
+    check_id: uuid.UUID, db: AsyncSession,
+) -> bool:
+    """True when a `label_student_reply` call marked a reply
+    `understanding_check=missed` AND the student spoke again after it — i.e.
+    the agent taught (hinted) rather than closing on the miss. That guided
+    recovery is the only thing that can inflate the verdict; a miss the agent
+    closed on straight away is scored from pre-help evidence anyway. Read
+    from the persisted turns (a tool call's content is its input as JSON),
+    so no extra column."""
+    missed_at: int | None = None
+    for turn in await _load_turns(check_id, db):
+        if missed_at is not None and turn.role == ROLE_STUDENT:
+            return True
+        if (
+            missed_at is None
+            and turn.role == ROLE_TOOL_CALL
+            and turn.tool_name == TOOL_LABEL_REPLY
+        ):
+            try:
+                label = json.loads(turn.content or "{}")
+            except ValueError:
+                continue
+            if isinstance(label, dict) and label.get("understanding_check") == "missed":
+                missed_at = turn.ordinal
+    return False
+
+
 def _apply_label_reply(
     student_turn: IntegrityConversationTurn | None,
     raw_input: dict[str, Any],
@@ -1793,6 +1821,12 @@ def _apply_label_reply(
             "rejected: engagement must be one of "
             + ", ".join(INTEGRITY_ENGAGEMENT_VALUES)
         )
+    # `understanding_check` (required in the schema, but agent tools aren't
+    # strict) is never a reason to drop the engagement label: rejecting it
+    # can't buy a relabel — the loop ends this turn on reply text + label —
+    # and a lost engagement breaks the not_trying streak behind the nudge and
+    # the teacher's note. It's read straight from the persisted tool input by
+    # _taught_after_missed_check; a missing one just means no extra gate.
     if student_turn is None:
         return "rejected: there is no student message to label"
     if student_turn.engagement is not None:
@@ -2130,6 +2164,25 @@ async def _apply_finish_check(
                 "actually thin, or pick 'pass' if the student understood "
                 "their own work."
             )
+
+    # Teaching never raises the verdict. When the student's first reply to
+    # the understanding check was wrong, stuck or a dodge, the agent teaches
+    # instead of closing — and a student who gets there with its hints then
+    # reads, to the model, like one who understood all along (it re-scores
+    # `transfer` from the guided recovery and passes them). So the agent
+    # labels that first reply in the same response as its hint, before any
+    # recovery, and a `missed` label followed by guided turns rules out
+    # `pass` here, deterministically.
+    if disposition == DISPOSITION_PASS and await _taught_after_missed_check(
+        check.id, db,
+    ):
+        return (
+            "rejected: disposition=pass is not available — you labelled the "
+            "student's first reply to the understanding check `missed` and "
+            "then guided them. Getting there once guided is learning, not "
+            "proof they understood it on their own. Pick needs_practice (they "
+            "explained their own work) or flag_for_review (they couldn't)."
+        )
 
     # Understanding-check gate (verified tier only). A correct-on-paper
     # answer narrated fluently maxes both required dimensions without

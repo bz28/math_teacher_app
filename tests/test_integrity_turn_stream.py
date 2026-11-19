@@ -144,7 +144,7 @@ async def test_reply_verdict_and_finish_stream_every_shown_message(
             make_text(goodbye),
             make_tool_use(
                 "label_student_reply",
-                {"engagement": "answering", "wrapping_up": True},
+                {"engagement": "answering", "wrapping_up": True, "understanding_check": "not_a_check_reply"},
                 use_id="ul1",
             ),
             _finish("uf1"),
@@ -181,7 +181,7 @@ async def test_narration_after_rejected_finish_is_never_streamed(
             make_text(goodbye),
             make_tool_use(
                 "label_student_reply",
-                {"engagement": "answering", "wrapping_up": True},
+                {"engagement": "answering", "wrapping_up": True, "understanding_check": "not_a_check_reply"},
                 use_id="ul1",
             ),
         ],

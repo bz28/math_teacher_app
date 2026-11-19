@@ -3033,6 +3033,180 @@ async def test_finish_check_accepts_verified_pass_with_mid_concept_probe(
         assert check.disposition == "pass"
 
 
+def _label(use_id: str, check_reply: str, *, wrapping_up: bool = False) -> Any:
+    return make_tool_use(
+        "label_student_reply",
+        {
+            "engagement": "answering",
+            "wrapping_up": wrapping_up,
+            "understanding_check": check_reply,
+        },
+        use_id=use_id,
+    )
+
+
+async def test_finish_check_rejects_pass_after_missed_understanding_check(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Teaching never raises the verdict. The student misses the
+    understanding check, the agent hints instead of closing (labelling that
+    reply `missed`), and the student gets there once guided — then the
+    agent re-scores `transfer=mid` off the recovery and tries `pass`. The
+    `missed` label from the EARLIER turn rules `pass` out, even though the
+    rubric alone would clear the verified-tier outcome gate."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+    await _force_verified_tier(submission_id)
+    problem_id = await _only_problem_id(submission_id)
+
+    # Turn 1: wrong reply to the probe → a hint, labelled missed.
+    set_agent_script([[
+        make_text("Picture the curve from 0 to 2π. How often does it reach −1?"),
+        _label("ul1", "missed"),
+    ]])
+    r = await _post_turn(
+        client, world, submission_id,
+        {"message": "more, the wave would hit it more times"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["overall_status"] != "complete"
+
+    # Turn 2: they get there once guided; the agent tries to pass them.
+    set_agent_script([
+        [make_text("Exactly — just once."), _label("ul2", "not_a_check_reply", wrapping_up=True)],
+        [_verdict(problem_id, "uv1", transfer="mid")],
+        [_finish("uf1")],
+        [make_text("Let me reconsider that.")],
+    ])
+    r = await _post_turn(
+        client, world, submission_id,
+        {"message": "oh, only once at π, so fewer"},
+    )
+    assert r.status_code == 200, r.text
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        assert check.status != "complete"
+        assert check.disposition is None
+        tool_results = (await s.execute(
+            select(IntegrityConversationTurn.content)
+            .where(
+                IntegrityConversationTurn.integrity_check_submission_id == check.id,
+                IntegrityConversationTurn.role == "tool_result",
+            )
+        )).scalars().all()
+        assert any("understanding check `missed`" in t for t in tool_results)
+
+
+async def test_label_without_understanding_check_still_stores_engagement(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Agent tools aren't strict, so the model can drop the required
+    `understanding_check`. That must never cost the engagement label: the
+    loop ends this turn on reply text + label, so a rejection can't buy a
+    relabel, and a NULL engagement breaks the not_trying streak behind the
+    own-words nudge and the teacher's "didn't engage" note."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+
+    set_agent_script([[
+        make_text("Picture the curve from 0 to 2π. How often does it reach −1?"),
+        make_tool_use(
+            "label_student_reply",
+            {"engagement": "answering", "wrapping_up": False},
+            use_id="ul1",
+        ),
+    ]])
+    r = await _post_turn(
+        client, world, submission_id,
+        {"message": "more, the wave would hit it more times"},
+    )
+    assert r.status_code == 200, r.text
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        rows = (await s.execute(
+            select(IntegrityConversationTurn)
+            .where(IntegrityConversationTurn.integrity_check_submission_id == check.id)
+        )).scalars().all()
+        assert [t.content for t in rows if t.role == "tool_result"] == ["recorded"]
+        assert [t.engagement for t in rows if t.role == "student"] == ["answering"]
+
+
+async def test_finish_check_allows_pass_when_missed_label_was_not_taught(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """The guard targets guided recovery only. A reply labelled `missed`
+    that the agent closes on in the same turn — no hint, no further student
+    turn — leaves nothing for teaching to inflate, so the guard steps aside
+    (the verified-tier outcome gate still applies). Pins that an over-strict
+    `missed` on a correct-but-broad answer can't, on its own, cost an honest
+    student a pass."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+    await _force_verified_tier(submission_id)
+    problem_id = await _only_problem_id(submission_id)
+
+    set_agent_script([
+        [make_text("Spot on. Nice work."), _label("ul1", "missed", wrapping_up=True)],
+        [_verdict(problem_id, "uv1", transfer="high")],
+        [_finish("uf1")],
+    ])
+    r = await _post_turn(
+        client, world, submission_id,
+        {"message": "Depends what changes — a bigger 3 makes x smaller."},
+    )
+    assert r.status_code == 200, r.text
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        assert check.status == "complete"
+        assert check.disposition == "pass"
+
+
+async def test_finish_check_accepts_pass_after_handled_understanding_check(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """The mirror: a reply labelled `handled` (or any label but `missed`)
+    never blocks a pass — the genuine understander still passes."""
+    set_agent_script([[make_text("Opener.")]])
+    r = await _submit(client, world)
+    submission_id = r.json()["submission_id"]
+    await _force_verified_tier(submission_id)
+    problem_id = await _only_problem_id(submission_id)
+
+    set_agent_script([
+        [make_text("Spot on. Nice work."), _label("ul1", "handled", wrapping_up=True)],
+        [_verdict(problem_id, "uv1", transfer="high")],
+        [_finish("uf1")],
+    ])
+    r = await _post_turn(
+        client, world, submission_id,
+        {"message": "fewer — cos only reaches −1 once, at π"},
+    )
+    assert r.status_code == 200, r.text
+
+    async with get_session_factory()() as s:
+        check = (await s.execute(
+            select(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == submission_id)
+        )).scalar_one()
+        assert check.status == "complete"
+        assert check.disposition == "pass"
+
+
 # ── One closing per turn: no narration, no double goodbye ──────────
 
 _CANNED_CLOSING = (
@@ -3110,7 +3284,7 @@ async def test_narration_after_rejected_finish_never_reaches_student(
             make_text(goodbye),
             make_tool_use(
                 "label_student_reply",
-                {"engagement": "answering", "wrapping_up": True},
+                {"engagement": "answering", "wrapping_up": True, "understanding_check": "not_a_check_reply"},
                 use_id="ul1",
             ),
         ],
@@ -3288,7 +3462,7 @@ async def test_goodbye_alongside_finish_gets_no_canned_closing(
             make_text(goodbye),
             make_tool_use(
                 "label_student_reply",
-                {"engagement": "answering", "wrapping_up": True},
+                {"engagement": "answering", "wrapping_up": True, "understanding_check": "not_a_check_reply"},
                 use_id="ul1",
             ),
             _finish("uf1"),
