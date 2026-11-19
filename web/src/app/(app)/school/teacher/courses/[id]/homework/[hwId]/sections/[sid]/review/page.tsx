@@ -5609,6 +5609,13 @@ function pageLabelFor(pages: number[]): string | null {
 // the typed value. Full/Zero clicks commit immediately.
 // ────────────────────────────────────────────────────────────────────
 
+// The collapsed row's two answer cells wrap anywhere and clip sideways:
+// `clip` (not `hidden`) leaves KaTeX's vertical overhang visible; `hidden`
+// is the fallback where clip is unsupported (Safari < 16), since an
+// unbreakable student answer painting over the key is the worse failure.
+const ANSWER_CELL_CLIP =
+  "[overflow-wrap:anywhere] [overflow-x:hidden] supports-[overflow:clip]:[overflow-x:clip]";
+
 function ProblemGradeRow({
   problem,
   entry,
@@ -5819,21 +5826,26 @@ function ProblemGradeRow({
     const box = answerBoxRef.current;
     const content = answerContentRef.current;
     if (!collapsed || !box || !content) return;
-    // Compare layout boxes, not scrollHeight/scrollWidth: KaTeX's
-    // struts and vlists overhang their line boxes by a few px, so the
-    // scroll metrics report "overflow" for a lone \frac that is fully
-    // visible. What's actually hidden is content taller than the cap,
-    // or a math box with no break points (a wide matrix) running past
-    // the edge of its own cell, which clips it (`overflow-x: clip`).
+    // Vertical: compare layout boxes, not scrollHeight — KaTeX's
+    // struts and vlists overhang their line boxes by a few px, so
+    // scrollHeight reports "overflow" for a lone \frac that is fully
+    // visible. Measured against the box's content area (its height minus
+    // the py-0.5 headroom), so a last line cut by even 2px still counts.
+    // Horizontal: each value cell clips sideways, so ask the cell itself
+    // (scrollWidth). That covers anything unbreakable — a matrix, a
+    // canvas diagram — and ignores KaTeX's own 400em radical/arrow svgs,
+    // which KaTeX already clips inside their `.hide-tail` box. 4px of
+    // slack: a \sqrt ends in an ink-less `.vlist-s` spacer that sits
+    // ~2px past its cell even when the root is fully visible; a genuinely
+    // clipped unbreakable box overflows by far more.
     const measure = () => {
-      const tall =
-        content.getBoundingClientRect().height > box.getBoundingClientRect().height + 1;
-      // `svg, img` too: anything unbreakable MathText can emit, not
-      // only KaTeX (KaTeX's own inner svgs sit inside its box anyway).
-      const wide = Array.from(content.querySelectorAll(".katex, svg, img")).some((k) => {
-        const cell = k.closest("[data-answer-cell]");
-        return !!cell && k.getBoundingClientRect().right > cell.getBoundingClientRect().right + 1;
-      });
+      const cs = getComputedStyle(box);
+      const avail =
+        box.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+      const tall = content.getBoundingClientRect().height > avail + 1;
+      const wide = Array.from(content.querySelectorAll("[data-answer-cell]")).some(
+        (cell) => cell.scrollWidth > cell.clientWidth + 4,
+      );
       setAnswerOverflows(tall || wide);
     };
     measure();
@@ -6002,9 +6014,9 @@ function ProblemGradeRow({
                   leaves KaTeX's vertical overhang visible; `hidden` where
                   clip is unsupported), so a box with no break points can
                   never paint over the other cell.
-                - MathText's prose spans carry an inline `pre-wrap`; reset
-                  to `normal` so a stray newline or indent in an extracted
-                  answer doesn't add blank lines to a scannable row.
+                - Answers are trimmed, so a stray leading/trailing newline
+                  from the extractor doesn't add blank lines; interior line
+                  breaks (a system's `x = 2<br>y = 3`) keep their shape.
                 - A generous safety cap (9rem: ~4 lines of fraction-height
                   math, ~6 of plain text) remains for
                   genuinely huge answers. Hitting it is never silent:
@@ -6023,15 +6035,15 @@ function ProblemGradeRow({
             >
               <span
                 ref={answerContentRef}
-                className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1 text-[13px] leading-[1.75] @md:grid @md:grid-cols-[fit-content(60%)_minmax(0,1fr)] [&_.katex-display]:!my-0 [&_.katex-display]:!inline-block [&_div]:!my-0 [&_div]:!inline [&_span[style*='pre-wrap']]:!whitespace-normal"
+                className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1 text-[13px] leading-[1.75] @md:grid @md:grid-cols-[fit-content(60%)_minmax(0,1fr)] [&_.katex-display]:!my-0 [&_.katex-display]:!inline-block [&_div]:!my-0 [&_div]:!inline"
               >
                 {problem.student_answer ? (
                   <span
                     data-answer-cell
-                    className="min-w-0 max-w-full font-semibold text-text-primary [overflow-wrap:anywhere] [overflow-x:hidden] supports-[overflow:clip]:[overflow-x:clip]"
+                    className={`min-w-0 max-w-full font-semibold text-text-primary ${ANSWER_CELL_CLIP}`}
                     title={mathPlainText(problem.student_answer)}
                   >
-                    <MathText text={problem.student_answer} breakInline />
+                    <MathText text={problem.student_answer.trim()} breakInline />
                   </span>
                 ) : (
                   <span className="min-w-0 text-xs font-semibold text-[color:var(--color-warning-dark)]">
@@ -6046,11 +6058,11 @@ function ProblemGradeRow({
                   </span>
                   <span
                     data-answer-cell
-                    className="min-w-0 text-text-secondary [overflow-wrap:anywhere] [overflow-x:hidden] supports-[overflow:clip]:[overflow-x:clip]"
+                    className={`min-w-0 text-text-secondary ${ANSWER_CELL_CLIP}`}
                     title={problem.final_answer ? mathPlainText(problem.final_answer) : undefined}
                   >
                     {problem.final_answer ? (
-                      <MathText text={problem.final_answer} breakInline />
+                      <MathText text={problem.final_answer.trim()} breakInline />
                     ) : (
                       <span className="italic text-text-muted">no key</span>
                     )}

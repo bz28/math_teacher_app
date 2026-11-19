@@ -67,6 +67,10 @@ SPECS: list[tuple[str, str, str | None, str, float]] = [
     ("Compute the 7×5 product matrix.", f"$${BIG_MATRIX}$$", BIG_MATRIX, "full", 0.92),
     # Trailing newlines, as the extractor sometimes returns them.
     ("Solve $2x + 3 = 11$.", "$x = 4$", "$x = 4$\n\n", "full", 0.98),
+    # Interior line break (a system) must keep its shape; a short root.
+    ("Solve the system $x + y = 5$, $x - y = -1$.",
+     "$x = 2$<br>$y = 3$", "$x = 2$<br>$y = 3$", "full", 0.96),
+    ("Simplify $\\sqrt{8}$.", r"$2\sqrt{2}$", r"$2\sqrt{2}$", "full", 0.97),
     # No break points anywhere: one unbreakable KaTeX run, wider than a cell.
     ("Describe where $f(x) = x^2$ is monotonic.",
      r"$\text{decreasing on }(-\infty,0)\text{ and increasing on }(0,\infty)$",
