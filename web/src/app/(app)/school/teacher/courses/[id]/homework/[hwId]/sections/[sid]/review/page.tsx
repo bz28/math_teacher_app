@@ -5876,20 +5876,25 @@ function ProblemGradeRow({
     // scrollHeight reports "overflow" for a lone \frac that is fully
     // visible. Measured against the box's content area (its height minus
     // the py-0.5 headroom), so a last line cut by even 2px still counts.
-    // Horizontal: each value cell clips sideways, so ask the cell itself
-    // (scrollWidth). That covers anything unbreakable — a matrix, a
-    // canvas diagram — and ignores KaTeX's own 400em radical/arrow svgs,
-    // which KaTeX already clips inside their `.hide-tail` box. 4px of
-    // slack: a \sqrt ends in an ink-less `.vlist-s` spacer that sits
-    // ~2px past its cell even when the root is fully visible; a genuinely
-    // clipped unbreakable box overflows by far more.
+    // Horizontal: each value cell clips sideways; compare the right edge
+    // of every real layout box against its cell — KaTeX's `.base` runs,
+    // and any canvas/svg/img that isn't KaTeX's own. Not scrollWidth:
+    // that also counts ink-less KaTeX internals (a \sqrt's `.vlist-s`
+    // spacer, its 400em self-clipped svg, the hidden MathML) and flagged
+    // a fully visible 2√2.
+    const cs = getComputedStyle(box);
+    const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
     const measure = () => {
-      const cs = getComputedStyle(box);
-      const avail =
-        box.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
-      const tall = content.getBoundingClientRect().height > avail + 1;
-      const wide = Array.from(content.querySelectorAll("[data-answer-cell]")).some(
-        (cell) => cell.scrollWidth > cell.clientWidth + 4,
+      const tall = content.getBoundingClientRect().height > box.clientHeight - padY + 1;
+      const wide = Array.from(content.querySelectorAll<HTMLElement>("[data-answer-cell]")).some(
+        (cell) => {
+          const right = cell.getBoundingClientRect().right + 1;
+          return Array.from(cell.querySelectorAll(".katex-html > .base, canvas, svg, img")).some(
+            (el) =>
+              (el.classList.contains("base") || !el.closest(".katex")) &&
+              el.getBoundingClientRect().right > right,
+          );
+        },
       );
       setAnswerOverflows(tall || wide);
     };
@@ -5899,14 +5904,18 @@ function ProblemGradeRow({
     ro.observe(content);
     // The observed boxes' widths are set by the row, not the math, so a
     // KaTeX font swap that only widens a matrix wouldn't re-fire the
-    // observer. Re-measure once the fonts are in.
+    // observer. Re-measure whenever a font load finishes (not only the
+    // first `ready`, which may already have resolved before this row's
+    // KaTeX fonts were requested).
     let live = true;
     void document.fonts?.ready.then(() => {
       if (live) measure();
     });
+    document.fonts?.addEventListener("loadingdone", measure);
     return () => {
       live = false;
       ro.disconnect();
+      document.fonts?.removeEventListener("loadingdone", measure);
     };
   }, [collapsed, problem.student_answer, problem.final_answer]);
 
@@ -5979,6 +5988,11 @@ function ProblemGradeRow({
   // Same rowRef + focus model as the expanded row so keyboard nav, the
   // focus ring, and screen-reader tracking are identical.
   if (collapsed && aiGrade) {
+    // Trimmed: a stray newline from the extractor shouldn't add blank
+    // lines, and a whitespace-only read is "No answer extracted", not
+    // an empty cell the teacher might confirm past.
+    const studentAnswer = problem.student_answer?.trim() || null;
+    const keyAnswer = problem.final_answer?.trim() || null;
     const verdict =
       aiGrade.score_status === "full"
         // Was a hard-coded #22a06b that sat outside the palette and put
@@ -6021,9 +6035,9 @@ function ProblemGradeRow({
           // values are LaTeX source, not plain text — the API wraps the
           // extractor's read as `$…$` precisely so it renders as math.
           aria-label={
-            problem.student_answer
-              ? `Expand problem ${problem.position} to inspect. Student answered ${mathPlainText(problem.student_answer)}; answer key is ${problem.final_answer ? mathPlainText(problem.final_answer) : "not set"}.`
-              : `Expand problem ${problem.position} to inspect. No answer extracted. Answer key is ${problem.final_answer ? mathPlainText(problem.final_answer) : "not set"}.`
+            studentAnswer
+              ? `Expand problem ${problem.position} to inspect. Student answered ${mathPlainText(studentAnswer)}; answer key is ${keyAnswer ? mathPlainText(keyAnswer) : "not set"}.`
+              : `Expand problem ${problem.position} to inspect. No answer extracted. Answer key is ${keyAnswer ? mathPlainText(keyAnswer) : "not set"}.`
           }
           aria-expanded={false}
         >
@@ -6082,13 +6096,13 @@ function ProblemGradeRow({
                 ref={answerContentRef}
                 className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1 text-[13px] leading-[1.75] @md:grid @md:grid-cols-[fit-content(60%)_minmax(0,1fr)] [&_.katex-display]:!my-0 [&_.katex-display]:!inline-block [&_div]:!my-0 [&_div]:!inline"
               >
-                {problem.student_answer ? (
+                {studentAnswer ? (
                   <span
                     data-answer-cell
                     className={`min-w-0 max-w-full font-semibold text-text-primary ${ANSWER_CELL_CLIP}`}
-                    title={mathPlainText(problem.student_answer)}
+                    title={mathPlainText(studentAnswer)}
                   >
-                    <MathText text={problem.student_answer.trim()} breakInline />
+                    <MathText text={studentAnswer} breakInline />
                   </span>
                 ) : (
                   <span className="min-w-0 text-xs font-semibold text-[color:var(--color-warning-dark)]">
@@ -6104,10 +6118,10 @@ function ProblemGradeRow({
                   <span
                     data-answer-cell
                     className={`min-w-0 text-text-secondary ${ANSWER_CELL_CLIP}`}
-                    title={problem.final_answer ? mathPlainText(problem.final_answer) : undefined}
+                    title={keyAnswer ? mathPlainText(keyAnswer) : undefined}
                   >
-                    {problem.final_answer ? (
-                      <MathText text={problem.final_answer.trim()} breakInline />
+                    {keyAnswer ? (
+                      <MathText text={keyAnswer} breakInline />
                     ) : (
                       <span className="italic text-text-muted">no key</span>
                     )}

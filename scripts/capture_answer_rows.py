@@ -62,7 +62,8 @@ SPECS: list[tuple[str, str, str | None, str, float]] = [
     ("Compute $A + B$.",
      r"$$\begin{bmatrix} 1 & 2 \\ 3 & 4 \end{bmatrix}$$",
      r"\begin{bmatrix} 1 & 2 \\ 3 & 4 \end{bmatrix}", "full", 0.94),
-    ("Find the angle of elevation.", r"$4.8^\circ$", None, "zero", 0.93),
+    # Whitespace-only read: must still say "No answer extracted".
+    ("Find the angle of elevation.", r"$4.8^\circ$", "\n ", "zero", 0.93),
     ("Find the angle of depression.", r"$4.8^\circ$", r"$4.8^\circ$", "full", 0.95),
     ("Compute the 7×5 product matrix.", f"$${BIG_MATRIX}$$", BIG_MATRIX, "full", 0.92),
     # Trailing newlines, as the extractor sometimes returns them.
@@ -165,6 +166,11 @@ ROWS_BOX_JS = """() => {
 
 
 async def main() -> int:
+    # Seeds rows and never cleans up — refuse anything but a local DB.
+    from api.config import settings
+    host = settings.database_url.split("@")[-1].split("/")[0].split(":")[0]
+    if host not in ("localhost", "127.0.0.1"):
+        raise SystemExit(f"refusing to seed non-local database host {host!r}")
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     w = await seed()
     async with HarnessBrowser(WEB_BASE) as browser:
@@ -224,7 +230,7 @@ async def main() -> int:
             print(f"  page errors: {len(errors)}")
             for e in errors[:10]:
                 print(f"    ! {e}")
-    return 0
+    return 1 if errors else 0
 
 
 if __name__ == "__main__":
