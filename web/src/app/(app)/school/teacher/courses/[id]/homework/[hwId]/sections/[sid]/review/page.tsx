@@ -5821,20 +5821,32 @@ function ProblemGradeRow({
     // struts and vlists overhang their line boxes by a few px, so the
     // scroll metrics report "overflow" for a lone \frac that is fully
     // visible. What's actually hidden is content taller than the cap,
-    // or a math box (a wide matrix) running past the right edge.
+    // or a math box with no break points (a wide matrix) running past
+    // the edge of its own cell, which clips it (`overflow-x: clip`).
     const measure = () => {
-      const b = box.getBoundingClientRect();
-      const tall = content.getBoundingClientRect().height > b.height + 1;
-      const wide = Array.from(content.querySelectorAll(".katex")).some(
-        (k) => k.getBoundingClientRect().right > b.right + 1,
-      );
+      const tall =
+        content.getBoundingClientRect().height > box.getBoundingClientRect().height + 1;
+      const wide = Array.from(content.querySelectorAll(".katex")).some((k) => {
+        const cell = k.closest("[data-answer-cell]");
+        return !!cell && k.getBoundingClientRect().right > cell.getBoundingClientRect().right + 1;
+      });
       setAnswerOverflows(tall || wide);
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(box);
     ro.observe(content);
-    return () => ro.disconnect();
+    // The observed boxes' widths are set by the row, not the math, so a
+    // KaTeX font swap that only widens a matrix wouldn't re-fire the
+    // observer. Re-measure once the fonts are in.
+    let live = true;
+    void document.fonts?.ready.then(() => {
+      if (live) measure();
+    });
+    return () => {
+      live = false;
+      ro.disconnect();
+    };
   }, [collapsed, problem.student_answer, problem.final_answer]);
 
   // Student work step list. Same clamp-and-expand pattern as the
@@ -5942,7 +5954,7 @@ function ProblemGradeRow({
           // Wraps rather than clips: in the narrow middle column (or on a
           // phone) the verdict drops under the answer instead of
           // squeezing the answer to "⚠ No ⁝".
-          className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-[--radius-sm]"
+          className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary/40 rounded-[--radius-sm]"
           // Spell the comparison out for screen readers rather than
           // leaving them the bare position. Delimiters stripped: these
           // values are LaTeX source, not plain text — the API wraps the
@@ -5982,7 +5994,11 @@ function ProblemGradeRow({
                   MathText emit a BLOCK div with vertical margins; the
                   `[&_div]` / `.katex-display` overrides keep it in the
                   flow of the row.
-                - A generous safety cap (~4 lines of math) remains for
+                - Each value cell clips sideways (`overflow-x: clip`, which
+                  leaves KaTeX's vertical overhang visible), so a box with
+                  no break points can never paint over the other cell.
+                - A generous safety cap (9rem: ~4 lines of fraction-height
+                  math, ~6 of plain text) remains for
                   genuinely huge answers. Hitting it is never silent:
                   the row shows "Show all", and clicking (this whole
                   button) expands the row to the full grading body. */}
@@ -6000,7 +6016,11 @@ function ProblemGradeRow({
                 className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1 text-[13px] leading-[1.75] @md:grid @md:grid-cols-[fit-content(60%)_minmax(0,1fr)] [&_.katex-display]:!my-0 [&_.katex-display]:!inline-block [&_div]:!my-0 [&_div]:!inline"
               >
                 {problem.student_answer ? (
-                  <span className="min-w-0 max-w-full font-semibold text-text-primary [overflow-wrap:anywhere]">
+                  <span
+                    data-answer-cell
+                    className="min-w-0 max-w-full font-semibold text-text-primary [overflow-wrap:anywhere] [overflow-x:clip]"
+                    title={mathPlainText(problem.student_answer)}
+                  >
                     <MathText text={problem.student_answer} breakInline />
                   </span>
                 ) : (
@@ -6014,7 +6034,11 @@ function ProblemGradeRow({
                   <span aria-hidden className="shrink-0 text-[11px] text-text-muted">
                     →
                   </span>
-                  <span className="min-w-0 text-text-secondary [overflow-wrap:anywhere]">
+                  <span
+                    data-answer-cell
+                    className="min-w-0 text-text-secondary [overflow-wrap:anywhere] [overflow-x:clip]"
+                    title={problem.final_answer ? mathPlainText(problem.final_answer) : undefined}
+                  >
                     {problem.final_answer ? (
                       <MathText text={problem.final_answer} breakInline />
                     ) : (
