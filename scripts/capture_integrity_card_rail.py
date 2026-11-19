@@ -338,6 +338,43 @@ async def main(phase: str) -> int:
                 await page.screenshot(path=out("0-before-wide"))
                 return 0
 
+            if phase.startswith("resize-"):
+                # Open Conversation from the rail card at xl, then drop
+                # below xl (the rail goes display:none). The modal must
+                # stay visible and close cleanly, unlocking scroll.
+                tag = phase.removeprefix("resize-")
+                rail = page.locator("aside.xl\\:block")
+                await rail.get_by_role("button", name=re.compile("Conversation")).click()
+                await page.wait_for_timeout(800)
+                await page.set_viewport_size({"width": 1180, "height": 900})
+                await page.wait_for_timeout(800)
+                visible = await page.get_by_role("dialog").first.is_visible()
+                locked = await page.evaluate("document.body.style.overflow")
+                print(f"  body.overflow while open: {locked!r}")
+                await page.screenshot(path=out(f"16-resize-modal-{tag}"))
+                await page.keyboard.press("Escape")
+                await page.wait_for_timeout(600)
+                dialogs = await page.get_by_role("dialog").count()
+                overflow = await page.evaluate("document.body.style.overflow")
+                print(f"  modal visible after resize: {visible}")
+                print(f"  after Escape: dialogs={dialogs} body.overflow={overflow!r}")
+                # Same check for the rail photo's ⤢ Full lightbox.
+                await page.set_viewport_size({"width": 1440, "height": 900})
+                await page.wait_for_timeout(800)
+                await rail.get_by_role("button", name=re.compile("Full")).click()
+                await page.wait_for_timeout(800)
+                await page.set_viewport_size({"width": 1180, "height": 900})
+                await page.wait_for_timeout(800)
+                gvisible = await page.get_by_role("dialog").first.is_visible()
+                await page.keyboard.press("Escape")
+                await page.wait_for_timeout(600)
+                gdialogs = await page.get_by_role("dialog").count()
+                goverflow = await page.evaluate("document.body.style.overflow")
+                print(f"  gallery visible after resize: {gvisible}; after Escape: "
+                      f"dialogs={gdialogs} body.overflow={goverflow!r}")
+                print(f"  console errors: {len(errors)}")
+                return 0
+
             async def pick(name: str) -> None:
                 await page.get_by_role("button", name=re.compile(name)).first.click()
                 await page.wait_for_timeout(1800)

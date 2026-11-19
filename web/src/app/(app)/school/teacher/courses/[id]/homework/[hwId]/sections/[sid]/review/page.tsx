@@ -7541,7 +7541,10 @@ function ConversationModal({
   }, [integrity.problems]);
 
   return (
-    <Modal open={open} onClose={onClose} className="max-w-3xl bg-surface p-0" label="AI and student conversation">
+    // Portaled: the trigger lives in the xl rail AND the below-xl grade
+    // column, each display:none on the other side of the breakpoint, so
+    // a resize while open must not hide the modal with its subtree.
+    <Modal portal open={open} onClose={onClose} className="max-w-3xl bg-surface p-0" label="AI and student conversation">
       <div className="flex items-center justify-between border-b border-border-light px-5 py-3">
         <div>
           <h3 className="text-sm font-bold text-text-primary">
