@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useCallback, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
@@ -24,6 +25,12 @@ interface ModalProps {
   labelledById?: string;
   /** id of the element holding the dialog's message, for aria-describedby. */
   describedById?: string;
+  /** Render into document.body instead of in place. Use when the modal's
+   *  trigger can sit inside a subtree that may become display:none while
+   *  it's open (e.g. a responsive rail that hides below a breakpoint) —
+   *  in place, the modal would vanish with it while still holding the
+   *  page's scroll lock and keyboard handlers. */
+  portal?: boolean;
 }
 
 const FOCUSABLE_SELECTOR =
@@ -39,6 +46,7 @@ export function Modal({
   label,
   labelledById,
   describedById,
+  portal = false,
 }: ModalProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -98,7 +106,7 @@ export function Modal({
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [open, handleKeyDown]);
 
-  return (
+  const tree = (
     <AnimatePresence>
       {open && (
         <div
@@ -145,4 +153,8 @@ export function Modal({
       )}
     </AnimatePresence>
   );
+  // document is absent during SSR; a modal only ever opens client-side.
+  return portal && typeof document !== "undefined"
+    ? createPortal(tree, document.body)
+    : tree;
 }

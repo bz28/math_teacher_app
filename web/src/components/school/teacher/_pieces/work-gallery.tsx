@@ -117,6 +117,7 @@ function GalleryBody({
   return (
     <Modal
       open
+      portal
       onClose={onClose}
       className="max-h-[90vh] w-full max-w-5xl overflow-y-auto bg-surface p-3"
       label={`${studentName}'s ${note ?? "work"}`}
