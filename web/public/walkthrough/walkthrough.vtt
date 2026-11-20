@@ -1,0 +1,644 @@
+WEBVTT
+
+welcome.loop-1
+00:00:01.520 --> 00:00:04.786
+Welcome to Veradic.
+Here's the whole idea in one breath.
+
+welcome.loop-2
+00:00:04.786 --> 00:00:08.752
+You assign homework, and students
+photograph their handwritten work.
+
+welcome.loop-3
+00:00:08.752 --> 00:00:12.543
+The AI grades it as a first pass.
+Then you review it and publish.
+
+welcome.loop-4
+00:00:12.543 --> 00:00:15.342
+No grade reaches a student until you
+publish it.
+
+welcome.queue-5
+00:00:15.744 --> 00:00:17.685
+This is My Courses, your home base.
+
+welcome.queue-6
+00:00:17.685 --> 00:00:22.563
+Needs you today gathers every submission that's
+waiting on you, across all your classes.
+
+welcome.queue-7
+00:00:22.563 --> 00:00:26.999
+Flagged work comes first, then work that's
+past due and still needs your review.
+
+welcome.queue-8
+00:00:26.999 --> 00:00:29.604
+Click any row to jump straight to that
+student.
+
+welcome.courses-9
+00:00:30.006 --> 00:00:33.753
+Further down are your courses, each
+showing how much is left to review.
+
+welcome.sidebar-10
+00:00:34.155 --> 00:00:38.440
+On the left, Preview as student lets you
+see the app the way your students do.
+
+welcome.sidebar-11
+00:00:38.440 --> 00:00:43.440
+Video walkthrough brings back this video, and
+Report a problem sends a note straight to us.
+
+courses.concept-12
+00:00:45.880 --> 00:00:48.536
+A course is a class you teach, like
+Algebra I.
+
+courses.concept-13
+00:00:48.536 --> 00:00:52.809
+Sections are the periods you teach it in,
+and each one has its own roster.
+
+courses.concept-14
+00:00:52.809 --> 00:00:57.313
+You build homework once for the course,
+then assign it to any of its sections.
+
+courses.new-15
+00:00:57.715 --> 00:00:58.612
+Let's make one.
+
+courses.new-16
+00:00:58.612 --> 00:01:03.755
+Click New Course, give it a name, pick the
+subject, and add a grade level if you like.
+
+courses.create-17
+00:01:04.157 --> 00:01:07.663
+Create it, and it shows up in your list.
+Open it to set it up.
+
+courses.section-18
+00:01:08.757 --> 00:01:11.344
+Now add a section for each period you
+teach.
+
+courses.section-19
+00:01:11.344 --> 00:01:12.990
+I'll call this one Period 2.
+
+courses.code-20
+00:01:13.392 --> 00:01:16.528
+Every section gets its own join code the
+moment you create it.
+
+students.code-21
+00:01:18.960 --> 00:01:21.734
+The quickest way to add students is that
+join code.
+
+students.code-22
+00:01:21.734 --> 00:01:24.399
+Click it to copy it, then put it up on the
+board.
+
+students.code-23
+00:01:24.399 --> 00:01:28.370
+Students enter the code when they sign up,
+and they land in this section.
+
+students.invite-24
+00:01:28.770 --> 00:01:33.479
+You can also invite students by email.
+Open Manage, paste in your list, and send.
+
+students.invite-25
+00:01:33.479 --> 00:01:38.246
+Each student gets an email with a link that
+brings them straight into the section.
+
+students.pending-26
+00:01:38.648 --> 00:01:42.325
+Each invite waits under Pending invites
+until the student accepts.
+
+students.pending-27
+00:01:42.325 --> 00:01:45.945
+You can resend one, or revoke it if it
+went to the wrong address.
+
+students.close-28
+00:01:46.347 --> 00:01:51.480
+Once everyone's in, close enrollment, so
+the code stops letting new students join.
+
+students.close-29
+00:01:51.480 --> 00:01:53.170
+You can reopen it any time.
+
+students.regen-30
+00:01:53.570 --> 00:01:57.172
+And if a code ever ends up somewhere it
+shouldn't, regenerate it.
+
+students.regen-31
+00:01:57.172 --> 00:01:59.278
+The old code stops working right away.
+
+materials.units-32
+00:02:01.720 --> 00:02:03.126
+Materials live in units.
+
+materials.units-33
+00:02:03.126 --> 00:02:05.820
+Think of a unit as a chapter of your
+textbook.
+
+materials.units-34
+00:02:05.820 --> 00:02:11.033
+Every homework belongs to at least one unit, so
+it pays to set them up the way you teach.
+
+materials.new_unit-35
+00:02:11.435 --> 00:02:13.963
+Click New Unit, and name it after the
+chapter.
+
+materials.new_unit-36
+00:02:13.963 --> 00:02:17.644
+It appears in the list on the left, and
+clicking it opens the unit.
+
+materials.upload-37
+00:02:18.046 --> 00:02:20.266
+Then upload what you teach from:
+
+materials.upload-38
+00:02:20.266 --> 00:02:23.249
+textbook pages, worksheets, your own
+notes.
+
+materials.upload-39
+00:02:23.249 --> 00:02:25.053
+Photos and PDFs both work.
+
+materials.why-40
+00:02:25.455 --> 00:02:29.619
+When you have the AI write problems, you
+can point it at these files, so new
+
+materials.why-41
+00:02:29.619 --> 00:02:32.577
+problems match the way your class learns
+the material.
+
+materials.view-42
+00:02:32.979 --> 00:02:38.173
+Hover over any file, and View opens it, so you
+can check you uploaded the right pages.
+
+homework.list-43
+00:02:40.600 --> 00:02:43.773
+The Homework tab sorts everything by what
+it needs from you:
+
+homework.list-44
+00:02:43.773 --> 00:02:46.998
+homework to grade, what's due this week,
+and what's finished.
+
+homework.filter-45
+00:02:47.400 --> 00:02:52.296
+As the list grows, search it, or filter by
+status, section, or unit.
+
+homework.details-46
+00:02:53.008 --> 00:02:55.817
+Click New homework.
+Step one is the details:
+
+homework.details-47
+00:02:55.817 --> 00:02:58.116
+a title, and the unit it belongs to.
+
+homework.due-48
+00:02:58.518 --> 00:03:01.056
+Set a due date, and read the note
+underneath.
+
+homework.due-49
+00:03:01.056 --> 00:03:03.538
+The AI starts grading when that date
+passes.
+
+homework.policy-50
+00:03:03.940 --> 00:03:06.203
+Pick a late policy, and choose sections.
+
+homework.policy-51
+00:03:06.203 --> 00:03:09.880
+Leave sections empty to assign it to every
+section in the course.
+
+homework.generate-52
+00:03:10.282 --> 00:03:11.722
+Step two is the problems.
+
+homework.generate-53
+00:03:11.722 --> 00:03:15.178
+The AI can write new ones from your unit
+and your materials.
+
+homework.generate-54
+00:03:15.178 --> 00:03:17.598
+You choose how many, and what to focus on.
+
+homework.generate-55
+00:03:17.598 --> 00:03:20.305
+They land in a review queue for you to
+approve.
+
+homework.upload-56
+00:03:20.707 --> 00:03:22.240
+Already have a worksheet?
+
+homework.upload-57
+00:03:22.240 --> 00:03:27.879
+Switch to Upload, add photos or a PDF, and the
+AI copies the problems from it word for word.
+
+homework.grading-58
+00:03:28.281 --> 00:03:29.559
+Step three is grading.
+
+homework.grading-59
+00:03:29.559 --> 00:03:34.033
+Set the points, then add rules of your
+own, and common mistakes to watch for.
+
+homework.grading-60
+00:03:34.033 --> 00:03:38.681
+On the right, you can read exactly how the
+AI will give full and partial credit.
+
+homework.review-61
+00:03:39.082 --> 00:03:40.647
+Step four is one last look.
+
+homework.review-62
+00:03:40.647 --> 00:03:45.227
+Create and generate would start writing
+problems, so for this walkthrough, I'll
+
+homework.review-63
+00:03:45.227 --> 00:03:46.793
+save it as a draft instead.
+
+homework.editor-64
+00:03:47.195 --> 00:03:49.271
+Saving opens the draft in the editor.
+
+homework.editor-65
+00:03:49.271 --> 00:03:52.805
+Here's one that already has its problems,
+each with its points.
+
+homework.editor-66
+00:03:52.805 --> 00:03:56.115
+Open Solution to check the answer key and
+the worked steps.
+
+homework.publish-67
+00:03:56.516 --> 00:03:59.948
+When it looks right, Publish sends it out
+to the sections you chose.
+
+homework.preview-68
+00:04:00.348 --> 00:04:04.932
+Before you do, Preview as student shows
+you exactly what your students will see,
+
+homework.preview-69
+00:04:04.932 --> 00:04:06.594
+right down to the upload box.
+
+homework.preview-70
+00:04:06.594 --> 00:04:11.064
+Anything you turn in here is a test run,
+and your students' work is untouched.
+
+homework.preview-71
+00:04:11.064 --> 00:04:13.184
+Back to teacher view brings you home.
+
+grading.roster-72
+00:04:15.640 --> 00:04:19.923
+Once homework is due, the AI grades each
+submission, and you review it.
+
+grading.roster-73
+00:04:19.923 --> 00:04:24.749
+This is the grading page for one section.
+The roster puts what needs you on top.
+
+grading.roster-74
+00:04:24.749 --> 00:04:28.670
+Needs your eyes is anything flagged, or
+where the AI wasn't sure.
+
+grading.roster-75
+00:04:28.670 --> 00:04:30.178
+Below that, AI confident.
+
+grading.open-76
+00:04:30.580 --> 00:04:33.978
+Let's open Zoe.
+Her photographed work is on the right.
+
+grading.open-77
+00:04:33.978 --> 00:04:38.697
+Each problem shows her answer, the answer
+key, and the AI's grade, with how
+
+grading.open-78
+00:04:38.697 --> 00:04:39.704
+confident it is.
+
+grading.confident-79
+00:04:40.106 --> 00:04:44.210
+Problems the AI is confident about
+collapse to a quick confirm, and one
+
+grading.confident-80
+00:04:44.210 --> 00:04:45.655
+button confirms them all.
+
+grading.confident-81
+00:04:45.655 --> 00:04:48.198
+Even those aren't accepted until you say
+so.
+
+grading.confident-82
+00:04:48.198 --> 00:04:50.452
+The one it was unsure about stays open.
+
+grading.reason-83
+00:04:50.854 --> 00:04:54.626
+The AI wasn't sure about problem five, so
+it left it open.
+
+grading.reason-84
+00:04:54.626 --> 00:04:55.537
+Its reasoning:
+
+grading.reason-85
+00:04:55.537 --> 00:05:00.480
+her work finds x equals 2 and y equals 5,
+but she wrote the point backwards.
+
+grading.reason-86
+00:05:00.480 --> 00:05:01.975
+It suggested no credit.
+
+grading.partial-87
+00:05:02.378 --> 00:05:05.936
+That's a judgment call, and it's yours.
+I'll give partial credit.
+
+grading.partial-88
+00:05:05.936 --> 00:05:10.864
+The feedback underneath is what Zoe sees once
+the grade is published, and you can edit it.
+
+grading.approve-89
+00:05:11.264 --> 00:05:12.182
+Then approve it.
+
+grading.approve-90
+00:05:12.182 --> 00:05:16.775
+The AI's grade is only ever a suggestion,
+and nothing is accepted automatically.
+
+grading.publish-91
+00:05:17.177 --> 00:05:19.070
+To release grades, click Publish.
+
+grading.publish-92
+00:05:19.070 --> 00:05:23.714
+Veradic tells you how many you haven't
+approved yet, and warns you about anything
+
+grading.publish-93
+00:05:23.714 --> 00:05:26.696
+still flagged.
+I'll publish only the one I approved.
+
+grading.done-94
+00:05:27.098 --> 00:05:29.421
+Zoe can now see her score and her
+feedback.
+
+grading.done-95
+00:05:29.421 --> 00:05:31.527
+Everyone else waits until you're ready.
+
+uc.why-96
+00:05:33.960 --> 00:05:38.367
+After a student turns in work, Veradic
+asks them to explain it, in their own
+
+uc.why-97
+00:05:38.367 --> 00:05:41.615
+words, in a short conversation.
+It's there for learning.
+
+uc.why-98
+00:05:41.615 --> 00:05:44.863
+When a student is stuck, it helps them
+think it through.
+
+uc.never-99
+00:05:45.265 --> 00:05:46.615
+It never accuses anyone.
+
+uc.never-100
+00:05:46.615 --> 00:05:51.230
+When an explanation doesn't line up with
+the work, it flags it for you to look at,
+
+uc.never-101
+00:05:51.230 --> 00:05:52.862
+and you decide what it means.
+
+uc.card-102
+00:05:53.264 --> 00:05:58.089
+Here, Ava's answers were all correct, but she
+couldn't explain how she found the slope.
+
+uc.conversation-103
+00:05:58.490 --> 00:06:03.324
+Open the conversation to read exactly what
+was said, and how long she took to reply.
+
+uc.resolve-104
+00:06:04.426 --> 00:06:08.271
+Maybe she had an off day.
+Maybe it's worth a word after class.
+
+uc.resolve-105
+00:06:08.271 --> 00:06:11.372
+Either way, mark it reviewed, and pick an
+outcome.
+
+uc.resolve-106
+00:06:11.372 --> 00:06:12.612
+I'll choose Cleared.
+
+uc.after-107
+00:06:13.014 --> 00:06:17.014
+Once it's resolved, it leaves your queue,
+and the record shows you reviewed it.
+
+grades.grid-108
+00:06:19.440 --> 00:06:21.343
+The Grades tab is your gradebook:
+
+grades.grid-109
+00:06:21.343 --> 00:06:24.571
+every student and every homework, one
+section at a time.
+
+grades.grid-110
+00:06:24.571 --> 00:06:29.414
+Only published grades show a score, and missing
+work is never averaged in as a zero.
+
+grades.bands-111
+00:06:29.817 --> 00:06:32.953
+The bar along the top shows how the
+section is spread:
+
+grades.bands-112
+00:06:32.953 --> 00:06:37.832
+three students at eighty-five or above, two in
+the seventies, and two under seventy.
+
+grades.bands-113
+00:06:37.832 --> 00:06:42.246
+A small dot marks a grade where you
+changed the AI's suggestion, like Zoe's.
+
+grades.attention-114
+00:06:42.649 --> 00:06:46.397
+Needs attention narrows it to students
+averaging below seventy percent.
+
+grades.missing-115
+00:06:46.799 --> 00:06:49.927
+Missing work shows who hasn't turned in
+something that's past due.
+
+grades.student-116
+00:06:50.329 --> 00:06:52.043
+Click a name to see one student:
+
+grades.student-117
+00:06:52.043 --> 00:06:56.222
+their overall grade, what's missing, and
+how they're getting on with practice.
+
+grades.export-118
+00:06:57.095 --> 00:07:01.956
+Back on the gradebook, Export CSV
+downloads this section's grades, ready to
+
+grades.export-119
+00:07:01.956 --> 00:07:04.872
+import into Canvas, Schoology or
+PowerSchool.
+
+pi.practice-120
+00:07:07.320 --> 00:07:08.806
+Practice sets are ungraded.
+
+pi.practice-121
+00:07:08.806 --> 00:07:11.723
+Students use them to work at a skill until
+it clicks.
+
+pi.practice-122
+00:07:11.723 --> 00:07:14.585
+The quickest way to make one is to clone a
+homework.
+
+pi.clone-123
+00:07:14.988 --> 00:07:19.357
+Pick the homework and the problems to
+practice, and the AI writes new versions
+
+pi.clone-124
+00:07:19.357 --> 00:07:20.870
+of each for you to approve.
+
+pi.clone-125
+00:07:20.870 --> 00:07:23.391
+I won't generate one now, so I'll close
+this.
+
+pi.insights-126
+00:07:23.793 --> 00:07:28.135
+Student Insights shows which problems most
+of a section got wrong on each homework.
+
+pi.insights-127
+00:07:28.135 --> 00:07:30.803
+It only counts grades you've approved or
+published.
+
+pi.sections-128
+00:07:31.205 --> 00:07:35.180
+Each section gets its own view, since
+different periods often trip over
+
+pi.sections-129
+00:07:35.180 --> 00:07:36.132
+different things.
+
+pi.sections-130
+00:07:36.132 --> 00:07:38.763
+Pick a section up top, and a homework
+below it.
+
+pi.reteach-131
+00:07:39.165 --> 00:07:42.275
+Here, every student in Period 3 missed
+problem six.
+
+pi.reteach-132
+00:07:42.275 --> 00:07:46.848
+It's already picked for a practice set, so
+reteaching it is one click away.
+
+pi.other-133
+00:07:47.249 --> 00:07:51.889
+The rest of the homework is tucked under Other
+problems, if you want to add more to the set.
+
+pi.loop-134
+00:07:52.292 --> 00:07:53.267
+That's the loop.
+
+pi.loop-135
+00:07:53.267 --> 00:07:58.204
+Assign, let the AI take the first pass,
+review and publish, then reteach what the
+
+pi.loop-136
+00:07:58.204 --> 00:08:00.277
+class missed.
+Thanks for watching.
