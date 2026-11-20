@@ -315,7 +315,7 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
         {/* The walkthrough chapter for whichever tab is open. Hidden on
             phones, where the tab row already needs the full width. */}
         {TAB_CHAPTER[tab] && (
-          <WatchHow chapter={TAB_CHAPTER[tab]} className="hidden shrink-0 sm:inline-flex" />
+          <WatchHow chapter={TAB_CHAPTER[tab]} className="shrink-0 max-sm:hidden" />
         )}
       </div>
 

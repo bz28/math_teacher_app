@@ -1978,7 +1978,7 @@ function HomeworkSectionReview({
         >
           ← Back to submissions
         </Link>
-        <WatchHow chapter="grading" className="hidden sm:inline-flex" />
+        <WatchHow chapter="grading" className="max-sm:hidden" />
       </div>
 
       <div className="mt-3 flex flex-wrap items-start justify-between gap-3">

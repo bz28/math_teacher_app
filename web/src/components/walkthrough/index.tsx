@@ -151,7 +151,7 @@ function WalkthroughDialog({
       portal
       labelledById="walkthrough-title"
       outerClassName="z-[70]"
-      className="p-0 md:max-w-5xl"
+      className="p-0! md:max-w-5xl"
     >
       <div className="flex items-start justify-between gap-4 border-b border-border-light px-6 py-4">
         <div className="min-w-0">
