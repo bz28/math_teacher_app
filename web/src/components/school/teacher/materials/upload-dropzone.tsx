@@ -75,7 +75,7 @@ export function UploadDropzone({ busy, onDropTree, children }: UploadDropzonePro
           <div>
             <p className="text-base font-bold text-primary">Drop files or folders to upload</p>
             <p className="mt-1 text-xs font-medium text-primary/70">
-              Folders become units · PDF, PNG, JPG up to 25 MB
+              Folders become units · PDF, PNG or JPG · images up to 5 MB
             </p>
           </div>
         </div>

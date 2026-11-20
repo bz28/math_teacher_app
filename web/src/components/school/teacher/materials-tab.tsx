@@ -32,6 +32,7 @@ import {
   mapWithConcurrency,
   sanitizeFolderName,
   treeFromDirectoryPicker,
+  looseFilesTarget,
   uniqueName,
 } from "./materials/walk-dropped-folder";
 import {
@@ -62,6 +63,10 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
     resolve: (choices: Map<string, ResolutionChoice> | null) => void;
   } | null>(null);
   const lastClickedDocIdRef = useRef<string | null>(null);
+  // True once units/documents have loaded successfully. Until then an
+  // empty `units` means "unknown", not "this course has no units", so an
+  // upload must not mint a "Unit 1" beside units we haven't seen yet.
+  const loadedRef = useRef(false);
   const { busy, error, setError, run } = useAsyncAction();
 
   const reload = useCallback(
@@ -75,6 +80,7 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
         ]);
         setUnits(u.units);
         setDocs(d.documents);
+        loadedRef.current = true;
         return true;
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load materials");
@@ -204,6 +210,9 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
       let okFiles = 0;
       let okUnits = 0;
       let failedFiles = 0;
+      // First unit this drop creates or merges into — where loose files
+      // land when no unit is selected (an empty course).
+      let firstTargetUnitId: string | null = null;
       const UPLOAD_CONCURRENCY = 5;
 
       const uploadBatch = async (files: File[], unitId: string) => {
@@ -241,6 +250,7 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
           continue;
         }
 
+        firstTargetUnitId ??= targetUnitId;
         await uploadBatch(folder.files, targetUnitId);
 
         // level-2 subfolders — on merge we still create them under the
@@ -267,12 +277,42 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
       // being selected, so `selected` is non-null when loose files
       // arrive — defense-in-depth: skip + toast if it isn't.
       if (tree.looseFiles.length > 0) {
-        if (selected !== null) {
-          await uploadBatch(tree.looseFiles, selected);
+        // A brand-new course has no unit to select, so the first-ever
+        // "Upload files" click (the empty state's only button) had
+        // nowhere to put loose files and failed outright. Give them a
+        // home instead: the first unit this same drop created from a
+        // folder, else a new "Unit 1". The teacher can rename it from
+        // the folder tree.
+        const route = looseFilesTarget(
+          selected,
+          firstTargetUnitId,
+          // Not loaded yet (or the load failed): treat as "units may
+          // exist" so we ask the teacher to pick rather than guess.
+          tops.length > 0 || !loadedRef.current,
+        );
+        let target = route.kind === "unit" ? route.id : null;
+        let unitCreateFailed = false;
+        if (route.kind === "create") {
+          try {
+            const name = uniqueName("Unit 1", taken);
+            const created = await teacher.createUnit(courseId, { name });
+            target = created.id;
+            okUnits += 1;
+            setSelected(created.id);
+          } catch {
+            unitCreateFailed = true;
+          }
+        }
+        if (target !== null) {
+          await uploadBatch(tree.looseFiles, target);
         } else {
           failedFiles += tree.looseFiles.length;
           toast.error(
-            "Pick a unit on the left before dropping loose files.",
+            unitCreateFailed
+              ? "Couldn't create a unit for these files. Try New Unit, then upload again."
+              : !loadedRef.current
+                ? "Couldn't load your materials. Refresh the page, then upload again."
+                : "Pick a unit on the left before dropping loose files.",
           );
         }
       }
@@ -440,7 +480,7 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
           New Unit
         </button>
         <SplitUploadButton
-          busy={busy}
+          busy={busy || loading}
           onFiles={handleLooseFiles}
           onFolderTree={handleImport}
         />
@@ -681,7 +721,7 @@ function FirstTimeDropzone({
           </p>
 
           <p className="text-[11px] font-medium text-text-muted">
-            PDF, PNG, JPG up to 25 MB
+            PDF, PNG or JPG · images up to 5 MB
           </p>
         </div>
       </UploadDropzone>

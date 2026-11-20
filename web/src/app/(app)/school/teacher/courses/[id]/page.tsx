@@ -405,7 +405,7 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
         )}
         {tab === "practice" && <PracticeTab courseId={id} />}
         {tab === "insights" && <StudentInsightsTab courseId={id} />}
-        {tab === "submissions" && <SubmissionsTab courseId={id} />}
+        {tab === "submissions" && <SubmissionsTab courseId={id} onGoToHomework={() => setTab("homework")} />}
         {tab === "grades" && <GradesTab courseId={id} />}
         {tab === "settings" && course && <SettingsTab course={course} />}
         </ErrorBoundary>
