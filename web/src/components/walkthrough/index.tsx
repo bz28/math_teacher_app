@@ -137,7 +137,7 @@ function WalkthroughDialog({
       portal
       labelledById="walkthrough-title"
       outerClassName="z-[70]"
-      className="max-w-5xl p-0"
+      className="p-0 md:max-w-5xl"
     >
       <div className="flex items-start justify-between gap-4 border-b border-border-light px-6 py-4">
         <div className="min-w-0">
@@ -164,7 +164,7 @@ function WalkthroughDialog({
       </div>
 
       <div className="grid max-h-[calc(100vh-10rem)] gap-0 overflow-y-auto md:grid-cols-[1fr_280px] md:overflow-visible">
-        <div className="bg-black md:rounded-bl-[--radius-md]">
+        <div className="min-w-0 bg-black md:rounded-bl-[--radius-md]">
           <video
             ref={videoRef}
             src={WALKTHROUGH_SRC}
@@ -234,7 +234,7 @@ export function WatchHow({ chapter, className }: { chapter: ChapterId; className
       type="button"
       onClick={() => open(chapter)}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-[--radius-sm] px-1.5 py-1 text-sm font-medium text-text-secondary transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-[--radius-sm] px-1.5 py-1 text-sm font-medium text-text-secondary transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
         className,
       )}
     >

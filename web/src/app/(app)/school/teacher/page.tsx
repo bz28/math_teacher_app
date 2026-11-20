@@ -89,11 +89,14 @@ export default function SchoolTeacherDashboard() {
                   ? "Nothing here yet."
                   : describeWorkload(courses.length, totals)}
             </p>
+            {/* The walkthrough entry on phones, where the sidebar (and its
+                "Video walkthrough" item) is hidden. With no courses the
+                empty state carries its own link. */}
+            {courses.length > 0 && (
+              <WatchHow chapter="welcome" className="-ml-1.5 mt-2 md:hidden" />
+            )}
           </div>
           <div className="flex shrink-0 items-center gap-3">
-            {/* The only walkthrough entry on phones, where the sidebar
-                (and its "Video walkthrough" item) is hidden. */}
-            <WatchHow chapter="welcome" className="md:hidden" />
             <button
               type="button"
               className="shrink-0 rounded-[--radius-sm] bg-primary px-4 py-2 text-sm font-semibold tracking-[0.01em] text-white transition-colors hover:bg-primary-dark"
