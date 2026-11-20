@@ -63,6 +63,10 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
     resolve: (choices: Map<string, ResolutionChoice> | null) => void;
   } | null>(null);
   const lastClickedDocIdRef = useRef<string | null>(null);
+  // True once units/documents have loaded successfully. Until then an
+  // empty `units` means "unknown", not "this course has no units", so an
+  // upload must not mint a "Unit 1" beside units we haven't seen yet.
+  const loadedRef = useRef(false);
   const { busy, error, setError, run } = useAsyncAction();
 
   const reload = useCallback(
@@ -76,6 +80,7 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
         ]);
         setUnits(u.units);
         setDocs(d.documents);
+        loadedRef.current = true;
         return true;
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load materials");
@@ -278,7 +283,13 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
         // home instead: the first unit this same drop created from a
         // folder, else a new "Unit 1". The teacher can rename it from
         // the folder tree.
-        const route = looseFilesTarget(selected, firstTargetUnitId, tops.length > 0);
+        const route = looseFilesTarget(
+          selected,
+          firstTargetUnitId,
+          // Not loaded yet (or the load failed): treat as "units may
+          // exist" so we ask the teacher to pick rather than guess.
+          tops.length > 0 || !loadedRef.current,
+        );
         let target = route.kind === "unit" ? route.id : null;
         let unitCreateFailed = false;
         if (route.kind === "create") {
@@ -467,7 +478,7 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
           New Unit
         </button>
         <SplitUploadButton
-          busy={busy}
+          busy={busy || loading}
           onFiles={handleLooseFiles}
           onFolderTree={handleImport}
         />
@@ -708,7 +719,7 @@ function FirstTimeDropzone({
           </p>
 
           <p className="text-[11px] font-medium text-text-muted">
-            PDF up to 25 MB · PNG or JPG up to 5 MB
+            PDF, PNG or JPG · images up to 5 MB
           </p>
         </div>
       </UploadDropzone>
