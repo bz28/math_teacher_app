@@ -39,15 +39,28 @@ class SecurityHeadersMiddleware:
         await self.app(scope, receive, send_with_headers)
 
 
-# POST routes whose bodies carry base64 files. They get the larger
-# upload cap; each still enforces its own per-file and total caps.
-UPLOAD_ROUTES = re.compile(
-    r"^/v1/(?:"
-    r"teacher/courses/[^/]+/(?:documents|question-bank/upload)"
-    r"|school/student/homework/(?:[^/]+/submit|page-orientation)"
-    r"|school/student/submissions/[^/]+/retake"
-    r")/?$"
+# POST routes whose bodies carry base64 files, mapped to their larger
+# request caps by api/middleware/setup.py. Each route still enforces its
+# own per-file and total caps on the decoded files.
+UPLOAD_DOCUMENT = re.compile(r"^/v1/teacher/courses/[^/]+/documents/?$")
+UPLOAD_WORKSHEET = re.compile(r"^/v1/teacher/courses/[^/]+/question-bank/upload/?$")
+UPLOAD_SUBMISSION = re.compile(
+    r"^/v1/school/student/(?:homework/(?:[^/]+/submit|page-orientation)"
+    r"|submissions/[^/]+/retake)/?$"
 )
+
+
+def _bearer_is_valid(scope: Scope) -> bool:
+    """A signed, unexpired access token on the request. FastAPI reads the
+    whole body before auth dependencies run, so a large-body cap handed to
+    anonymous requests would let anyone make the server buffer it."""
+    from api.core.auth import decode_access_token
+
+    for name, value in scope.get("headers", []):
+        if name == b"authorization":
+            scheme, _, token = value.decode("latin-1").partition(" ")
+            return scheme.lower() == "bearer" and decode_access_token(token.strip()) is not None
+    return False
 
 
 class RequestSizeLimitMiddleware:
@@ -55,15 +68,19 @@ class RequestSizeLimitMiddleware:
         self,
         app: ASGIApp,
         max_size: int = 10 * 1024 * 1024,
-        upload_max_size: int | None = None,
+        upload_caps: list[tuple[re.Pattern[str], int]] | None = None,
     ) -> None:
         self.app = app
         self.max_size = max_size
-        self.upload_max_size = upload_max_size or max_size
+        self.upload_caps = upload_caps or []
 
     def limit_for(self, scope: Scope) -> int:
-        if scope.get("method") == "POST" and UPLOAD_ROUTES.match(scope.get("path", "")):
-            return self.upload_max_size
+        if scope.get("method") != "POST":
+            return self.max_size
+        path = scope.get("path", "")
+        for pattern, cap in self.upload_caps:
+            if pattern.match(path):
+                return cap if _bearer_is_valid(scope) else self.max_size
         return self.max_size
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:

@@ -88,11 +88,11 @@ const PAST_DUE_COPY: Record<Exclude<LatePolicy, "no_credit">, string> = {
  *
  * Per-file resizing for images runs client-side (resizeImageForUpload)
  * so a 12 MP phone photo doesn't get rejected at the 5 MB server cap.
- * PDFs go through untouched up to 25 MB.
+ * PDFs go through untouched up to 23 MB (api MAX_PDF_BYTES).
  */
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const MAX_PDF_BYTES = 25 * 1024 * 1024;
+const MAX_PDF_BYTES = 23 * 1024 * 1024;
 const MAX_FILES = 10;
 const ACCEPT = "image/jpeg,image/png,application/pdf";
 
@@ -297,7 +297,7 @@ export function SubmissionPanel({
 
     if (isPdf) {
       if (file.size > MAX_PDF_BYTES) {
-        return done(errorRow(file, "Too large (max 25MB)"));
+        return done(errorRow(file, "Too large (max 23MB)"));
       }
       try {
         const base64 = await fileToBase64(file);

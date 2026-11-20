@@ -47,7 +47,7 @@ export const WORKSHOP_UNDO_GRACE_MS = 30_000;
 export const SOLUTION_FAILED_PREFIX = "(solution failed";
 /** Materials tab upload size caps (match backend MAX_IMAGE_BYTES / MAX_PDF_BYTES). */
 export const MATERIAL_UPLOAD_MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-export const MATERIAL_UPLOAD_MAX_PDF_BYTES = 25 * 1024 * 1024;
+export const MATERIAL_UPLOAD_MAX_PDF_BYTES = 23 * 1024 * 1024;
 
 /** How many source documents one generation call sends (matches backend
  *  MAX_VISION_IMAGES). Selecting more is allowed — the extras are just

@@ -22,7 +22,7 @@ export async function uploadDocument(
   unitId: string,
 ): Promise<string> {
   // Per-format caps mirror the backend's magic-byte validation: 5MB for
-  // images, 25MB for PDFs. file.type is the browser-detected MIME — good
+  // images, 23MB for PDFs. file.type is the browser-detected MIME — good
   // enough for fast-fail; the server's magic-byte check is the source of truth.
   const isPdf = file.type === "application/pdf";
   const cap = isPdf ? MATERIAL_UPLOAD_MAX_PDF_BYTES : MATERIAL_UPLOAD_MAX_IMAGE_BYTES;
