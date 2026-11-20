@@ -162,8 +162,8 @@ with math.
   evaluation harness, golden set, and quality dashboards — quality is measured, not assumed.
 - **Focused on the AI loop today — a current scope, not a permanent boundary.** Today the
   scope is the homework → grade → understand → reteach loop, and Veradic *complements* tools
-  like Google Classroom / Canvas rather than replacing them: there is no gradebook export,
-  SIS/roster sync, messaging, or attendance in the code. This is where the product is
+  like Google Classroom / Canvas rather than replacing them: there is no SIS/roster sync,
+  messaging, or attendance in the code (grades do export as CSV, per section or per course). This is where the product is
   focused **now**, not a forever non-goal — general class-management ("LMS") capabilities
   are a possible future expansion. For now, ideate should propose within the AI loop and
   treat LMS-style features as out of current scope unless explicitly reopened.
