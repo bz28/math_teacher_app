@@ -286,6 +286,7 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
             const name = uniqueName("Unit 1", taken);
             const created = await teacher.createUnit(courseId, { name });
             target = created.id;
+            okUnits += 1;
             setSelected(created.id);
           } catch {
             unitCreateFailed = true;
@@ -707,7 +708,7 @@ function FirstTimeDropzone({
           </p>
 
           <p className="text-[11px] font-medium text-text-muted">
-            PDF, PNG, JPG up to 25 MB
+            PDF up to 25 MB · PNG or JPG up to 5 MB
           </p>
         </div>
       </UploadDropzone>
