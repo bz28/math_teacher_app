@@ -106,6 +106,15 @@ export function AssignmentDetailsStep({
               disabled={disabled}
               className="mt-2 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
             />
+            {/* AI grading is queued until the due date passes; with no due
+                date nothing ever triggers it, so the teacher must press
+                "Grade N ungraded" on the grading page. Say so here, where
+                the choice is made — it's the first-week trap otherwise. */}
+            <p className="mt-1.5 text-xs text-text-muted">
+              {schedule.dueAt
+                ? "AI grading starts when this date passes."
+                : "No due date? Submissions wait until you press Grade ungraded on the grading page."}
+            </p>
           </div>
           <div>
             <label className="block text-sm font-bold text-text-primary">Late policy</label>

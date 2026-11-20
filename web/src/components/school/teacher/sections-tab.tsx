@@ -92,7 +92,16 @@ export function SectionsTab({
       ) : sections.length === 0 ? (
         <EmptyState
           title="No sections yet"
-          description="Add a class period to get started."
+          description="Add a section for each class period you teach. Students join a section with its code."
+          action={
+            <button
+              type="button"
+              onClick={() => setShowNew(true)}
+              className="text-sm font-semibold text-primary hover:underline"
+            >
+              New section →
+            </button>
+          }
         />
       ) : (
         <div className="mt-4 space-y-3">

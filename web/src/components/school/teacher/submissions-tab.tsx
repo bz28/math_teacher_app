@@ -36,7 +36,14 @@ function reviewHref(courseId: string, row: SubmissionsInboxRow): string {
  *   • "Republish all" fans the existing per-HW publish-grades endpoint
  *     across every homework with edited-but-unreleased grades.
  */
-export function SubmissionsTab({ courseId }: { courseId: string }) {
+export function SubmissionsTab({
+  courseId,
+  onGoToHomework,
+}: {
+  courseId: string;
+  /** Empty-state CTA: switch the workspace to the Homework tab. */
+  onGoToHomework?: () => void;
+}) {
   const router = useRouter();
   const [rows, setRows] = useState<SubmissionsInboxRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -127,6 +134,17 @@ export function SubmissionsTab({ courseId }: { courseId: string }) {
         <EmptyState
           title="Nothing submitted yet"
           description="Publish a homework and student work will land here for grading."
+          action={
+            onGoToHomework && (
+              <button
+                type="button"
+                onClick={onGoToHomework}
+                className="text-sm font-semibold text-primary hover:underline"
+              >
+                Go to Homework →
+              </button>
+            )
+          }
         />
       </div>
     );

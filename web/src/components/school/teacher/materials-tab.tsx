@@ -267,8 +267,24 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
       // being selected, so `selected` is non-null when loose files
       // arrive — defense-in-depth: skip + toast if it isn't.
       if (tree.looseFiles.length > 0) {
-        if (selected !== null) {
-          await uploadBatch(tree.looseFiles, selected);
+        // A brand-new course has no unit to select, so the first-ever
+        // "Upload files" click (the empty state's only button) had
+        // nowhere to put loose files and failed outright. Give them a
+        // home instead: create "Unit 1" and upload there. The teacher
+        // can rename it from the folder tree.
+        let target = selected;
+        if (target === null && tops.length === 0) {
+          try {
+            const name = uniqueName("Unit 1", taken);
+            const created = await teacher.createUnit(courseId, { name });
+            target = created.id;
+            setSelected(created.id);
+          } catch {
+            // Fall through to the skip + toast below.
+          }
+        }
+        if (target !== null) {
+          await uploadBatch(tree.looseFiles, target);
         } else {
           failedFiles += tree.looseFiles.length;
           toast.error(

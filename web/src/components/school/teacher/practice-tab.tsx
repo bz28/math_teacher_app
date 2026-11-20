@@ -235,7 +235,16 @@ export function PracticeTab({ courseId }: { courseId: string }) {
         ) : practices.length === 0 ? (
           <EmptyState
             title="No practice sets yet"
-            description="Click New practice to create one — you can clone from a homework or start from scratch."
+            description="Ungraded sets students can drill until it clicks. Clone one from a homework or start from scratch."
+            action={
+              <button
+                type="button"
+                onClick={() => setShowNew(true)}
+                className="text-sm font-semibold text-primary hover:underline"
+              >
+                New practice →
+              </button>
+            }
           />
         ) : filtered.length === 0 ? (
           <EmptyState
