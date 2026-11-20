@@ -1,0 +1,14 @@
+{
+  "duration": 540,
+  "chapters": [
+    { "id": "welcome", "title": "How Veradic works", "start": 0 },
+    { "id": "courses", "title": "Courses and sections", "start": 60 },
+    { "id": "students", "title": "Getting students in", "start": 120 },
+    { "id": "materials", "title": "Materials and units", "start": 180 },
+    { "id": "homework", "title": "Creating homework", "start": 240 },
+    { "id": "grading", "title": "Reviewing AI grades", "start": 300 },
+    { "id": "understanding-check", "title": "The understanding check", "start": 360 },
+    { "id": "grades", "title": "Gradebook and export", "start": 420 },
+    { "id": "practice-insights", "title": "Practice and insights", "start": 480 }
+  ]
+}

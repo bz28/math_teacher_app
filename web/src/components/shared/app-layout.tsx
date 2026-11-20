@@ -21,6 +21,7 @@ import { TeacherUsagePill } from "@/components/shared/teacher-usage-pill";
 import { useToast } from "@/components/ui";
 import { FlagIcon } from "@/components/ui/icons";
 import { useTour } from "@/components/tour";
+import { useWalkthrough } from "@/components/walkthrough";
 
 // ── Student nav items ──
 
@@ -362,7 +363,7 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { user, logout, loadUser } = useAuthStore();
   const toast = useToast();
-  const tour = useTour();
+  const walkthrough = useWalkthrough();
   const [previewLoading, setPreviewLoading] = useState(false);
 
   return (
@@ -436,20 +437,14 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
             {previewLoading ? "Switching…" : "Preview as student"}
           </button>
 
-          {/* Re-enter the Field Guide tour anytime — never touches data.
-              Step one anchors the New-course button + handoff dialog that
-              exist only on /school/teacher, so navigate there first (from
-              wherever in the workspace the teacher opened the menu) before
-              starting, or the tour lands on a missing target. */}
+          {/* The chaptered video walkthrough, from anywhere — opens over
+              the current page, so nothing the teacher was doing is lost. */}
           <button
-            onClick={() => {
-              router.push("/school/teacher");
-              tour.start("teacher");
-            }}
+            onClick={() => walkthrough.open()}
             className="flex w-full items-center gap-3 px-3 py-2 text-sm font-medium text-text-secondary transition-colors hover:text-text-primary"
           >
-            <CompassIcon />
-            Take the tour
+            <PlayIcon />
+            Video walkthrough
           </button>
 
           {/* The catch-all report — no context attached beyond the page
@@ -635,11 +630,11 @@ function SwitchIcon() {
   );
 }
 
-function CompassIcon() {
+function PlayIcon() {
   return (
     <svg className="h-5 w-5 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <circle cx="12" cy="12" r="9" />
-      <polygon points="16.2 7.8 13.4 13.4 7.8 16.2 10.6 10.6 16.2 7.8" />
+      <path d="M10 8.5v7l5.5-3.5z" />
     </svg>
   );
 }

@@ -4,7 +4,6 @@ import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { TOUR_IDS } from "@/components/tour";
 import {
   ApiError,
   EntitlementError,
@@ -118,7 +117,6 @@ export function StudentInsightsTab({ courseId }: { courseId: string }) {
     <section>
       <header className="max-w-2xl">
         <h2
-          data-tour-id={TOUR_IDS.teacherInsights}
           className="font-serif text-[26px] leading-tight tracking-[-0.015em] text-text-primary"
         >
           Student Insights

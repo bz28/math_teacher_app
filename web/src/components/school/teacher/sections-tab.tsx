@@ -5,42 +5,20 @@ import { teacher, type TeacherSection, type TeacherSectionDetail } from "@/lib/a
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TOUR_IDS } from "@/components/tour";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export function SectionsTab({
   courseId,
   onChanged,
-  showNewSection,
-  onShowNewSectionChange,
-  onSectionCreated,
-  expandFirstRoster,
-  onExpandFirstRosterConsumed,
 }: {
   courseId: string;
   onChanged: () => void;
-  /** Controlled "new section" modal — supplied by the onboarding tour's
-   *  live handoff. Falls back to internal state when omitted. */
-  showNewSection?: boolean;
-  onShowNewSectionChange?: (open: boolean) => void;
-  /** Fired when a section is actually created (not just the modal closing).
-   *  The onboarding tour uses this to advance, the way the course step
-   *  advances on course creation. */
-  onSectionCreated?: () => void;
-  /** Onboarding tour step two requests the first section's roster be
-   *  expanded so the invite control (TOUR_IDS.teacherInvite) mounts
-   *  before the spotlight measures it. One-shot: cleared via
-   *  onExpandFirstRosterConsumed once consumed. */
-  expandFirstRoster?: boolean;
-  onExpandFirstRosterConsumed?: () => void;
 }) {
   const [sections, setSections] = useState<TeacherSection[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showNewLocal, setShowNewLocal] = useState(false);
-  const showNew = showNewSection ?? showNewLocal;
-  const setShowNew = onShowNewSectionChange ?? setShowNewLocal;
+  const [showNew, setShowNew] = useState(false);
   const [openRoster, setOpenRoster] = useState<string | null>(null);
 
   const reload = async () => {
@@ -60,24 +38,12 @@ export function SectionsTab({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId]);
 
-  // Honour the tour's one-shot request to open the first section's
-  // roster. Wait until sections have loaded (length > 0) before
-  // consuming, so a first-run teacher who just created a section in
-  // step one still resolves a real target. Don't override a roster the
-  // teacher already has open.
-  useEffect(() => {
-    if (!expandFirstRoster || sections.length === 0) return;
-    setOpenRoster((cur) => cur ?? sections[0].id);
-    onExpandFirstRosterConsumed?.();
-  }, [expandFirstRoster, sections, onExpandFirstRosterConsumed]);
-
   return (
     <div>
       <div className="flex items-center justify-between">
         <h2 className="font-serif text-[24px] leading-tight tracking-[-0.01em] text-text-primary">Class sections</h2>
         <button
           type="button"
-          data-tour-id={TOUR_IDS.teacherNewSection}
           className="rounded-[--radius-sm] bg-primary px-4 py-2 text-sm font-semibold tracking-[0.01em] text-white transition-colors hover:bg-primary-dark"
           onClick={() => setShowNew(true)}
         >
@@ -133,7 +99,6 @@ export function SectionsTab({
           onCreated={() => {
             // Signal a real creation BEFORE closing, so the tour advances
             // (and the close handler treats this as create, not cancel).
-            onSectionCreated?.();
             setShowNew(false);
             reload();
             onChanged();
@@ -773,7 +738,6 @@ function BulkInviteForm({
       </label>
       <textarea
         id={`bulk-invite-${sectionId}`}
-        data-tour-id={TOUR_IDS.teacherInvite}
         value={text}
         onChange={(e) => {
           setText(e.target.value);
