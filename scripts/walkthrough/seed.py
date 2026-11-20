@@ -25,11 +25,13 @@ No LLM calls. Everything is written straight to the DB.
 from __future__ import annotations
 
 import base64
+import re
 import uuid
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import delete, select, update
 
+from api.config import settings
 from api.core import photo_store
 from api.database import get_session_factory
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
@@ -247,7 +249,24 @@ async def _draft_homework(s, course, published_hw, section, teacher, now) -> uui
     return hw.id
 
 
+def assert_local_world() -> None:
+    """Refuse to seed anything but a local database with local photo storage.
+
+    Retiring the previous world nulls the fixed join codes and renames
+    matching emails across the whole database, so this must never run
+    against a shared, staging or production DB, or upload to the real
+    photo bucket.
+    """
+    db = settings.database_url
+    if not re.search(r"@(localhost|127\.0\.0\.1)(:\d+)?/", db):
+        host = db.split("@")[-1].split("/")[0] if db else "unset"  # never echo credentials
+        raise SystemExit(f"refusing to run: DATABASE_URL must point at localhost (host: {host})")
+    if settings.photo_bucket:
+        raise SystemExit("refusing to run: unset PHOTO_BUCKET so photos stay on local disk")
+
+
 async def seed() -> dict:
+    assert_local_world()
     await _retire_previous_world()
     ids = await seed_dense_school()
     now = datetime.now(UTC)
