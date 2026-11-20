@@ -310,7 +310,9 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
           toast.error(
             unitCreateFailed
               ? "Couldn't create a unit for these files. Try New Unit, then upload again."
-              : "Pick a unit on the left before dropping loose files.",
+              : !loadedRef.current
+                ? "Couldn't load your materials. Refresh the page, then upload again."
+                : "Pick a unit on the left before dropping loose files.",
           );
         }
       }
