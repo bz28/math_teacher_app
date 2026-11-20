@@ -32,6 +32,7 @@ import {
   mapWithConcurrency,
   sanitizeFolderName,
   treeFromDirectoryPicker,
+  looseFilesTarget,
   uniqueName,
 } from "./materials/walk-dropped-folder";
 import {
@@ -204,6 +205,9 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
       let okFiles = 0;
       let okUnits = 0;
       let failedFiles = 0;
+      // First unit this drop creates or merges into — where loose files
+      // land when no unit is selected (an empty course).
+      let firstTargetUnitId: string | null = null;
       const UPLOAD_CONCURRENCY = 5;
 
       const uploadBatch = async (files: File[], unitId: string) => {
@@ -241,6 +245,7 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
           continue;
         }
 
+        firstTargetUnitId ??= targetUnitId;
         await uploadBatch(folder.files, targetUnitId);
 
         // level-2 subfolders — on merge we still create them under the
@@ -270,17 +275,20 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
         // A brand-new course has no unit to select, so the first-ever
         // "Upload files" click (the empty state's only button) had
         // nowhere to put loose files and failed outright. Give them a
-        // home instead: create "Unit 1" and upload there. The teacher
-        // can rename it from the folder tree.
-        let target = selected;
-        if (target === null && tops.length === 0) {
+        // home instead: the first unit this same drop created from a
+        // folder, else a new "Unit 1". The teacher can rename it from
+        // the folder tree.
+        const route = looseFilesTarget(selected, firstTargetUnitId, tops.length > 0);
+        let target = route.kind === "unit" ? route.id : null;
+        let unitCreateFailed = false;
+        if (route.kind === "create") {
           try {
             const name = uniqueName("Unit 1", taken);
             const created = await teacher.createUnit(courseId, { name });
             target = created.id;
             setSelected(created.id);
           } catch {
-            // Fall through to the skip + toast below.
+            unitCreateFailed = true;
           }
         }
         if (target !== null) {
@@ -288,7 +296,9 @@ export function MaterialsTab({ courseId, onChanged }: { courseId: string; onChan
         } else {
           failedFiles += tree.looseFiles.length;
           toast.error(
-            "Pick a unit on the left before dropping loose files.",
+            unitCreateFailed
+              ? "Couldn't create a unit for these files. Try New Unit, then upload again."
+              : "Pick a unit on the left before dropping loose files.",
           );
         }
       }

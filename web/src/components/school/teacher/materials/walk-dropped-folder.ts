@@ -218,3 +218,22 @@ export async function mapWithConcurrency<T, R>(
   await Promise.all(workers);
   return out;
 }
+
+/**
+ * Where loose (non-folder) files from an import should land.
+ *  - the selected unit, when there is one;
+ *  - else the first unit this same import created/merged from a folder;
+ *  - else, in a course with no units at all, a unit we create for them
+ *    ("create") — the first-ever upload in a new course has nothing to
+ *    select, and failing it was a first-week dead end;
+ *  - else nowhere ("none": the caller asks the teacher to pick a unit).
+ */
+export function looseFilesTarget(
+  selected: string | null,
+  firstImportedUnitId: string | null,
+  courseHasTopUnits: boolean,
+): { kind: "unit"; id: string } | { kind: "create" } | { kind: "none" } {
+  const id = selected ?? firstImportedUnitId;
+  if (id !== null) return { kind: "unit", id };
+  return courseHasTopUnits ? { kind: "none" } : { kind: "create" };
+}
