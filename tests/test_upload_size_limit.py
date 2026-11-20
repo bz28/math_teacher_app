@@ -162,3 +162,24 @@ async def test_real_app_lets_a_signed_in_12mb_upload_through():
         # Past the size gate: the route itself answers (the user and course
         # don't exist, so it refuses on its own terms).
         assert signed.status_code != 413, signed.text
+
+
+async def test_real_app_refuses_chunked_bodies_with_the_right_status():
+    """Without a Content-Length the body is read in the middleware, so the
+    real app answers 401/413 itself; refusing from inside the app's
+    receive() came back as FastAPI's generic 400 instead."""
+    big = b"J" * (settings.max_request_size + 1024)
+
+    async def chunks():
+        for i in range(0, len(big), 1024 * 1024):
+            yield big[i:i + 1024 * 1024]
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
+        anon = await c.post(DOC, content=chunks())
+        assert anon.status_code == 413, anon.text
+        stale = await c.post(DOC, content=chunks(),
+                             headers={"Authorization": f"Bearer {_expired_token()}"})
+        assert stale.status_code == 401, stale.text
+        other = await c.post("/v1/auth/login", content=chunks())
+        assert other.status_code == 413, other.text

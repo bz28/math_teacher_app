@@ -215,11 +215,18 @@ export function SubmissionPanel({
     .filter((f) => !f.error)
     .flatMap((f, i) => (stillSideways(f) ? [i + 1] : []));
   const checking = stagedFiles.some((f) => f.checking && !f.error);
+  // A turn-in's PDFs share one cap (the server's MAX_PDF_BYTES): the
+  // reader may send a PDF whole, and all pages go in one request.
+  const pdfBytes = stagedFiles
+    .filter((f) => !f.error && f.mediaType === "application/pdf")
+    .reduce((n, f) => n + f.size, 0);
+  const pdfsTooLarge = pdfBytes > MAX_PDF_BYTES;
   const canSubmit =
     validCount > 0 &&
     !submitting &&
     !preparing &&
     !checking &&
+    !pdfsTooLarge &&
     sidewaysPages.length === 0;
 
   // Why the submit CTA is disabled, in the student's words. Mirrors the
@@ -236,7 +243,9 @@ export function SubmissionPanel({
           ? "None of these files can be turned in yet — fix or remove the ones flagged above, then add one that's ready."
           : checking
             ? "Checking your pages…"
-            : sidewaysHint(sidewaysPages);
+            : pdfsTooLarge
+              ? `Your PDFs come to ${(pdfBytes / 1024 / 1024).toFixed(1)} MB together, over the ${MAX_PDF_BYTES / 1024 / 1024} MB limit. Remove one, or take photos of some pages instead.`
+              : sidewaysHint(sidewaysPages);
 
   const newRowId = () =>
     typeof crypto !== "undefined" && "randomUUID" in crypto

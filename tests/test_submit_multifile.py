@@ -427,7 +427,7 @@ async def test_submit_rejects_pdfs_too_large_together(
             json={"files": [PAGE_PNG, TINY_PDF, TINY_PDF]},
         )
         assert r.status_code == 413, r.text
-        assert "PDFs too large together" in r.json()["detail"]
+        assert "PDFs in this turn-in come to" in r.json()["detail"]
         # One PDF plus a photo is fine: photos don't count toward it.
         r = await client.post(
             f"/v1/school/student/homework/{world['assignment_id']}/submit",
@@ -435,3 +435,22 @@ async def test_submit_rejects_pdfs_too_large_together(
             json={"files": [PAGE_PNG, TINY_PDF]},
         )
         assert r.status_code == 200, r.text
+
+
+async def test_submit_accepts_a_pdf_exactly_at_the_cap(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """Sizes are counted exactly, not estimated from base64 length: the
+    estimate rounds padding up and refused a PDF the per-file check had
+    just accepted. TINY_PDF decodes to 26 bytes; its base64 estimates 27."""
+    from unittest.mock import patch
+
+    exact = len(base64.b64decode(TINY_PDF))
+    assert len(TINY_PDF) * 3 // 4 > exact  # the case that used to fail
+    with patch("api.routes.school_student_practice.MAX_PDF_BYTES", exact):
+        r = await client.post(
+            f"/v1/school/student/homework/{world['assignment_id']}/submit",
+            headers=_auth(world["student_token"]),
+            json={"files": [TINY_PDF]},
+        )
+    assert r.status_code == 200, r.text

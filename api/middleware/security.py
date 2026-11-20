@@ -105,25 +105,41 @@ class RequestSizeLimitMiddleware:
             await self._refuse(refuse_status, scope, receive, send)
             return
 
-        # Track actual bytes received (catches chunked transfers without Content-Length)
-        bytes_received = 0
+        if content_length:
+            # The server holds the client to its declared length, so a
+            # body within the cap here stays within it.
+            await self.app(scope, receive, send)
+            return
 
-        async def receive_with_limit() -> Any:
-            nonlocal bytes_received
+        # No Content-Length (chunked): read the body here, up to the cap,
+        # and refuse past it before the app sees any of it. Refusing from
+        # inside the app's receive() doesn't work: FastAPI's body parsing
+        # turns any error raised there into a generic 400.
+        chunks: list[bytes] = []
+        received = 0
+        while True:
             message = await receive()
-            if message["type"] == "http.request":
-                bytes_received += len(message.get("body", b""))
-                if bytes_received > max_size:
-                    raise ValueError("Request body too large")
-            return message
-
-        try:
-            await self.app(scope, receive_with_limit, send)
-        except ValueError as e:
-            if "Request body too large" in str(e):
+            if message["type"] != "http.request":
+                return  # client went away mid-body
+            chunk = message.get("body", b"")
+            received += len(chunk)
+            if received > max_size:
                 await self._refuse(refuse_status, scope, receive, send)
-            else:
-                raise
+                return
+            chunks.append(chunk)
+            if not message.get("more_body", False):
+                break
+
+        replayed = False
+
+        async def replay() -> Any:
+            nonlocal replayed
+            if not replayed:
+                replayed = True
+                return {"type": "http.request", "body": b"".join(chunks), "more_body": False}
+            return await receive()
+
+        await self.app(scope, replay, send)
 
     @staticmethod
     async def _refuse(status: int, scope: Scope, receive: Receive, send: Send) -> None:

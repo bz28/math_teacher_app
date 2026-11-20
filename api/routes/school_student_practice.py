@@ -25,6 +25,7 @@ approved variation content.
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import logging
 import uuid
@@ -2236,6 +2237,7 @@ async def _validated_upload_files(body: SubmitHomeworkRequest) -> list[dict[str,
     # cap so a 10-PDF payload can't blow up the row store.
     validated_files: list[dict[str, str]] = []
     total_bytes = 0
+    pdf_bytes = 0
     for i, raw in enumerate(body.files):
         # Strip an optional `data:<media>;base64,` prefix before
         # validation. The prefix is informational; magic bytes inside
@@ -2291,32 +2293,33 @@ async def _validated_upload_files(body: SubmitHomeworkRequest) -> list[dict[str,
                     detail=f"File {i + 1}: couldn't read this file to rotate it",
                 ) from e
             # Count what is stored, not what was sent.
-            total_bytes += len(b64) * 3 // 4
+            stored = len(base64.b64decode(b64))
         else:
-            total_bytes += len(decoded)
+            stored = len(decoded)
+        total_bytes += stored
+        if media_type == "application/pdf":
+            pdf_bytes += stored
         validated_files.append({"data": b64, "media_type": media_type})
-    # The reader sends a PDF it can't render page by page (unreadable, or
-    # past its page cap) whole, and every page of a turn-in goes in one
-    # model request. So the PDFs together must fit that request, like a
-    # single PDF does (MAX_PDF_BYTES). Photos are resampled, so they don't
-    # count here.
-    pdf_bytes = sum(
-        len(f["data"]) * 3 // 4 for f in validated_files if f["media_type"] == "application/pdf"
-    )
-    if pdf_bytes > MAX_PDF_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=(
-                f"PDFs too large together: {pdf_bytes / 1024 / 1024:.1f}MB "
-                f"(max {MAX_PDF_BYTES // 1024 // 1024}MB of PDFs per turn-in)"
-            ),
-        )
     if total_bytes > MAX_SUBMISSION_TOTAL_BYTES:
         raise HTTPException(
             status_code=413,
             detail=(
                 f"Submission too large: {total_bytes / 1024 / 1024:.1f}MB "
                 f"(max {MAX_SUBMISSION_TOTAL_BYTES // 1024 // 1024}MB total)"
+            ),
+        )
+    # The reader sends a PDF it can't render page by page (unreadable, or
+    # past its page cap) whole, and every page of a turn-in goes in one
+    # model request. So the PDFs together must fit that request, like a
+    # single PDF does (MAX_PDF_BYTES). Photos are resampled, so they don't
+    # count here.
+    if pdf_bytes > MAX_PDF_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"The PDFs in this turn-in come to {pdf_bytes / 1024 / 1024:.1f}MB "
+                f"(max {MAX_PDF_BYTES // 1024 // 1024}MB of PDFs). "
+                "Take photos of some pages instead, or split the PDF."
             ),
         )
     return validated_files
