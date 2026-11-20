@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.audit_log import record_activity, record_question_edit
 from api.core.checklist_points import MAX_CHECKLIST_ITEM_CHARS, MAX_CHECKLIST_ITEMS
 from api.core.constants import SOLUTION_FAILED_SENTINEL_PREFIX
+from api.core.document_vision import MAX_TOTAL_SOURCE_B64_BYTES
 from api.core.drawing_check import ChecklistItem
 from api.core.drawing_requirement import classify_requires_drawing
 from api.core.entitlements import Entitlement, check_entitlement
@@ -541,7 +542,12 @@ async def upload_worksheet(
         )
 
     # Validate each file (image or PDF) and build the stored payload.
+    # Extraction sends every file to the model in ONE request, as-is
+    # (`_extract_from_files`), so the batch must fit that request's
+    # budget. Refuse it here, where the teacher sees why, rather than
+    # accepting it and failing the job in the background.
     validated_files = []
+    total_b64 = 0
     for i, file_b64 in enumerate(body.images):
         try:
             _, media_type = validate_and_decode_upload(file_b64)
@@ -550,6 +556,13 @@ async def upload_worksheet(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"File {i + 1}: {e}",
             ) from e
+        total_b64 += len(file_b64)
+        if total_b64 > MAX_TOTAL_SOURCE_B64_BYTES:
+            raw_mb = MAX_TOTAL_SOURCE_B64_BYTES * 3 // 4 // 1024 // 1024
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"Files are too large together (max about {raw_mb}MB in total)",
+            )
         validated_files.append({"data": file_b64, "media_type": media_type})
 
     # Validate the assignment belongs to this teacher + this course.

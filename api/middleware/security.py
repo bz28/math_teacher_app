@@ -1,3 +1,4 @@
+import re
 import uuid
 from collections.abc import MutableMapping
 from typing import Any
@@ -38,10 +39,32 @@ class SecurityHeadersMiddleware:
         await self.app(scope, receive, send_with_headers)
 
 
+# POST routes whose bodies carry base64 files. They get the larger
+# upload cap; each still enforces its own per-file and total caps.
+UPLOAD_ROUTES = re.compile(
+    r"^/v1/(?:"
+    r"teacher/courses/[^/]+/(?:documents|question-bank/upload)"
+    r"|school/student/homework/(?:[^/]+/submit|page-orientation)"
+    r"|school/student/submissions/[^/]+/retake"
+    r")/?$"
+)
+
+
 class RequestSizeLimitMiddleware:
-    def __init__(self, app: ASGIApp, max_size: int = 10 * 1024 * 1024) -> None:
+    def __init__(
+        self,
+        app: ASGIApp,
+        max_size: int = 10 * 1024 * 1024,
+        upload_max_size: int | None = None,
+    ) -> None:
         self.app = app
         self.max_size = max_size
+        self.upload_max_size = upload_max_size or max_size
+
+    def limit_for(self, scope: Scope) -> int:
+        if scope.get("method") == "POST" and UPLOAD_ROUTES.match(scope.get("path", "")):
+            return self.upload_max_size
+        return self.max_size
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -51,7 +74,8 @@ class RequestSizeLimitMiddleware:
         # Fast-reject if Content-Length is declared and too large
         headers = dict(scope.get("headers", []))
         content_length = headers.get(b"content-length")
-        if content_length and int(content_length) > self.max_size:
+        max_size = self.limit_for(scope)
+        if content_length and int(content_length) > max_size:
             response = Response(
                 content='{"detail":"Request body too large"}',
                 status_code=413,
@@ -62,7 +86,6 @@ class RequestSizeLimitMiddleware:
 
         # Track actual bytes received (catches chunked transfers without Content-Length)
         bytes_received = 0
-        max_size = self.max_size
 
         async def receive_with_limit() -> Any:
             nonlocal bytes_received

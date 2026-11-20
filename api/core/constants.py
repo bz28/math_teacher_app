@@ -40,6 +40,12 @@ MAX_PDF_BYTES = 25 * 1024 * 1024
 # around 30 MB after client-side resize) and saves the DB from
 # pathological payloads.
 MAX_SUBMISSION_TOTAL_BYTES = 50 * 1024 * 1024
+# Request-body cap for the routes that carry files. Uploads travel as
+# base64 JSON (4/3 the raw size), so the global 10 MB body cap rejected
+# any PDF over ~7.5 MB before the 25 MB check above ever ran. This fits
+# a full 50 MB submission once encoded, plus room for the JSON around it.
+# Every other route keeps settings.max_request_size.
+MAX_UPLOAD_REQUEST_BYTES = MAX_SUBMISSION_TOTAL_BYTES * 4 // 3 + 2 * 1024 * 1024
 # Hard cap on number of files per submission. Mirrors the teacher
 # upload cap. Real homework submissions are 1-3 pages; 10 leaves
 # headroom for multi-page worksheets.

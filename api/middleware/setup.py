@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
 from api.config import settings
+from api.core.constants import MAX_UPLOAD_REQUEST_BYTES
 from api.middleware.errors import UnhandledErrorMiddleware
 from api.middleware.logging import LoggingMiddleware
 from api.middleware.security import RequestSizeLimitMiddleware, SecurityHeadersMiddleware
@@ -20,7 +21,11 @@ def configure_middleware(app: FastAPI) -> None:
     app.add_middleware(UnhandledErrorMiddleware)
 
     # Request size limit
-    app.add_middleware(RequestSizeLimitMiddleware, max_size=settings.max_request_size)
+    app.add_middleware(
+        RequestSizeLimitMiddleware,
+        max_size=settings.max_request_size,
+        upload_max_size=MAX_UPLOAD_REQUEST_BYTES,
+    )
 
     # Security headers
     app.add_middleware(SecurityHeadersMiddleware)
