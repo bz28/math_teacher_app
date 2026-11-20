@@ -37,14 +37,14 @@ From **My Courses**, click **New Course** and give it a name, subject, and (opti
 
 Two ways:
 
-- **Join code** — every section card shows a short code under "Share with your class" (click to copy). Students enter it when they sign up at veradicai.com/register. You can close enrollment or regenerate the code from the section's **Manage** panel.
-- **Email invites** — paste student emails (up to 100 at a time, comma- or line-separated) into **Invite students** on the section. Each student gets an email link that takes them to sign up (or sign in) and lands them in your section. Pending invites can be resent or revoked.
+- **Join code** — every section card shows a short code under "Share with your class" (click to copy). Students enter it when they sign up at veradicai.com/register. **Close enrollment** sits right beside the code; **Regenerate join code** is in the section's **Manage** panel.
+- **Email invites** — paste student emails (up to 100 at a time, comma- or line-separated) into **Invite students** on the section. Students who already have a Veradic account are added to the section right away; everyone else gets an email link to sign up, which lands them in your section. Pending invites can be resent or revoked.
 
 Every student account is created through one of these paths: Veradic has no personal self-signup, so students of any age join through their teacher's class (which also satisfies the federal COPPA school-consent exception for under-13s).
 
 ### 4. Add curriculum materials
 
-Upload your textbook chapters, problem sets, or curriculum documents (PDF, PNG, or JPG up to 25 MB) to the course **Materials** tab. Materials are organized into **units** — think chapters. Create a unit with **New Unit** first (or drop a whole folder, which becomes a unit), then upload into it. Every homework belongs to at least one unit, and Veradic uses that unit's materials as context when generating problems, so they stay aligned with what you actually teach.
+Upload your textbook chapters, problem sets, or curriculum documents (PDF, PNG, or JPG up to 25 MB) to the course **Materials** tab. Materials are organized into **units** — think chapters. Create a unit with **New Unit** (or drop a whole folder, which becomes a unit) and upload into it. Every homework belongs to at least one unit. When you generate problems, tick the materials you want Veradic to draw on in the source-material picker, so the problems stay aligned with what you actually teach.
 
 ---
 
