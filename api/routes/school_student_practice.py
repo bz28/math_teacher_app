@@ -42,7 +42,7 @@ from sqlalchemy.orm import load_only, undefer
 
 from api.core import photo_store
 from api.core.audit_log import record_student_activity
-from api.core.constants import MAX_SUBMISSION_FILES, MAX_SUBMISSION_TOTAL_BYTES
+from api.core.constants import MAX_PDF_BYTES, MAX_SUBMISSION_FILES, MAX_SUBMISSION_TOTAL_BYTES
 from api.core.image_utils import (
     MIN_PAGE_LONG_EDGE,
     PAGE_ROTATIONS,
@@ -2295,6 +2295,22 @@ async def _validated_upload_files(body: SubmitHomeworkRequest) -> list[dict[str,
         else:
             total_bytes += len(decoded)
         validated_files.append({"data": b64, "media_type": media_type})
+    # The reader sends a PDF it can't render page by page (unreadable, or
+    # past its page cap) whole, and every page of a turn-in goes in one
+    # model request. So the PDFs together must fit that request, like a
+    # single PDF does (MAX_PDF_BYTES). Photos are resampled, so they don't
+    # count here.
+    pdf_bytes = sum(
+        len(f["data"]) * 3 // 4 for f in validated_files if f["media_type"] == "application/pdf"
+    )
+    if pdf_bytes > MAX_PDF_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"PDFs too large together: {pdf_bytes / 1024 / 1024:.1f}MB "
+                f"(max {MAX_PDF_BYTES // 1024 // 1024}MB of PDFs per turn-in)"
+            ),
+        )
     if total_bytes > MAX_SUBMISSION_TOTAL_BYTES:
         raise HTTPException(
             status_code=413,

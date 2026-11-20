@@ -37,8 +37,8 @@ MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB after base64 decode
 # block, and anything bigger would be accepted, stored, and then never
 # reach the model. tests/test_upload_size_limit.py pins the fit.
 MAX_PDF_BYTES = 23 * 1024 * 1024
-# Whole-submission cap. With ≤10 files at up to 25 MB each the worst
-# case is 250 MB, which we don't want hitting the row store. 50 MB is
+# Whole-submission cap. With ≤10 files at up to 23 MB each the worst
+# case is 230 MB, which we don't want hitting the row store. 50 MB is
 # generous for real homework (a 10-photo phone submission tops out
 # around 30 MB after client-side resize) and saves the DB from
 # pathological payloads.

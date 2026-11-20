@@ -92,10 +92,9 @@ async def test_submit_homework_rejects_oversized_image_with_index(
     files with a generic error. Builds a 6MB PNG-magic blob, which
     is well over the 5MB image cap but well under any web-layer
     body-size middleware (so we exercise our handler, not the
-    framework's 413). The PDF cap (25MB) is harder to test through
-    HTTP because the payload bloats past framework limits before
-    hitting our validator — the validator's per-format split is
-    covered directly in tests/test_image_utils.py."""
+    framework's 413). The PDF cap (MAX_PDF_BYTES) is covered directly
+    in tests/test_image_utils.py, and the request caps that let a big
+    PDF reach this handler in tests/test_upload_size_limit.py."""
     # 6 MB raw + PNG header → ~8 MB base64. PNG is capped at 5 MB,
     # so this trips MAX_IMAGE_BYTES inside validate_and_decode_upload.
     oversized_raw = _JPEG_HEADER + b"\x00" * (6 * 1024 * 1024)
@@ -410,3 +409,29 @@ async def test_submit_accepts_tablet_handwriting_over_a_small_paper_picture(
         json={"files": [tablet_pdf((300, 388)), tablet_pdf((1, 1))]},
     )
     assert r.status_code == 200, r.text
+
+
+async def test_submit_rejects_pdfs_too_large_together(
+    client: AsyncClient, world: dict[str, Any]
+) -> None:
+    """The reader can send a PDF whole, and a turn-in's pages share one
+    model request, so the PDFs together are held to the single-PDF cap.
+    The cap is shrunk so two tiny PDFs exceed it and one doesn't."""
+    from unittest.mock import patch
+
+    one_pdf = len(base64.b64decode(TINY_PDF))
+    with patch("api.routes.school_student_practice.MAX_PDF_BYTES", one_pdf + 1):
+        r = await client.post(
+            f"/v1/school/student/homework/{world['assignment_id']}/submit",
+            headers=_auth(world["student_token"]),
+            json={"files": [PAGE_PNG, TINY_PDF, TINY_PDF]},
+        )
+        assert r.status_code == 413, r.text
+        assert "PDFs too large together" in r.json()["detail"]
+        # One PDF plus a photo is fine: photos don't count toward it.
+        r = await client.post(
+            f"/v1/school/student/homework/{world['assignment_id']}/submit",
+            headers=_auth(world["student_token"]),
+            json={"files": [PAGE_PNG, TINY_PDF]},
+        )
+        assert r.status_code == 200, r.text

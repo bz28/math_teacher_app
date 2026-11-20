@@ -50,17 +50,19 @@ UPLOAD_SUBMISSION = re.compile(
 )
 
 
-def _bearer_is_valid(scope: Scope) -> bool:
-    """A signed, unexpired access token on the request. FastAPI reads the
-    whole body before auth dependencies run, so a large-body cap handed to
-    anonymous requests would let anyone make the server buffer it."""
+def _bearer_status(scope: Scope) -> str:
+    """"valid", "invalid" (a Bearer token that doesn't verify, e.g. expired)
+    or "absent". FastAPI reads the whole body before auth dependencies run,
+    so the large-body cap goes only to verified tokens."""
     from api.core.auth import decode_access_token
 
     for name, value in scope.get("headers", []):
         if name == b"authorization":
             scheme, _, token = value.decode("latin-1").partition(" ")
-            return scheme.lower() == "bearer" and decode_access_token(token.strip()) is not None
-    return False
+            if scheme.lower() != "bearer":
+                return "absent"
+            return "valid" if decode_access_token(token.strip()) is not None else "invalid"
+    return "absent"
 
 
 class RequestSizeLimitMiddleware:
@@ -74,14 +76,21 @@ class RequestSizeLimitMiddleware:
         self.max_size = max_size
         self.upload_caps = upload_caps or []
 
-    def limit_for(self, scope: Scope) -> int:
+    def limit_for(self, scope: Scope) -> tuple[int, int]:
+        """(byte cap, status to refuse with past it). An upload with an
+        expired token is refused with 401, not 413: clients refresh their
+        session on a 401 and retry, while a 413 would tell a student her
+        in-limits file is too large."""
         if scope.get("method") != "POST":
-            return self.max_size
+            return self.max_size, 413
         path = scope.get("path", "")
         for pattern, cap in self.upload_caps:
             if pattern.match(path):
-                return cap if _bearer_is_valid(scope) else self.max_size
-        return self.max_size
+                status = _bearer_status(scope)
+                if status == "valid":
+                    return cap, 413
+                return self.max_size, 401 if status == "invalid" else 413
+        return self.max_size, 413
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -91,14 +100,9 @@ class RequestSizeLimitMiddleware:
         # Fast-reject if Content-Length is declared and too large
         headers = dict(scope.get("headers", []))
         content_length = headers.get(b"content-length")
-        max_size = self.limit_for(scope)
+        max_size, refuse_status = self.limit_for(scope)
         if content_length and int(content_length) > max_size:
-            response = Response(
-                content='{"detail":"Request body too large"}',
-                status_code=413,
-                media_type="application/json",
-            )
-            await response(scope, receive, send)
+            await self._refuse(refuse_status, scope, receive, send)
             return
 
         # Track actual bytes received (catches chunked transfers without Content-Length)
@@ -117,11 +121,25 @@ class RequestSizeLimitMiddleware:
             await self.app(scope, receive_with_limit, send)
         except ValueError as e:
             if "Request body too large" in str(e):
-                response = Response(
-                    content='{"detail":"Request body too large"}',
-                    status_code=413,
-                    media_type="application/json",
-                )
-                await response(scope, receive, send)
+                await self._refuse(refuse_status, scope, receive, send)
             else:
                 raise
+
+    @staticmethod
+    async def _refuse(status: int, scope: Scope, receive: Receive, send: Send) -> None:
+        # 401 carries the same detail and header get_current_user sends, so
+        # clients take their usual refresh-and-retry path.
+        if status == 401:
+            response = Response(
+                content='{"detail":"Invalid or expired token"}',
+                status_code=401,
+                media_type="application/json",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        else:
+            response = Response(
+                content='{"detail":"Request body too large"}',
+                status_code=413,
+                media_type="application/json",
+            )
+        await response(scope, receive, send)

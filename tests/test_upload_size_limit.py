@@ -100,12 +100,39 @@ def test_signed_in_upload_gets_the_upload_cap(chunked):
 
 @pytest.mark.parametrize(
     "headers",
-    [{}, {"Authorization": "Bearer not-a-jwt"}, {"Authorization": f"Basic {_token()}"}],
-    ids=["anonymous", "bad-token", "not-bearer"],
+    [{}, {"Authorization": f"Basic {_token()}"}],
+    ids=["anonymous", "not-bearer"],
 )
 def test_unauthenticated_upload_keeps_the_global_cap(headers):
     c = _client(max_size=100, upload_max=1000)
     assert c.post(DOC, content=b"x" * 500, headers=headers).status_code == 413
+
+
+def _expired_token() -> str:
+    from datetime import UTC, datetime, timedelta
+
+    from jose import jwt
+
+    exp = datetime.now(UTC) - timedelta(minutes=1)
+    return jwt.encode({"sub": str(uuid.uuid4()), "role": "student", "exp": exp},
+                      settings.jwt_secret, algorithm="HS256")
+
+
+@pytest.mark.parametrize("token", [_expired_token(), "not-a-jwt"], ids=["expired", "garbage"])
+@pytest.mark.parametrize("chunked", [False, True])
+def test_large_upload_with_a_stale_token_gets_401_so_clients_refresh(token, chunked):
+    """A student whose 15-minute token lapsed while she worked on paper
+    must get the 401 that makes web and mobile refresh and retry, not a
+    413 calling her in-limits file too large."""
+    c = _client(max_size=100, upload_max=1000)
+    body = b"x" * 500
+    r = c.post(DOC, content=iter([body]) if chunked else body,
+               headers={"Authorization": f"Bearer {token}"})
+    assert r.status_code == 401
+    assert r.json()["detail"] == "Invalid or expired token"
+    # Under the global cap, the body goes through and the route decides.
+    small = c.post(DOC, content=b"x" * 50, headers={"Authorization": f"Bearer {token}"})
+    assert small.status_code == 200
 
 
 @pytest.mark.parametrize("chunked", [False, True])

@@ -41,10 +41,10 @@ MAX_VISION_IMAGES = 5
 # the cap can still bite — but only where the request would genuinely
 # have failed.
 #
-# Note the residual gap: base64 inflates by ~4/3, so this admits ~23MB
-# of raw bytes while uploads accept a 25MB PDF (MAX_PDF_BYTES). A PDF
-# between those two sizes is stored and previewable but can't be sent.
-# Surfacing that to the teacher is the follow-up to this fix.
+# Base64 inflates by ~4/3, so this admits ~23MB of raw bytes, and
+# uploads cap a PDF at exactly that (MAX_PDF_BYTES), so any single
+# accepted PDF can be sent. Several selected together can still exceed
+# it; those are skipped and named in _empty_result_message.
 _ANTHROPIC_MAX_REQUEST_BYTES = 32 * 1024 * 1024
 MAX_TOTAL_SOURCE_B64_BYTES = _ANTHROPIC_MAX_REQUEST_BYTES - 1024 * 1024
 
