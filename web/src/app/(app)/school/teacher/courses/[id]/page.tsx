@@ -11,7 +11,7 @@ import {
   BANK_JOB_TOAST_AUTO_CLEAR_MS,
 } from "@/lib/constants";
 import { formatDueRelative } from "@/lib/utils";
-import { TOUR_ACTIONS, TOUR_IDS, useTour, useTourAction } from "@/components/tour";
+import { WatchHow, type ChapterId } from "@/components/walkthrough";
 import { StatusPill } from "@/components/school/teacher/_pieces/status-pill";
 import { SectionsTab } from "@/components/school/teacher/sections-tab";
 import { MaterialsTab } from "@/components/school/teacher/materials-tab";
@@ -52,6 +52,17 @@ const TABS: { key: TabKey; label: string }[] = [
 const ALL_TAB_KEYS: TabKey[] = [...TABS.map((t) => t.key), "settings"];
 
 const DEFAULT_TAB: TabKey = "sections";
+
+// Which walkthrough chapter explains each tab (settings has none).
+const TAB_CHAPTER: Partial<Record<TabKey, ChapterId>> = {
+  sections: "students",
+  materials: "materials",
+  homework: "homework",
+  practice: "practice-insights",
+  insights: "practice-insights",
+  submissions: "grading",
+  grades: "grades",
+};
 
 const ACTIVE_JOB_STORAGE_KEY = (courseId: string) => `bank.activeJob.${courseId}`;
 
@@ -211,47 +222,6 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // ── Onboarding tour wiring ──
-  // The Field Guide tour (components/tour) replaces the old setup
-  // checklist. This page registers the imperative handoffs each step
-  // needs (tab switches + the live New-section dialog) and owns the
-  // section modal so the tour can open it. It does NOT auto-start: the
-  // from-zero tour begins on the courses list (a brand-new teacher has
-  // no course) and carries across the navigation into this workspace,
-  // resuming at "Create a section". Auto-starting here too would
-  // double-fire during that continuation, so the courses list is the
-  // sole owner of the first-run start.
-  const [sectionModalOpen, setSectionModalOpen] = useState(false);
-  const tour = useTour();
-  // During the first-run tour, creating a section must advance the tour the
-  // same way creating a course does (the course step's onCreated → next()).
-  // SectionsTab routes both create and cancel through the modal-open boolean,
-  // so this ref lets the close handler tell "just created" from "cancelled".
-  const sectionCreatedRef = useRef(false);
-  // One-shot request from step two: expand the first section's roster so
-  // the invite control mounts. SectionsTab consumes it once a section is
-  // present and clears it via onExpandFirstRosterConsumed.
-  const [expandFirstRoster, setExpandFirstRoster] = useState(false);
-
-  useTourAction(TOUR_ACTIONS.gotoSections, () => {
-    setTab("sections");
-    setSectionModalOpen(false);
-  });
-  useTourAction(TOUR_ACTIONS.openNewSection, () => {
-    setTab("sections");
-    setSectionModalOpen(true);
-  });
-  useTourAction(TOUR_ACTIONS.closeNewSection, () => setSectionModalOpen(false));
-  useTourAction(TOUR_ACTIONS.expandFirstSection, () => {
-    setTab("sections");
-    setExpandFirstRoster(true);
-  });
-  useTourAction(TOUR_ACTIONS.gotoMaterials, () => setTab("materials"));
-  useTourAction(TOUR_ACTIONS.gotoHomework, () => setTab("homework"));
-  useTourAction(TOUR_ACTIONS.gotoPractice, () => setTab("practice"));
-  useTourAction(TOUR_ACTIONS.gotoSubmissions, () => setTab("submissions"));
-  useTourAction(TOUR_ACTIONS.gotoGrades, () => setTab("grades"));
-
   // While the course itself loads, only the header waits on it: the
   // tab bar and the open tab render now, so a tab's own fetch starts
   // alongside the course's instead of after it.
@@ -306,22 +276,12 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
 
       {/* Editorial tab bar — underline-on-active matches the student
           top-bar and app-shell grammar. No tinted pill backgrounds. */}
-      <div className="mt-8 flex gap-6 overflow-x-auto border-b border-border-light">
+      <div className="mt-8 flex items-center gap-4 border-b border-border-light">
+        <div className="flex min-w-0 flex-1 gap-6 overflow-x-auto">
         {TABS.map((t) => (
           <button
             key={t.key}
             type="button"
-            // Submissions and Grades anchor the onboarding tour on their
-            // tab buttons — both tabs render an empty state (no stable
-            // header/control) for a from-zero teacher, so the always-
-            // mounted tab button is the only reliable spotlight target.
-            data-tour-id={
-              t.key === "submissions"
-                ? TOUR_IDS.teacherSubmissions
-                : t.key === "grades"
-                  ? TOUR_IDS.teacherGrades
-                  : undefined
-            }
             onClick={() => setTab(t.key)}
             className={`relative shrink-0 py-3 text-sm font-medium transition-colors ${
               tab === t.key
@@ -351,6 +311,12 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
             )}
           </button>
         ))}
+        </div>
+        {/* The walkthrough chapter for whichever tab is open. Hidden on
+            phones, where the tab row already needs the full width. */}
+        {TAB_CHAPTER[tab] && (
+          <WatchHow chapter={TAB_CHAPTER[tab]} className="shrink-0 max-sm:hidden" />
+        )}
       </div>
 
       {/* Per-tab error boundary — a render throw in one tab (bad payload,
@@ -361,40 +327,7 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
       <div className="mt-6">
         <ErrorBoundary key={tab}>
         {tab === "sections" && (
-          <SectionsTab
-            courseId={id}
-            onChanged={reloadCourse}
-            showNewSection={sectionModalOpen}
-            onShowNewSectionChange={(open) => {
-              if (!open) {
-                if (sectionCreatedRef.current) {
-                  // Create path: the tour already advanced via onSectionCreated;
-                  // just close, don't treat this close as a cancel.
-                  sectionCreatedRef.current = false;
-                  setSectionModalOpen(false);
-                  return;
-                }
-                if (tour.handoffActive) {
-                  // Cancel during the tour gate: return to the section
-                  // spotlight (re-prompt), mirroring the course step.
-                  tour.back();
-                  return;
-                }
-              }
-              setSectionModalOpen(open);
-            }}
-            onSectionCreated={() => {
-              sectionCreatedRef.current = true;
-              // Advance only when the tour is parked on THIS step's handoff
-              // (the open New-section dialog) — not merely tour-active. Guard
-              // on handoffActive so creating a second section later (e.g. on
-              // the invite step, where the New-section button is also visible)
-              // doesn't spuriously skip the tour ahead.
-              if (tour.handoffActive) tour.next();
-            }}
-            expandFirstRoster={expandFirstRoster}
-            onExpandFirstRosterConsumed={() => setExpandFirstRoster(false)}
-          />
+          <SectionsTab courseId={id} onChanged={reloadCourse} />
         )}
         {tab === "materials" && <MaterialsTab courseId={id} onChanged={reloadCourse} />}
         {tab === "homework" && (

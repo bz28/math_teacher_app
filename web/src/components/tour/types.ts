@@ -7,19 +7,20 @@
  * authoring another entry in `tours.ts` — no engine changes.
  *
  * One family uses the engine today: persona overviews (login-time) —
- * a big WelcomeCover then a guided walk: "teacher" | "student" |
- * "personal". The teacher overview is one comprehensive from-zero tour
- * that walks every workspace tab; the old per-feature first-use
- * coachmarks were retired (they fired once, invisibly, and confused
- * teachers). The `compact` flag the engine still honors is unused.
+ * a big WelcomeCover then a guided walk, for "student" and "personal".
+ * Teachers onboard with the video walkthrough (components/walkthrough)
+ * instead; their "teacher" `tours_seen` key now records that they've
+ * seen the walkthrough. The `compact` flag and live `handoff` steps the
+ * engine still honors are unused by the current tours.
  */
 
 /**
  * The key a tour is registered + persisted under (`tours_seen`). Named
  * `TourPersona` for continuity with the original persona-only engine.
- * Mirrors the backend `MarkTourSeenRequest` Literal.
+ * The backend `MarkTourSeenRequest` Literal also accepts "teacher"
+ * (the walkthrough-seen key), which is not a tour.
  */
-export type TourPersona = "teacher" | "student" | "personal";
+export type TourPersona = "student" | "personal";
 
 /** Preferred side for the caption card relative to its target. "auto"
  *  lets the engine pick whichever side fits without covering the
@@ -43,16 +44,6 @@ export type TourPlacement =
  * step-list and the controls can't drift apart silently.
  */
 export const TOUR_IDS = {
-  teacherNewCourse: "teacher-new-course",
-  teacherNewSection: "teacher-new-section",
-  teacherInvite: "teacher-invite",
-  teacherMaterials: "teacher-materials",
-  teacherNewHomework: "teacher-new-homework",
-  teacherPractice: "teacher-practice",
-  teacherInsights: "teacher-insights",
-  teacherSubmissions: "teacher-submissions",
-  teacherGrades: "teacher-grades",
-
   // ── School-student dashboard (/school/student) ──
   studentJoin: "student-join",
   studentHomework: "student-homework",
@@ -63,30 +54,6 @@ export const TOUR_IDS = {
   personalStart: "personal-start",
   personalModes: "personal-modes",
   personalJoin: "personal-join",
-} as const;
-
-/**
- * Named imperative handoffs a step can request. The host page registers
- * a handler for each via `useTourAction(name, fn)`; the engine invokes
- * them by name so the data-only step-list never imports page state.
- */
-export const TOUR_ACTIONS = {
-  // Live handoff into the real New-course dialog on the courses list —
-  // the from-zero tour's first step, owned by the courses-list page.
-  openNewCourse: "teacher.open-new-course",
-  closeNewCourse: "teacher.close-new-course",
-  gotoSections: "teacher.goto-sections",
-  openNewSection: "teacher.open-new-section",
-  closeNewSection: "teacher.close-new-section",
-  // Switch to the Sections tab AND expand the first section's roster so
-  // the invite control (TOUR_IDS.teacherInvite, inside the roster) is
-  // mounted before step two spotlights it.
-  expandFirstSection: "teacher.expand-first-section",
-  gotoMaterials: "teacher.goto-materials",
-  gotoHomework: "teacher.goto-homework",
-  gotoPractice: "teacher.goto-practice",
-  gotoSubmissions: "teacher.goto-submissions",
-  gotoGrades: "teacher.goto-grades",
 } as const;
 
 export interface TourCover {

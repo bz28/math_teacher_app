@@ -59,6 +59,7 @@ import { GraphCheckReview, openGraphItems } from "@/components/school/teacher/_p
 import { effectiveRubric, rubricChanged, rubricFields } from "@/lib/rubric";
 import { PHOTO_URLS_EXPIRED, onPhotoError } from "@/lib/submission-photos";
 import { deductionPoints, earnedPoints, formatPoints } from "@/lib/points";
+import { WatchHow } from "@/components/walkthrough";
 
 type GradeStatus = GradeBreakdownEntry["score_status"];
 
@@ -1970,13 +1971,14 @@ function HomeworkSectionReview({
 
   return (
     <div className="mx-auto max-w-7xl px-4 pb-10">
-      <div className="pt-3">
+      <div className="flex items-center justify-between gap-3 pt-3">
         <Link
           href={backHref}
           className="inline-flex items-center gap-1 font-sans text-[11px] font-semibold uppercase tracking-[0.12em] text-text-muted transition-colors hover:text-text-primary"
         >
           ← Back to submissions
         </Link>
+        <WatchHow chapter="grading" className="max-sm:hidden" />
       </div>
 
       <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
@@ -7600,6 +7602,9 @@ function IntegrityCard({
           </div>
         )}
       </div>
+      {/* Outside the card: its role="status" live region would re-announce
+          this link on every update. */}
+      <WatchHow chapter="understanding-check" className="mt-1 text-xs" />
       {integrity && (
         <ConversationModal
           open={open}
