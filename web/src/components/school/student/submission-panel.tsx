@@ -88,11 +88,11 @@ const PAST_DUE_COPY: Record<Exclude<LatePolicy, "no_credit">, string> = {
  *
  * Per-file resizing for images runs client-side (resizeImageForUpload)
  * so a 12 MP phone photo doesn't get rejected at the 5 MB server cap.
- * PDFs go through untouched up to 25 MB.
+ * PDFs go through untouched up to 23 MB (api MAX_PDF_BYTES).
  */
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const MAX_PDF_BYTES = 25 * 1024 * 1024;
+const MAX_PDF_BYTES = 23 * 1024 * 1024;
 const MAX_FILES = 10;
 const ACCEPT = "image/jpeg,image/png,application/pdf";
 
@@ -215,11 +215,20 @@ export function SubmissionPanel({
     .filter((f) => !f.error)
     .flatMap((f, i) => (stillSideways(f) ? [i + 1] : []));
   const checking = stagedFiles.some((f) => f.checking && !f.error);
+  // A turn-in's PDFs share one cap (the server's MAX_PDF_BYTES): the
+  // reader may send a PDF whole, and all pages go in one request. The
+  // server counts a turned PDF after re-saving it, which can grow it a
+  // few percent (up to ~6% measured), so count those with that margin.
+  const pdfBytes = stagedFiles
+    .filter((f) => !f.error && f.mediaType === "application/pdf")
+    .reduce((n, f) => n + (f.rotation ? Math.ceil(f.size * 1.07) : f.size), 0);
+  const pdfsTooLarge = pdfBytes > MAX_PDF_BYTES;
   const canSubmit =
     validCount > 0 &&
     !submitting &&
     !preparing &&
     !checking &&
+    !pdfsTooLarge &&
     sidewaysPages.length === 0;
 
   // Why the submit CTA is disabled, in the student's words. Mirrors the
@@ -236,7 +245,9 @@ export function SubmissionPanel({
           ? "None of these files can be turned in yet — fix or remove the ones flagged above, then add one that's ready."
           : checking
             ? "Checking your pages…"
-            : sidewaysHint(sidewaysPages);
+            : pdfsTooLarge
+              ? `Your PDFs come to ${(pdfBytes / 1024 / 1024).toFixed(1)} MB together, over the ${MAX_PDF_BYTES / 1024 / 1024} MB limit. Remove one, or take photos of some pages instead.`
+              : sidewaysHint(sidewaysPages);
 
   const newRowId = () =>
     typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -297,7 +308,7 @@ export function SubmissionPanel({
 
     if (isPdf) {
       if (file.size > MAX_PDF_BYTES) {
-        return done(errorRow(file, "Too large (max 25MB)"));
+        return done(errorRow(file, "Too large (max 23MB)"));
       }
       try {
         const base64 = await fileToBase64(file);

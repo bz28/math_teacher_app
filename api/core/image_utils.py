@@ -101,7 +101,7 @@ def validate_and_decode_upload(data_base64: str) -> tuple[bytes, str]:
     elif raw[:5] == b"%PDF-":
         media_type = "application/pdf"
         cap = MAX_PDF_BYTES
-        cap_label = "25MB"
+        cap_label = f"{MAX_PDF_BYTES // 1024 // 1024}MB"
     else:
         raise ValueError(
             "Unsupported file format (only JPEG, PNG, and PDF are accepted)"

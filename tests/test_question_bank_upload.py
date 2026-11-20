@@ -196,3 +196,32 @@ async def test_extract_from_files_includes_constraint_in_prompt() -> None:
             files, subject="math", user_id="u1", constraint="   "
         )
     assert "skip everything else" not in captured["text"]
+
+
+async def test_upload_rejects_files_too_large_together(
+    client: AsyncClient,
+    world: dict[str, Any],
+) -> None:
+    """Each file passes its own cap, but extraction sends the whole batch
+    to the model in one request, so the batch must fit that budget. The
+    budget is shrunk here so tiny payloads exercise it."""
+    course_id = await _course_id_for(world)
+    await _link_teacher_to_course(world["teacher_id"], course_id)
+
+    with (
+        patch("api.routes.teacher_question_bank.MAX_TOTAL_SOURCE_B64_BYTES", len(TINY_PDF) + 5),
+        patch("api.routes.teacher_question_bank.schedule_generation_job") as sched,
+    ):
+        r = await client.post(
+            f"/v1/teacher/courses/{course_id}/question-bank/upload",
+            headers={"Authorization": f"Bearer {world['teacher_token']}"},
+            json={
+                "images": [TINY_PDF, TINY_PDF],
+                "assignment_id": str(world["assignment_id"]),
+                "unit_id": str(world["unit_id"]),
+            },
+        )
+
+    assert r.status_code == 413, r.text
+    assert "too large together" in r.json()["detail"]
+    sched.assert_not_called()
