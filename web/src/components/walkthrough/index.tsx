@@ -81,12 +81,18 @@ export function useWalkthrough(): WalkthroughContextValue {
 export function WalkthroughProvider({ children }: { children: ReactNode }) {
   // null = closed; otherwise the chapter to start at.
   const [startAt, setStartAt] = useState<ChapterId | null>(null);
-  const open = useCallback((chapter: ChapterId = "welcome") => setStartAt(chapter), []);
+  // Bumped on every open so the dialog remounts fresh: the chapter
+  // highlight starts at the requested chapter, not the last session's.
+  const [session, setSession] = useState(0);
+  const open = useCallback((chapter: ChapterId = "welcome") => {
+    setSession((n) => n + 1);
+    setStartAt(chapter);
+  }, []);
   const value = useMemo(() => ({ open }), [open]);
   return (
     <WalkthroughContext.Provider value={value}>
       {children}
-      <WalkthroughDialog startAt={startAt} onClose={() => setStartAt(null)} />
+      <WalkthroughDialog key={session} startAt={startAt} onClose={() => setStartAt(null)} />
     </WalkthroughContext.Provider>
   );
 }
@@ -99,7 +105,7 @@ function WalkthroughDialog({
   onClose: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [current, setCurrent] = useState<ChapterId>("welcome");
+  const [current, setCurrent] = useState<ChapterId>(startAt ?? "welcome");
   // The open effect's pending "seek once metadata loads". A chapter the
   // teacher clicks first must cancel it, or it would snap them back.
   const pendingOpenSeek = useRef<(() => void) | null>(null);
@@ -177,7 +183,7 @@ function WalkthroughDialog({
         </button>
       </div>
 
-      <div className="grid max-h-[calc(100vh-10rem)] gap-0 overflow-y-auto md:grid-cols-[1fr_280px] md:overflow-visible">
+      <div className="grid max-h-[calc(100dvh-10rem)] gap-0 overflow-y-auto md:grid-cols-[1fr_280px]">
         <div className="min-w-0 bg-black md:rounded-bl-[--radius-md]">
           <video
             ref={videoRef}
@@ -187,7 +193,9 @@ function WalkthroughDialog({
             playsInline
             preload="metadata"
             onTimeUpdate={onTimeUpdate}
-            className="aspect-video w-full"
+            // Short landscape screens: cap the height so the controls
+            // stay on screen; the frame letterboxes inside the black cell.
+            className="aspect-video max-h-[calc(100dvh-12rem)] w-full object-contain"
           >
             <track kind="captions" src={CAPTIONS_SRC} srcLang="en" label="English" default />
           </video>
