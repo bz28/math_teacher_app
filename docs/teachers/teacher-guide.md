@@ -44,7 +44,7 @@ Every student account is created through one of these paths: Veradic has no pers
 
 ### 4. Add curriculum materials
 
-Upload your textbook chapters, problem sets, or curriculum documents (PDF up to 25 MB; PNG or JPG up to 5 MB) to the course **Materials** tab. Materials are organized into **units** — think chapters. Create a unit with **New Unit** (or drop a whole folder, which becomes a unit) and upload into it. Every homework belongs to at least one unit. When you generate problems, tick the materials you want Veradic to draw on in the source-material picker, so the problems stay aligned with what you actually teach.
+Upload your textbook chapters, problem sets, or curriculum documents (PDF, PNG, or JPG; images up to 5 MB) to the course **Materials** tab. Materials are organized into **units** — think chapters. Create a unit with **New Unit** (or drop a whole folder, which becomes a unit) and upload into it. Every homework belongs to at least one unit. When you generate problems, tick the materials you want Veradic to draw on in the source-material picker, so the problems stay aligned with what you actually teach.
 
 ---
 
