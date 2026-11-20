@@ -130,13 +130,15 @@ class RequestSizeLimitMiddleware:
             if not message.get("more_body", False):
                 break
 
-        replayed = False
+        body: bytes | None = b"".join(chunks)
+        chunks.clear()  # don't hold the body twice for the whole request
 
         async def replay() -> Any:
-            nonlocal replayed
-            if not replayed:
-                replayed = True
-                return {"type": "http.request", "body": b"".join(chunks), "more_body": False}
+            nonlocal body
+            if body is not None:
+                message = {"type": "http.request", "body": body, "more_body": False}
+                body = None
+                return message
             return await receive()
 
         await self.app(scope, replay, send)

@@ -216,10 +216,12 @@ export function SubmissionPanel({
     .flatMap((f, i) => (stillSideways(f) ? [i + 1] : []));
   const checking = stagedFiles.some((f) => f.checking && !f.error);
   // A turn-in's PDFs share one cap (the server's MAX_PDF_BYTES): the
-  // reader may send a PDF whole, and all pages go in one request.
+  // reader may send a PDF whole, and all pages go in one request. The
+  // server counts a turned PDF after re-saving it, which can grow it a
+  // few percent (up to ~6% measured), so count those with that margin.
   const pdfBytes = stagedFiles
     .filter((f) => !f.error && f.mediaType === "application/pdf")
-    .reduce((n, f) => n + f.size, 0);
+    .reduce((n, f) => n + (f.rotation ? Math.ceil(f.size * 1.07) : f.size), 0);
   const pdfsTooLarge = pdfBytes > MAX_PDF_BYTES;
   const canSubmit =
     validCount > 0 &&
