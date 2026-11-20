@@ -7489,7 +7489,6 @@ function IntegrityCard({
           <p className="min-w-0 flex-1 pt-0.5 text-sm font-semibold leading-snug text-text-primary">
             {title}
           </p>
-          <WatchHow chapter="understanding-check" className="shrink-0 text-xs" />
         </div>
 
         {/* Activity flags — only what actually happened. A summary with
@@ -7603,6 +7602,9 @@ function IntegrityCard({
           </div>
         )}
       </div>
+      {/* Outside the card: its role="status" live region would re-announce
+          this link on every update. */}
+      <WatchHow chapter="understanding-check" className="mt-1 text-xs" />
       {integrity && (
         <ConversationModal
           open={open}

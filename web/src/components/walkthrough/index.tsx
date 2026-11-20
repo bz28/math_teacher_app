@@ -100,9 +100,16 @@ function WalkthroughDialog({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [current, setCurrent] = useState<ChapterId>("welcome");
+  // The open effect's pending "seek once metadata loads". A chapter the
+  // teacher clicks first must cancel it, or it would snap them back.
+  const pendingOpenSeek = useRef<(() => void) | null>(null);
 
   const seek = useCallback((id: ChapterId, play: boolean) => {
     const v = videoRef.current;
+    if (v && pendingOpenSeek.current) {
+      v.removeEventListener("loadedmetadata", pendingOpenSeek.current);
+      pendingOpenSeek.current = null;
+    }
     const ch = CHAPTERS.find((c) => c.id === id);
     if (!v || !ch) return;
     v.currentTime = ch.start;
@@ -117,9 +124,16 @@ function WalkthroughDialog({
     const v = videoRef.current;
     if (!v) return;
     const go = () => seek(startAt, false);
-    if (v.readyState >= 1) go();
-    else v.addEventListener("loadedmetadata", go, { once: true });
-    return () => v.removeEventListener("loadedmetadata", go);
+    if (v.readyState >= 1) {
+      go();
+      return;
+    }
+    pendingOpenSeek.current = go;
+    v.addEventListener("loadedmetadata", go, { once: true });
+    return () => {
+      v.removeEventListener("loadedmetadata", go);
+      pendingOpenSeek.current = null;
+    };
   }, [startAt, seek]);
 
   const onTimeUpdate = () => {
@@ -229,10 +243,18 @@ function WalkthroughDialog({
  */
 export function WatchHow({ chapter, className }: { chapter: ChapterId; className?: string }) {
   const { open } = useWalkthrough();
+  const title = CHAPTERS.find((c) => c.id === chapter)?.title ?? "";
+  // Visible text is terse ("Watch how 1:18"); the accessible name says
+  // which chapter, since a page can carry more than one of these.
+  const label =
+    chapter === "welcome"
+      ? `Watch the walkthrough, ${formatLength(data.duration)}`
+      : `Watch how: ${title}, ${formatLength(chapterLength(chapter))}`;
   return (
     <button
       type="button"
       onClick={() => open(chapter)}
+      aria-label={label}
       className={cn(
         "inline-flex items-center gap-1.5 whitespace-nowrap rounded-[--radius-sm] px-1.5 py-1 text-sm font-medium text-text-secondary transition-colors hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
         className,

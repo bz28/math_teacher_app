@@ -97,8 +97,6 @@ export function SectionsTab({
           courseId={courseId}
           onClose={() => setShowNew(false)}
           onCreated={() => {
-            // Signal a real creation BEFORE closing, so the tour advances
-            // (and the close handler treats this as create, not cancel).
             setShowNew(false);
             reload();
             onChanged();
