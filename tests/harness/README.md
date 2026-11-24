@@ -40,6 +40,12 @@ python -m tests.harness explore --probe geometry --from-corpus --mode replay
 # scored against a GOLD disposition + the two harm metrics + injection.
 python -m tests.harness run --probe integrity --mode replay   # $0 regression gate
 python -m tests.harness run --probe integrity --mode record   # paid judgment sweep
+
+# End-to-end user journeys (tests/harness/flows.py): login, logout,
+# join_class, submit_homework, grade_publish. Runs nightly + on demand in
+# .github/workflows/harness-flows.yml.
+python -m tests.harness flows --mode replay
+python -m tests.harness flows --only join_class,grade_publish
 ```
 
 ## Two-layer evals for judgment surfaces (grading, integrity)

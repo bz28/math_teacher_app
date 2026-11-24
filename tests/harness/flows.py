@@ -1,9 +1,7 @@
 """Flow tests — drive real multi-step user journeys and report only HARD
-failures, so the improver catches "the feature is broken when you do it", not
-just "the page looks off" (the load-only scan) or "the AI output is wrong" (the
-probes). A broken journey becomes a human ALERT in the scan's GitHub issue —
-NOT an auto-fix proposal, because journeys often live on auth/billing/grading
-surfaces the agent must never edit (see flow_alert_md).
+failures, so they catch "the feature is broken when you do it" rather than
+"the AI output is wrong" (the probes). Run by `python -m tests.harness flows`,
+nightly in .github/workflows/harness-flows.yml.
 
 Two layers, picked per journey by which can be made NON-FLAKY:
   • Browser layer (login, logout, student insights, confirm reading) — the
@@ -54,7 +52,7 @@ from tests.harness.seed import (
     seed_workshop_item,
 )
 
-# Generous, matching the scanner — so slow CI is never mistaken for a failure.
+# Generous, so slow CI is never mistaken for a failure.
 _TIMEOUT_MS = 30000
 # API-flow HTTP timeout. Generous so a cold/slow API isn't read as a failure;
 # a genuine hang raises httpx.TimeoutException → run_flows DROPS the flow.
@@ -624,26 +622,3 @@ async def run_flows(
             continue
     return results
 
-
-def flow_failures(results: list[FlowResult]) -> list[dict[str, object]]:
-    """The failed journeys, recorded in findings.json. NOT proposal evidence —
-    a broken journey usually lives on an auth/billing surface the agent must
-    never edit, so these are surfaced as a human alert (see flow_alert_md), not
-    fed to the fix pipeline."""
-    return [
-        {"flow": r.name, "title": r.title, "issues": r.issues}
-        for r in results if not r.passed
-    ]
-
-
-def flow_alert_md(failures: list[dict[str, object]]) -> str:
-    """A human alert for broken journeys — they page YOU rather than entering
-    the auto-fix queue, because the agent can't (and must not) edit auth/billing
-    code. Empty string when nothing broke (caller skips the alert)."""
-    if not failures:
-        return ""
-    lines = ["### ⚠️ Broken user journeys — needs your attention (not auto-fixable)"]
-    for f in failures:
-        issues = "; ".join(str(i) for i in (f.get("issues") or []))
-        lines.append(f"- **{f.get('title') or f.get('flow')}**: {issues}")
-    return "\n".join(lines)

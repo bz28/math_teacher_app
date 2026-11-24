@@ -449,31 +449,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/harness-runs/ingest": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Ingest Harness Run
-         * @description Service-authenticated write path for the "Harness Runs" tab.
-         *
-         *     CI (GitHub Actions) can't open a Postgres connection to prod, so the
-         *     autonomous harness POSTs its run summary here instead of writing the row
-         *     directly. Guarded by a shared secret (``X-Harness-Token``), never a user
-         *     session — disabled (503) when the token isn't configured.
-         */
-        post: operations["ingest_harness_run_v1_admin_harness_runs_ingest_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/admin/harness-runs/{run_id}/report": {
         parameters: {
             query?: never;
@@ -611,33 +586,6 @@ export interface paths {
         };
         /** Llm Calls */
         get: operations["llm_calls_v1_admin_llm_calls_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/llm-calls/defects": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Llm Call Defects
-         * @description Recent LLM calls whose output looks defective — failed calls, or outputs
-         *     carrying the control-char corruption fingerprint (the LaTeX-class bug) —
-         *     grouped by (function, signature) so a recurring defect is ONE row. Drives
-         *     the improver's production-defect channel.
-         *
-         *     `watermark` is an opaque keyset cursor `'<iso>|<id>'` of the last row scanned;
-         *     pass it back as `since` next run for incremental, skip-free scans. Callers
-         *     MUST URL-encode it (the ISO offset contains a `+`).
-         */
-        get: operations["llm_call_defects_v1_admin_llm_calls_defects_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5354,57 +5302,6 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
-        /**
-         * HarnessRunIngest
-         * @description Run-summary payload for the service-authenticated ingest path. Fields map
-         *     1:1 to the writable HarnessRun columns; id + created_at are server-set.
-         */
-        HarnessRunIngest: {
-            /**
-             * Captures
-             * @default 0
-             */
-            captures: number;
-            /** Cost Usd */
-            cost_usd?: number | null;
-            /**
-             * Det Pass
-             * @default 0
-             */
-            det_pass: number;
-            /**
-             * Det Total
-             * @default 0
-             */
-            det_total: number;
-            /**
-             * Items Generated
-             * @default 0
-             */
-            items_generated: number;
-            /**
-             * Judge Count
-             * @default 0
-             */
-            judge_count: number;
-            /** Judge Mean */
-            judge_mean?: number | null;
-            /** Mode */
-            mode: string;
-            /** Note */
-            note?: string | null;
-            /**
-             * Passed
-             * @default false
-             */
-            passed: boolean;
-            /** Probe */
-            probe: string;
-            /** Prompt */
-            prompt?: string | null;
-            /** Report Html */
-            report_html?: string | null;
-        };
         /** ImageExtractRequest */
         ImageExtractRequest: {
             /**
@@ -8146,43 +8043,6 @@ export interface operations {
             };
         };
     };
-    ingest_harness_run_v1_admin_harness_runs_ingest_post: {
-        parameters: {
-            query?: never;
-            header?: {
-                "x-harness-token"?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["HarnessRunIngest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     harness_run_report_v1_admin_harness_runs__run_id__report_get: {
         parameters: {
             query?: never;
@@ -8609,44 +8469,6 @@ export interface operations {
                 offset?: number;
             };
             header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    llm_call_defects_v1_admin_llm_calls_defects_get: {
-        parameters: {
-            query?: {
-                /** @description keyset cursor '<iso>|<id>'; URL-encode the '+' */
-                since?: string | null;
-                hours?: number;
-                limit?: number;
-            };
-            header?: {
-                "X-Improver-Key"?: string | null;
-            };
             path?: never;
             cookie?: never;
         };

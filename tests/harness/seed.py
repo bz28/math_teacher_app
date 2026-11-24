@@ -65,7 +65,7 @@ async def seed_world() -> Seed:
             password_hash=hash_password("x"), grade_level=8, role="student",
             name="Harness Student",
         )
-        # Platform-level admin (no school) so the improver can scan the admin
+        # Platform-level admin (no school) so harness runs can drive the admin
         # dashboard surfaces, which sit behind require_admin.
         admin = User(
             email=f"harness_admin_{uuid.uuid4().hex[:6]}@t.com",

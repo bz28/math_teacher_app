@@ -1,0 +1,98 @@
+name: Harness flows
+
+# End-to-end user journeys (login, logout, join_class, submit_homework,
+# grade_publish) against an EPHEMERAL stack: Postgres + API + web + headless
+# Chromium. Runs `python -m tests.harness flows` (tests/harness/flows.py) in
+# cassette replay mode, so it makes no metered LLM calls. A failed journey —
+# or one dropped because its surface never came up — fails the job.
+
+on:
+  schedule:
+    - cron: "41 7 * * *" # nightly, ~2:41am ET, off the :00 mark
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: harness-flows
+  cancel-in-progress: true
+
+jobs:
+  flows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: postgresql+asyncpg://mathapp:mathapp@localhost:5432/mathapp_harness
+      JWT_SECRET: harness-ephemeral-secret # shared by the seed and the API in this job
+      CLAUDE_API_KEY: "harness-no-metered-calls" # dummy: the app needs a value to boot; replay never calls out
+      APP_ENV: test
+      SENTRY_DSN: ""
+      HARNESS_LLM_MODE: replay
+      HARNESS_API_BASE: http://localhost:8000/v1
+      HARNESS_WEB_BASE: http://localhost:3000
+      NEXT_PUBLIC_API_URL: http://localhost:8000/v1
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: mathapp
+          POSTGRES_PASSWORD: mathapp
+          POSTGRES_DB: mathapp_harness
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 10s
+          --health-timeout 5s --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Python deps + Chromium
+        run: |
+          pip install -e ".[dev]" -c constraints.txt
+          python -m playwright install --with-deps chromium
+
+      - uses: pnpm/action-setup@v4
+        with: { version: 10 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+          cache-dependency-path: web/pnpm-lock.yaml
+
+      - name: Migrate the ephemeral harness DB
+        run: alembic upgrade head
+
+      - name: Build + start the web app
+        working-directory: web
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+          (pnpm start -p 3000 &)
+
+      - name: Start the API
+        run: (python -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --log-level warning &)
+
+      - name: Wait for API + web
+        run: |
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8000/v1/health >/dev/null 2>&1 \
+               && curl -sf http://localhost:3000 >/dev/null 2>&1; then
+              echo "api+web up"; exit 0
+            fi
+            sleep 3
+          done
+          echo "api/web did not come up in time"; exit 1
+
+      - name: Run the flows
+        run: |
+          set -o pipefail
+          python -m tests.harness flows --mode replay | tee flows.log
+          # A dropped journey passes the CLI (it never false-flags a flaky
+          # environment), but on a stack we just proved is up it means a
+          # journey silently stopped running — fail loudly instead.
+          if grep -q "  DROP  " flows.log; then
+            echo "::error::a flow was dropped (surface unreachable) — see flows.log"; exit 1
+          fi

@@ -1,7 +1,7 @@
 # Veradic — Product & Customer Overview
 
-> Source-of-truth product context for the codebase. Written to ground the autonomous
-> improver's "ideate" arm: it should propose **gaps**, not rebuild what already exists.
+> Source-of-truth product context for the codebase. Read it before proposing a feature:
+> propose **gaps**, not rebuilds of what already exists.
 > The customer/positioning statements here were reviewed and confirmed with the owner;
 > anything still unverified is marked `<!-- confirm -->`. No pricing, named customers, or
 > dates are asserted here.
@@ -102,7 +102,7 @@ engine** (`api/core/geometry/`), **document vision + image extraction**
 
 ## 4. Feature map by surface
 
-Concrete inventory of **what exists today**, derived from `tests/harness/improver/surfaces.py`,
+Concrete inventory of **what exists today**, derived from
 `web/src/app/**`, `api/routes/**`, and `api/models/**`.
 
 ### Student — web `(app)/` + `/school/student/*` and mobile
@@ -156,8 +156,8 @@ with math.
   hand teachers un-checked AI output.
 - **Tutoring guides, it doesn't give answers.** Learn mode decomposes into steps and tutors
   toward the student's own solution.
-- **Nothing auto-merges (engineering).** The autonomous improver stops at PR-open for human
-  review (`tests/harness/improver/README.md`); it never merges its own work.
+- **Nothing auto-merges (engineering).** Agent work stops at PR-open for human review; an
+  agent never merges its own work.
 - **AI cost + quality are first-class.** Every LLM call is logged and cost-tracked, with an
   evaluation harness, golden set, and quality dashboards — quality is measured, not assumed.
 - **Focused on the AI loop today — a current scope, not a permanent boundary.** Today the
