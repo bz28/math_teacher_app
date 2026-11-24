@@ -11,9 +11,17 @@ history, and for pre-2026-07-27 rows (cache counts backfilled to 0,
 meaning "never measured") it would invent a correction from a zero.
 """
 
-import pytest
+import uuid as _uuid
+from datetime import UTC, datetime, timedelta
 
+import pytest
+from sqlalchemy import text
+
+from api.alembic.versions import (  # type: ignore[import-not-found]
+    dh1000104_recompute_opus_cache_read_cost as mig,
+)
 from api.core.model_pricing import cost_usd, price_for
+from api.database import get_session_factory
 
 _MIGRATION_OPUS_INPUT_PER_TOKEN = 4.0 / 1_000_000
 _MIGRATION_WRONG_READ_MULT = 0.1
@@ -104,3 +112,110 @@ def test_other_models_must_not_be_in_scope() -> None:
             "correct and dh1000104 must not touch it"
         )
         assert not model_id.startswith("claude-opus-5-5")
+
+
+# --------------------------------------------------------------------------
+# The SQL itself, not just the arithmetic
+# --------------------------------------------------------------------------
+#
+# Everything above pins the FORMULA. It never runs the migration, so the
+# LIKE pattern, the WHERE clause, the created_at bound, the float8/numeric
+# interaction and idempotency were all unexercised — and the scope is the
+# part that can corrupt rows rather than merely mis-state them.
+
+_BEFORE = datetime(2026, 11, 20, tzinfo=UTC)
+_AFTER = datetime(2026, 11, 24, tzinfo=UTC) + timedelta(days=1)
+
+
+async def _row(
+    *, model: str, cache_read: int, created_at: datetime, cost: float,
+) -> _uuid.UUID:
+    rid = _uuid.uuid4()
+    async with get_session_factory()() as s:
+        await s.execute(
+            text(
+                "INSERT INTO llm_calls (id, function, model, input_tokens, "
+                "output_tokens, cache_read_tokens, cache_write_tokens, "
+                "latency_ms, cost_usd, success, retry_count, created_at) "
+                "VALUES (:id, 'integrity_extract', :m, 1000, 500, :cr, 0, "
+                "1.0, :c, true, 0, :t)",
+            ),
+            {"id": rid, "m": model, "cr": cache_read, "c": cost, "t": created_at},
+        )
+        await s.commit()
+    return rid
+
+
+async def _cost(rid: _uuid.UUID) -> float:
+    async with get_session_factory()() as s:
+        return float(
+            (
+                await s.execute(
+                    text("SELECT cost_usd FROM llm_calls WHERE id = :i"),
+                    {"i": rid},
+                )
+            ).scalar_one(),
+        )
+
+
+async def _run(sql: str) -> None:
+    async with get_session_factory()() as s:
+        await s.execute(text(sql))
+        await s.commit()
+
+
+_UPGRADE = f"UPDATE llm_calls SET cost_usd = cost_usd - ({mig._DELTA}) WHERE {mig._SCOPE}"
+_DOWNGRADE = f"UPDATE llm_calls SET cost_usd = cost_usd + ({mig._DELTA}) WHERE {mig._SCOPE}"
+
+
+async def test_upgrade_sql_corrects_only_rows_in_scope() -> None:
+    """Runs the real statement, not a Python restatement of it."""
+    target = await _row(
+        model="claude-opus-5-5", cache_read=38_000, created_at=_BEFORE, cost=0.049,
+    )
+    no_cache = await _row(
+        model="claude-opus-5-5", cache_read=0, created_at=_BEFORE, cost=0.014,
+    )
+    sonnet = await _row(
+        model="claude-sonnet-4-6", cache_read=20_000, created_at=_BEFORE, cost=0.0165,
+    )
+    # Shorter id that the LIKE pattern must NOT match.
+    opus5 = await _row(
+        model="claude-opus-5", cache_read=38_000, created_at=_BEFORE, cost=0.049,
+    )
+
+    await _run(_UPGRADE)
+
+    assert await _cost(target) == pytest.approx(0.0414)
+    assert await _cost(no_cache) == pytest.approx(0.014)
+    assert await _cost(sonnet) == pytest.approx(0.0165)
+    assert await _cost(opus5) == pytest.approx(0.049), (
+        "LIKE 'claude-opus-5-5%' must not match the shorter 'claude-opus-5'"
+    )
+
+
+async def test_rows_written_after_the_cutoff_are_left_alone() -> None:
+    """The new code already priced these at 0.05x.
+
+    Without the created_at bound the filter cannot tell them apart, so a
+    downgrade would add a delta they never carried and over-price current
+    history.
+    """
+    fresh = await _row(
+        model="claude-opus-5-5", cache_read=38_000, created_at=_AFTER, cost=0.0414,
+    )
+    await _run(_UPGRADE)
+    assert await _cost(fresh) == pytest.approx(0.0414)
+    await _run(_DOWNGRADE)
+    assert await _cost(fresh) == pytest.approx(0.0414), (
+        "a post-deploy row must survive a downgrade untouched"
+    )
+
+
+async def test_downgrade_is_a_true_inverse() -> None:
+    rid = await _row(
+        model="claude-opus-5-5", cache_read=38_000, created_at=_BEFORE, cost=0.049,
+    )
+    await _run(_UPGRADE)
+    await _run(_DOWNGRADE)
+    assert await _cost(rid) == pytest.approx(0.049)

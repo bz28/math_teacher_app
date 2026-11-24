@@ -30,6 +30,16 @@ Scope and safety
 - The correction can only move cost DOWN. The migration raises a NOTICE
   with the before/after totals so the deploy log records what we had
   overstated.
+- Bounded by `created_at` so neither direction can touch a row the new
+  code wrote at the correct rate. Without that bound a `downgrade` would
+  over-price every row written since the deploy, because the filter
+  cannot otherwise tell corrected rows from never-wrong ones.
+
+Known residue: during a rolling deploy the old container keeps writing
+Opus rows at the flat 0.1x after this has run. Those stay overstated.
+The direction is conservative and the window is one deploy, but it is
+why the reconciliation panel may show a small permanent gap for a window
+spanning the release.
 
 Rates used (published, checked 2026-11-24): Opus 5.5 input $4/MTok.
 Correction per row = cache_read_tokens * $4e-6 * (0.1 - 0.05).
@@ -48,7 +58,24 @@ _OPUS_INPUT_PER_TOKEN = 4.0 / 1_000_000
 _WRONG_READ_MULT = 0.1
 _CORRECT_READ_MULT = 0.05
 
-_SCOPE = "model LIKE 'claude-opus-5-5%' AND cache_read_tokens > 0"
+# Rows written by the OLD code — the only ones that carry the error.
+#
+# The cutoff is what makes this safe in both directions. Without it the
+# WHERE clause cannot tell a mispriced row from one the new code wrote
+# correctly at 0.05x, so `downgrade` would add the delta to rows that
+# never had it and OVER-price current history. The upgrade has the mirror
+# hazard if it is ever replayed.
+#
+# Set to the moment this migration was authored. Every row in scope
+# predates the deploy that runs it; rows the new code writes afterwards
+# are outside the window and are left alone by both directions.
+_WRITTEN_BY_OLD_CODE_BEFORE = "2026-11-24 00:00:00+00"
+
+_SCOPE = (
+    "model LIKE 'claude-opus-5-5%' "
+    "AND cache_read_tokens > 0 "
+    f"AND created_at < TIMESTAMPTZ '{_WRITTEN_BY_OLD_CODE_BEFORE}'"
+)
 _DELTA = (
     f"cache_read_tokens * {_OPUS_INPUT_PER_TOKEN!r} "
     f"* ({_WRONG_READ_MULT!r} - {_CORRECT_READ_MULT!r})"
@@ -79,5 +106,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Restore the flat 0.1x figure these rows were originally written with."""
+    """Restore the flat 0.1x figure these rows were originally written with.
+
+    Bounded by the same cutoff as the upgrade, so it cannot reach rows the
+    new code already priced correctly.
+    """
     op.execute(f"UPDATE llm_calls SET cost_usd = cost_usd + ({_DELTA}) WHERE {_SCOPE}")
