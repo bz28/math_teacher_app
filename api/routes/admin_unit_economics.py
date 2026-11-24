@@ -1,0 +1,563 @@
+"""Unit economics — what one homework, exam, or generated unit costs us.
+
+The spend dashboard answers "what did we spend"; this answers "what does
+one of each thing cost", which is the only form a margin conversation can
+use. A blended $/student/month has no levers in it: it cannot say what
+happens when a teacher assigns twice as much homework, or what we save by
+moving grading to a cheaper model, because the homework and the grading
+are averaged together.
+
+Three denominators, because three costs behave differently as a class grows:
+
+  submission units   per student, per submission   homework/quiz/test/practice
+  generation         per teaching UNIT             amortises over the class
+  residual AI        per active user, per month    tutoring, bank chat
+
+Generation belongs to the unit, not the assignment: a teacher builds a
+unit's problems once and draws assignments from it, so its cost divides by
+class size while reading and grading does not. That asymmetry is the whole
+reason this is split out rather than averaged.
+
+Everything here is READ-ONLY and derived from rows we already write. The
+response also carries per-function TOKEN profiles so the dashboard can
+reprice a unit onto another model without another round trip — see
+api/core/model_pricing.reprice for why that needs the tokenizer factor.
+"""
+
+import uuid as uuid_lib
+from datetime import UTC, datetime, timedelta
+from typing import Any
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import Select, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from api.config import settings
+from api.core.model_pricing import MODEL_CATALOG, cost_usd, price_for, reprice
+from api.database import get_db
+from api.middleware.auth import CurrentUser, require_admin
+from api.models.assignment import Assignment, Submission
+from api.models.llm_call import LLMCall
+from api.models.question_bank import QuestionBankGenerationJob
+from api.models.user import User
+from api.routes.admin_helpers import INTERNAL_SCHOOL_SENTINEL
+
+router = APIRouter()
+
+_PER_MTOK = 1_000_000
+_DAYS_PER_MONTH = 30.0
+
+# Harness grading calls. They carry a real cost but no customer, and
+# including them would price our own test runs into a school's bill.
+_EXCLUDED_FUNCTIONS = ("judge",)
+
+# Assignment.type values, in the order the dashboard lists them.
+_SUBMISSION_KINDS = ("homework", "quiz", "test", "practice")
+
+# Below this many observations a unit cost is noise. The dashboard greys
+# it out rather than rendering a number — a thin bucket that reads as
+# $0.00 produces a 100% margin, which is exactly the figure that ends up
+# in a board deck.
+_DEFAULT_MIN_SAMPLE = 5
+
+
+def _median(col: Any) -> Any:
+    return func.percentile_cont(0.5).within_group(col.asc())
+
+
+def _p90(col: Any) -> Any:
+    return func.percentile_cont(0.9).within_group(col.asc())
+
+
+def _f(value: Any) -> float:
+    """Coalesce a possibly-NULL aggregate to a float."""
+    return float(value) if value is not None else 0.0
+
+
+class _Scope:
+    """The filters every query in this endpoint shares."""
+
+    def __init__(
+        self,
+        since: datetime,
+        until: datetime,
+        school_id: str | None,
+        exclude_internal: bool,
+    ) -> None:
+        self.since = since
+        self.until = until
+        self.school_id = school_id
+        self.exclude_internal = exclude_internal
+
+    @property
+    def days(self) -> float:
+        return max((self.until - self.since).total_seconds() / 86400.0, 1e-9)
+
+    def filters(self) -> list[Any]:
+        out: list[Any] = [
+            LLMCall.created_at >= self.since,
+            LLMCall.created_at <= self.until,
+            LLMCall.function.notin_(_EXCLUDED_FUNCTIONS),
+        ]
+        if self.school_id == INTERNAL_SCHOOL_SENTINEL:
+            out.append(LLMCall.school_id.is_(None))
+        elif self.school_id:
+            out.append(LLMCall.school_id == self.school_id)
+        elif self.exclude_internal:
+            # school_id IS NULL is founder/admin/test traffic. It looks
+            # like a school's usage and would inflate every per-student
+            # figure on the page.
+            out.append(LLMCall.school_id.isnot(None))
+        return out
+
+    def apply(self, stmt: Select[Any]) -> Select[Any]:
+        return stmt.where(*self.filters())
+
+
+async def _resolve_window(
+    db: AsyncSession, days: int | None,
+) -> tuple[datetime, datetime, str, str | None]:
+    """The window to measure over.
+
+    Defaults to "since the model changed" rather than a fixed lookback,
+    and derives that date from the first real Opus 5.5 call instead of a
+    hardcoded one — the commit landed 2026-10-28 but the rollout was
+    observed from 2026-11-04, and a window that straddles the switch
+    averages two different pricing regimes into one meaningless number.
+    """
+    until = datetime.now(UTC)
+    if days is not None:
+        return until - timedelta(days=days), until, "fixed_days", None
+
+    cutover = (
+        await db.execute(
+            select(func.min(LLMCall.created_at)).where(
+                LLMCall.model.like(f"{settings.llm_model_opus}%"),
+            ),
+        )
+    ).scalar()
+    if cutover is None:
+        # No calls on the current model yet (a fresh database, or a model
+        # we have not shipped). Fall back to a month rather than scanning
+        # all of history.
+        return until - timedelta(days=30), until, "no_cutover_found", None
+    return cutover, until, "model_cutover", settings.llm_model_opus
+
+
+def _submission_join(stmt: Select[Any]) -> Select[Any]:
+    return stmt.join(Submission, Submission.id == LLMCall.submission_id).join(
+        Assignment, Assignment.id == Submission.assignment_id,
+    )
+
+
+async def _submission_units(db: AsyncSession, scope: _Scope) -> list[dict[str, Any]]:
+    """Cost of one submission, by assignment type.
+
+    Cost is summed per submission FIRST and then aggregated, so the
+    headline is "what one homework costs", not "what one call costs".
+    The median leads: a student who photographs forty pages produces one
+    very expensive call that should not set our rate card.
+    """
+    per_submission = scope.apply(
+        _submission_join(
+            select(
+                LLMCall.submission_id.label("sub"),
+                Assignment.type.label("kind"),
+                func.sum(LLMCall.cost_usd).label("cost"),
+            ),
+        ),
+    ).group_by(LLMCall.submission_id, Assignment.type).subquery()
+
+    rows = (
+        await db.execute(
+            select(
+                per_submission.c.kind,
+                func.count().label("n"),
+                _median(per_submission.c.cost).label("median"),
+                func.avg(per_submission.c.cost).label("mean"),
+                _p90(per_submission.c.cost).label("p90"),
+                func.sum(per_submission.c.cost).label("total"),
+            ).group_by(per_submission.c.kind),
+        )
+    ).all()
+
+    by_kind = {r.kind: r for r in rows}
+    out: list[dict[str, Any]] = []
+    for kind in _SUBMISSION_KINDS:
+        r = by_kind.get(kind)
+        out.append(
+            {
+                "kind": f"submission:{kind}",
+                "label": kind,
+                "denominator": "per student per submission",
+                "n": int(r.n) if r else 0,
+                "cost_median": _f(r.median) if r else None,
+                "cost_mean": _f(r.mean) if r else None,
+                "cost_p90": _f(r.p90) if r else None,
+                "cost_total": _f(r.total) if r else 0.0,
+            },
+        )
+    return out
+
+
+async def _submission_functions(
+    db: AsyncSession, scope: _Scope,
+) -> dict[str, list[dict[str, Any]]]:
+    """Per-function decomposition, token profile, and a reprice matrix.
+
+    `calls_per_unit` is what makes repricing work: the understanding
+    check fires several turns per homework, so its per-call median has to
+    be multiplied back up before it compares with a single grading call.
+
+    The reprice matrix is computed HERE rather than in the dashboard on
+    purpose. Rescaling tokens by the tokenizer ratio, applying the target
+    model's own cache-read multiplier, and handling Haiku 5.5's
+    >100k-token cliff are each easy to get subtly wrong, and a second
+    implementation in TypeScript would drift from the tested one. The
+    dashboard does lookups and multiplication, nothing else.
+    """
+    rows = (
+        await db.execute(
+            scope.apply(
+                _submission_join(
+                    select(
+                        Assignment.type.label("kind"),
+                        LLMCall.function.label("function"),
+                        LLMCall.model.label("model"),
+                        func.count().label("calls"),
+                        func.count(func.distinct(LLMCall.submission_id)).label("units"),
+                        func.sum(LLMCall.cost_usd).label("cost"),
+                        _median(LLMCall.input_tokens).label("med_in"),
+                        _median(LLMCall.output_tokens).label("med_out"),
+                        _median(LLMCall.cache_read_tokens).label("med_cread"),
+                        _median(LLMCall.cache_write_tokens).label("med_cwrite"),
+                    ),
+                ),
+            ).group_by(Assignment.type, LLMCall.function, LLMCall.model),
+        )
+    ).all()
+
+    # Collapse per-model rows into one entry per (kind, function), keeping
+    # the DOMINANT model's token profile as the measurement to reprice
+    # from — mixing two models' token counts would reprice from a profile
+    # no single model ever produced.
+    grouped: dict[tuple[str, str], list[Any]] = {}
+    for r in rows:
+        grouped.setdefault((r.kind, r.function), []).append(r)
+
+    out: dict[str, list[dict[str, Any]]] = {}
+    for (kind, function), group in grouped.items():
+        dominant = max(group, key=lambda r: int(r.calls))
+        calls = sum(int(r.calls) for r in group)
+        cost = sum(_f(r.cost) for r in group)
+        units = max((int(r.units) for r in group), default=1) or 1
+        tokens = {
+            "input": _f(dominant.med_in),
+            "output": _f(dominant.med_out),
+            "cache_read": _f(dominant.med_cread),
+            "cache_write": _f(dominant.med_cwrite),
+        }
+        calls_per_unit = calls / units
+        out.setdefault(f"submission:{kind}", []).append(
+            {
+                "function": function,
+                "models": sorted({r.model for r in group}),
+                "measured_model": dominant.model,
+                "calls_per_unit": calls_per_unit,
+                "cost_per_unit": cost / units,
+                "tokens": tokens,
+                "reprice": _reprice_row(dominant.model, tokens, calls_per_unit),
+            },
+        )
+    for fns in out.values():
+        fns.sort(key=lambda f: f["cost_per_unit"], reverse=True)
+    return out
+
+
+def _reprice_row(
+    measured_model: str, tokens: dict[str, float], calls_per_unit: float,
+) -> dict[str, float | None]:
+    """What this function would cost per unit on each catalog model.
+
+    None for a model we cannot price from — an unmeasured source model
+    means there is no token profile to rescale, and inventing one is how
+    a simulator starts lying.
+    """
+    source = price_for(measured_model)
+    out: dict[str, float | None] = {}
+    for target in MODEL_CATALOG:
+        if source is None:
+            out[target.id] = None
+            continue
+        out[target.id] = calls_per_unit * reprice(
+            source,
+            target,
+            input_tokens=int(tokens["input"]),
+            output_tokens=int(tokens["output"]),
+            cache_read_tokens=int(tokens["cache_read"]),
+            cache_write_tokens=int(tokens["cache_write"]),
+        )
+    return out
+
+
+async def _generation_unit(db: AsyncSession, scope: _Scope) -> dict[str, Any]:
+    """Cost of generating one teaching unit's problems.
+
+    Grouped by the job's `unit_id`, not by job: a teacher may run several
+    generation jobs while building one unit, and the thing that amortises
+    over a class is the unit, not an individual job.
+    """
+    per_unit = scope.apply(
+        select(
+            QuestionBankGenerationJob.unit_id.label("unit"),
+            func.sum(LLMCall.cost_usd).label("cost"),
+        ).join(
+            QuestionBankGenerationJob,
+            QuestionBankGenerationJob.id == LLMCall.generation_job_id,
+        ),
+    ).group_by(QuestionBankGenerationJob.unit_id).subquery()
+
+    r = (
+        await db.execute(
+            select(
+                func.count().label("n"),
+                _median(per_unit.c.cost).label("median"),
+                func.avg(per_unit.c.cost).label("mean"),
+                _p90(per_unit.c.cost).label("p90"),
+                func.sum(per_unit.c.cost).label("total"),
+            ),
+        )
+    ).one()
+
+    return {
+        "kind": "generation:unit",
+        "label": "unit generation",
+        "denominator": "per teaching unit",
+        "n": int(r.n),
+        "cost_median": _f(r.median) if r.n else None,
+        "cost_mean": _f(r.mean) if r.n else None,
+        "cost_p90": _f(r.p90) if r.n else None,
+        "cost_total": _f(r.total),
+    }
+
+
+async def _residual_units(db: AsyncSession, scope: _Scope) -> list[dict[str, Any]]:
+    """Everything tied to neither a submission nor a generation job.
+
+    Tutoring, practice, question-bank chat, unit suggestions. Split by the
+    role of the user who caused it, because teacher-side AI scales with
+    TEACHERS and self-study scales with STUDENTS — folding them together
+    hides a difference that gets large at district scale.
+
+    Denominated per active user per 30 days so the figure survives a
+    window of any length.
+    """
+    rows = (
+        await db.execute(
+            scope.apply(
+                select(
+                    User.role.label("role"),
+                    func.sum(LLMCall.cost_usd).label("cost"),
+                    func.count(func.distinct(LLMCall.user_id)).label("actives"),
+                    func.count().label("calls"),
+                ).join(User, User.id == LLMCall.user_id),
+            )
+            .where(
+                LLMCall.submission_id.is_(None),
+                LLMCall.generation_job_id.is_(None),
+            )
+            .group_by(User.role),
+        )
+    ).all()
+
+    months = scope.days / _DAYS_PER_MONTH
+    by_role = {r.role: r for r in rows}
+    out: list[dict[str, Any]] = []
+    for role, kind, label in (
+        ("student", "residual:student", "self-study"),
+        ("teacher", "residual:teacher", "teacher-side AI"),
+    ):
+        r = by_role.get(role)
+        actives = int(r.actives) if r and r.actives else 0
+        total = _f(r.cost) if r else 0.0
+        out.append(
+            {
+                "kind": kind,
+                "label": label,
+                "denominator": f"per active {role} per month",
+                "n": actives,
+                "cost_median": (total / actives / months) if actives else None,
+                "cost_mean": (total / actives / months) if actives else None,
+                "cost_p90": None,
+                "cost_total": total,
+            },
+        )
+    return out
+
+
+async def _reconciliation(db: AsyncSession, scope: _Scope) -> dict[str, Any]:
+    """Recorded spend vs. the same tokens priced at published rates.
+
+    The two should agree. A gap means a model is priced wrong in the
+    catalog or missing from it — which is exactly how the flat cache-read
+    multiplier went unnoticed for a month. Surfacing it permanently is
+    cheaper than discovering it again.
+    """
+    rows = (
+        await db.execute(
+            scope.apply(
+                select(
+                    LLMCall.model.label("model"),
+                    func.count().label("calls"),
+                    func.sum(LLMCall.cost_usd).label("recorded"),
+                    func.sum(LLMCall.input_tokens).label("in_t"),
+                    func.sum(LLMCall.output_tokens).label("out_t"),
+                    func.sum(LLMCall.cache_read_tokens).label("cread"),
+                    func.sum(LLMCall.cache_write_tokens).label("cwrite"),
+                ),
+            ).group_by(LLMCall.model),
+        )
+    ).all()
+
+    recorded = 0.0
+    recomputed = 0.0
+    calls = 0
+    unpriced: list[str] = []
+    per_model: list[dict[str, Any]] = []
+
+    for r in rows:
+        calls += int(r.calls)
+        recorded += _f(r.recorded)
+        price = price_for(r.model)
+        if price is None:
+            unpriced.append(r.model)
+            # No invented figure: an unpriced model contributes its
+            # recorded cost so the totals still balance, and is named so
+            # the dashboard can say the comparison is incomplete.
+            recomputed += _f(r.recorded)
+            model_recomputed = None
+        else:
+            # Summed tokens are exact for flat-rate models. Haiku 5.5's
+            # >100k-token cliff is per call, so if we ever run it this
+            # needs to move per-row.
+            model_recomputed = cost_usd(
+                price,
+                input_tokens=int(_f(r.in_t)),
+                output_tokens=int(_f(r.out_t)),
+                cache_read_tokens=int(_f(r.cread)),
+                cache_write_tokens=int(_f(r.cwrite)),
+            )
+            recomputed += model_recomputed
+        per_model.append(
+            {
+                "model": r.model,
+                "calls": int(r.calls),
+                "recorded_usd": _f(r.recorded),
+                "recomputed_usd": model_recomputed,
+                "priced": price is not None,
+            },
+        )
+
+    per_model.sort(key=lambda m: m["recorded_usd"], reverse=True)
+    gap_pct = ((recorded - recomputed) / recomputed * 100.0) if recomputed else 0.0
+    return {
+        "call_count": calls,
+        "recorded_usd": recorded,
+        "recomputed_usd": recomputed,
+        "gap_pct": gap_pct,
+        "unpriced_models": sorted(set(unpriced)),
+        "by_model": per_model,
+    }
+
+
+async def _teacher_student_ratio(
+    db: AsyncSession, school_id: str | None,
+) -> dict[str, Any]:
+    """Measured, not assumed — it divides every teacher-side cost."""
+    stmt = select(User.role, func.count().label("n")).where(
+        User.role.in_(("teacher", "student")),
+    )
+    if school_id and school_id != INTERNAL_SCHOOL_SENTINEL:
+        stmt = stmt.where(User.school_id == school_id)
+    rows = (await db.execute(stmt.group_by(User.role))).all()
+    counts = {r.role: int(r.n) for r in rows}
+    teachers = counts.get("teacher", 0)
+    students = counts.get("student", 0)
+    return {
+        "teachers": teachers,
+        "students": students,
+        "students_per_teacher": (students / teachers) if teachers else None,
+    }
+
+
+def _catalog() -> list[dict[str, Any]]:
+    configured = {
+        settings.llm_model_opus,
+        settings.llm_model_sonnet,
+        settings.llm_model_haiku,
+    }
+    return [
+        {
+            "id": m.id,
+            "label": m.label,
+            "input_per_mtok": m.input_per_token * _PER_MTOK,
+            "output_per_mtok": m.output_per_token * _PER_MTOK,
+            "cache_read_mult": m.cache_read_mult,
+            "cache_write_mult": 1.25,
+            "tokenizer_factor": m.tokenizer_factor,
+            "long_context_threshold": m.long_context_threshold,
+            "long_context_input_per_mtok": (
+                m.long_context_input_per_token * _PER_MTOK
+                if m.long_context_input_per_token is not None
+                else None
+            ),
+            "long_context_output_per_mtok": (
+                m.long_context_output_per_token * _PER_MTOK
+                if m.long_context_output_per_token is not None
+                else None
+            ),
+            "is_configured": any(c.startswith(m.id) for c in configured),
+        }
+        for m in MODEL_CATALOG
+    ]
+
+
+@router.get("/unit-economics")
+async def unit_economics(
+    days: int | None = Query(default=None, ge=1, le=3650),
+    school_id: str | None = Query(default=None),
+    exclude_internal: bool = Query(default=True),
+    min_sample: int = Query(default=_DEFAULT_MIN_SAMPLE, ge=1, le=1000),
+    current_user: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    if school_id and school_id != INTERNAL_SCHOOL_SENTINEL:
+        try:
+            uuid_lib.UUID(school_id)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail="invalid school_id") from e
+
+    since, until, window_basis, cutover_model = await _resolve_window(db, days)
+    scope = _Scope(since, until, school_id, exclude_internal)
+
+    units = await _submission_units(db, scope)
+    units.append(await _generation_unit(db, scope))
+    units.extend(await _residual_units(db, scope))
+    for u in units:
+        u["sufficient"] = u["n"] >= min_sample
+
+    return {
+        "window": {
+            "start": since.isoformat(),
+            "end": until.isoformat(),
+            "days": scope.days,
+            "basis": window_basis,
+            "cutover_model": cutover_model,
+        },
+        "units": units,
+        "functions_by_unit": await _submission_functions(db, scope),
+        "reconciliation": await _reconciliation(db, scope),
+        "teacher_student_ratio": await _teacher_student_ratio(db, school_id),
+        "model_catalog": _catalog(),
+        "min_sample": min_sample,
+    }
