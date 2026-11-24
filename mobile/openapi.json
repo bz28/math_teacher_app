@@ -11721,6 +11721,102 @@
         ]
       }
     },
+    "/v1/admin/unit-economics": {
+      "get": {
+        "operationId": "unit_economics_v1_admin_unit_economics_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 3650,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Days"
+            }
+          },
+          {
+            "in": "query",
+            "name": "school_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "School Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "exclude_internal",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Exclude Internal",
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "min_sample",
+            "required": false,
+            "schema": {
+              "default": 5,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Min Sample",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Unit Economics V1 Admin Unit Economics Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Unit Economics",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/admin/users": {
       "get": {
         "operationId": "users_v1_admin_users_get",
