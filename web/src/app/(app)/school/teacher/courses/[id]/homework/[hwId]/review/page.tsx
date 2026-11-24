@@ -68,6 +68,10 @@ export default function HomeworkReviewPage({
         status: "pending",
         assignment_id: assignmentId,
       });
+      // The bank lists newest first; review goes oldest first so a set
+      // is approved in the order it was read or written (problem 1
+      // first), and items that land mid-review join at the end.
+      res.items.sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
       // Practice items are variations by design (clone-from-HW
       // parents each one on a source HW primary), so skip the
       // variation filter for practice — otherwise we'd drop every

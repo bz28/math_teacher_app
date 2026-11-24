@@ -914,7 +914,19 @@ async def approve_bank_item(
             except (ValueError, TypeError):
                 continue
         if item.id not in existing_ids:
-            existing_ids.append(item.id)
+            # File it before the first of this HW's own problems that was
+            # made after it, not at the end: approving in any order (or
+            # after a Skip) keeps a set in the order it was read or
+            # written. Problems brought in from elsewhere keep their place.
+            made_later = set((await db.execute(
+                select(QuestionBankItem.id).where(
+                    QuestionBankItem.id.in_(existing_ids),
+                    QuestionBankItem.originating_assignment_id == a.id,
+                    QuestionBankItem.created_at > item.created_at,
+                )
+            )).scalars().all()) if existing_ids else set()
+            at = next((i for i, pid in enumerate(existing_ids) if pid in made_later), len(existing_ids))
+            existing_ids.insert(at, item.id)
             # snapshot_bank_items re-validates that every id in the list
             # belongs to the course and is approved — including the one
             # we just flipped above (in-memory state is "approved").
