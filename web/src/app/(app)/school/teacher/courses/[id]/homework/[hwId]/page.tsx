@@ -20,6 +20,7 @@ import {
   type HomeworkGraphChecklist,
 } from "@/lib/api";
 import { jobNotices } from "@/lib/job-notice";
+import { generatingLabel, generationProgress } from "@/lib/generation-progress";
 import { normalizeRubric } from "@/lib/rubric";
 import { buildChoices } from "@/lib/practice-choices";
 import { evenSplit, MAX_TOTAL_POINTS, pointsRange } from "@/lib/points";
@@ -788,24 +789,13 @@ export default function HomeworkDetailPage({
   const activeGenerating = activeJobs.some(
     (j) => j.status !== "done" && j.status !== "failed",
   );
-  // Aggregate counts across every job feeding this HW. Drives the
-  // hero and inline strip — clone-as-practice can have N jobs, so
-  // displaying any single job's count would underreport.
-  const aggregateRequested = activeJobs.reduce(
-    (s, j) => s + j.requested_count,
-    0,
-  );
-  // An upload copies problems off the teacher's pages; it doesn't know how
-  // many until it has read them (requested_count stays 0 until then).
-  const runningJobs = activeJobs.filter(
-    (j) => j.status !== "done" && j.status !== "failed",
-  );
-  const readingUpload =
-    runningJobs.length > 0 && runningJobs.every((j) => j.mode === "upload");
-  const aggregateProduced = activeJobs.reduce(
-    (s, j) => s + j.produced_count,
-    0,
-  );
+  // Counts across every job feeding this HW (hero + inline strip), or
+  // just the running uploads while one is being read.
+  const {
+    requested: aggregateRequested,
+    produced: aggregateProduced,
+    reading: readingUpload,
+  } = generationProgress(activeJobs);
 
   // Failed-generation surfacing. A job that ends `status:"failed"`
   // (backend failure OR the poll-ceiling timeout above) drops out of
@@ -1469,26 +1459,6 @@ function ProblemsEmptyHero({
 // aesthetic so an in-flight gen reads as a deliberate "we're on it"
 // state, not a stalled skeleton. Live count comes from the polled job.
 // ────────────────────────────────────────────────────────────────────
-// "Generating 6 problems…", or for an upload "Reading 6 problems from your
-// pages…" — and before the upload has been read, no count at all (it is 0
-// until then, which read as "Generating 0 problems…").
-function generatingLabel(
-  count: number,
-  reading: boolean,
-  more?: "more",
-): string {
-  const noun = count === 1 ? "problem" : "problems";
-  if (reading) {
-    if (count === 0) {
-      return more ? "Reading more problems from your pages…" : "Reading your pages…";
-    }
-    return more
-      ? `Reading ${count} more ${noun} from your pages…`
-      : `Reading ${count} ${noun} from your pages…`;
-  }
-  return more ? `Generating ${count} more…` : `Generating ${count} ${noun}…`;
-}
-
 function ProblemsGeneratingHero({
   requestedCount,
   producedCount,
