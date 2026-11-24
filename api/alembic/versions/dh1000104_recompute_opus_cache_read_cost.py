@@ -30,16 +30,14 @@ Scope and safety
 - The correction can only move cost DOWN. The migration raises a NOTICE
   with the before/after totals so the deploy log records what we had
   overstated.
-- Bounded by `created_at` so neither direction can touch a row the new
-  code wrote at the correct rate. Without that bound a `downgrade` would
-  over-price every row written since the deploy, because the filter
-  cannot otherwise tell corrected rows from never-wrong ones.
+- Self-identifying rather than time-bounded: a row is in scope only if
+  its stored cost still matches what the OLD formula produces. Both
+  directions are therefore idempotent, and neither can touch a row the
+  other already handled.
 
-Known residue: during a rolling deploy the old container keeps writing
-Opus rows at the flat 0.1x after this has run. Those stay overstated.
-The direction is conservative and the window is one deploy, but it is
-why the reconciliation panel may show a small permanent gap for a window
-spanning the release.
+Rolling-deploy residue is self-healing as a result: the old container
+keeps writing flat-rate rows after this runs, and replaying the migration
+corrects exactly those without disturbing anything else.
 
 Rates used (published, checked 2026-11-24): Opus 5.5 input $4/MTok.
 Correction per row = cache_read_tokens * $4e-6 * (0.1 - 0.05).
@@ -53,33 +51,56 @@ down_revision: str | None = "dg1000103"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
-# Opus 5.5 base input rate, USD per token.
+# Opus 5.5 published rates, USD per token.
 _OPUS_INPUT_PER_TOKEN = 4.0 / 1_000_000
+_OPUS_OUTPUT_PER_TOKEN = 20.0 / 1_000_000
+_CACHE_WRITE_MULT = 1.25
 _WRONG_READ_MULT = 0.1
 _CORRECT_READ_MULT = 0.05
 
-# Rows written by the OLD code — the only ones that carry the error.
+# Rows written by the OLD code — the only ones carrying the error.
 #
-# The cutoff is what makes this safe in both directions. Without it the
-# WHERE clause cannot tell a mispriced row from one the new code wrote
-# correctly at 0.05x, so `downgrade` would add the delta to rows that
-# never had it and OVER-price current history. The upgrade has the mirror
-# hazard if it is ever replayed.
+# Identified by RECOMPUTING what the old formula would have produced and
+# matching the stored value against it, rather than by a timestamp.
 #
-# Set to the moment this migration was authored. Every row in scope
-# predates the deploy that runs it; rows the new code writes afterwards
-# are outside the window and are left alone by both directions.
-_WRITTEN_BY_OLD_CODE_BEFORE = "2026-11-24 00:00:00+00"
-
-_SCOPE = (
-    "model LIKE 'claude-opus-5-5%' "
-    "AND cache_read_tokens > 0 "
-    f"AND created_at < TIMESTAMPTZ '{_WRITTEN_BY_OLD_CODE_BEFORE}'"
+# A date cutoff cannot express this. Pinned to the authoring date it
+# misses every row the old container wrote between authoring and deploy
+# (days, on a branch -> PR -> CI -> merge workflow) and those stay
+# overstated forever. Pinned to now() it is complete going forward but
+# makes `downgrade` add a delta to every row the NEW code has since
+# written correctly, over-pricing live history.
+#
+# Matching the formula has neither failure. It is exact (every input to
+# the old computation is stored on the row), complete (no time bound to
+# miss rows), and idempotent in both directions: once corrected a row no
+# longer matches the old formula, so a replayed upgrade is a no-op, and
+# a downgrade only touches rows matching the NEW one.
+_OLD_COST = (
+    f"(input_tokens * {_OPUS_INPUT_PER_TOKEN!r} "
+    f"+ output_tokens * {_OPUS_OUTPUT_PER_TOKEN!r} "
+    f"+ cache_read_tokens * {_OPUS_INPUT_PER_TOKEN!r} * {_WRONG_READ_MULT!r} "
+    f"+ cache_write_tokens * {_OPUS_INPUT_PER_TOKEN!r} * {_CACHE_WRITE_MULT!r})"
 )
+_NEW_COST = (
+    f"(input_tokens * {_OPUS_INPUT_PER_TOKEN!r} "
+    f"+ output_tokens * {_OPUS_OUTPUT_PER_TOKEN!r} "
+    f"+ cache_read_tokens * {_OPUS_INPUT_PER_TOKEN!r} * {_CORRECT_READ_MULT!r} "
+    f"+ cache_write_tokens * {_OPUS_INPUT_PER_TOKEN!r} * {_CACHE_WRITE_MULT!r})"
+)
+
+_BASE = "model LIKE 'claude-opus-5-5%' AND cache_read_tokens > 0"
+
 _DELTA = (
     f"cache_read_tokens * {_OPUS_INPUT_PER_TOKEN!r} "
     f"* ({_WRONG_READ_MULT!r} - {_CORRECT_READ_MULT!r})"
 )
+
+# Half the correction separates the two cleanly: a row priced the old way
+# sits 0 away from _OLD_COST and a full delta from _NEW_COST, and the
+# reverse once corrected. Absorbs float8 round-trip noise without ever
+# straddling.
+UPGRADE_SCOPE = f"{_BASE} AND abs(cost_usd - {_OLD_COST}) < ({_DELTA}) / 2"
+DOWNGRADE_SCOPE = f"{_BASE} AND abs(cost_usd - {_NEW_COST}) < ({_DELTA}) / 2"
 
 
 def _report(direction: str) -> str:
@@ -92,7 +113,7 @@ def _report(direction: str) -> str:
         SELECT count(*), COALESCE(sum({_DELTA}), 0)
           INTO n, shift
           FROM llm_calls
-         WHERE {_SCOPE};
+         WHERE {UPGRADE_SCOPE};
         RAISE NOTICE
             'dh1000104: % Opus 5.5 rows {direction} by $% (cache-read 0.1x -> 0.05x)',
             n, round(shift::numeric, 4);
@@ -102,13 +123,19 @@ def _report(direction: str) -> str:
 
 def upgrade() -> None:
     op.execute(_report("corrected down"))
-    op.execute(f"UPDATE llm_calls SET cost_usd = cost_usd - ({_DELTA}) WHERE {_SCOPE}")
+    op.execute(
+        f"UPDATE llm_calls SET cost_usd = cost_usd - ({_DELTA}) "
+        f"WHERE {UPGRADE_SCOPE}",
+    )
 
 
 def downgrade() -> None:
     """Restore the flat 0.1x figure these rows were originally written with.
 
-    Bounded by the same cutoff as the upgrade, so it cannot reach rows the
-    new code already priced correctly.
+    Matches rows priced the NEW way, so it cannot reach a row the old
+    code wrote or double-apply on a replay.
     """
-    op.execute(f"UPDATE llm_calls SET cost_usd = cost_usd + ({_DELTA}) WHERE {_SCOPE}")
+    op.execute(
+        f"UPDATE llm_calls SET cost_usd = cost_usd + ({_DELTA}) "
+        f"WHERE {DOWNGRADE_SCOPE}",
+    )

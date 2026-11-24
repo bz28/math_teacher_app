@@ -123,8 +123,13 @@ def test_other_models_must_not_be_in_scope() -> None:
 # interaction and idempotency were all unexercised — and the scope is the
 # part that can corrupt rows rather than merely mis-state them.
 
+# Scope is self-identifying now, so these only need to be plausible.
 _BEFORE = datetime(2026, 11, 20, tzinfo=UTC)
 _AFTER = datetime(2026, 11, 24, tzinfo=UTC) + timedelta(days=1)
+
+# What the old and new formulas produce for 1000 in / 500 out / 38k reads.
+_OLD = 1_000 * 4e-6 + 500 * 20e-6 + 38_000 * 4e-6 * 0.1
+_NEW = 1_000 * 4e-6 + 500 * 20e-6 + 38_000 * 4e-6 * 0.05
 
 
 async def _row(
@@ -164,14 +169,20 @@ async def _run(sql: str) -> None:
         await s.commit()
 
 
-_UPGRADE = f"UPDATE llm_calls SET cost_usd = cost_usd - ({mig._DELTA}) WHERE {mig._SCOPE}"
-_DOWNGRADE = f"UPDATE llm_calls SET cost_usd = cost_usd + ({mig._DELTA}) WHERE {mig._SCOPE}"
+_UPGRADE = (
+    f"UPDATE llm_calls SET cost_usd = cost_usd - ({mig._DELTA}) "
+    f"WHERE {mig.UPGRADE_SCOPE}"
+)
+_DOWNGRADE = (
+    f"UPDATE llm_calls SET cost_usd = cost_usd + ({mig._DELTA}) "
+    f"WHERE {mig.DOWNGRADE_SCOPE}"
+)
 
 
 async def test_upgrade_sql_corrects_only_rows_in_scope() -> None:
     """Runs the real statement, not a Python restatement of it."""
     target = await _row(
-        model="claude-opus-5-5", cache_read=38_000, created_at=_BEFORE, cost=0.049,
+        model="claude-opus-5-5", cache_read=38_000, created_at=_BEFORE, cost=_OLD,
     )
     no_cache = await _row(
         model="claude-opus-5-5", cache_read=0, created_at=_BEFORE, cost=0.014,
@@ -181,41 +192,74 @@ async def test_upgrade_sql_corrects_only_rows_in_scope() -> None:
     )
     # Shorter id that the LIKE pattern must NOT match.
     opus5 = await _row(
-        model="claude-opus-5", cache_read=38_000, created_at=_BEFORE, cost=0.049,
+        model="claude-opus-5", cache_read=38_000, created_at=_BEFORE, cost=_OLD,
     )
 
     await _run(_UPGRADE)
 
-    assert await _cost(target) == pytest.approx(0.0414)
+    assert await _cost(target) == pytest.approx(_NEW)
     assert await _cost(no_cache) == pytest.approx(0.014)
     assert await _cost(sonnet) == pytest.approx(0.0165)
-    assert await _cost(opus5) == pytest.approx(0.049), (
+    assert await _cost(opus5) == pytest.approx(_OLD), (
         "LIKE 'claude-opus-5-5%' must not match the shorter 'claude-opus-5'"
     )
 
 
-async def test_rows_written_after_the_cutoff_are_left_alone() -> None:
-    """The new code already priced these at 0.05x.
+async def test_rows_the_new_code_priced_are_never_corrected_again() -> None:
+    """These were written at 0.05x and carry no error.
 
-    Without the created_at bound the filter cannot tell them apart, so a
-    downgrade would add a delta they never carried and over-price current
-    history.
+    A time-bounded filter could not tell them apart, so a downgrade would
+    add a delta they never carried and over-price live history. Matching
+    the old formula distinguishes them exactly.
     """
     fresh = await _row(
-        model="claude-opus-5-5", cache_read=38_000, created_at=_AFTER, cost=0.0414,
+        model="claude-opus-5-5", cache_read=38_000, created_at=_AFTER, cost=_NEW,
     )
     await _run(_UPGRADE)
-    assert await _cost(fresh) == pytest.approx(0.0414)
-    await _run(_DOWNGRADE)
-    assert await _cost(fresh) == pytest.approx(0.0414), (
-        "a post-deploy row must survive a downgrade untouched"
+    assert await _cost(fresh) == pytest.approx(_NEW), (
+        "an already-correct row must not be corrected a second time"
     )
 
 
-async def test_downgrade_is_a_true_inverse() -> None:
+async def test_upgrade_is_idempotent() -> None:
+    """A replay must be a no-op, not a second halving.
+
+    This is what makes the rolling-deploy residue safe to clean up: the
+    old container keeps writing flat-rate rows after the migration has
+    run, and re-running it fixes exactly those.
+    """
     rid = await _row(
-        model="claude-opus-5-5", cache_read=38_000, created_at=_BEFORE, cost=0.049,
+        model="claude-opus-5-5", cache_read=38_000, created_at=_BEFORE, cost=_OLD,
+    )
+    await _run(_UPGRADE)
+    once = await _cost(rid)
+    await _run(_UPGRADE)
+    await _run(_UPGRADE)
+    assert await _cost(rid) == pytest.approx(once)
+    assert once == pytest.approx(_NEW)
+
+
+async def test_replay_corrects_rows_written_after_the_first_run() -> None:
+    """The rolling-deploy case, end to end."""
+    already = await _row(
+        model="claude-opus-5-5", cache_read=38_000, created_at=_BEFORE, cost=_OLD,
+    )
+    await _run(_UPGRADE)
+    # The old container is still serving and writes another flat-rate row.
+    straggler = await _row(
+        model="claude-opus-5-5", cache_read=38_000, created_at=_AFTER, cost=_OLD,
+    )
+    await _run(_UPGRADE)
+    assert await _cost(straggler) == pytest.approx(_NEW)
+    assert await _cost(already) == pytest.approx(_NEW), "and not re-corrected"
+
+
+async def test_downgrade_is_a_true_inverse_and_idempotent() -> None:
+    rid = await _row(
+        model="claude-opus-5-5", cache_read=38_000, created_at=_BEFORE, cost=_OLD,
     )
     await _run(_UPGRADE)
     await _run(_DOWNGRADE)
-    assert await _cost(rid) == pytest.approx(0.049)
+    assert await _cost(rid) == pytest.approx(_OLD)
+    await _run(_DOWNGRADE)
+    assert await _cost(rid) == pytest.approx(_OLD), "replay must not re-add"
