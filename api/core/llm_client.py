@@ -30,6 +30,7 @@ from api.config import settings
 from api.core.cost_tracker import PlatformStopError, cost_tracker
 from api.core.llm_logging import fire_and_forget_persist
 from api.core.llm_schemas import ToolSchema
+from api.core.model_pricing import cost_usd, price_for_billing
 from api.core.prompts import load_prompt, prompt_version
 
 logger = logging.getLogger(__name__)
@@ -99,14 +100,11 @@ MODEL_OPUS = settings.llm_model_opus
 # tool_choice "auto" and tells them to answer with the tool.
 _ALWAYS_THINKS = {MODEL_OPUS}
 
-# Pricing per token (USD)
-_PRICING: dict[str, tuple[float, float]] = {
-    MODEL_SONNET: (3.0 / 1_000_000, 15.0 / 1_000_000),
-    MODEL_HAIKU: (1.0 / 1_000_000, 5.0 / 1_000_000),
-    MODEL_OPUS: (4.0 / 1_000_000, 20.0 / 1_000_000),
-}
-# Fallback for unknown models
-_DEFAULT_PRICING = _PRICING[MODEL_SONNET]
+# Pricing lives in api/core/model_pricing.py — one table, shared with the
+# admin unit-economics simulator so the two can never disagree about what
+# a call costs. It is also per-model where Anthropic's rates are per-model:
+# the cache-READ multiplier used to be a single constant here, which
+# over-charged every cached Opus 5.5 read by 2x.
 
 MAX_RETRIES = 3
 
@@ -122,14 +120,6 @@ MAX_RETRIES = 3
 # ingest up to ten images before it emits anything, and a stall longer
 # than this is a real fault worth surfacing rather than waiting out.
 VISION_STREAM_TIMEOUT_S = 120.0
-
-# Prompt-cache price multipliers, relative to the model's base INPUT rate.
-# A cache write costs 25% more than fresh input (you pay a premium to
-# store the prefix); a subsequent read costs a tenth. Both are Anthropic
-# platform rates for the 5-minute `ephemeral` cache we use, so they hold
-# across models and don't belong in the per-model _PRICING table.
-_CACHE_WRITE_MULT = 1.25
-_CACHE_READ_MULT = 0.1
 
 # Extended thinking: minimum budget enforced by the Anthropic API.
 MIN_THINKING_BUDGET = 1024
@@ -274,12 +264,12 @@ def _calc_cost(
     before these two args existed) therefore undercharges every cached
     call and makes a cache hit indistinguishable from a short prompt.
     """
-    input_price, output_price = _PRICING.get(model, _DEFAULT_PRICING)
-    return (
-        (input_tokens * input_price)
-        + (output_tokens * output_price)
-        + (cache_read_tokens * input_price * _CACHE_READ_MULT)
-        + (cache_write_tokens * input_price * _CACHE_WRITE_MULT)
+    return cost_usd(
+        price_for_billing(model),
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cache_read_tokens=cache_read_tokens,
+        cache_write_tokens=cache_write_tokens,
     )
 
 
@@ -409,7 +399,7 @@ def _with_transcript_cache(
     so without a breakpoint the cost of a conversation is quadratic in its
     length: turn 10 pays full input price for turns 1-9 all over again.
     Marking the tail of the last message caches everything before it, so
-    the next turn reads that prefix at `_CACHE_READ_MULT` and only writes
+    the next turn reads that prefix at the model's cache-read rate and writes
     the delta.
 
     The breakpoint ROLLS — it sits on whatever the last message is, which

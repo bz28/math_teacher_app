@@ -91,8 +91,8 @@ class LLMCall(Base):
     output_tokens: Mapped[int] = mapped_column(Integer, nullable=False)
 
     # Prompt-cache traffic, priced differently from ordinary input:
-    # a write costs 1.25x base input, a read 0.1x (see _CACHE_WRITE_MULT /
-    # _CACHE_READ_MULT in llm_client). Split out rather than folded into
+    # a write costs 1.25x base input, a read 0.05x-0.1x depending on the
+    # model (see api/core/model_pricing.py). Split out rather than folded into
     # input_tokens so the dashboard can show a real cache HIT RATE —
     # without these two numbers there is no way to tell whether the
     # cache_control we send is doing anything at all.

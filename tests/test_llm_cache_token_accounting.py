@@ -8,7 +8,8 @@ so there was no way to tell whether the `cache_control` we send was ever
 working.
 
 Covers:
-1. `_calc_cost` prices cache reads at 0.1x and writes at 1.25x the
+1. `_calc_cost` prices cache reads at the model's own read multiplier
+   and writes at 1.25x the
    model's base input rate, on top of uncached input + output.
 2. Zero cache traffic prices exactly as before (no drift for the
    uncached path, which is most calls).
@@ -26,17 +27,22 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from api.core.llm_client import (
-    _CACHE_READ_MULT,
-    _CACHE_WRITE_MULT,
     MODEL_SONNET,
     _calc_cost,
     _usage_cache_tokens,
     call_claude_json,
 )
+from api.core.model_pricing import CACHE_WRITE_MULT, price_for
 
-# Sonnet base rates, mirrored from _PRICING.
-_IN = 3.0 / 1_000_000
-_OUT = 15.0 / 1_000_000
+_SONNET = price_for(MODEL_SONNET)
+assert _SONNET is not None, "Sonnet must be in MODEL_CATALOG"
+
+_CACHE_READ_MULT = _SONNET.cache_read_mult
+_CACHE_WRITE_MULT = CACHE_WRITE_MULT
+
+# Sonnet base rates, mirrored from MODEL_CATALOG.
+_IN = _SONNET.input_per_token
+_OUT = _SONNET.output_per_token
 
 _SCHEMA: Any = {
     "name": "emit",
