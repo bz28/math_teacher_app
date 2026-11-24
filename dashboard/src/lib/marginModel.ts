@@ -97,12 +97,16 @@ function unitOf(data: UnitEconomicsData, kind: string): UnitCost | undefined {
 function repricedUnitCost(
   fns: UnitFunction[] | undefined,
   models: ModelChoice,
+  // Needed because a function's knob can depend on the family it was
+  // measured in — `decompose` is generation work inside a generation
+  // job and tutoring everywhere else.
+  unitKind: string,
 ): { cost: number; unpriced: boolean } {
   if (!fns || fns.length === 0) return { cost: 0, unpriced: false };
   let cost = 0;
   let unpriced = false;
   for (const fn of fns) {
-    const chosen = models[featureFor(fn.function)];
+    const chosen = models[featureFor(fn.function, unitKind)];
     const repriced = chosen ? fn.reprice[chosen] : undefined;
     if (repriced === undefined || repriced === null) {
       cost += fn.cost_per_unit;
@@ -133,7 +137,11 @@ export function computeMargin(
     const perMonth = s[kind];
     const unit = unitOf(data, `submission:${kind}`);
     const fns = data.functions_by_unit[`submission:${kind}`];
-    const { cost, unpriced } = repricedUnitCost(fns, s.models);
+    const { cost, unpriced } = repricedUnitCost(
+      fns,
+      s.models,
+      `submission:${kind}`,
+    );
     // No measurement at all → contribute nothing, but say so rather
     // than let a missing bucket read as "free".
     const thin = !unit || !unit.sufficient;
@@ -153,7 +161,7 @@ export function computeMargin(
   // 2. Generation — paid once per teaching unit, shared by the class.
   const genFns = data.functions_by_unit["generation:unit"];
   const genUnit = unitOf(data, "generation:unit");
-  const gen = repricedUnitCost(genFns, s.models);
+  const gen = repricedUnitCost(genFns, s.models, "generation:unit");
   // The endpoint only returns a measured total for generation (there is
   // no per-function profile when no generation ran), so fall back to it.
   const genPerUnit = gen.cost > 0 ? gen.cost : (genUnit?.cost_median ?? 0);
@@ -177,7 +185,11 @@ export function computeMargin(
   // page changed.
   const teacher = unitOf(data, "residual:teacher");
   const teacherFns = data.functions_by_unit["residual:teacher"];
-  const teacherCost = repricedUnitCost(teacherFns, s.models);
+  const teacherCost = repricedUnitCost(
+    teacherFns,
+    s.models,
+    "residual:teacher",
+  );
   const perTeacherMonth =
     teacherFns && teacherFns.length > 0
       ? teacherCost.cost
@@ -193,7 +205,11 @@ export function computeMargin(
   // 4. Self-study — already per student per month.
   const student = unitOf(data, "residual:student");
   const studentFns = data.functions_by_unit["residual:student"];
-  const studentCost = repricedUnitCost(studentFns, s.models);
+  const studentCost = repricedUnitCost(
+    studentFns,
+    s.models,
+    "residual:student",
+  );
   lines.push({
     key: "residual:student",
     label: "self-study",

@@ -145,11 +145,6 @@ export const FEATURE_BUCKETS: { key: string; label: string; functions: string[] 
       // check before those were split apart.
       LLM_MODES.PRACTICE_EVAL,
       LLM_MODES.SUGGEST_UNITS,
-      // assignment_generation calls decompose_problem WITH a
-      // generation_job_id, so a unit's per-problem solution legs are
-      // generation work and must follow the generation knob rather than
-      // tutoring, where DECOMPOSE otherwise lives.
-      LLM_MODES.DECOMPOSE,
     ],
   },
   {
@@ -159,12 +154,25 @@ export const FEATURE_BUCKETS: { key: string; label: string; functions: string[] 
       LLM_MODES.STEP_CHAT,
       // Emitted only by the tutor, despite the generic name.
       LLM_MODES.ANSWER_EQUIVALENCE,
+      LLM_MODES.DECOMPOSE,
       LLM_MODES.DECOMPOSE_DIAGNOSIS,
       LLM_MODES.DIAGNOSE_WORK,
       LLM_MODES.BANK_CHAT,
     ],
   },
 ];
+
+// Some functions serve two masters, and the function NAME cannot tell
+// them apart — only the unit family can.
+//
+// `decompose` is the live case: assignment_generation calls
+// decompose_problem WITH a generation_job_id (so a unit's per-problem
+// solution legs are generation work), while practice and session call the
+// same helper for self-study (tutoring). Mapping the name to either knob
+// alone gets the other context wrong, which is what a name-only map did.
+const CONTEXT_DEPENDENT: Record<string, { generation: string; other: string }> = {
+  [LLM_MODES.DECOMPOSE]: { generation: "generation", other: "tutoring" },
+};
 
 // construction_figures logs a DERIVED label — `${mode}_facts_a` /
 // `_facts_b`, not an LLM_MODES constant — against the generation job that
@@ -184,7 +192,11 @@ const FEATURE_OF: Record<string, string> = Object.fromEntries(
 /** Which simulator knob a logged function sits under. "other" for
  *  anything unmapped — shown, never silently folded into a priced
  *  bucket, so a new function surfaces instead of skewing a margin. */
-export function featureFor(fnName: string): string {
+export function featureFor(fnName: string, unitKind = ""): string {
+  const ctx = CONTEXT_DEPENDENT[fnName];
+  if (ctx) {
+    return unitKind.startsWith("generation:") ? ctx.generation : ctx.other;
+  }
   const direct = FEATURE_OF[fnName];
   if (direct) return direct;
   for (const [suffix, key] of DERIVED_SUFFIX_FEATURE) {
