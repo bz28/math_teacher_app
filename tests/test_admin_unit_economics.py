@@ -531,7 +531,12 @@ async def test_generation_profile_is_denominated_per_unit(
     w = await _seed(homework_submissions=6, generation_units=2, jobs_per_unit=2)
     body = await _get(client, w.admin_id, days=30)
 
-    headline = _unit(body, "generation:unit")["cost_median"]
+    # Against the MEAN, not the median: summing per-function totals and
+    # dividing by the unit count is an average by construction. They are
+    # equal here only because the seeded jobs cost the same, so asserting
+    # on the median would pass for the wrong reason and break the first
+    # time real data is uneven.
+    headline = _unit(body, "generation:unit")["cost_mean"]
     profile = sum(
         f["cost_per_unit"] for f in body["functions_by_unit"]["generation:unit"]
     )
@@ -583,3 +588,49 @@ async def test_every_measured_catalog_id_is_selectable(
                 f"{f['function']} seeds the picker with "
                 f"{f['measured_catalog_id']!r}, which is not an option"
             )
+
+
+async def test_function_costs_sum_to_the_headline_unit_cost(
+    client: AsyncClient,
+) -> None:
+    """The parts must add up to the whole, even when a feature is optional.
+
+    `integrity_check_enabled` is per assignment, so the understanding
+    check does not fire on every homework. If each function is divided by
+    the submissions THAT FUNCTION touched rather than by every submission
+    of the kind, the optional leg is inflated and the per-function costs
+    no longer sum to the measured unit cost — and the simulator builds
+    its margin by summing exactly those per-function figures.
+    """
+    w = await _seed(homework_submissions=6)
+    async with get_session_factory()() as s:
+        # Strip grading from half the homeworks, the way an assignment
+        # with a feature disabled would look.
+        subs = (
+            await s.execute(
+                text(
+                    "SELECT s.id FROM submissions s JOIN assignments a "
+                    "ON a.id = s.assignment_id WHERE a.type = 'homework' LIMIT 3",
+                ),
+            )
+        ).scalars().all()
+        for sub in subs:
+            await s.execute(
+                text(
+                    "DELETE FROM llm_calls WHERE submission_id = :s "
+                    "AND function = 'ai_grading'",
+                ),
+                {"s": sub},
+            )
+        await s.commit()
+
+    body = await _get(client, w.admin_id, days=30)
+    headline_mean = _unit(body, "submission:homework")["cost_mean"]
+    parts = sum(
+        f["cost_per_unit"] for f in body["functions_by_unit"]["submission:homework"]
+    )
+    assert parts == pytest.approx(headline_mean, rel=1e-6), (
+        f"per-function costs sum to {parts} but the unit costs "
+        f"{headline_mean} — a feature that fires on only some submissions "
+        "is being divided by the wrong denominator"
+    )
