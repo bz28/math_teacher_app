@@ -201,13 +201,21 @@ async def _submission_units(db: AsyncSession, scope: _Scope) -> list[dict[str, A
 
 
 def _profile_rows(
-    rows: list[Any], key_of: Any, units_of: Any,
+    rows: list[Any], key_of: Any, denominators: dict[str, float],
 ) -> dict[str, list[dict[str, Any]]]:
     """Collapse per-(unit, function, model) rows into one entry per function.
 
     Keeps the DOMINANT model's token profile as the measurement to
     reprice from — mixing two models' token counts would reprice from a
     profile no single model ever produced.
+
+    `denominators` is the count of units of each KIND, measured once and
+    shared by every function. It must not be derived per function: a
+    feature that fires on only some units (integrity is per-assignment,
+    so the understanding check skips homeworks that disabled it) would
+    then be divided by its own smaller count, inflating it and breaking
+    the invariant the simulator depends on — that the per-function costs
+    sum to the measured unit cost.
     """
     grouped: dict[tuple[str, str], list[Any]] = {}
     for r in rows:
@@ -218,7 +226,7 @@ def _profile_rows(
         dominant = max(group, key=lambda r: int(r.calls))
         calls = sum(int(r.calls) for r in group)
         cost = sum(_f(r.cost) for r in group)
-        units = units_of(group)
+        units = denominators.get(kind) or 1.0
         tokens = {
             "input": _f(dominant.med_in),
             "output": _f(dominant.med_out),
@@ -293,7 +301,6 @@ async def _unit_functions(
                             Assignment.type.label("kind"),
                             LLMCall.function.label("function"),
                             LLMCall.model.label("model"),
-                            func.count(func.distinct(LLMCall.submission_id)).label("units"),
                             *_PROFILE_COLS,
                         ),
                     ),
@@ -301,11 +308,27 @@ async def _unit_functions(
             )
         ).all(),
     )
+    sub_denoms = {
+        f"submission:{r.kind}": float(r.units)
+        for r in (
+            await db.execute(
+                scope.apply(
+                    _submission_join(
+                        select(
+                            Assignment.type.label("kind"),
+                            func.count(func.distinct(LLMCall.submission_id))
+                            .label("units"),
+                        ).select_from(LLMCall),
+                    ),
+                ).group_by(Assignment.type),
+            )
+        ).all()
+    }
     out.update(
         _profile_rows(
             sub_rows,
             key_of=lambda r: f"submission:{r.kind}",
-            units_of=lambda g: max((int(r.units) for r in g), default=1) or 1,
+            denominators=sub_denoms,
         ),
     )
 
@@ -317,8 +340,6 @@ async def _unit_functions(
                     select(
                         LLMCall.function.label("function"),
                         LLMCall.model.label("model"),
-                        func.count(func.distinct(QuestionBankGenerationJob.unit_id))
-                        .label("units"),
                         *_PROFILE_COLS,
                     ).join(
                         QuestionBankGenerationJob,
@@ -328,11 +349,23 @@ async def _unit_functions(
             )
         ).all(),
     )
+    gen_units = (
+        await db.execute(
+            scope.apply(
+                select(
+                    func.count(func.distinct(QuestionBankGenerationJob.unit_id)),
+                ).select_from(LLMCall).join(
+                    QuestionBankGenerationJob,
+                    QuestionBankGenerationJob.id == LLMCall.generation_job_id,
+                ),
+            ),
+        )
+    ).scalar() or 1
     out.update(
         _profile_rows(
             gen_rows,
             key_of=lambda _r: "generation:unit",
-            units_of=lambda g: max((int(r.units) for r in g), default=1) or 1,
+            denominators={"generation:unit": float(gen_units)},
         ),
     )
 
@@ -347,7 +380,6 @@ async def _unit_functions(
                         User.role.label("role"),
                         LLMCall.function.label("function"),
                         LLMCall.model.label("model"),
-                        func.count(func.distinct(LLMCall.user_id)).label("units"),
                         *_PROFILE_COLS,
                     ).join(User, User.id == LLMCall.user_id),
                 )
@@ -360,12 +392,30 @@ async def _unit_functions(
             )
         ).all(),
     )
+    res_denoms = {
+        f"residual:{r.role}": max(float(r.units), 1.0) * max(months, 1e-9)
+        for r in (
+            await db.execute(
+                scope.apply(
+                    select(
+                        User.role.label("role"),
+                        func.count(func.distinct(LLMCall.user_id)).label("units"),
+                    ).select_from(LLMCall).join(User, User.id == LLMCall.user_id),
+                )
+                .where(
+                    LLMCall.submission_id.is_(None),
+                    LLMCall.generation_job_id.is_(None),
+                    User.role.in_(("student", "teacher")),
+                )
+                .group_by(User.role),
+            )
+        ).all()
+    }
     out.update(
         _profile_rows(
             res_rows,
             key_of=lambda r: f"residual:{r.role}",
-            units_of=lambda g: (max((int(r.units) for r in g), default=1) or 1)
-            * max(months, 1e-9),
+            denominators=res_denoms,
         ),
     )
     return out
