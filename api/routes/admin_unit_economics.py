@@ -200,10 +200,76 @@ async def _submission_units(db: AsyncSession, scope: _Scope) -> list[dict[str, A
     return out
 
 
-async def _submission_functions(
+def _profile_rows(
+    rows: list[Any], key_of: Any, units_of: Any,
+) -> dict[str, list[dict[str, Any]]]:
+    """Collapse per-(unit, function, model) rows into one entry per function.
+
+    Keeps the DOMINANT model's token profile as the measurement to
+    reprice from — mixing two models' token counts would reprice from a
+    profile no single model ever produced.
+    """
+    grouped: dict[tuple[str, str], list[Any]] = {}
+    for r in rows:
+        grouped.setdefault((key_of(r), r.function), []).append(r)
+
+    out: dict[str, list[dict[str, Any]]] = {}
+    for (kind, function), group in grouped.items():
+        dominant = max(group, key=lambda r: int(r.calls))
+        calls = sum(int(r.calls) for r in group)
+        cost = sum(_f(r.cost) for r in group)
+        units = units_of(group)
+        tokens = {
+            "input": _f(dominant.med_in),
+            "output": _f(dominant.med_out),
+            "cache_read": _f(dominant.med_cread),
+            "cache_write": _f(dominant.med_cwrite),
+        }
+        calls_per_unit = calls / units
+        out.setdefault(kind, []).append(
+            {
+                "function": function,
+                "models": sorted({r.model for r in group}),
+                "measured_model": dominant.model,
+                # The catalog entry that model id resolves to. A logged id
+                # can carry a -YYYYMMDD pin (settings.llm_model_haiku does),
+                # which matches no catalog id and no <option> value — the
+                # dashboard's model picker silently fell back to the first
+                # option when seeded from the raw id.
+                "measured_catalog_id": (
+                    measured.id if (measured := price_for(dominant.model)) else None
+                ),
+                "calls_per_unit": calls_per_unit,
+                "cost_per_unit": cost / units,
+                "tokens": tokens,
+                "reprice": _reprice_row(dominant.model, tokens, calls_per_unit),
+            },
+        )
+    for fns in out.values():
+        fns.sort(key=lambda f: f["cost_per_unit"], reverse=True)
+    return out
+
+
+_PROFILE_COLS = (
+    func.count().label("calls"),
+    func.sum(LLMCall.cost_usd).label("cost"),
+    _median(LLMCall.input_tokens).label("med_in"),
+    _median(LLMCall.output_tokens).label("med_out"),
+    _median(LLMCall.cache_read_tokens).label("med_cread"),
+    _median(LLMCall.cache_write_tokens).label("med_cwrite"),
+)
+
+
+async def _unit_functions(
     db: AsyncSession, scope: _Scope,
 ) -> dict[str, list[dict[str, Any]]]:
     """Per-function decomposition, token profile, and a reprice matrix.
+
+    Covers EVERY unit family, not just submissions. Generation and
+    tutoring need a profile for the same two reasons the submission
+    legs do: the dashboard seeds each model picker from the model those
+    calls actually ran on, and a knob with no profile behind it silently
+    does nothing when you move it.
 
     `calls_per_unit` is what makes repricing work: the understanding
     check fires several turns per homework, so its per-call median has to
@@ -213,64 +279,95 @@ async def _submission_functions(
     purpose. Rescaling tokens by the tokenizer ratio, applying the target
     model's own cache-read multiplier, and handling Haiku 5.5's
     >100k-token cliff are each easy to get subtly wrong, and a second
-    implementation in TypeScript would drift from the tested one. The
-    dashboard does lookups and multiplication, nothing else.
+    implementation in TypeScript would drift from the tested one.
     """
-    rows = (
-        await db.execute(
-            scope.apply(
-                _submission_join(
+    out: dict[str, list[dict[str, Any]]] = {}
+
+    # Submissions — denominator is the distinct submission.
+    sub_rows = list(
+        (
+            await db.execute(
+                scope.apply(
+                    _submission_join(
+                        select(
+                            Assignment.type.label("kind"),
+                            LLMCall.function.label("function"),
+                            LLMCall.model.label("model"),
+                            func.count(func.distinct(LLMCall.submission_id)).label("units"),
+                            *_PROFILE_COLS,
+                        ),
+                    ),
+                ).group_by(Assignment.type, LLMCall.function, LLMCall.model),
+            )
+        ).all(),
+    )
+    out.update(
+        _profile_rows(
+            sub_rows,
+            key_of=lambda r: f"submission:{r.kind}",
+            units_of=lambda g: max((int(r.units) for r in g), default=1) or 1,
+        ),
+    )
+
+    # Generation — denominator is the teaching UNIT, matching _generation_unit.
+    gen_rows = list(
+        (
+            await db.execute(
+                scope.apply(
                     select(
-                        Assignment.type.label("kind"),
                         LLMCall.function.label("function"),
                         LLMCall.model.label("model"),
-                        func.count().label("calls"),
-                        func.count(func.distinct(LLMCall.submission_id)).label("units"),
-                        func.sum(LLMCall.cost_usd).label("cost"),
-                        _median(LLMCall.input_tokens).label("med_in"),
-                        _median(LLMCall.output_tokens).label("med_out"),
-                        _median(LLMCall.cache_read_tokens).label("med_cread"),
-                        _median(LLMCall.cache_write_tokens).label("med_cwrite"),
+                        func.count(func.distinct(QuestionBankGenerationJob.unit_id))
+                        .label("units"),
+                        *_PROFILE_COLS,
+                    ).join(
+                        QuestionBankGenerationJob,
+                        QuestionBankGenerationJob.id == LLMCall.generation_job_id,
                     ),
-                ),
-            ).group_by(Assignment.type, LLMCall.function, LLMCall.model),
-        )
-    ).all()
+                ).group_by(LLMCall.function, LLMCall.model),
+            )
+        ).all(),
+    )
+    out.update(
+        _profile_rows(
+            gen_rows,
+            key_of=lambda _r: "generation:unit",
+            units_of=lambda g: max((int(r.units) for r in g), default=1) or 1,
+        ),
+    )
 
-    # Collapse per-model rows into one entry per (kind, function), keeping
-    # the DOMINANT model's token profile as the measurement to reprice
-    # from — mixing two models' token counts would reprice from a profile
-    # no single model ever produced.
-    grouped: dict[tuple[str, str], list[Any]] = {}
-    for r in rows:
-        grouped.setdefault((r.kind, r.function), []).append(r)
-
-    out: dict[str, list[dict[str, Any]]] = {}
-    for (kind, function), group in grouped.items():
-        dominant = max(group, key=lambda r: int(r.calls))
-        calls = sum(int(r.calls) for r in group)
-        cost = sum(_f(r.cost) for r in group)
-        units = max((int(r.units) for r in group), default=1) or 1
-        tokens = {
-            "input": _f(dominant.med_in),
-            "output": _f(dominant.med_out),
-            "cache_read": _f(dominant.med_cread),
-            "cache_write": _f(dominant.med_cwrite),
-        }
-        calls_per_unit = calls / units
-        out.setdefault(f"submission:{kind}", []).append(
-            {
-                "function": function,
-                "models": sorted({r.model for r in group}),
-                "measured_model": dominant.model,
-                "calls_per_unit": calls_per_unit,
-                "cost_per_unit": cost / units,
-                "tokens": tokens,
-                "reprice": _reprice_row(dominant.model, tokens, calls_per_unit),
-            },
-        )
-    for fns in out.values():
-        fns.sort(key=lambda f: f["cost_per_unit"], reverse=True)
+    # Residual — denominator is active users x months, so cost_per_unit
+    # reads as "per active user per month", matching _residual_units.
+    months = scope.days / _DAYS_PER_MONTH
+    res_rows = list(
+        (
+            await db.execute(
+                scope.apply(
+                    select(
+                        User.role.label("role"),
+                        LLMCall.function.label("function"),
+                        LLMCall.model.label("model"),
+                        func.count(func.distinct(LLMCall.user_id)).label("units"),
+                        *_PROFILE_COLS,
+                    ).join(User, User.id == LLMCall.user_id),
+                )
+                .where(
+                    LLMCall.submission_id.is_(None),
+                    LLMCall.generation_job_id.is_(None),
+                    User.role.in_(("student", "teacher")),
+                )
+                .group_by(User.role, LLMCall.function, LLMCall.model),
+            )
+        ).all(),
+    )
+    out.update(
+        _profile_rows(
+            res_rows,
+            key_of=lambda r: f"residual:{r.role}",
+            units_of=lambda g: (max((int(r.units) for r in g), default=1) or 1)
+            * max(months, 1e-9),
+        ),
+    )
     return out
 
 
@@ -555,7 +652,7 @@ async def unit_economics(
             "cutover_model": cutover_model,
         },
         "units": units,
-        "functions_by_unit": await _submission_functions(db, scope),
+        "functions_by_unit": await _unit_functions(db, scope),
         "reconciliation": await _reconciliation(db, scope),
         "teacher_student_ratio": await _teacher_student_ratio(db, school_id),
         "model_catalog": _catalog(),

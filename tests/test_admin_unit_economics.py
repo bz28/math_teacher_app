@@ -488,3 +488,98 @@ async def test_cheaper_model_reprices_cheaper_than_opus(client: AsyncClient) -> 
 
     assert vision["claude-haiku-5-5"] < vision[_SONNET] < vision[_OPUS]
     assert vision["claude-fable-5-1"] > vision[_OPUS]
+
+
+async def test_generation_and_tutoring_also_get_token_profiles(
+    client: AsyncClient,
+) -> None:
+    """Every model-picker knob needs a profile, or moving it does nothing.
+
+    The submission legs had one and generation/tutoring did not, so the
+    dashboard seeded those two pickers with the wrong model and changing
+    them left the margin unmoved.
+    """
+    w = await _seed(homework_submissions=6, generation_units=2)
+    async with get_session_factory()() as s:
+        s.add(
+            LLMCall(
+                function="step_chat", model="claude-haiku-4-5-20251001",
+                input_tokens=500, output_tokens=200, latency_ms=1.0,
+                cost_usd=0.001, success=True,
+                school_id=uuid.UUID(w.school_id),
+                user_id=uuid.UUID(w.student_ids[0]), created_at=_WHEN,
+            ),
+        )
+        await s.commit()
+
+    fns = (await _get(client, w.admin_id, days=30))["functions_by_unit"]
+
+    gen = fns.get("generation:unit")
+    assert gen, "generation must carry a token profile"
+    assert gen[0]["measured_model"] == _SONNET
+    assert gen[0]["reprice"][_OPUS] > gen[0]["reprice"]["claude-haiku-5-5"]
+
+    tutor = fns.get("residual:student")
+    assert tutor, "self-study must carry a token profile"
+    assert tutor[0]["measured_model"] == "claude-haiku-4-5-20251001"
+
+
+async def test_generation_profile_is_denominated_per_unit(
+    client: AsyncClient,
+) -> None:
+    """Must match the headline generation unit cost, not be per job."""
+    w = await _seed(homework_submissions=6, generation_units=2, jobs_per_unit=2)
+    body = await _get(client, w.admin_id, days=30)
+
+    headline = _unit(body, "generation:unit")["cost_median"]
+    profile = sum(
+        f["cost_per_unit"] for f in body["functions_by_unit"]["generation:unit"]
+    )
+    assert profile == pytest.approx(headline, rel=1e-6)
+
+
+async def test_date_pinned_model_resolves_to_a_catalog_id(
+    client: AsyncClient,
+) -> None:
+    """settings.llm_model_haiku carries a -YYYYMMDD pin.
+
+    The raw id matches no catalog entry and no <option> value, so a
+    dashboard picker seeded from it silently fell back to the first
+    model in the list — showing Fable 5.1 where Haiku actually ran.
+    """
+    w = await _seed(homework_submissions=6)
+    async with get_session_factory()() as s:
+        s.add(
+            LLMCall(
+                function="step_chat", model="claude-haiku-4-5-20251001",
+                input_tokens=500, output_tokens=200, latency_ms=1.0,
+                cost_usd=0.001, success=True,
+                school_id=uuid.UUID(w.school_id),
+                user_id=uuid.UUID(w.student_ids[0]), created_at=_WHEN,
+            ),
+        )
+        await s.commit()
+
+    body = await _get(client, w.admin_id, days=30)
+    tutor = body["functions_by_unit"]["residual:student"][0]
+    catalog_ids = {m["id"] for m in body["model_catalog"]}
+
+    assert tutor["measured_model"] == "claude-haiku-4-5-20251001"
+    assert tutor["measured_catalog_id"] == "claude-haiku-4-5"
+    assert tutor["measured_catalog_id"] in catalog_ids
+
+
+async def test_every_measured_catalog_id_is_selectable(
+    client: AsyncClient,
+) -> None:
+    """Whatever the picker is seeded with must exist as an option."""
+    w = await _seed(homework_submissions=6, generation_units=2)
+    body = await _get(client, w.admin_id, days=30)
+    catalog_ids = {m["id"] for m in body["model_catalog"]}
+
+    for fns in body["functions_by_unit"].values():
+        for f in fns:
+            assert f["measured_catalog_id"] in catalog_ids, (
+                f"{f['function']} seeds the picker with "
+                f"{f['measured_catalog_id']!r}, which is not an option"
+            )
