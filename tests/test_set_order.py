@@ -171,3 +171,34 @@ async def test_after_students_submit_an_approval_goes_last(client: AsyncClient) 
         await s.commit()
     await _approve(client, w, ids[1])
     assert await _problem_ids(w) == [str(ids[0]), str(ids[2]), str(ids[1])]
+
+
+@pytest.mark.asyncio
+async def test_a_set_approved_out_of_order_before_the_fix_is_no_worse_than_an_append(
+    client: AsyncClient,
+) -> None:
+    # Before problems were stamped apart, problems 1-5 shared one created_at
+    # and problem 6 came later, and the newest-first queue had the teacher
+    # approve 6 first: [6, 1, 2]. Approving 3 must not jump it ahead of 6.
+    w = await _seed()
+    made = datetime.now(UTC)
+    async with get_session_factory()() as s:
+        items = [
+            QuestionBankItem(
+                course_id=w["course_id"], unit_id=w["unit_id"], originating_assignment_id=w["hw_id"],
+                title=f"Problem {n}", question=f"Problem {n}", final_answer="1",
+                status="pending", source="imported",
+                created_at=made + timedelta(seconds=1 if n == 6 else 0),
+            )
+            for n in range(1, 7)
+        ]
+        s.add_all(items)
+        await s.flush()
+        for n in (6, 1, 2):  # approved under the old append
+            items[n - 1].status = "approved"
+        hw = (await s.execute(select(Assignment).where(Assignment.id == w["hw_id"]))).scalar_one()
+        hw.content = {"problem_ids": [str(items[n - 1].id) for n in (6, 1, 2)]}
+        await s.commit()
+        ids = [i.id for i in items]
+    await _approve(client, w, ids[2])
+    assert await _problem_ids(w) == [str(ids[i]) for i in (5, 0, 1, 2)]
