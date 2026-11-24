@@ -25,6 +25,7 @@ api/core/model_pricing.reprice for why that needs the tokenizer factor.
 """
 
 import uuid as uuid_lib
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -241,17 +242,30 @@ def _profile_rows(
         # By COST, not call count: a function with 1,000 cheap Haiku calls
         # and 50 huge Opus ones would otherwise reprice all 1,050 from the
         # cheap profile. Choosing by spend fails conservatively.
-        dominant = max(group, key=lambda r: _f(r.cost))
+        # Tie-broken on model id so identical requests return identical
+        # answers; a bare max() takes whichever row Postgres emitted first.
+        dominant = max(group, key=lambda r: (_f(r.cost), r.model))
         calls = sum(int(r.calls) for r in group)
         cost = sum(_f(r.cost) for r in group)
         units = denominators.get(kind) or 1.0
         tokens = {
-            "input": _f(dominant.med_in),
-            "output": _f(dominant.med_out),
-            "cache_read": _f(dominant.med_cread),
-            "cache_write": _f(dominant.med_cwrite),
+            "input": _f(dominant.avg_in),
+            "output": _f(dominant.avg_out),
+            "cache_read": _f(dominant.avg_cread),
+            "cache_write": _f(dominant.avg_cwrite),
         }
         calls_per_unit = calls / units
+        legs = [
+            _Leg(
+                model=r.model,
+                calls_per_unit=int(r.calls) / units,
+                input=_f(r.avg_in),
+                output=_f(r.avg_out),
+                cache_read=_f(r.avg_cread),
+                cache_write=_f(r.avg_cwrite),
+            )
+            for r in group
+        ]
         out.setdefault(kind, []).append(
             {
                 "function": function,
@@ -268,7 +282,13 @@ def _profile_rows(
                 "calls_per_unit": calls_per_unit,
                 "cost_per_unit": cost / units,
                 "tokens": tokens,
-                "reprice": _reprice_row(dominant.model, tokens, calls_per_unit),
+                "reprice": _reprice_legs(legs),
+                # Every leg repriced onto the model it actually ran on.
+                # Equals cost_per_unit when the arithmetic is sound, which
+                # is what the dashboard's trust badge compares against —
+                # and unlike "reprice at the dominant model" it stays a
+                # true identity when a function spans several models.
+                "self_reprice": _self_reprice(legs),
             },
         )
     for fns in out.values():
@@ -291,10 +311,10 @@ def _profile_rows(
 _PROFILE_COLS = (
     func.count().label("calls"),
     func.sum(LLMCall.cost_usd).label("cost"),
-    func.avg(LLMCall.input_tokens).label("med_in"),
-    func.avg(LLMCall.output_tokens).label("med_out"),
-    func.avg(LLMCall.cache_read_tokens).label("med_cread"),
-    func.avg(LLMCall.cache_write_tokens).label("med_cwrite"),
+    func.avg(LLMCall.input_tokens).label("avg_in"),
+    func.avg(LLMCall.output_tokens).label("avg_out"),
+    func.avg(LLMCall.cache_read_tokens).label("avg_cread"),
+    func.avg(LLMCall.cache_write_tokens).label("avg_cwrite"),
 )
 
 
@@ -451,30 +471,65 @@ async def _unit_functions(
     return out
 
 
-def _reprice_row(
-    measured_model: str, tokens: dict[str, float], calls_per_unit: float,
-) -> dict[str, float | None]:
+@dataclass(frozen=True)
+class _Leg:
+    """One (function, model) slice of a unit's work."""
+
+    model: str
+    calls_per_unit: float
+    input: float
+    output: float
+    cache_read: float
+    cache_write: float
+
+
+def _reprice_legs(legs: list[_Leg]) -> dict[str, float | None]:
     """What this function would cost per unit on each catalog model.
 
-    None for a model we cannot price from — an unmeasured source model
-    means there is no token profile to rescale, and inventing one is how
+    Each leg is repriced from ITS OWN measured profile and the result
+    summed. Repricing the group's total call count off a single model's
+    profile overstates any mixed-model group by the ratio between them.
+
+    None for a target we cannot price any leg from — an unknown source
+    model means there is no profile to rescale, and inventing one is how
     a simulator starts lying.
     """
-    source = price_for(measured_model)
     out: dict[str, float | None] = {}
+    sources = [(leg, price_for(leg.model)) for leg in legs]
     for target in MODEL_CATALOG:
-        if source is None:
-            out[target.id] = None
-            continue
-        out[target.id] = calls_per_unit * reprice(
-            source,
-            target,
-            input_tokens=tokens["input"],
-            output_tokens=tokens["output"],
-            cache_read_tokens=tokens["cache_read"],
-            cache_write_tokens=tokens["cache_write"],
-        )
+        total = 0.0
+        for leg, source in sources:
+            if source is None:
+                out[target.id] = None
+                break
+            total += leg.calls_per_unit * reprice(
+                source,
+                target,
+                input_tokens=leg.input,
+                output_tokens=leg.output,
+                cache_read_tokens=leg.cache_read,
+                cache_write_tokens=leg.cache_write,
+            )
+        else:
+            out[target.id] = total
     return out
+
+
+def _self_reprice(legs: list[_Leg]) -> float | None:
+    """Every leg priced on the model it actually ran on."""
+    total = 0.0
+    for leg in legs:
+        source = price_for(leg.model)
+        if source is None:
+            return None
+        total += leg.calls_per_unit * cost_usd(
+            source,
+            input_tokens=leg.input,
+            output_tokens=leg.output,
+            cache_read_tokens=leg.cache_read,
+            cache_write_tokens=leg.cache_write,
+        )
+    return total
 
 
 async def _generation_unit(db: AsyncSession, scope: _Scope) -> dict[str, Any]:
@@ -762,9 +817,12 @@ async def unit_economics(
     units.append(await _generation_unit(db, scope))
     units.extend(await _residual_units(db, scope))
     for u in units:
-        u["sufficient"] = u["n"] >= min_sample and not u.pop(
-            "window_too_short", False,
-        )
+        # Popped FIRST: `and` short-circuits, so folding the pop into the
+        # expression left the key in the response on every row that failed
+        # the sample check — which is the common case, not the rare one.
+        too_short = bool(u.pop("window_too_short", False))
+        u["sufficient"] = u["n"] >= min_sample and not too_short
+        u["window_too_short"] = too_short
 
     return {
         "window": {
