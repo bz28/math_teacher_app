@@ -795,6 +795,13 @@ export default function HomeworkDetailPage({
     (s, j) => s + j.requested_count,
     0,
   );
+  // An upload copies problems off the teacher's pages; it doesn't know how
+  // many until it has read them (requested_count stays 0 until then).
+  const runningJobs = activeJobs.filter(
+    (j) => j.status !== "done" && j.status !== "failed",
+  );
+  const readingUpload =
+    runningJobs.length > 0 && runningJobs.every((j) => j.mode === "upload");
   const aggregateProduced = activeJobs.reduce(
     (s, j) => s + j.produced_count,
     0,
@@ -1137,6 +1144,7 @@ export default function HomeworkDetailPage({
               <ProblemsGeneratingHero
                 requestedCount={aggregateRequested}
                 producedCount={aggregateProduced}
+                reading={readingUpload}
               />
             ) : problems.length === 0 ? (
               <ProblemsEmptyHero
@@ -1161,9 +1169,10 @@ export default function HomeworkDetailPage({
                     </span>
                     <span>
                       <span className="font-semibold">
-                        {aggregateProduced > 0
-                          ? `Generating ${aggregateRequested} more… · ${aggregateProduced} of ${aggregateRequested} ready`
-                          : `Generating ${aggregateRequested} more…`}
+                        {generatingLabel(aggregateRequested, readingUpload, "more")}
+                        {aggregateProduced > 0 && aggregateRequested > 0
+                          ? ` · ${aggregateProduced} of ${aggregateRequested} ready`
+                          : ""}
                       </span>{" "}
                       <span className="text-text-secondary">new ones land in the review queue when ready.</span>
                     </span>
@@ -1460,14 +1469,35 @@ function ProblemsEmptyHero({
 // aesthetic so an in-flight gen reads as a deliberate "we're on it"
 // state, not a stalled skeleton. Live count comes from the polled job.
 // ────────────────────────────────────────────────────────────────────
+// "Generating 6 problems…", or for an upload "Reading 6 problems from your
+// pages…" — and before the upload has been read, no count at all (it is 0
+// until then, which read as "Generating 0 problems…").
+function generatingLabel(
+  count: number,
+  reading: boolean,
+  more?: "more",
+): string {
+  const noun = count === 1 ? "problem" : "problems";
+  if (reading) {
+    if (count === 0) {
+      return more ? "Reading more problems from your pages…" : "Reading your pages…";
+    }
+    return more
+      ? `Reading ${count} more ${noun} from your pages…`
+      : `Reading ${count} ${noun} from your pages…`;
+  }
+  return more ? `Generating ${count} more…` : `Generating ${count} ${noun}…`;
+}
+
 function ProblemsGeneratingHero({
   requestedCount,
   producedCount,
+  reading,
 }: {
   requestedCount: number;
   producedCount: number;
+  reading: boolean;
 }) {
-  const noun = requestedCount === 1 ? "problem" : "problems";
   // role="status" announces text changes politely — drives the "X of Y
   // ready" subcopy update so screen-reader users hear progress.
   return (
@@ -1478,12 +1508,14 @@ function ProblemsGeneratingHero({
     >
       <div className="animate-pulse text-5xl" aria-hidden="true">✨</div>
       <h3 className="mt-4 text-lg font-bold text-text-primary">
-        Generating {requestedCount} {noun}…
+        {generatingLabel(requestedCount, reading)}
       </h3>
       <p className="mt-1 text-xs text-text-muted">
-        {producedCount > 0
+        {producedCount > 0 && requestedCount > 0
           ? `${producedCount} of ${requestedCount} ready — they'll land in the review queue as the AI finishes each one.`
-          : "The AI is crafting them from your uploaded materials. Usually about 30 seconds."}
+          : reading
+            ? "The AI is copying each problem from your pages and working out its solution. They'll land in the review queue for you to approve."
+            : "The AI is writing them from your unit and materials. Usually about 30 seconds."}
       </p>
     </div>
   );
