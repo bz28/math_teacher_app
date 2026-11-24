@@ -141,10 +141,15 @@ export const FEATURE_BUCKETS: { key: string; label: string; functions: string[] 
       LLM_MODES.GENERATE_DISTRACTORS,
       LLM_MODES.REGENERATE_BANK_ITEM,
       LLM_MODES.PRACTICE_GENERATE,
-      LLM_MODES.ANSWER_EQUIVALENCE,
-      // Legacy label covering both of the two above, pre-split.
+      // Legacy label covering distractors and the tutor's equivalence
+      // check before those were split apart.
       LLM_MODES.PRACTICE_EVAL,
       LLM_MODES.SUGGEST_UNITS,
+      // assignment_generation calls decompose_problem WITH a
+      // generation_job_id, so a unit's per-problem solution legs are
+      // generation work and must follow the generation knob rather than
+      // tutoring, where DECOMPOSE otherwise lives.
+      LLM_MODES.DECOMPOSE,
     ],
   },
   {
@@ -152,12 +157,24 @@ export const FEATURE_BUCKETS: { key: string; label: string; functions: string[] 
     label: "Tutor + chat",
     functions: [
       LLM_MODES.STEP_CHAT,
-      LLM_MODES.DECOMPOSE,
+      // Emitted only by the tutor, despite the generic name.
+      LLM_MODES.ANSWER_EQUIVALENCE,
       LLM_MODES.DECOMPOSE_DIAGNOSIS,
       LLM_MODES.DIAGNOSE_WORK,
       LLM_MODES.BANK_CHAT,
     ],
   },
+];
+
+// construction_figures logs a DERIVED label — `${mode}_facts_a` /
+// `_facts_b`, not an LLM_MODES constant — against the generation job that
+// produced the figure. Unmapped, those legs fall to "other", which keeps
+// the "could not be repriced" banner permanently lit for any geometry
+// unit and leaves them outside the generation knob. Matched by suffix
+// because the prefix is whichever mode produced the figure.
+const DERIVED_SUFFIX_FEATURE: [string, string][] = [
+  ["_facts_a", "generation"],
+  ["_facts_b", "generation"],
 ];
 
 const FEATURE_OF: Record<string, string> = Object.fromEntries(
@@ -168,5 +185,10 @@ const FEATURE_OF: Record<string, string> = Object.fromEntries(
  *  anything unmapped — shown, never silently folded into a priced
  *  bucket, so a new function surfaces instead of skewing a margin. */
 export function featureFor(fnName: string): string {
-  return FEATURE_OF[fnName] ?? "other";
+  const direct = FEATURE_OF[fnName];
+  if (direct) return direct;
+  for (const [suffix, key] of DERIVED_SUFFIX_FEATURE) {
+    if (fnName.endsWith(suffix)) return key;
+  }
+  return "other";
 }

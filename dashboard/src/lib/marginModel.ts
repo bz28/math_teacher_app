@@ -60,6 +60,9 @@ export interface CostLine {
 
 export interface MarginResult {
   lines: CostLine[];
+  /** Lines excluded from the total because the window cannot support
+   *  them. Reported so the page says what it left out. */
+  excluded: string[];
   costPerStudentMonth: number;
   costPerStudentYear: number;
   revenue: number;
@@ -167,30 +170,65 @@ export function computeMargin(
   anyThin = anyThin || (genThin && s.unitsPerYear > 0);
 
   // 3. Teacher-side AI — per teacher, divided across their students.
+  //
+  // Repriced like everything else. Reading cost_mean straight off the
+  // measured unit left the Tutor + chat knob completely inert: the
+  // operator moved tutoring from Opus to Haiku and not one figure on the
+  // page changed.
   const teacher = unitOf(data, "residual:teacher");
-  const perTeacherMonth = teacher?.cost_mean ?? 0;
+  const teacherFns = data.functions_by_unit["residual:teacher"];
+  const teacherCost = repricedUnitCost(teacherFns, s.models);
+  const perTeacherMonth =
+    teacherFns && teacherFns.length > 0
+      ? teacherCost.cost
+      : (teacher?.cost_mean ?? 0);
   lines.push({
     key: "residual:teacher",
     label: "teacher-side AI",
     perStudentMonth: perTeacherMonth / Math.max(s.studentsPerTeacher, 1),
     thin: !teacher || !teacher.sufficient,
-    unpriced: false,
+    unpriced: teacherCost.unpriced,
   });
 
   // 4. Self-study — already per student per month.
   const student = unitOf(data, "residual:student");
+  const studentFns = data.functions_by_unit["residual:student"];
+  const studentCost = repricedUnitCost(studentFns, s.models);
   lines.push({
     key: "residual:student",
     label: "self-study",
-    perStudentMonth: student?.cost_mean ?? 0,
+    perStudentMonth:
+      studentFns && studentFns.length > 0
+        ? studentCost.cost
+        : (student?.cost_mean ?? 0),
     thin: !student || !student.sufficient,
-    unpriced: false,
+    unpriced: studentCost.unpriced,
   });
 
   anyThin = anyThin || lines.some((l) => l.thin);
 
+  // A residual rate is cost / users / MONTHS. On a window far shorter
+  // than a month that divisor goes to ~0 and the rate explodes: half an
+  // hour after a model switch — the state of the DEFAULT window right
+  // after a cutover — one student with $0.20 of tutoring reports $288 per
+  // student per month, which drags the margin tile to -8,330%.
+  //
+  // Round 1 flagged it; the arithmetic still consumed it. A number that
+  // absurd is not "directional", so it is left out of the total and
+  // named instead.
+  const excluded: string[] = [];
+  for (const line of lines) {
+    const unit = unitOf(data, line.key);
+    if (unit?.window_too_short && line.perStudentMonth > 0) {
+      excluded.push(line.label);
+      line.perStudentMonth = 0;
+    }
+  }
+
   const costPerStudentMonth = lines.reduce((a, l) => a + l.perStudentMonth, 0);
-  const costPerStudentYear = costPerStudentMonth * s.schoolYearMonths;
+  // Clamped with the rest: a negative school year flips the sign of
+  // every cost and reports a margin above 100%.
+  const costPerStudentYear = costPerStudentMonth * Math.max(s.schoolYearMonths, 0);
 
   // Revenue: priced per student per SUBJECT, with a floor.
   //
@@ -213,36 +251,33 @@ export function computeMargin(
   const capHeadroom =
     costPerStudentMonth > 0 ? s.fairUseCap / costPerStudentMonth : null;
 
-  // Trust check: reprice onto the models we really ran and compare with
-  // what we really paid. A gap means the simulator's arithmetic has
-  // drifted from reality and nothing on the page should be believed.
+  // Trust check: every leg priced on the model it actually ran on,
+  // compared with what we actually paid. The backend computes it
+  // (`self_reprice`) because only it knows the per-model split — and
+  // unlike "look up the measured model in the reprice map" it stays a
+  // true identity when a function spans several models.
   let measured = 0;
   let repricedAtMeasured = 0;
   let unchecked = 0;
   for (const [, fns] of Object.entries(data.functions_by_unit)) {
     for (const fn of fns) {
-      // measured_catalog_id, NOT measured_model: the raw id can carry a
-      // -YYYYMMDD pin that is absent from the reprice map, and falling
-      // back to cost_per_unit would add the identical value to both
-      // sides — silently cancelling the check for that leg.
-      const atOwn = fn.measured_catalog_id
-        ? fn.reprice[fn.measured_catalog_id]
-        : undefined;
-      if (atOwn === undefined || atOwn === null) {
+      if (fn.self_reprice === null || fn.self_reprice === undefined) {
         // Nothing to compare: leave BOTH sides alone rather than adding
         // a matching pair that dilutes the delta toward zero.
         unchecked += 1;
-      } else {
-        measured += fn.cost_per_unit;
-        repricedAtMeasured += atOwn;
+        continue;
       }
+      measured += fn.cost_per_unit;
+      repricedAtMeasured += fn.self_reprice;
     }
   }
+
   const trustDeltaPct =
     measured > 0 ? ((repricedAtMeasured - measured) / measured) * 100 : null;
 
   return {
     lines,
+    excluded,
     costPerStudentMonth,
     costPerStudentYear,
     revenue,

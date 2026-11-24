@@ -215,7 +215,10 @@ export default function UnitEconomics() {
   }
 
   const tier = tierFor(scenarioNums.enrollment);
-  const subjIdx = Math.min(Math.max(scenarioNums.subjects, 1), 4) - 1;
+  // Rounded: rateCard[tier][1.5] is undefined, which silently fell back
+  // to the default price while revenue still billed 2.5 subjects.
+  const subjIdx =
+    Math.round(Math.min(Math.max(scenarioNums.subjects, 1), 4)) - 1;
   const cardPrice = rateCard[tier]?.[subjIdx] ?? DEFAULTS.pricePerStudent;
 
   const scenario: Scenario = useMemo(
@@ -235,6 +238,10 @@ export default function UnitEconomics() {
         message={error}
         onRetry={() => {
           setError(null);
+          // Without this the retry render has loading=false and
+          // data=null, which falls through to `return null` — a white
+          // page until the fetch lands.
+          setLoading(true);
           setReloadKey((k) => k + 1);
         }}
       />
@@ -358,10 +365,16 @@ export default function UnitEconomics() {
         />
       </div>
 
-      {(result.anyThin || result.anyUnpriced) && (
+      {(result.anyThin || result.anyUnpriced || result.excluded.length > 0) && (
         <p className="empty-state-sub" style={{ marginTop: 12, color: "var(--warn)" }}>
           {result.anyThin && (
             <>Some unit costs rest on fewer than {data.min_sample} observations. </>
+          )}
+          {result.excluded.length > 0 && (
+            <>
+              Left out of the total because this window is too short to read a
+              monthly rate from: {result.excluded.join(", ")}.{" "}
+            </>
           )}
           {result.anyUnpriced && (
             <>Some functions could not be repriced and fall back to measured cost. </>
@@ -486,6 +499,7 @@ export default function UnitEconomics() {
                   type="number"
                   inputMode="decimal"
                   step="0.5"
+                  min={0}
                   value={scenarioNums[key]}
                   onChange={(e) => setNum(key, e.target.value)}
                   style={{ width: "100%" }}
@@ -505,8 +519,16 @@ export default function UnitEconomics() {
             </thead>
             <tbody>
               {FEATURE_BUCKETS.map((b) => {
-                const chosen = models[b.key] ?? "";
+                // Fall back to a configured model rather than "": an
+                // empty value matches no <option>, so the control renders
+                // with nothing selected and the rate column shows a dash.
+                const chosen =
+                  models[b.key] ||
+                  data.model_catalog.find((x) => x.is_configured)?.id ||
+                  data.model_catalog[0]?.id ||
+                  "";
                 const m = data.model_catalog.find((x) => x.id === chosen);
+                const measuredHere = Boolean(models[b.key]);
                 return (
                   <tr key={b.key}>
                     <td>{b.label}</td>
@@ -526,6 +548,11 @@ export default function UnitEconomics() {
                     </td>
                     <td className="num">
                       {m ? `$${m.input_per_mtok}/$${m.output_per_mtok}` : "—"}
+                      {!measuredHere && (
+                        <div className="empty-state-sub" style={{ fontSize: 11 }}>
+                          not measured in this window
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );
@@ -661,6 +688,7 @@ export default function UnitEconomics() {
                 type="number"
                 inputMode="decimal"
                 step={key === "fairUseCap" || key === "schoolYearMonths" ? "0.5" : "50"}
+                min={0}
                 value={scenarioNums[key]}
                 onChange={(e) => setNum(key, e.target.value)}
                 style={{ width: "100%" }}

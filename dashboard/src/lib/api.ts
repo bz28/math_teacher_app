@@ -1833,6 +1833,11 @@ export interface UnitFunction {
     cache_write: number;
   };
   reprice: RepriceRow;
+  /** Every leg priced on the model it actually ran on. Equals
+   *  `cost_per_unit` when the arithmetic is sound — the trust check.
+   *  Stays a true identity when a function spans several models, which
+   *  "reprice at the measured model" does not. */
+  self_reprice: number | null;
 }
 
 export interface UnitCost {
@@ -1848,6 +1853,9 @@ export interface UnitCost {
   cost_p90: number | null;
   cost_total: number;
   sufficient: boolean;
+  /** The window is too short to extrapolate a per-month rate from.
+   *  Distinct from a thin sample: different cause, different fix. */
+  window_too_short: boolean;
 }
 
 export interface UnitEconomicsModel {
