@@ -33,7 +33,13 @@ from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
-from api.core.model_pricing import MODEL_CATALOG, cost_usd, price_for, reprice
+from api.core.model_pricing import (
+    CACHE_WRITE_MULT,
+    MODEL_CATALOG,
+    cost_usd,
+    price_for,
+    reprice,
+)
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
 from api.models.assignment import Assignment, Submission
@@ -59,6 +65,15 @@ _SUBMISSION_KINDS = ("homework", "quiz", "test", "practice")
 # $0.00 produces a 100% margin, which is exactly the figure that ends up
 # in a board deck.
 _DEFAULT_MIN_SAMPLE = 5
+
+# A per-month rate extrapolated from a window far shorter than a month is
+# arithmetic, not measurement. The DEFAULT window is "since the model
+# changed", so the hour after a model switch it is an hour long: five
+# students and $0.20 of tutoring would report $173 per student per month
+# with n=5 and no warning at all. Residual units below this are reported
+# with their figures intact but flagged insufficient, so the page greys
+# them and the simulator's thin-data banner fires.
+_MIN_RESIDUAL_DAYS = 7.0
 
 
 def _median(col: Any) -> Any:
@@ -223,7 +238,10 @@ def _profile_rows(
 
     out: dict[str, list[dict[str, Any]]] = {}
     for (kind, function), group in grouped.items():
-        dominant = max(group, key=lambda r: int(r.calls))
+        # By COST, not call count: a function with 1,000 cheap Haiku calls
+        # and 50 huge Opus ones would otherwise reprice all 1,050 from the
+        # cheap profile. Choosing by spend fails conservatively.
+        dominant = max(group, key=lambda r: _f(r.cost))
         calls = sum(int(r.calls) for r in group)
         cost = sum(_f(r.cost) for r in group)
         units = denominators.get(kind) or 1.0
@@ -258,13 +276,25 @@ def _profile_rows(
     return out
 
 
+# MEAN, not median. These columns reconstruct a COST: the repriced figure
+# is `calls_per_unit x cost(profile)`, and only the mean satisfies
+# `sum = mean x count`. A median profile understates every right-skewed
+# distribution — and token counts here are explicitly skewed (one student
+# photographs forty pages). Worse, the four medians are taken
+# INDEPENDENTLY, so a group where fewer than half the calls hit cache has
+# `median(cache_read_tokens) = 0` and the repriced figure drops the
+# cache-read term that the recorded cost definitely includes.
+#
+# The median still leads for the DISPLAYED unit cost (_submission_units),
+# where resisting one freak submission is exactly what we want. Different
+# statistic, different job.
 _PROFILE_COLS = (
     func.count().label("calls"),
     func.sum(LLMCall.cost_usd).label("cost"),
-    _median(LLMCall.input_tokens).label("med_in"),
-    _median(LLMCall.output_tokens).label("med_out"),
-    _median(LLMCall.cache_read_tokens).label("med_cread"),
-    _median(LLMCall.cache_write_tokens).label("med_cwrite"),
+    func.avg(LLMCall.input_tokens).label("med_in"),
+    func.avg(LLMCall.output_tokens).label("med_out"),
+    func.avg(LLMCall.cache_read_tokens).label("med_cread"),
+    func.avg(LLMCall.cache_write_tokens).label("med_cwrite"),
 )
 
 
@@ -439,10 +469,10 @@ def _reprice_row(
         out[target.id] = calls_per_unit * reprice(
             source,
             target,
-            input_tokens=int(tokens["input"]),
-            output_tokens=int(tokens["output"]),
-            cache_read_tokens=int(tokens["cache_read"]),
-            cache_write_tokens=int(tokens["cache_write"]),
+            input_tokens=tokens["input"],
+            output_tokens=tokens["output"],
+            cache_read_tokens=tokens["cache_read"],
+            cache_write_tokens=tokens["cache_write"],
         )
     return out
 
@@ -518,6 +548,38 @@ async def _residual_units(db: AsyncSession, scope: _Scope) -> list[dict[str, Any
     ).all()
 
     months = scope.days / _DAYS_PER_MONTH
+
+    # A real distribution, not one derived rate reported twice. Sum per
+    # USER first, then take the median across users — the same shape
+    # _submission_units uses, and the only thing that makes the
+    # dashboard's "Median" column header true for these rows. One heavy
+    # tutoring user should move the mean and not the median.
+    per_user = scope.apply(
+        select(
+            User.role.label("role"),
+            LLMCall.user_id.label("uid"),
+            func.sum(LLMCall.cost_usd).label("cost"),
+        ).select_from(LLMCall).join(User, User.id == LLMCall.user_id),
+    ).where(
+        LLMCall.submission_id.is_(None),
+        LLMCall.generation_job_id.is_(None),
+        User.role.in_(("student", "teacher")),
+    ).group_by(User.role, LLMCall.user_id).subquery()
+
+    dist = {
+        r.role: r
+        for r in (
+            await db.execute(
+                select(
+                    per_user.c.role,
+                    _median(per_user.c.cost).label("median"),
+                    func.avg(per_user.c.cost).label("mean"),
+                    _p90(per_user.c.cost).label("p90"),
+                ).group_by(per_user.c.role),
+            )
+        ).all()
+    }
+
     by_role = {r.role: r for r in rows}
     out: list[dict[str, Any]] = []
     for role, kind, label in (
@@ -525,18 +587,22 @@ async def _residual_units(db: AsyncSession, scope: _Scope) -> list[dict[str, Any
         ("teacher", "residual:teacher", "teacher-side AI"),
     ):
         r = by_role.get(role)
+        d = dist.get(role)
         actives = int(r.actives) if r and r.actives else 0
         total = _f(r.cost) if r else 0.0
+        per_month = (1.0 / months) if months > 0 else 0.0
         out.append(
             {
                 "kind": kind,
                 "label": label,
                 "denominator": f"per active {role} per month",
                 "n": actives,
-                "cost_median": (total / actives / months) if actives else None,
-                "cost_mean": (total / actives / months) if actives else None,
-                "cost_p90": None,
+                "cost_median": (_f(d.median) * per_month) if (d and actives) else None,
+                "cost_mean": (_f(d.mean) * per_month) if (d and actives) else None,
+                "cost_p90": (_f(d.p90) * per_month) if (d and actives) else None,
                 "cost_total": total,
+                # A month's rate read off a few hours is not a measurement.
+                "window_too_short": scope.days < _MIN_RESIDUAL_DAYS,
             },
         )
     return out
@@ -650,7 +716,7 @@ def _catalog() -> list[dict[str, Any]]:
             "input_per_mtok": m.input_per_token * _PER_MTOK,
             "output_per_mtok": m.output_per_token * _PER_MTOK,
             "cache_read_mult": m.cache_read_mult,
-            "cache_write_mult": 1.25,
+            "cache_write_mult": CACHE_WRITE_MULT,
             "tokenizer_factor": m.tokenizer_factor,
             "long_context_threshold": m.long_context_threshold,
             "long_context_input_per_mtok": (
@@ -663,7 +729,12 @@ def _catalog() -> list[dict[str, Any]]:
                 if m.long_context_output_per_token is not None
                 else None
             ),
-            "is_configured": any(c.startswith(m.id) for c in configured),
+            # Resolve each configured id through the catalog rather than
+            # prefix-matching: "claude-opus-5-5".startswith("claude-opus-5")
+            # is True, which labelled Opus 5 as running at Opus 5.5's rates.
+            "is_configured": any(
+                (p := price_for(c)) is not None and p.id == m.id for c in configured
+            ),
         }
         for m in MODEL_CATALOG
     ]
@@ -691,7 +762,9 @@ async def unit_economics(
     units.append(await _generation_unit(db, scope))
     units.extend(await _residual_units(db, scope))
     for u in units:
-        u["sufficient"] = u["n"] >= min_sample
+        u["sufficient"] = u["n"] >= min_sample and not u.pop(
+            "window_too_short", False,
+        )
 
     return {
         "window": {
