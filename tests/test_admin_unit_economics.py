@@ -46,6 +46,17 @@ _WHEN = _NOW - timedelta(days=2)
 _OPUS = "claude-opus-5-5"
 _SONNET = "claude-sonnet-4-6"
 
+# What the seed's token counts actually cost, derived rather than typed,
+# so a rate change moves the expectation with the catalog.
+def _hw_cost() -> float:
+    return cost_usd(_price(_OPUS), 4200, 850, 1000, 0) + cost_usd(
+        _price(_SONNET), 900, 300, 0, 0,
+    )
+
+
+def _gen_job_cost() -> float:
+    return cost_usd(_price(_SONNET), 5000, 2000, 0, 0)
+
 
 def _price(model_id: str):
     p = price_for(model_id)
@@ -138,12 +149,18 @@ async def _seed(
                 await s.flush()
                 # Two calls per submission: vision on Opus, grading on Sonnet.
                 # Summing them is what makes the unit cost a SUBMISSION cost.
+                # cost_usd derived from the tokens on the row, the way
+                # llm_client writes it. An arbitrary cost beside unrelated
+                # token counts is a shape production cannot produce, and it
+                # makes the self_reprice == measured invariant untestable.
                 calls.append(
                     LLMCall(
                         function="integrity_extract", model=_OPUS,
                         input_tokens=4200, output_tokens=850,
                         cache_read_tokens=1000, cache_write_tokens=0,
-                        latency_ms=10.0, cost_usd=cost_each * 0.7, success=True,
+                        latency_ms=10.0,
+                        cost_usd=cost_usd(_price(_OPUS), 4200, 850, 1000, 0),
+                        success=True,
                         school_id=school.id, user_id=students[i].id,
                         submission_id=sub.id, created_at=_WHEN,
                     ),
@@ -153,7 +170,9 @@ async def _seed(
                         function="ai_grading", model=_SONNET,
                         input_tokens=900, output_tokens=300,
                         cache_read_tokens=0, cache_write_tokens=0,
-                        latency_ms=10.0, cost_usd=cost_each * 0.3, success=True,
+                        latency_ms=10.0,
+                        cost_usd=cost_usd(_price(_SONNET), 900, 300, 0, 0),
+                        success=True,
                         school_id=school.id, user_id=students[i].id,
                         submission_id=sub.id, created_at=_WHEN,
                     ),
@@ -179,7 +198,9 @@ async def _seed(
                     LLMCall(
                         function="generate_questions", model=_SONNET,
                         input_tokens=5000, output_tokens=2000,
-                        latency_ms=10.0, cost_usd=0.50, success=True,
+                        latency_ms=10.0,
+                        cost_usd=cost_usd(_price(_SONNET), 5000, 2000, 0, 0),
+                        success=True,
                         school_id=school.id, user_id=teacher.id,
                         generation_job_id=job.id, created_at=_WHEN,
                     ),
@@ -223,7 +244,7 @@ async def test_homework_cost_is_per_submission_not_per_call(
 
     hw = _unit(body, "submission:homework")
     assert hw["n"] == 6
-    assert hw["cost_median"] == pytest.approx(0.30)
+    assert hw["cost_median"] == pytest.approx(_hw_cost())
     assert hw["sufficient"] is True
 
 
@@ -283,8 +304,8 @@ async def test_generation_groups_by_teaching_unit_not_by_job(
 
     gen = _unit(body, "generation:unit")
     assert gen["n"] == 2, "two units, four jobs"
-    # 2 jobs x $0.50 per unit.
-    assert gen["cost_median"] == pytest.approx(1.0)
+    # Two jobs per unit, so one unit costs two generations.
+    assert gen["cost_median"] == pytest.approx(2 * _gen_job_cost())
 
 
 # --------------------------------------------------------------------------
@@ -765,7 +786,10 @@ async def test_short_window_marks_residual_rates_insufficient(
         "a per-month rate extrapolated from under a week must not be "
         "presented as measured"
     )
-    assert "window_too_short" not in row, "internal flag must not leak"
+    # Public and typed: the page uses it to say WHY a row is insufficient,
+    # since "too few observations" and "window too short to extrapolate"
+    # send an operator to look at completely different things.
+    assert row["window_too_short"] is True
 
 
 async def test_residual_median_resists_one_heavy_user(
@@ -863,3 +887,185 @@ async def test_reprice_source_is_chosen_by_spend_not_call_count(
         "21 calls dominated by Opus in SPEND, which is what the repriced "
         "cost is reconstructed from"
     )
+
+
+# --------------------------------------------------------------------------
+# Review round 2 — defects the round-1 fixes introduced or left behind
+# --------------------------------------------------------------------------
+
+async def _mixed_model_grading(w: _World) -> None:
+    """One function spanning two models with very different per-call costs.
+
+    This is the DEFAULT shape in the week after a model cutover, not a
+    contrived case: the window starts at the first call on the new model
+    while the old one is still serving.
+    """
+    async with get_session_factory()() as s:
+        await s.execute(text("DELETE FROM llm_calls WHERE function = 'ai_grading'"))
+        sub = (
+            await s.execute(
+                text(
+                    "SELECT s.id FROM submissions s JOIN assignments a "
+                    "ON a.id = s.assignment_id WHERE a.type='homework' LIMIT 1",
+                ),
+            )
+        ).scalar_one()
+        for _ in range(20):
+            s.add(
+                LLMCall(
+                    function="ai_grading", model="claude-haiku-4-5-20251001",
+                    input_tokens=100, output_tokens=20, latency_ms=1.0,
+                    cost_usd=cost_usd(_price("claude-haiku-4-5"), 100, 20, 0, 0),
+                    success=True, school_id=uuid.UUID(w.school_id),
+                    submission_id=sub, created_at=_WHEN,
+                ),
+            )
+        s.add(
+            LLMCall(
+                function="ai_grading", model=_OPUS,
+                input_tokens=50_000, output_tokens=4_000, latency_ms=1.0,
+                cost_usd=cost_usd(_price(_OPUS), 50_000, 4_000, 0, 0),
+                success=True, school_id=uuid.UUID(w.school_id),
+                submission_id=sub, created_at=_WHEN,
+            ),
+        )
+        await s.commit()
+
+
+async def test_mixed_model_group_is_repriced_leg_by_leg(
+    client: AsyncClient,
+) -> None:
+    """Repricing a group's TOTAL calls off one model's profile is wrong.
+
+    `calls_per_unit` spans every model in the group. Multiplying it by a
+    single model's token profile overstates a mixed group by the ratio
+    between them — measured at 20.7x on this exact shape, in the number
+    the margin is built from.
+    """
+    w = await _seed(homework_submissions=6)
+    await _mixed_model_grading(w)
+
+    body = await _get(client, w.admin_id, days=30)
+    grading = [
+        f for f in body["functions_by_unit"]["submission:homework"]
+        if f["function"] == "ai_grading"
+    ][0]
+
+    # Priced on the models it really ran on, it must reproduce what we paid.
+    assert grading["self_reprice"] == pytest.approx(
+        grading["cost_per_unit"], rel=1e-6,
+    )
+    # And no target may be an order of magnitude off the measured cost
+    # purely because one leg is expensive.
+    assert grading["reprice"][_OPUS] < grading["cost_per_unit"] * 10
+
+
+async def test_self_reprice_sums_to_the_unit_cost_across_every_family(
+    client: AsyncClient,
+) -> None:
+    """The invariant the whole simulator rests on, including mixed groups."""
+    w = await _seed(homework_submissions=6, generation_units=2)
+    await _mixed_model_grading(w)
+
+    body = await _get(client, w.admin_id, days=30)
+    for kind, fns in body["functions_by_unit"].items():
+        unit = [u for u in body["units"] if u["kind"] == kind]
+        if not unit or unit[0]["cost_mean"] is None:
+            continue
+        total = 0.0
+        for f in fns:
+            assert f["self_reprice"] is not None, f"{kind}/{f['function']} unpriced"
+            total += f["self_reprice"]
+        assert total == pytest.approx(unit[0]["cost_mean"], rel=1e-6), (
+            f"{kind}: legs repriced on their own models must sum to the "
+            "measured unit cost"
+        )
+
+
+async def test_window_too_short_never_leaks_on_the_thin_branch(
+    client: AsyncClient,
+) -> None:
+    """`and` short-circuits, so folding the pop into it left the key behind.
+
+    The untested branch was the common one: every row with fewer than
+    min_sample observations, including every row with none at all.
+    """
+    w = await _seed(homework_submissions=6)
+    body = await _get(client, w.admin_id, days=30, min_sample=1000)
+
+    for u in body["units"]:
+        assert u["sufficient"] is False, "min_sample=1000 fails every row"
+        # Present and typed, never a leaked internal — the page uses it to
+        # say WHY a row is insufficient.
+        assert isinstance(u["window_too_short"], bool)
+
+
+async def test_thin_and_short_are_distinguishable(client: AsyncClient) -> None:
+    """Sample size and window length are different problems.
+
+    The page's warning copy blamed sample size for both, so an operator
+    chasing a short-window artefact was sent to look at the wrong thing.
+    """
+    w = await _seed(homework_submissions=6)
+    async with get_session_factory()() as s:
+        for i in range(6):
+            s.add(
+                LLMCall(
+                    function="step_chat", model=_SONNET,
+                    input_tokens=500, output_tokens=200, latency_ms=1.0,
+                    cost_usd=0.03, success=True,
+                    school_id=uuid.UUID(w.school_id),
+                    user_id=uuid.UUID(w.student_ids[i]),
+                    created_at=datetime.now(UTC) - timedelta(minutes=30),
+                ),
+            )
+        await s.commit()
+
+    short = _unit(await _get(client, w.admin_id, days=1), "residual:student")
+    assert short["window_too_short"] is True
+    assert short["n"] >= 5, "not thin — the window is the problem"
+
+    wide = _unit(await _get(client, w.admin_id, days=30), "submission:homework")
+    assert wide["window_too_short"] is False
+
+
+async def test_dominant_model_is_stable_across_identical_requests(
+    client: AsyncClient,
+) -> None:
+    """A bare max() returns whichever row Postgres emitted first.
+
+    That flips the seeded picker and the trust check between identical
+    requests whenever two models tie on spend.
+    """
+    w = await _seed(homework_submissions=6)
+    async with get_session_factory()() as s:
+        await s.execute(text("DELETE FROM llm_calls WHERE function = 'ai_grading'"))
+        sub = (
+            await s.execute(
+                text(
+                    "SELECT s.id FROM submissions s JOIN assignments a "
+                    "ON a.id = s.assignment_id WHERE a.type='homework' LIMIT 1",
+                ),
+            )
+        ).scalar_one()
+        for model in (_OPUS, _SONNET):
+            s.add(
+                LLMCall(
+                    function="ai_grading", model=model,
+                    input_tokens=1_000, output_tokens=500, latency_ms=1.0,
+                    cost_usd=0.01, success=True,  # deliberately identical
+                    school_id=uuid.UUID(w.school_id),
+                    submission_id=sub, created_at=_WHEN,
+                ),
+            )
+        await s.commit()
+
+    seen = set()
+    for _ in range(4):
+        body = await _get(client, w.admin_id, days=30)
+        grading = [
+            f for f in body["functions_by_unit"]["submission:homework"]
+            if f["function"] == "ai_grading"
+        ][0]
+        seen.add(grading["measured_model"])
+    assert len(seen) == 1, f"tie broke differently across requests: {seen}"
