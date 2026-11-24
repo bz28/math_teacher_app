@@ -20,9 +20,10 @@ from sqlalchemy import select
 from api.core.auth import create_access_token, hash_password
 from api.core.question_bank_generation import _run_generation
 from api.database import get_session_factory
-from api.models.assignment import Assignment
+from api.models.assignment import Assignment, Submission
 from api.models.course import Course, CourseTeacher
 from api.models.question_bank import QuestionBankGenerationJob, QuestionBankItem
+from api.models.section import Section
 from api.models.unit import Unit
 from api.models.user import User
 
@@ -148,3 +149,25 @@ async def test_a_problem_from_elsewhere_keeps_its_place(client: AsyncClient) -> 
     for i in (2, 0, 1):
         await _approve(client, w, ids[i])
     assert await _problem_ids(w) == [str(borrowed_id)] + [str(i) for i in ids]
+
+
+@pytest.mark.asyncio
+async def test_after_students_submit_an_approval_goes_last(client: AsyncClient) -> None:
+    # Published with problem 2 still pending, students submitted, then
+    # unpublished: their work is stored by problem number, so approving
+    # problem 2 must not move problem 3 down to number 3's slot.
+    w = await _seed()
+    ids = await _pending(w, 3, made=datetime.now(UTC))
+    for i in (0, 2):
+        await _approve(client, w, ids[i])
+    async with get_session_factory()() as s:
+        student = User(email=f"s_{uuid.uuid4().hex[:6]}@t.com", password_hash=hash_password("x"),
+                       grade_level=9, role="student", name="S")
+        section = Section(course_id=w["course_id"], name="P1")
+        s.add_all([student, section])
+        await s.flush()
+        s.add(Submission(assignment_id=w["hw_id"], student_id=student.id,
+                         section_id=section.id, status="submitted"))
+        await s.commit()
+    await _approve(client, w, ids[1])
+    assert await _problem_ids(w) == [str(ids[0]), str(ids[2]), str(ids[1])]

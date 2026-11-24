@@ -48,6 +48,7 @@ from api.core.question_bank_generation import (
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user_full, require_teacher
 from api.middleware.rate_limit import limiter
+from api.models.assignment import Submission
 from api.models.course import Course
 from api.models.question_bank import QuestionBankGenerationJob, QuestionBankItem
 from api.models.question_edit import (
@@ -918,13 +919,20 @@ async def approve_bank_item(
             # made after it, not at the end: approving in any order (or
             # after a Skip) keeps a set in the order it was read or
             # written. Problems brought in from elsewhere keep their place.
-            made_later = set((await db.execute(
-                select(QuestionBankItem.id).where(
-                    QuestionBankItem.id.in_(existing_ids),
-                    QuestionBankItem.originating_assignment_id == a.id,
-                    QuestionBankItem.created_at > item.created_at,
-                )
-            )).scalars().all()) if existing_ids else set()
+            # Once students have submitted (published, then unpublished),
+            # it goes last: their work is stored by problem number, and
+            # moving a problem down would file it under the wrong one.
+            made_later: set[uuid.UUID] = set()
+            if existing_ids and (await db.execute(
+                select(Submission.id).where(Submission.assignment_id == a.id).limit(1)
+            )).first() is None:
+                made_later = set((await db.execute(
+                    select(QuestionBankItem.id).where(
+                        QuestionBankItem.id.in_(existing_ids),
+                        QuestionBankItem.originating_assignment_id == a.id,
+                        QuestionBankItem.created_at > item.created_at,
+                    )
+                )).scalars().all())
             at = next((i for i, pid in enumerate(existing_ids) if pid in made_later), len(existing_ids))
             existing_ids.insert(at, item.id)
             # snapshot_bank_items re-validates that every id in the list
