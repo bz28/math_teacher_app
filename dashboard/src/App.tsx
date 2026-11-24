@@ -7,6 +7,7 @@ import ServiceStatusBanner from "./components/ServiceStatusBanner";
 import Login from "./pages/Login";
 import Overview from "./pages/Overview";
 import LLMCalls from "./pages/LLMCalls";
+import UnitEconomics from "./pages/UnitEconomics";
 import HarnessRuns from "./pages/HarnessRuns";
 import Quality from "./pages/Quality";
 import GenerationQuality from "./pages/GenerationQuality";
@@ -66,6 +67,7 @@ export default function App() {
           {/* Diagnostics. */}
           <Route path="/audit-logs" element={<AuditLogs />} />
           <Route path="/llm-calls" element={<LLMCalls />} />
+          <Route path="/unit-economics" element={<UnitEconomics />} />
           <Route path="/harness-runs" element={<HarnessRuns />} />
           {/* One front door for the five AI-quality pages. Each still
               renders at its original route below, so existing links and

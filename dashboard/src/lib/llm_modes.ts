@@ -89,3 +89,71 @@ export const FUNCTION_COLORS: Record<string, string> = {
 export function colorForFunction(fnName: string): string {
   return FUNCTION_COLORS[fnName] ?? "#94a3b8";
 }
+
+// ── Features you choose a MODEL for ────────────────────────────────
+//
+// Deliberately NOT PIPELINE_BUCKETS. That map answers "which stage of
+// one submission did this call belong to" and drives the per-submission
+// flight recorder, where adding a bucket adds an always-empty stage to
+// every trace. This one answers "which knob on the cost simulator does
+// this call sit under", and spans work no single submission does —
+// generating a unit's problems, tutoring a student in self-study.
+//
+// Same underlying LLM_MODES, two genuinely different groupings.
+export const FEATURE_BUCKETS: { key: string; label: string; functions: string[] }[] = [
+  {
+    key: "vision",
+    label: "Read handwriting",
+    functions: [
+      LLM_MODES.INTEGRITY_EXTRACT,
+      LLM_MODES.IMAGE_EXTRACT,
+      LLM_MODES.BANK_EXTRACT,
+    ],
+  },
+  { key: "grading", label: "Grade", functions: [LLM_MODES.AI_GRADING] },
+  {
+    key: "integrity",
+    label: "Understanding check",
+    functions: [
+      LLM_MODES.INTEGRITY_AGENT,
+      LLM_MODES.INTEGRITY_ANSWER_EQUIVALENCE,
+      LLM_MODES.INTEGRITY_DIAGNOSE_WRONG,
+    ],
+  },
+  {
+    key: "generation",
+    label: "Generate problems",
+    functions: [
+      LLM_MODES.GENERATE_QUESTIONS,
+      LLM_MODES.GENERATE_DISTRACTORS,
+      LLM_MODES.REGENERATE_BANK_ITEM,
+      LLM_MODES.PRACTICE_GENERATE,
+      LLM_MODES.ANSWER_EQUIVALENCE,
+      // Legacy label covering both of the two above, pre-split.
+      LLM_MODES.PRACTICE_EVAL,
+      LLM_MODES.SUGGEST_UNITS,
+    ],
+  },
+  {
+    key: "tutoring",
+    label: "Tutor + chat",
+    functions: [
+      LLM_MODES.STEP_CHAT,
+      LLM_MODES.DECOMPOSE,
+      LLM_MODES.DECOMPOSE_DIAGNOSIS,
+      LLM_MODES.DIAGNOSE_WORK,
+      LLM_MODES.BANK_CHAT,
+    ],
+  },
+];
+
+const FEATURE_OF: Record<string, string> = Object.fromEntries(
+  FEATURE_BUCKETS.flatMap((b) => b.functions.map((f) => [f, b.key])),
+);
+
+/** Which simulator knob a logged function sits under. "other" for
+ *  anything unmapped — shown, never silently folded into a priced
+ *  bucket, so a new function surfaces instead of skewing a margin. */
+export function featureFor(fnName: string): string {
+  return FEATURE_OF[fnName] ?? "other";
+}

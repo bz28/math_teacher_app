@@ -53,6 +53,7 @@ const SECONDARY: NavItem[] = [
   { to: "/schools", label: "Schools", end: true },
   { to: "/leads", label: "Leads" },
   { to: "/llm-calls", label: "LLM calls & spend" },
+  { to: "/unit-economics", label: "Margin simulator" },
   { to: "/users", label: "Users" },
   { to: "/audit-logs", label: "Audit log" },
 ];

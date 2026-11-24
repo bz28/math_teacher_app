@@ -696,6 +696,8 @@ export const api = {
     request<StudentSubmissionsData>(
       `/admin/students/${studentId}/submissions`, params,
     ),
+  unitEconomics: (params?: Record<string, string>) =>
+    request<UnitEconomicsData>("/admin/unit-economics", params),
   gradingQuality: (params?: Record<string, string>) =>
     request<GradingQualityData>("/admin/grading-quality", params),
   gradingQualityOverrides: (params?: Record<string, string>) =>
@@ -1794,4 +1796,110 @@ export interface TeacherSubmissionsData {
     call_count: number;
     failed_count: number;
   }[];
+}
+
+
+// ── Unit economics ─────────────────────────────────────────────────
+//
+// What ONE homework / exam / generated unit costs us, as opposed to what
+// we spent in total. The simulator page turns these into a margin at a
+// given price per student.
+//
+// Every repriced figure is computed server-side (see
+// api/routes/admin_unit_economics.py). Tokenizer rescaling, per-model
+// cache multipliers and Haiku 5.5's 100k-token price cliff are each easy
+// to get subtly wrong, so the page looks numbers up rather than
+// recomputing them.
+
+/** A cost per unit, by model id. `null` = we cannot price it from the
+ *  measured model, and the page must say so rather than show a number. */
+export type RepriceRow = Record<string, number | null>;
+
+export interface UnitFunction {
+  function: string;
+  models: string[];
+  /** The model most of these calls actually ran on — what we reprice FROM.
+   *  May carry a -YYYYMMDD pin, so it is NOT safe to match against
+   *  `model_catalog[].id`; use `measured_catalog_id` for that. */
+  measured_model: string;
+  /** `measured_model` resolved to a catalog id, or null if unpriced. */
+  measured_catalog_id: string | null;
+  calls_per_unit: number;
+  cost_per_unit: number;
+  tokens: {
+    input: number;
+    output: number;
+    cache_read: number;
+    cache_write: number;
+  };
+  reprice: RepriceRow;
+}
+
+export interface UnitCost {
+  /** e.g. "submission:homework", "generation:unit", "residual:teacher". */
+  kind: string;
+  label: string;
+  denominator: string;
+  /** Observations behind the figure. Drives the thin-sample warning. */
+  n: number;
+  /** null when there is no data — NEVER 0, which would read as free. */
+  cost_median: number | null;
+  cost_mean: number | null;
+  cost_p90: number | null;
+  cost_total: number;
+  sufficient: boolean;
+}
+
+export interface UnitEconomicsModel {
+  id: string;
+  label: string;
+  input_per_mtok: number;
+  output_per_mtok: number;
+  cache_read_mult: number;
+  cache_write_mult: number;
+  tokenizer_factor: number;
+  long_context_threshold: number | null;
+  long_context_input_per_mtok: number | null;
+  long_context_output_per_mtok: number | null;
+  is_configured: boolean;
+}
+
+/** Recorded spend vs the same tokens priced at published rates. A gap
+ *  means a model is mispriced or missing from the catalog — the check
+ *  that would have caught the flat cache-read multiplier sooner. */
+export interface UnitEconomicsReconciliation {
+  call_count: number;
+  recorded_usd: number;
+  recomputed_usd: number;
+  gap_pct: number;
+  unpriced_models: string[];
+  by_model: {
+    model: string;
+    calls: number;
+    recorded_usd: number;
+    recomputed_usd: number | null;
+    priced: boolean;
+  }[];
+}
+
+export interface UnitEconomicsData {
+  window: {
+    start: string;
+    end: string;
+    days: number;
+    /** "model_cutover" = derived from the first real call on the
+     *  configured model, not a hardcoded date. */
+    basis: string;
+    cutover_model: string | null;
+  };
+  units: UnitCost[];
+  functions_by_unit: Record<string, UnitFunction[]>;
+  reconciliation: UnitEconomicsReconciliation;
+  teacher_student_ratio: {
+    teachers: number;
+    students: number;
+    students_per_teacher: number | null;
+  };
+  model_catalog: UnitEconomicsModel[];
+  min_sample: number;
 }
