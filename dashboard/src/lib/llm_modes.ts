@@ -110,7 +110,20 @@ export const FEATURE_BUCKETS: { key: string; label: string; functions: string[] 
       LLM_MODES.BANK_EXTRACT,
     ],
   },
-  { key: "grading", label: "Grade", functions: [LLM_MODES.AI_GRADING] },
+  {
+    key: "grading",
+    label: "Grade",
+    functions: [
+      LLM_MODES.AI_GRADING,
+      // Graph and drawing checks are part of grading a submission and are
+      // logged against one, so they belong under the grading knob rather
+      // than falling through to "other".
+      LLM_MODES.CLASSIFY_REQUIRES_DRAWING,
+      LLM_MODES.GRAPH_CHECKLIST,
+      LLM_MODES.DRAWING_CHECK,
+      LLM_MODES.GRAPH_FEEDBACK,
+    ],
+  },
   {
     key: "integrity",
     label: "Understanding check",

@@ -71,6 +71,8 @@ export interface MarginResult {
   overCap: boolean;
   /** Measured vs repriced on the models we actually ran. The trust check. */
   trustDeltaPct: number | null;
+  /** How many function legs the trust check could not cover. */
+  trustUncheckedLegs: number;
   anyThin: boolean;
   anyUnpriced: boolean;
 }
@@ -191,9 +193,18 @@ export function computeMargin(
   const costPerStudentYear = costPerStudentMonth * s.schoolYearMonths;
 
   // Revenue: priced per student per SUBJECT, with a floor.
-  const computed = s.enrollment * s.subjects * s.pricePerStudent;
+  //
+  // Clamped first. With subjects = 0, totalCost collapses to 0 while
+  // revenue still floors to the annual minimum, and the page reports a
+  // 100% gross margin next to a nonzero cost-per-student tile — the exact
+  // "empty bucket reads as free" failure the backend takes care to avoid.
+  // A negative enrollment reports above 100%. Both are one keystroke away
+  // in a bare number input, and both survive the URL round-trip.
+  const enrollment = Math.max(s.enrollment, 0);
+  const subjects = Math.max(s.subjects, 1);
+  const computed = enrollment * subjects * s.pricePerStudent;
   const revenue = Math.max(s.annualMinimum, computed);
-  const totalCost = costPerStudentYear * s.enrollment * s.subjects;
+  const totalCost = costPerStudentYear * enrollment * subjects;
   const grossProfit = revenue - totalCost;
   const marginPct = revenue > 0 ? (grossProfit / revenue) * 100 : null;
   const yearOneNetCash =
@@ -207,11 +218,24 @@ export function computeMargin(
   // drifted from reality and nothing on the page should be believed.
   let measured = 0;
   let repricedAtMeasured = 0;
+  let unchecked = 0;
   for (const [, fns] of Object.entries(data.functions_by_unit)) {
     for (const fn of fns) {
-      measured += fn.cost_per_unit;
-      const atOwn = fn.reprice[fn.measured_model];
-      repricedAtMeasured += atOwn ?? fn.cost_per_unit;
+      // measured_catalog_id, NOT measured_model: the raw id can carry a
+      // -YYYYMMDD pin that is absent from the reprice map, and falling
+      // back to cost_per_unit would add the identical value to both
+      // sides — silently cancelling the check for that leg.
+      const atOwn = fn.measured_catalog_id
+        ? fn.reprice[fn.measured_catalog_id]
+        : undefined;
+      if (atOwn === undefined || atOwn === null) {
+        // Nothing to compare: leave BOTH sides alone rather than adding
+        // a matching pair that dilutes the delta toward zero.
+        unchecked += 1;
+      } else {
+        measured += fn.cost_per_unit;
+        repricedAtMeasured += atOwn;
+      }
     }
   }
   const trustDeltaPct =
@@ -228,18 +252,35 @@ export function computeMargin(
     capHeadroom,
     overCap: costPerStudentMonth > s.fairUseCap,
     trustDeltaPct,
+    // Legs the check could not cover. A delta computed over a subset is
+    // weaker evidence, and the page says so rather than implying the
+    // whole page was verified.
+    trustUncheckedLegs: unchecked,
     anyThin,
     anyUnpriced,
   };
 }
 
-/** Margin at an arbitrary price, for the sensitivity sweep. */
+/** Margin at an arbitrary price, for the sensitivity sweep.
+ *
+ * Takes the whole scenario, not just a unit cost, so it applies the same
+ * annual minimum the headline tile does. Without it the two disagreed at
+ * the same price on the shipped defaults: 92 students x 1 subject x $28
+ * is $2,576, under the $3,000 floor, so the tile read 75.5% where the
+ * $28 bar read 71.4%.
+ */
 export function marginAtPrice(
   costPerStudentYear: number,
   price: number,
+  s: Pick<Scenario, "enrollment" | "subjects" | "annualMinimum">,
 ): number | null {
   if (price <= 0) return null;
-  return ((price - costPerStudentYear) / price) * 100;
+  const enrollment = Math.max(s.enrollment, 0);
+  const subjects = Math.max(s.subjects, 1);
+  const revenue = Math.max(s.annualMinimum, enrollment * subjects * price);
+  if (revenue <= 0) return null;
+  const cost = costPerStudentYear * enrollment * subjects;
+  return ((revenue - cost) / revenue) * 100;
 }
 
 export { SUBMISSION_KINDS, measuredUnitCost };

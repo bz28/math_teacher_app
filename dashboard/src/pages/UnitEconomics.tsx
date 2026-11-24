@@ -78,16 +78,38 @@ export default function UnitEconomics() {
   const [data, setData] = useState<UnitEconomicsData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [days, setDays] = useState<string>(params.get("days") ?? "");
-  const [excludeInternal, setExcludeInternal] = useState(
-    params.get("internal") !== "1",
-  );
+  const days = params.get("days") ?? "";
+  const excludeInternal = params.get("internal") !== "1";
+
+  function setParam(key: string, value: string | null) {
+    const next = new URLSearchParams(params);
+    if (value === null || value === "") next.delete(key);
+    else next.set(key, value);
+    setParams(next, { replace: true });
+  }
+
+  const setDays = (v: string) => setParam("days", v);
+  const setExcludeInternal = (v: boolean) =>
+    setParam("internal", v ? null : "1");
   const [rateCard, setRateCard] = useState<number[][]>(() => {
     const raw = params.get("rates");
     if (!raw) return DEFAULT_RATE_CARD;
     try {
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) && parsed.length === 4 ? parsed : DEFAULT_RATE_CARD;
+      const parsed: unknown = JSON.parse(raw);
+      // Validate the ROWS too. `[1,2,3,4]` passed a length-only check and
+      // then threw on row.map during render, blanking the page — and a
+      // hand-edited or truncated link is a realistic input for a feature
+      // whose whole point is shareable URLs.
+      const ok =
+        Array.isArray(parsed) &&
+        parsed.length === 4 &&
+        parsed.every(
+          (row) =>
+            Array.isArray(row) &&
+            row.length === 4 &&
+            row.every((v) => typeof v === "number" && Number.isFinite(v)),
+        );
+      return ok ? (parsed as number[][]) : DEFAULT_RATE_CARD;
     } catch {
       return DEFAULT_RATE_CARD;
     }
@@ -105,7 +127,30 @@ export default function UnitEconomics() {
     return out;
   }, [params]);
 
-  const [models, setModels] = useState<ModelChoice>({});
+  // Model picks live in the URL as well. They are the page's primary
+  // lever, so a "scenario link" that dropped them reproduced a different
+  // margin than the sender saw, with nothing on screen saying so.
+  const urlModels = useMemo(() => {
+    const out: ModelChoice = {};
+    for (const b of FEATURE_BUCKETS) {
+      const v = params.get(`m_${b.key}`);
+      if (v) out[b.key] = v;
+    }
+    return out;
+  }, [params]);
+
+  const [seededModels, setSeededModels] = useState<ModelChoice>({});
+  const models = useMemo(
+    () => ({ ...seededModels, ...urlModels }),
+    [seededModels, urlModels],
+  );
+
+  function setModel(key: string, value: string) {
+    setParam(`m_${key}`, value);
+  }
+  // Bumped to force a refetch; setDays((d) => d) is an identical-state
+  // no-op that React bails out of, so the old Retry button did nothing.
+  const [reloadKey, setReloadKey] = useState(0);
 
   // State is set only from the promise callbacks, never synchronously in
   // the effect body — the same shape the other console pages use. Stale
@@ -124,33 +169,34 @@ export default function UnitEconomics() {
         if (cancelled) return;
         setError(null);
         setData(d);
-        // Seed each knob with the model those calls actually ran on, so
-        // the page opens showing today's reality rather than a guess.
-        setModels((prev) => {
-          if (Object.keys(prev).length > 0) return prev;
-          const seeded: ModelChoice = {};
-          for (const b of FEATURE_BUCKETS) {
-            const match = Object.values(d.functions_by_unit)
-              .flat()
-              .find((f) => b.functions.includes(f.function));
-            // measured_catalog_id, not measured_model: the raw id can
-            // carry a date pin that matches no <option> value, which
-            // makes the select fall back to the first model in the list.
-            seeded[b.key] =
-              match?.measured_catalog_id ??
-              d.model_catalog.find((m) => m.is_configured)?.id ??
-              d.model_catalog[0]?.id ??
-              "";
-          }
-          return seeded;
-        });
+        // Seed each knob from the model those calls actually ran on.
+        //
+        // Reseeded on EVERY fetch, and only as a default under whatever
+        // the URL pins. The old version bailed out if any key was already
+        // set, so one thin first fetch (a new school scope, a 7-day
+        // window with no traffic) latched all five knobs to the first
+        // configured model permanently — claiming Opus 5.5 "(running)"
+        // for work that ran on something else, and repricing every
+        // figure against the wrong target.
+        const seeded: ModelChoice = {};
+        for (const b of FEATURE_BUCKETS) {
+          const match = Object.values(d.functions_by_unit)
+            .flat()
+            .find((f) => b.functions.includes(f.function));
+          // measured_catalog_id, not measured_model: the raw id can carry
+          // a date pin that matches no <option> value, which makes the
+          // select fall back to the first model in the list.
+          const id = match?.measured_catalog_id;
+          if (id) seeded[b.key] = id;
+        }
+        setSeededModels(seeded);
       })
       .catch((e) => !cancelled && setError(String(e?.message ?? e)))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
-  }, [schoolId, days, excludeInternal]);
+  }, [schoolId, days, excludeInternal, reloadKey]);
 
   function setNum(key: keyof typeof DEFAULTS, value: string) {
     const next = new URLSearchParams(params);
@@ -184,7 +230,15 @@ export default function UnitEconomics() {
 
   if (loading && !data) return <div className="loading">Loading unit economics…</div>;
   if (error) {
-    return <ErrorState message={error} onRetry={() => setDays((d) => d)} />;
+    return (
+      <ErrorState
+        message={error}
+        onRetry={() => {
+          setError(null);
+          setReloadKey((k) => k + 1);
+        }}
+      />
+    );
   }
   if (!data || !result) return null;
 
@@ -203,7 +257,9 @@ export default function UnitEconomics() {
   const sweepPrices = [14, 20, 24, 28, 32];
   const sweep = sweepPrices.map((p) => ({
     name: `$${p}`,
-    margin: Number((marginAtPrice(result.costPerStudentYear, p) ?? 0).toFixed(1)),
+    margin: Number(
+      (marginAtPrice(result.costPerStudentYear, p, scenario) ?? 0).toFixed(1),
+    ),
   }));
 
   return (
@@ -255,6 +311,9 @@ export default function UnitEconomics() {
           >
             Trust check {result.trustDeltaPct >= 0 ? "+" : ""}
             {result.trustDeltaPct.toFixed(1)}%
+            {result.trustUncheckedLegs > 0
+              ? ` (${result.trustUncheckedLegs} unverified)`
+              : ""}
           </span>
         )}
         {data.reconciliation.unpriced_models.length > 0 && (
@@ -395,6 +454,7 @@ export default function UnitEconomics() {
                   id={`ue-${key}`}
                   type="number"
                   inputMode="decimal"
+                  min={key === "subjects" ? 1 : 0}
                   value={scenarioNums[key]}
                   onChange={(e) => setNum(key, e.target.value)}
                   style={{ width: "100%" }}
@@ -454,9 +514,7 @@ export default function UnitEconomics() {
                       <select
                         id={`ue-model-${b.key}`}
                         value={chosen}
-                        onChange={(e) =>
-                          setModels({ ...models, [b.key]: e.target.value })
-                        }
+                        onChange={(e) => setModel(b.key, e.target.value)}
                       >
                         {data.model_catalog.map((opt) => (
                           <option key={opt.id} value={opt.id}>
