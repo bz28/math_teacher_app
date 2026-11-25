@@ -1,24 +1,19 @@
 import { decideLanding, isMfaChallenge } from "./routing";
 
 describe("decideLanding", () => {
-  it("routes teachers and admins to the web-app gate (regardless of school)", () => {
-    expect(decideLanding("teacher", null)).toBe("teacher-gate");
-    expect(decideLanding("admin", "school-1")).toBe("teacher-gate");
+  it("routes teachers and admins to the web-app gate", () => {
+    expect(decideLanding("teacher")).toBe("teacher-gate");
+    expect(decideLanding("admin")).toBe("teacher-gate");
   });
 
-  it("routes a student with a school to the classroom home", () => {
-    expect(decideLanding("student", "school-1")).toBe("school-home");
+  it("routes every student, in a class or not, to the classroom home", () => {
+    expect(decideLanding("student")).toBe("school-home");
   });
 
-  it("routes a personal student (no school) to the study screen", () => {
-    expect(decideLanding("student", null)).toBe("solve");
-    expect(decideLanding("student", "")).toBe("solve");
-  });
-
-  it("defaults to the study screen for unknown/missing roles", () => {
-    expect(decideLanding(null, null)).toBe("solve");
-    expect(decideLanding(undefined, undefined)).toBe("solve");
-    expect(decideLanding("", null)).toBe("solve");
+  it("never lands anyone on the hidden personal study screens", () => {
+    for (const role of [null, undefined, "", "student"]) {
+      expect(decideLanding(role)).toBe("school-home");
+    }
   });
 });
 

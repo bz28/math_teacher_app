@@ -8,6 +8,7 @@ import { auth as authApi } from "@/lib/api";
 import { useToast } from "@/components/ui";
 import { AuthShell, AUTH_CARD, AUTH_H1 } from "@/components/site/auth-shell";
 import { SiteInput, SitePasswordInput, SiteSubmit, Spinner } from "@/components/site/form";
+import { homePathFor } from "@/lib/home-path";
 
 export default function LoginPage() {
   return (
@@ -78,11 +79,7 @@ function LoginPageContent() {
     const user = useAuthStore.getState().user;
     const dest =
       sameOriginRedirect(redirect) ??
-      (user?.role === "teacher"
-        ? "/school/teacher"
-        : user?.role === "student" && user.school_id
-          ? "/school/student"
-          : "/home");
+      homePathFor(user?.role);
     router.replace(dest);
   }
 

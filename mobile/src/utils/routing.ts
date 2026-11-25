@@ -2,22 +2,19 @@
 // imports) so it's unit-testable without a render harness — App.tsx
 // calls it after login and after token restore to pick the first screen.
 
-export type Landing = "teacher-gate" | "school-home" | "solve";
+export type Landing = "teacher-gate" | "school-home";
 
 /**
  * Where a freshly-authenticated user should land.
  *
  * - Teachers/admins -> the web-app gate (no mobile dashboard).
- * - Students with a school -> their classroom home (assignments, grades).
- * - Everyone else (personal learners) -> the study screen.
+ * - Every student -> their classroom home (assignments, grades), which
+ *   offers "Join a class" until they're enrolled. Veradic is schools-only:
+ *   the personal study screens are hidden, never a landing.
  */
-export function decideLanding(
-  role: string | null | undefined,
-  schoolId: string | null | undefined,
-): Landing {
+export function decideLanding(role: string | null | undefined): Landing {
   if (role === "teacher" || role === "admin") return "teacher-gate";
-  if (role === "student" && schoolId) return "school-home";
-  return "solve";
+  return "school-home";
 }
 
 /**

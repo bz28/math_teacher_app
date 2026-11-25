@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui";
 import { ButtonLink } from "@/components/site/button-link";
 import { AuthShell, AUTH_CARD, AUTH_H1 } from "@/components/site/auth-shell";
 import { SiteInput, SitePasswordInput, SiteSubmit, Spinner } from "@/components/site/form";
+import { homePathFor } from "@/lib/home-path";
 
 // Student grade options. Signup is invite-only: every student arrives with
 // a class join code or a class invite (the backend refuses anything else,
@@ -89,7 +90,7 @@ function RegisterPageContent() {
     if (loading) return;
     if (!user) return;
     if (inviteToken || sectionInviteToken) return;
-    router.replace(user.role === "teacher" ? "/school/teacher" : "/home");
+    router.replace(homePathFor(user.role));
   }, [user, loading, inviteToken, sectionInviteToken, router]);
 
   // Validate invite token on mount (teacher or section — mutually exclusive)

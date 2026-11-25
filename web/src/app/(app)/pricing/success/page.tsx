@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useAuthStore } from "@/stores/auth";
 import { CheckIcon } from "@/components/ui/icons";
+import { homePathFor } from "@/lib/home-path";
 
 // Flag the workspace shell checks on mount to force a one-time
 // /auth/me refetch even after this page gives up polling. Belt-and-
@@ -87,7 +88,7 @@ export default function CheckoutSuccessPage() {
 
       {ready && (
         <Link
-          href={user?.role === "teacher" ? "/school/teacher" : "/home"}
+          href={homePathFor(user?.role)}
           className="mt-8 rounded-[--radius-pill] bg-primary px-8 py-3 text-sm font-bold text-white transition-colors hover:bg-primary-dark"
         >
           {user?.role === "teacher" ? "Continue to Workspace" : "Continue to Home"}

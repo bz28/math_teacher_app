@@ -2,11 +2,12 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { homePathFor } from "@/lib/home-path";
 import { useAuthStore } from "@/stores/auth";
 
 /**
- * Role guard for the school-student section. Sends users who aren't
- * school-affiliated students (or shadow previews) back to the personal home.
+ * Role guard for the school-student section. Sends non-students to their
+ * own portal.
  *
  * The "Previewing as student / Back to teacher view" banner used to live
  * here but is now hoisted to the outer SchoolStudentLayout shell so a
@@ -21,19 +22,15 @@ export default function SchoolStudentLayout({
   const router = useRouter();
   const { user, loading } = useAuthStore();
 
-  // Shadow-student previews (Preview as student) get school_id=null when
-  // the owning teacher is solo (no school). Admit them anyway — the
-  // dashboard is enrollment-driven and the outer shell's preview banner
-  // gives them a way back.
-  const allowed =
-    !!user &&
-    user.role === "student" &&
-    (!!user.school_id || user.is_preview);
+  // Every student belongs here (schools-only), including one not yet in a
+  // class — the dashboard is enrollment-driven and shows a join-a-class
+  // view until they enroll — and a solo teacher's preview shadow.
+  const allowed = !!user && user.role === "student";
 
   useEffect(() => {
     if (loading || !user) return;
     if (!allowed) {
-      router.replace("/home");
+      router.replace(homePathFor(user.role));
     }
   }, [user, loading, allowed, router]);
 
