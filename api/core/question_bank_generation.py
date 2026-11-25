@@ -857,6 +857,7 @@ async def _extract_from_files(
         max_tokens=4096,
         call_metadata=call_metadata,
         generation_job_id=generation_job_id,
+        prompt_ids=("bank_extract_worksheet",),
     )
 
     questions: list[Any] = result.get("questions", [])  # type: ignore[assignment]
@@ -1479,6 +1480,7 @@ async def regenerate_one(
         parts.append(PRACTICE_SINGLE_ANSWER_RULE)
 
     user_message = "\n\n".join(parts)
+    rule_ids = ("practice_single_answer_rule",) if is_practice else ()
 
     try:
         if images:
@@ -1491,6 +1493,7 @@ async def regenerate_one(
                 model=MODEL_REASON,
                 max_tokens=4096,
                 call_metadata=doc_metadata,
+                prompt_ids=rule_ids,
             )
         else:
             result = await call_claude_json(
@@ -1502,6 +1505,10 @@ async def regenerate_one(
                 model=MODEL_REASON,
                 max_tokens=4096,
                 call_metadata=doc_metadata,
+                prompt_ids=(
+                    "bank_regenerate_system", "figure_when_to_draw", "figure_fact_card_rules",
+                    "construction_figure_rules", *rule_ids,
+                ),
             )
     except Exception as e:
         raise RuntimeError(f"AI revision failed: {e}") from e

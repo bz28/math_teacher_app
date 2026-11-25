@@ -582,6 +582,7 @@ async def check_answer_correctness(
                 "n_trivial_matches": n_trivial_matches,
                 "n_llm_asked": len(uncertain),
             },
+            prompt_ids=("integrity_answer_equivalence_system",),
         )
     except Exception:
         logger.exception(

@@ -81,6 +81,7 @@ _IDENTITY_EXCLUDE = {
     "generation_job_id",
     "call_metadata",
     "max_retries",
+    "prompt_ids",
     # Operational, not response-determining: changing a call's timeout must
     # not invalidate its recordings.
     "timeout",
@@ -123,6 +124,12 @@ class Cassette:
         self.mode = mode
         self.root = root
         self._cache: dict[str, dict[str, Any]] = {}  # fn -> {key: entry}
+        # Every prompt version (api/core/prompts) a call in this process used,
+        # recorded or replayed — what an eval run reports it ran against.
+        self.used_prompt_versions: set[str] = set()
+
+    def note_prompt_versions(self, versions: list[str]) -> None:
+        self.used_prompt_versions.update(versions)
 
     def key(self, fn_name: str, identity: dict[str, Any]) -> str:
         payload = json.dumps(

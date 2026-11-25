@@ -595,6 +595,10 @@ async def grade_submission_with_ai(
             user_id=user_id,
             submission_id=submission_id,
             call_metadata={"phase": "ai_grading", "attempt": attempt},
+            prompt_ids=(
+                "grading_system", "grading_default_full_credit", "grading_default_partial_credit",
+                "grading_class_rules_intro",
+            ),
         )
 
     result = await grade(1)

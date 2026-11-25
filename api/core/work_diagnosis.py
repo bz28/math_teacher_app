@@ -80,6 +80,7 @@ async def diagnose_work(
         user_id=user_id,
         model=MODEL_REASON,
         max_tokens=2048,
+        prompt_ids=("work_diagnosis",),
     )
 
     # Validate expected fields

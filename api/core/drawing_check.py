@@ -190,6 +190,7 @@ async def write_graph_checklist(
         max_tokens=1500,
         temperature=0.0,
         user_id=user_id,
+        prompt_ids=("drawing_checklist_system",),
     )
     if out.get("asks_for_drawing") is False:
         return WrittenChecklist([], asks_for_drawing=False)
@@ -269,6 +270,7 @@ async def _look(
                 submission_id=submission_id,
                 call_metadata={"phase": phase, "problem_position": find_problem, "items": len(items),
                                "attempt": attempt},
+                               prompt_ids=("drawing_check_system",),
             )
             break
         except RuntimeError:

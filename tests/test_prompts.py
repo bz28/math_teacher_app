@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 from pathlib import Path
@@ -61,3 +62,43 @@ def test_loaders_and_version_ids() -> None:
     assert isinstance(load_prompt_map("integrity_posture_fragments"), dict)
     with pytest.raises(KeyError):
         prompt_version("nope")
+
+
+_API = Path(__file__).resolve().parent.parent / "api"
+_LLM_CALLS = {"call_claude_json", "call_claude_vision", "call_claude_conversation"}
+
+
+def _llm_calls() -> list[tuple[str, int, ast.Call]]:
+    out = []
+    for path in _API.rglob("*.py"):
+        if path.name == "llm_client.py":
+            continue
+        for node in ast.walk(ast.parse(path.read_text())):
+            if isinstance(node, ast.Call) and getattr(node.func, "id", None) in _LLM_CALLS:
+                out.append((str(path.relative_to(_API)), node.lineno, node))
+    return out
+
+
+def test_every_llm_call_logs_its_prompt_versions() -> None:
+    """Every call site names the prompt files it's built from, and every
+    literal id is a registered prompt — so each llm_calls row says which
+    prompt versions produced it."""
+    calls = _llm_calls()
+    assert calls
+    for where, line, call in calls:
+        kw = next((k for k in call.keywords if k.arg == "prompt_ids"), None)
+        assert kw is not None, f"api/{where}:{line} calls Claude without prompt_ids"
+        for const in ast.walk(kw.value):
+            if isinstance(const, ast.Constant) and isinstance(const.value, str):
+                assert const.value in PROMPT_VERSIONS, f"api/{where}:{line}: unknown prompt {const.value!r}"
+
+
+def test_call_metadata_carries_prompt_versions() -> None:
+    from api.core.llm_client import _with_prompt_versions
+
+    meta = _with_prompt_versions({"phase": "x"}, ("grading_system",))
+    assert meta == {
+        "phase": "x",
+        "prompt_versions": [prompt_version("safety_preamble"), prompt_version("grading_system")],
+    }
+    assert _with_prompt_versions(None, ())["prompt_versions"] == [prompt_version("safety_preamble")]

@@ -13,6 +13,7 @@ import html
 from pathlib import Path
 from typing import Any
 
+from api.core.prompts import PROMPT_VERSIONS, prompt_version
 from tests.harness.runner import CaptureResult, ItemResult, RunResult
 from tests.harness.types import JudgeScore
 
@@ -128,6 +129,14 @@ def _view(c: CaptureResult) -> str:
     )
 
 
+def _prompt_versions() -> str:
+    """Every live prompt version (api/core/prompts). The probe drives the app
+    from this same checkout, so this is the set its LLM calls ran with; the
+    report HTML is stored on the run's HarnessRun row, which golden cases'
+    last_run_id points at."""
+    return ", ".join(prompt_version(n) for n in sorted(PROMPT_VERSIONS))
+
+
 def write_report(result: RunResult, out_path: Path) -> Path:
     det_passed = sum(1 for it in result.items if it.passed)
     judge_means = [c.judge.mean for c in result.captures if c.judge is not None]
@@ -213,7 +222,8 @@ def write_report(result: RunResult, out_path: Path) -> Path:
   <b>{det_passed}/{len(result.items)}</b>
   {f'· judge mean <b>{mean_judge}/5</b> over {len(judge_means)} judged' if mean_judge is not None else ''}
   · spent <b>{cost}</b><br>
-  <small>{html.escape(result.note)}</small>
+  <small>{html.escape(result.note)}</small><br>
+  <small class="prompt-versions">prompt versions: {html.escape(_prompt_versions())}</small>
 </div>
 {_prompt_block(result.prompt)}
 {''.join(blocks) or '<i>no questions generated</i>'}

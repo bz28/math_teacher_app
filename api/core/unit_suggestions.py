@@ -89,6 +89,7 @@ Documents to organize:
                     user_id=user_id,
                     model=MODEL_CLASSIFY,
                     max_tokens=2048,
+                    prompt_ids=("suggest_units",),
                 )
                 batch_suggestions = result.get("suggestions", [])
                 if isinstance(batch_suggestions, list):
@@ -122,6 +123,7 @@ Documents to organize:
                     user_id=user_id,
                     model=MODEL_CLASSIFY,
                     max_tokens=1024,
+                    prompt_ids=("suggest_units",),
                 )
                 text_suggestions = text_result.get("suggestions", [])
                 if isinstance(text_suggestions, list):
@@ -137,6 +139,7 @@ Documents to organize:
                 user_id=user_id,
                 model=MODEL_CLASSIFY,
                 max_tokens=1024,
+                prompt_ids=("suggest_units",),
             )
             suggestions = result.get("suggestions", [])  # type: ignore[assignment]
 

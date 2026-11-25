@@ -11,7 +11,7 @@ from api.core.document_vision import build_vision_content
 from api.core.geometry.fact_card import is_blank_card
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
 from api.core.llm_schemas import GENERATE_QUESTIONS_CONSTRUCTION_SCHEMA
-from api.core.prompts import load_prompt, load_prompt_map
+from api.core.prompts import load_prompt, load_prompt_map, prompt_ids_in
 from api.core.step_decomposition import StepFigures, decompose_problem
 from api.core.subjects import Subject, get_config
 
@@ -48,6 +48,16 @@ _CONSTRUCTION_FIGURES_SECTION = (
     + '\n'
     + FACT_CARD_RULES
     + "\n"
+)
+
+
+# The prompt files a generation call is built from: the system prompt, its
+# figure sections, and the Customize constraint lines in the user message.
+_GENERATE_PROMPT_IDS = (
+    "assignment_generate_questions", "figure_when_to_draw", "figure_fact_card_rules",
+    "construction_figure_rules", "assignment_problem_type_instructions",
+    "assignment_answer_form_instructions", "assignment_difficulty_instructions",
+    "assignment_calculator_instructions", "assignment_format_instructions",
 )
 
 
@@ -148,6 +158,11 @@ async def generate_questions(
         return []
 
     system_prompt = _build_question_generation_prompt(subject)
+    # Callers pass product rules (practice single-answer, replacement) inside
+    # the teacher's instructions; log their versions when they're present.
+    prompt_ids = (*_GENERATE_PROMPT_IDS, *prompt_ids_in(
+        extra_instructions or "", "practice_single_answer_rule", "bank_replacement_rule",
+    ))
     schema = GENERATE_QUESTIONS_CONSTRUCTION_SCHEMA
     # Order the user message to match the prompt's priority hierarchy:
     # teacher's brief first (intent), structured constraints next, then
@@ -186,6 +201,7 @@ async def generate_questions(
                 max_tokens=_GENERATE_MAX_TOKENS,
                 call_metadata=call_metadata,
                 generation_job_id=generation_job_id,
+                prompt_ids=prompt_ids,
             )
         else:
             result = await call_claude_json(
@@ -199,6 +215,7 @@ async def generate_questions(
                 timeout=_GENERATE_TIMEOUT_S,
                 call_metadata=call_metadata,
                 generation_job_id=generation_job_id,
+                prompt_ids=prompt_ids,
             )
         questions: list[Any] = result.get("questions", [])  # type: ignore[assignment]
 

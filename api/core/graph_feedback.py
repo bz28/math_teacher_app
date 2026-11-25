@@ -103,6 +103,7 @@ async def write_graph_note(
             temperature=0.0,
             user_id=user_id,
             submission_id=submission_id,
+            prompt_ids=("graph_feedback_system",),
         )
         note = str(out.get("feedback") or "").strip()
         if note:

@@ -667,6 +667,14 @@ def add_parser(sub: Any) -> None:
     sc.add_argument("--json", type=Path, help="also write the rows as JSON here")
 
 
+def _used_prompt_versions() -> list[str]:
+    """The versioned prompts (api/core/prompts) this run's LLM calls used."""
+    from tests.harness.cassette import get_cassette
+
+    cassette = get_cassette()
+    return sorted(cassette.used_prompt_versions) if cassette else []
+
+
 def run_cli(args: argparse.Namespace) -> int:
     # Checked before anything else: a mistyped path must not judge against an
     # empty baseline (every how-good and case check would silently pass).
@@ -690,7 +698,11 @@ def run_cli(args: argparse.Namespace) -> int:
         args.baseline.write_text(json.dumps(baseline, indent=2, sort_keys=True) + "\n")
     ok = judge(rows, baseline, args.only)
     print(render(rows))  # noqa: T201
+    print("prompt versions: " + ", ".join(_used_prompt_versions()))  # noqa: T201
     if args.json:
-        args.json.write_text(json.dumps([asdict(r) | {"status": r.status} for r in rows], indent=2))
+        args.json.write_text(json.dumps({
+            "prompt_versions": _used_prompt_versions(),
+            "rows": [asdict(r) | {"status": r.status} for r in rows],
+        }, indent=2))
     sys.stdout.flush()
     return 0 if ok else 1

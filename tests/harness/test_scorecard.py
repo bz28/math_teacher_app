@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from api.core.prompts import PROMPT_VERSIONS, prompt_version
 from tests.harness import scorecard as sc
 
 _ROOT = Path(__file__).resolve().parents[2]
@@ -43,7 +44,11 @@ def test_the_scorecard_replays_clean(tmp_path: Path) -> None:
         cwd=_ROOT, capture_output=True, text=True, timeout=300,
     )
     assert proc.returncode == 0, proc.stdout[-4000:] + proc.stderr[-4000:]
-    rows = {r["feature"] + " / " + r["probe"]: r for r in json.loads(out.read_text())}
+    result = json.loads(out.read_text())
+    rows = {r["feature"] + " / " + r["probe"]: r for r in result["rows"]}
+    # The run records which prompt versions its calls used, each a live one.
+    live = {prompt_version(n) for n in PROMPT_VERSIONS}
+    assert result["prompt_versions"] and set(result["prompt_versions"]) <= live
     assert {k for k in _MUST_RUN if rows[k]["status"] != "PASS"} == set(), proc.stdout
     has_font = Path(sc._RECORDED_FONT).exists()
     for k in _FONT_BOUND:

@@ -48,6 +48,7 @@ async def extract_problems_from_image(
     result = await call_claude_vision(
         user_content, mode=LLMMode.IMAGE_EXTRACT,
         tool_schema=IMAGE_EXTRACT_SCHEMA, user_id=user_id,
+        prompt_ids=("image_extract",),
     )
 
     problems = result.get("problems", [])

@@ -153,6 +153,7 @@ async def _llm_requires_drawing(question: str, *, user_id: str | None = None) ->
             temperature=0.0,
             max_retries=1,
             user_id=user_id,
+            prompt_ids=("drawing_requirement_classify",),
         ), timeout=_CLASSIFY_TIMEOUT_S)
     except Exception:  # noqa: BLE001 — the regex is the fallback
         logger.warning("requires-drawing classification failed; using the regex", exc_info=True)

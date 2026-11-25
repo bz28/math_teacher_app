@@ -92,6 +92,7 @@ async def generate_distractors(
             model=model,
             max_tokens=max_tokens,
             generation_job_id=generation_job_id,
+            prompt_ids=("practice_distractors",),
         )
         distractors = result.get("distractors", [])
         if isinstance(distractors, list) and len(distractors) >= 3:
@@ -234,6 +235,7 @@ async def generate_similar_questions(
             user_id=user_id,
             model=MODEL_REASON if has_diagram else MODEL_HAIKU,
             max_tokens=4096 if has_diagram else min(1024 * len(problems), 4096),
+            prompt_ids=("practice_generate", "practice_difficulty_instructions"),
         )
         raw_problems = result.get("problems")
         if not isinstance(raw_problems, list) or len(raw_problems) == 0:
