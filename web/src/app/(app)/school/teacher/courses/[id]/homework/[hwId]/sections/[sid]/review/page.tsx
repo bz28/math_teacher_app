@@ -10,6 +10,7 @@ import {
   useOtherSectionCounts,
   useSubmissionDetailFetch,
 } from "./_hooks/use-review-data";
+import { ReviewStoreProvider, useReviewStore } from "./_store/review-store";
 import { ReopenControl } from "@/components/school/teacher/_pieces/reopen-control";
 import {
   teacher,
@@ -19,13 +20,7 @@ import {
   type TeacherSubmissionRow,
 } from "@/lib/api";
 import { openGraphItems } from "@/components/school/teacher/_pieces/graph-check-review";
-import type {
-  GradeStatus,
-  RosterEntry,
-  RosterFilter,
-  GraphCall,
-  GraphCallResult,
-} from "./_lib/types";
+import type { GradeStatus, RosterEntry, GraphCall, GraphCallResult } from "./_lib/types";
 import {
   EMPTY_ID_SET,
   isFlagged,
@@ -61,7 +56,9 @@ export default function HomeworkSectionReviewPage(props: {
 }) {
   return (
     <Suspense>
-      <HomeworkSectionReview {...props} />
+      <ReviewStoreProvider>
+        <HomeworkSectionReview {...props} />
+      </ReviewStoreProvider>
     </Suspense>
   );
 }
@@ -108,14 +105,16 @@ function HomeworkSectionReview({
   // expanded when the teacher hits "Next student" — otherwise
   // SubmissionDetailPanel unmounts during the switch and local state
   // inside RubricSection would reset to collapsed every time.
-  const [rubricOpen, setRubricOpen] = useState(false);
+  const rubricOpen = useReviewStore((s) => s.rubricOpen);
+  const setRubricOpen = useReviewStore((s) => s.setRubricOpen);
   const [roster, setRoster] = useState<RosterEntry[] | null>(null);
   // Roster filter — narrows the left pane by verdict / status. The
   // most useful default is "needs me" (anything flagged or ungraded);
   // we keep it on "all" for now so teachers don't lose context on
   // first land, but the filter chip is the fastest path from "show
   // me everyone" to "show me only the cheaters".
-  const [rosterFilter, setRosterFilter] = useState<RosterFilter>("all");
+  const rosterFilter = useReviewStore((s) => s.rosterFilter);
+  const setRosterFilter = useReviewStore((s) => s.setRosterFilter);
   // Which confident rows the teacher has ticked, per submission.
   //
   // This lives here rather than in the detail panel because the panel is
@@ -130,9 +129,8 @@ function HomeworkSectionReview({
   // because nothing about it is persisted server-side. The durable trust
   // signal is `reviewed_at` — the explicit Approve on an AI grade, or a
   // hand grade with every problem scored.
-  const [confirmedBySubmission, setConfirmedBySubmission] = useState<
-    ReadonlyMap<string, ReadonlySet<string>>
-  >(() => new Map());
+  const confirmedBySubmission = useReviewStore((s) => s.confirmedBySubmission);
+  const setConfirmedBySubmission = useReviewStore((s) => s.setConfirmedBySubmission);
 
   // What the last grade action did, announced politely. Grading is a
   // keyboard-first flow — 1-5 grades the focused problem and advances —
@@ -143,7 +141,8 @@ function HomeworkSectionReview({
   // `detail` goes stale during a post-save refetch, which is exactly
   // when a grade has just been recorded. The announcement was being
   // wiped before it could be read.
-  const [gradeAnnouncement, setGradeAnnouncement] = useState("");
+  const gradeAnnouncement = useReviewStore((s) => s.gradeAnnouncement);
+  const setGradeAnnouncement = useReviewStore((s) => s.setGradeAnnouncement);
   const announce = useCallback((message: string) => {
     // Re-announce an identical action by appending an invisible marker:
     // a live region only speaks when its text CHANGES, and grading three
@@ -152,7 +151,7 @@ function HomeworkSectionReview({
     setGradeAnnouncement((prev) =>
       prev === message ? `${message}\u200B` : message,
     );
-  }, []);
+  }, [setGradeAnnouncement]);
   const announceGrade = useCallback(
     (position: number, label: string) => announce(`Problem ${position}: ${label}.`),
     [announce],
@@ -169,7 +168,7 @@ function HomeworkSectionReview({
         return next;
       });
     },
-    [],
+    [setConfirmedBySubmission],
   );
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   // The teacher picking a student (roster click, "Next student", the
@@ -234,16 +233,19 @@ function HomeworkSectionReview({
   );
   // Whether the pinned work rail (wide layout) shows the photo inline.
   // A session preference — lifted here so it persists across students.
-  const [photoPinned, setPhotoPinned] = useState(true);
+  const photoPinned = useReviewStore((s) => s.photoPinned);
+  const setPhotoPinned = useReviewStore((s) => s.setPhotoPinned);
   // Whether the integrity card shows its Details (summary + activity
   // digest). Collapsed by default; a session preference like photoPinned,
   // shared by the rail card (xl) and the grade-column card (below xl).
-  const [integrityDetailsOpen, setIntegrityDetailsOpen] = useState(false);
+  const integrityDetailsOpen = useReviewStore((s) => s.integrityDetailsOpen);
+  const setIntegrityDetailsOpen = useReviewStore((s) => s.setIntegrityDetailsOpen);
   const toggleIntegrityDetails = useCallback(
     () => setIntegrityDetailsOpen((v) => !v),
-    [],
+    [setIntegrityDetailsOpen],
   );
-  const [publishConfirmOpen, setPublishConfirmOpen] = useState(false);
+  const publishConfirmOpen = useReviewStore((s) => s.publishConfirmOpen);
+  const setPublishConfirmOpen = useReviewStore((s) => s.setPublishConfirmOpen);
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState<string | null>(null);
   // Regrade state — a single slot because only one submission is open
@@ -255,7 +257,8 @@ function HomeworkSectionReview({
   const [regradeError, setRegradeError] = useState<
     { forSubmissionId: string; message: string } | null
   >(null);
-  const [regradeConfirmOpenFor, setRegradeConfirmOpenFor] = useState<string | null>(null);
+  const regradeConfirmOpenFor = useReviewStore((s) => s.regradeConfirmOpenFor);
+  const setRegradeConfirmOpenFor = useReviewStore((s) => s.setRegradeConfirmOpenFor);
   // Submissions the teacher sent to the AI grader ("Grade with AI" or
   // "Grade all") whose grade hasn't landed yet. Grading runs on the
   // server's queue after the request returns, so the page polls these
@@ -1123,7 +1126,7 @@ function HomeworkSectionReview({
         setPublishing(false);
       }
     },
-    [assignmentId, pendingReviewedOtherSections, dirtyReviewedOtherSections, setDetail, setDirtyOtherSections, setDirtyReviewedOtherSections, setFlaggedOtherSections, setGraphOtherSections, setPendingOtherSections, setPendingReviewedOtherSections],
+    [assignmentId, pendingReviewedOtherSections, dirtyReviewedOtherSections, setDetail, setDirtyOtherSections, setDirtyReviewedOtherSections, setFlaggedOtherSections, setGraphOtherSections, setPendingOtherSections, setPendingReviewedOtherSections, setPublishConfirmOpen],
   );
 
   // Publish-button click gate. If every grade about to go out is approved
@@ -1347,7 +1350,7 @@ function HomeworkSectionReview({
     } else {
       setPublishConfirmOpen(true);
     }
-  }, [unreviewedToPublishTotal, flaggedToPublishTotal, graphToPublishTotal, handlePublish]);
+  }, [unreviewedToPublishTotal, flaggedToPublishTotal, graphToPublishTotal, handlePublish, setPublishConfirmOpen]);
 
   // Explicit approval — the teacher's deliberate "I've vouched for this"
   // click on the Approve button of an AI grade (hand grades self-approve
@@ -1590,7 +1593,7 @@ function HomeworkSectionReview({
         setRegradingSubmissionId(null);
       }
     },
-    [setDetail],
+    [setDetail, setRegradeConfirmOpenFor],
   );
 
   // Next submitter whose grade isn't released to students yet —
