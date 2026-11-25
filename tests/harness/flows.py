@@ -106,9 +106,9 @@ async def _login_flow(
         await page.fill("#password", "x")  # the seed hashes "x" for every user
         await page.click('button[type="submit"]')
 
-        # Success = we leave /login for an authed route. The seeded student has
-        # no school, so the app lands on /home; assert only that we left /login,
-        # to stay robust to the exact destination.
+        # Success = we leave /login for an authed route (every student lands
+        # on /school/student); assert only that we left /login, to stay
+        # robust to the exact destination.
         try:
             await page.wait_for_url(lambda url: "/login" not in url, timeout=_TIMEOUT_MS)
         except PlaywrightTimeoutError:
@@ -130,17 +130,28 @@ async def _logout_flow(
     async with browser.authed_page(seed.student_token, seed.student_refresh) as page:
         await page.goto(
             # domcontentloaded, not networkidle (which _login_flow already uses):
-            # /home is a chatty SPA and networkidle can time out on a still-open
+            # the portal is a chatty SPA and networkidle can time out on a still-open
             # connection, which run_flows swallows — silently SKIPPING a real
             # broken logout instead of reporting it. The Sign Out control is in
             # the hydrated layout, so domcontentloaded is enough to find it.
-            f"{web_base.rstrip('/')}/home",
+            f"{web_base.rstrip('/')}/school/student",
             wait_until="domcontentloaded", timeout=_TIMEOUT_MS,
         )
+        # A first-run student sees the tour's welcome cover over the page;
+        # dismiss it so it can't intercept the click (it isn't the journey).
+        skip = page.get_by_role("button", name="Skip for now")
         try:
-            await page.click("button:has-text('Sign Out')", timeout=_TIMEOUT_MS)
+            await skip.click(timeout=5000)
         except PlaywrightTimeoutError:
-            issues.append("no Sign Out control found while authenticated on /home")
+            pass
+        try:
+            # Desktop sidebar's icon button; the phone header's is text.
+            await page.click(
+                "button[title='Sign out']:visible, button:has-text('Sign Out'):visible",
+                timeout=_TIMEOUT_MS,
+            )
+        except PlaywrightTimeoutError:
+            issues.append("no Sign Out control found while authenticated on /school/student")
             return FlowResult("logout", "Student logout", False, issues)
         try:
             await page.wait_for_url(lambda url: "/login" in url, timeout=_TIMEOUT_MS)
