@@ -620,7 +620,7 @@ async def test_a_reading_cannot_write_the_log(monkeypatch: pytest.MonkeyPatch) -
         return {"points": ["A"], "dropped": ["nothing to see"]}
 
     monkeypatch.setattr(cf, "call_claude_json", call)
-    got = await cf._read_once("s", "m", mode="t", user_id=None, generation_job_id=None)
+    got = await cf._read_once("s", "m", prompt_ids=cf._FACTS_IDS_A, mode="t", user_id=None, generation_job_id=None)
     assert got.dropped == []
 
 

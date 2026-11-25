@@ -124,12 +124,6 @@ class Cassette:
         self.mode = mode
         self.root = root
         self._cache: dict[str, dict[str, Any]] = {}  # fn -> {key: entry}
-        # Every prompt version (api/core/prompts) a call in this process used,
-        # recorded or replayed — what an eval run reports it ran against.
-        self.used_prompt_versions: set[str] = set()
-
-    def note_prompt_versions(self, versions: list[str]) -> None:
-        self.used_prompt_versions.update(versions)
 
     def key(self, fn_name: str, identity: dict[str, Any]) -> str:
         payload = json.dumps(
@@ -195,6 +189,20 @@ class Cassette:
 
 
 _instance: Cassette | None = None
+
+# Every prompt version (api/core/prompts) a cassetted call in this process
+# used, recorded or replayed — what an eval run reports it ran against.
+# Process-wide, not per Cassette: probes that point HARNESS_CASSETTE_DIR
+# elsewhere get a fresh instance, and the run's record must span them all.
+_used_prompt_versions: set[str] = set()
+
+
+def note_prompt_versions(versions: list[str]) -> None:
+    _used_prompt_versions.update(versions)
+
+
+def used_prompt_versions() -> list[str]:
+    return sorted(_used_prompt_versions)
 
 
 def get_cassette() -> Cassette | None:

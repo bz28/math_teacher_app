@@ -535,6 +535,7 @@ def _cassetted(default_model: str) -> Callable[[_F], _F]:
                 MISS,
                 CassetteMissError,
                 build_identity,
+                note_prompt_versions,
                 summarize,
             )
 
@@ -552,7 +553,7 @@ def _cassetted(default_model: str) -> Callable[[_F], _F]:
             )
             identity = build_identity(args_dict, default_model)
             versions = _with_prompt_versions(cm, args_dict.get("prompt_ids", ()))["prompt_versions"]
-            cassette.note_prompt_versions(versions)
+            note_prompt_versions(versions)
             if override is not None:
                 key = cassette.key(fn.__name__, {"k": str(override)})
             else:
