@@ -16,16 +16,9 @@ from __future__ import annotations
 
 import re
 
-PRACTICE_SINGLE_ANSWER_RULE = (
-    "This rule overrides every other instruction, including the teacher's "
-    "and any reference question: each problem asks for exactly one final "
-    "answer — one value, one expression, one equation, or one short "
-    "statement — even if those instructions ask for parts. Do not split a "
-    "problem into lettered or numbered sub-parts such as (a)/(b), a)/b), "
-    "1./2., or Part A/Part B, and do not ask for two things in one problem "
-    "(\"find x and the measure of each angle\"). Write a second problem "
-    "instead."
-)
+from api.core.prompts import load_prompt
+
+PRACTICE_SINGLE_ANSWER_RULE = load_prompt("practice_single_answer_rule")
 
 # A label only counts where a part label stands: opening a line or a
 # sentence. Mid-sentence, "(i) and (ii)", "copper (I) oxide", "x = (a) +

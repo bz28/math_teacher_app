@@ -49,6 +49,7 @@ CONSTANTS: list[tuple[str, str]] = [
     ("integrity_ai", "_VERIFY_PROMPT"),
     ("integrity_pipeline", "OPENER_TEMPLATES"),
     ("llm_client", "SAFETY_PREAMBLE"),
+    ("part_labels", "PRACTICE_SINGLE_ANSWER_RULE"),
     ("practice", "_DIFFICULTY_INSTRUCTIONS"),
     ("practice", "_DISTRACTOR_PROMPT"),
     ("practice", "_GENERATE_QUESTIONS_TEMPLATE"),
