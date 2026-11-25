@@ -275,3 +275,92 @@ test("graph and drawing checks sit under grading", () => {
 test("an unmapped function is 'other', never silently priced", () => {
   assert.equal(featureFor("some_new_mode_we_added", "submission:homework"), "other");
 });
+
+// ── Review round 4 ───────────────────────────────────────────────────
+
+test("an unmapped function is never silently repriced", () => {
+  // featureFor returns "other" for anything unmapped, and the picker has
+  // no row for it — so a model chosen for "other" would be invisible and
+  // unchangeable. The leg must fall back to measured cost and say so.
+  const d = data({
+    functions_by_unit: {
+      "submission:homework": [
+        fn("some_mode_nobody_mapped", { [OPUS]: 0.9, [HAIKU]: 0.01 }),
+      ],
+    },
+  });
+  const r = computeMargin(d, scenario({ models: { other: HAIKU } }));
+  const hw = r.lines.find((l) => l.key === "submission:homework");
+  assert.ok(hw);
+  assert.equal(
+    hw!.perStudentMonth,
+    0.9,
+    "an unmapped leg must hold its measured cost, not be repriced",
+  );
+  assert.equal(r.anyUnpriced, true, "and must light the banner");
+});
+
+test("an unpriceable generation leg lights the banner", () => {
+  // anyUnpriced used to be assigned only inside the submission loop, so
+  // a generation / teacher / self-study leg that could not be repriced
+  // left the knob inert with nothing on screen explaining why.
+  const d = data({
+    units: [
+      ...data().units.filter((u) => u.kind !== "generation:unit"),
+      unit("generation:unit", { n: 10, cost_mean: 1, cost_median: 1 }),
+    ],
+    functions_by_unit: {
+      // A model retired from the catalog reprices to null for every
+      // target, which is what a 90-day window can contain.
+      "generation:unit": [
+        fn("generate_questions", { [OPUS]: null, [HAIKU]: null }, {
+          cost_per_unit: 1,
+          self_reprice: null,
+        }),
+      ],
+    },
+  });
+  const r = computeMargin(
+    d,
+    scenario({ homework: 0, unitsPerYear: 8, models: { generation: OPUS } }),
+  );
+  assert.equal(r.anyUnpriced, true);
+});
+
+test("a row that is both thin and short reports BOTH", () => {
+  // Clearing `thin` whenever the window was short hid a 2-teacher sample
+  // for as long as the short-window flag was up. The two need different
+  // actions: collect more data, or widen the window.
+  const d = data({
+    units: [
+      ...data().units.filter((u) => u.kind !== "residual:teacher"),
+      unit("residual:teacher", {
+        n: 2, cost_mean: 500, cost_median: 500,
+        sufficient: false, window_too_short: true,
+      }),
+    ],
+  });
+  const r = computeMargin(d, scenario({ homework: 0 }));
+  const line = r.lines.find((l) => l.key === "residual:teacher");
+  assert.ok(line);
+  assert.equal(line!.shortWindow, true, "the window is short");
+  assert.equal(line!.thin, true, "and 2 observations is also thin");
+  assert.equal(r.anyThin, true, "so the thin warning must still fire");
+});
+
+test("a well-sampled short-window row is not called thin", () => {
+  const d = data({
+    units: [
+      ...data().units.filter((u) => u.kind !== "residual:student"),
+      unit("residual:student", {
+        n: 50, cost_mean: 288, cost_median: 288,
+        sufficient: false, window_too_short: true,
+      }),
+    ],
+  });
+  const line = computeMargin(d, scenario({ homework: 0 })).lines.find(
+    (l) => l.key === "residual:student",
+  );
+  assert.ok(line);
+  assert.equal(line!.thin, false, "50 observations is not a thin sample");
+});

@@ -143,6 +143,12 @@ export default function UnitEconomics() {
   // Which knobs the window actually measured, as opposed to ones holding
   // a fallback. "Chosen" is not "measured".
   const [measuredKnobs, setMeasuredKnobs] = useState<Set<string>>(new Set());
+  // Knobs whose legs did not all run on one model. One <select> cannot
+  // reproduce measured cost for those — whichever model is picked,
+  // some leg is repriced off a profile it never ran on — and the
+  // heaviest-leg default picks the most expensive member, which biases
+  // the row upward. The page says so rather than implying it is exact.
+  const [mixedKnobs, setMixedKnobs] = useState<Set<string>>(new Set());
   const models = useMemo(
     () => ({ ...seededModels, ...urlModels }),
     [seededModels, urlModels],
@@ -189,17 +195,29 @@ export default function UnitEconomics() {
         // appears in no bucket list at all so its knob was never seeded.
         const seeded: ModelChoice = {};
         const spend: Record<string, number> = {};
+        const seenModels: Record<string, Set<string>> = {};
         for (const [kind, fns] of Object.entries(d.functions_by_unit)) {
           for (const fn of fns) {
             const key = featureFor(fn.function, kind);
+            // Never seed "other". It is not a knob — it has no row in
+            // the picker, so a model chosen for it would be invisible
+            // and unchangeable — and giving it one would silently
+            // reprice an unmapped function instead of surfacing it.
+            // That guard is the only thing that catches the NEXT mode
+            // added without an llm_modes entry, which this file's own
+            // history shows happening repeatedly.
+            if (key === "other") continue;
             const id = fn.measured_catalog_id;
             // measured_catalog_id, not measured_model: the raw id can
             // carry a date pin that matches no <option> value, which
             // makes the select fall back to the first model in the list.
             // Heaviest leg wins, so a knob reflects where its money goes.
-            if (id && fn.cost_per_unit > (spend[key] ?? -1)) {
-              spend[key] = fn.cost_per_unit;
-              seeded[key] = id;
+            if (id) {
+              (seenModels[key] ??= new Set()).add(id);
+              if (fn.cost_per_unit > (spend[key] ?? -1)) {
+                spend[key] = fn.cost_per_unit;
+                seeded[key] = id;
+              }
             }
           }
         }
@@ -217,6 +235,13 @@ export default function UnitEconomics() {
         }
         setSeededModels(seeded);
         setMeasuredKnobs(new Set(Object.keys(spend)));
+        setMixedKnobs(
+          new Set(
+            Object.entries(seenModels)
+              .filter(([, models]) => models.size > 1)
+              .map(([key]) => key),
+          ),
+        );
       })
       .catch((e) => !cancelled && setError(String(e?.message ?? e)))
       .finally(() => !cancelled && setLoading(false));
@@ -571,6 +596,15 @@ export default function UnitEconomics() {
                       {!measuredHere && (
                         <div className="empty-state-sub" style={{ fontSize: 11 }}>
                           not measured in this window
+                        </div>
+                      )}
+                      {mixedKnobs.has(b.key) && (
+                        <div
+                          className="empty-state-sub"
+                          style={{ fontSize: 11, color: "var(--warn)" }}
+                          title="These calls ran on more than one model, so one model cannot reproduce the measured cost for this row"
+                        >
+                          ran on several models — estimate
                         </div>
                       )}
                     </td>

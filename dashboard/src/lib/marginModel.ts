@@ -114,7 +114,16 @@ function repricedUnitCost(
   let cost = 0;
   let unpriced = false;
   for (const fn of fns) {
-    const chosen = models[featureFor(fn.function, unitKind)];
+    const feature = featureFor(fn.function, unitKind);
+    // An unmapped function is never priced, whatever the model map
+    // happens to contain. The guard lives HERE rather than at the
+    // seeding site so it cannot be defeated by anything that writes an
+    // "other" entry — a URL parameter, a future caller, a refactor.
+    // "other" has no row in the picker, so a model chosen for it would
+    // be invisible and unchangeable, and repricing it would hide the
+    // next mode added without an llm_modes entry instead of surfacing
+    // it.
+    const chosen = feature === "other" ? undefined : models[feature];
     const repriced = chosen ? fn.reprice[chosen] : undefined;
     if (repriced === undefined || repriced === null) {
       cost += fn.cost_per_unit;
@@ -239,14 +248,22 @@ export function computeMargin(
     unpriced: studentCost.unpriced,
   });
 
-  // `thin` means too few observations and nothing else. A row whose
-  // `sufficient` was cleared purely by a short window is reported under
-  // `excluded`, because "collect more data" and "pick a longer window"
-  // send an operator to different places.
+  // `thin` is read from the sample size directly, not inferred from
+  // `sufficient` — the backend ANDs the sample check with the window
+  // check, so `sufficient: false` cannot say which applied, and a row
+  // that is BOTH thin and short would otherwise report only the window.
+  // The two need different actions: collect more data, or widen the
+  // window.
   for (const line of lines) {
-    if (line.shortWindow) line.thin = false;
+    const unit = unitOf(data, line.key);
+    line.thin = Boolean(unit) && unit!.n < data.min_sample;
   }
-  anyThin = anyThin || lines.some((l) => l.thin);
+  anyThin = lines.some((l) => l.thin);
+  // Derived from the lines, like anyThin. It used to be assigned only
+  // inside the submission loop, so an unpriceable generation, teacher
+  // or self-study leg went completely unannounced: the knob was inert
+  // and nothing said why.
+  anyUnpriced = anyUnpriced || lines.some((l) => l.unpriced);
 
   // A residual rate is cost / users / MONTHS. On a window far shorter
   // than a month that divisor goes to ~0 and the rate explodes: half an

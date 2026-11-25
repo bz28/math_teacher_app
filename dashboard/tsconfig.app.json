@@ -25,8 +25,10 @@
     "noUncheckedSideEffectImports": true
   },
   "include": ["src"],
-  // Tests are not part of the browser bundle and import node: builtins,
-  // which this config deliberately has no types for. They are
-  // typechecked and executed by `npm test`.
+  // Tests are not part of the browser bundle and import node:
+  // builtins, which this config deliberately has no types for.
+  // tsconfig.test.json typechecks them instead — `npm test` only
+  // STRIPS types, so excluding them here without that project left
+  // them checked by nothing.
   "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
 }
