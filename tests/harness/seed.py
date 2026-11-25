@@ -540,3 +540,106 @@ async def seed_confirmable_submission(
         refresh = await create_refresh_token(s, student.id)
         await s.commit()
         return str(hw.id), create_access_token(str(student.id), "student"), refresh
+
+
+@dataclass
+class ReviewSeed:
+    """The section-review page's world: where it lives and who is on it."""
+
+    course_id: str
+    assignment_id: str
+    section_id: str
+    graded_student: str  # AI-graded, one confident + one low-confidence problem
+    ungraded_student: str  # submitted, not graded yet
+    absent_student: str  # enrolled, never submitted
+
+
+async def seed_review_homework(seed: Seed) -> ReviewSeed:
+    """A published three-problem homework (with a rubric) in the seeded
+    section, and three fresh students covering the review page's roster
+    states: one AI-graded (problem 1 confident full credit, problem 2
+    low-confidence partial, problem 3 medium-confidence zero), one submitted
+    but ungraded, one who never submitted. Its own homework, so the seeded
+    student and the other flows never show up on this roster's counts. AI
+    grading and integrity stay OFF, so opening the page fires no LLM call."""
+    course_id = uuid.UUID(seed.course_id)
+    now = datetime.now(UTC)
+    tag = uuid.uuid4().hex[:6]
+    async with get_session_factory()() as s:
+        section_id = (await s.execute(
+            select(SectionEnrollment.section_id).where(
+                SectionEnrollment.student_id == uuid.UUID(seed.student_id),
+                SectionEnrollment.course_id == course_id,
+            ).limit(1)
+        )).scalar_one()
+        hw = Assignment(
+            course_id=course_id, unit_ids=[uuid.UUID(seed.unit_id)],
+            teacher_id=uuid.UUID(seed.teacher_id), title="Review HW",
+            type="homework", status="published", content={"problem_ids": []},
+            integrity_check_enabled=False, ai_grading_enabled=False,
+            rubric={"full_credit": "Correct answer with work shown."},
+        )
+        s.add(hw)
+        await s.flush()
+        problems = [("Solve 3x = 9.", "x = 3"), ("Solve 2x + 1 = 7.", "x = 3"),
+                    ("Solve x/4 = 2.", "x = 8")]
+        items = []
+        for i, (q, a) in enumerate(problems):
+            item = QuestionBankItem(
+                course_id=course_id, unit_id=uuid.UUID(seed.unit_id),
+                originating_assignment_id=hw.id, title=f"Problem {i + 1}",
+                question=q, final_answer=a, status="approved", source="generated",
+            )
+            s.add(item)
+            items.append(item)
+        await s.flush()
+        hw.content = {"problem_ids": [str(it.id) for it in items]}
+        s.add(AssignmentSection(assignment_id=hw.id, section_id=section_id, published_at=now))
+
+        names = {}
+        subs: dict[str, Submission] = {}
+        for key, name, submits in (
+            ("graded", "Ada Review", True),
+            ("ungraded", "Ben Review", True),
+            ("absent", "Cy Review", False),
+        ):
+            student = User(
+                email=f"harness_review_{key}_{tag}@t.com", password_hash=hash_password("x"),
+                grade_level=8, role="student", name=name,
+            )
+            s.add(student)
+            await s.flush()
+            s.add(SectionEnrollment(section_id=section_id, course_id=course_id, student_id=student.id))
+            names[key] = name
+            if submits:
+                sub = Submission(
+                    assignment_id=hw.id, student_id=student.id, section_id=section_id,
+                    status="submitted", files=[], is_late=False,
+                )
+                s.add(sub)
+                subs[key] = sub
+        await s.flush()
+
+        calls = [("full", 100, 0.95), ("partial", 50, 0.4), ("zero", 0, 0.7)]
+        ai = {"grades": [
+            {"problem_position": i + 1, "student_answer": "x = 3", "score_status": st,
+             "percent": pct, "confidence": conf, "reasoning": f"Reasoning for problem {i + 1}.",
+             "student_feedback": None}
+            for i, (st, pct, conf) in enumerate(calls)
+        ]}
+        breakdown = [
+            {"problem_id": str(it.id), "score_status": st, "percent": pct,
+             "confidence": conf, "feedback": None, "deductions": None}
+            for it, (st, pct, conf) in zip(items, calls, strict=True)
+        ]
+        s.add(SubmissionGrade(
+            submission_id=subs["graded"].id, ai_score=50.0, final_score=50.0,
+            ai_breakdown=ai, breakdown=breakdown, graded_at=now,
+            rubric_snapshot=hw.rubric,
+        ))
+        await s.commit()
+        return ReviewSeed(
+            course_id=seed.course_id, assignment_id=str(hw.id), section_id=str(section_id),
+            graded_student=names["graded"], ungraded_student=names["ungraded"],
+            absent_student=names["absent"],
+        )
