@@ -4,7 +4,7 @@
 
 - Veradic is an AI math-education **school portal**: students photograph handwritten homework; the platform grades it, runs a conversational understanding-check, and hands teachers a class-at-a-glance with the students who need help surfaced first. Full product + customer + feature context: [`docs/product/overview.md`](docs/product/overview.md) — **read it when reasoning about features or proposing changes** (it's the single source of truth; don't duplicate it here).
 - **Build for teachers, sell to districts.** The teacher is the hero/daily user (the product must win their love first); the district is the buyer/expansion path; the student app is the input surface.
-- Load-bearing principles: the teacher sees and approves **every** AI grade (nothing auto-posts); integrity **raises scrutiny, never auto-flags**; generated content is **verified before it's trusted**; tutoring **guides, never gives answers**. Subjects: **math is mature; physics/chemistry are partial.** Scope is the homework→grade→understand→reteach loop today (not a general LMS) — a current focus, not a permanent boundary.
+- Load-bearing principles: the teacher sees and approves **every** AI grade (nothing auto-posts); integrity **raises scrutiny, never auto-flags**; generated content is **verified before it's trusted**; tutoring **guides, never gives answers**. Scope: **math-only, schools-only** — every user is a teacher or a student in a teacher's class; the personal self-study screens are hidden (their routes redirect) and physics/chemistry are not offered. Scope is the homework→grade→understand→reteach loop today (not a general LMS) — a current focus, not a permanent boundary.
 
 ## Ground truth
 
@@ -26,11 +26,13 @@
 - **Verify the blast radius, not just the new thing.** A change to a shared component, store, hook, API contract, or migration can silently break surfaces it didn't obviously touch. Identify what the change could affect (every call site of an edited component/function, every screen that reads a changed store/endpoint) and confirm those *still function the same* — exercise the adjacent flow, not just the new feature. **Attach a screenshot of each affected surface you checked**, not only the changed one. If you can't verify an affected surface, list it as an explicit risk in the Test Plan rather than assuming it's fine.
 - Small, cohesive commits (~150 lines when the change is cohesive; larger is fine for a single logical operation like a rename or bulk delete).
 - Conventional commit prefixes: `feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`.
+- **Finishing.** After your PR merges, remove your worktree and delete your local branch. If your PR supersedes another, close the old one with a comment linking yours.
+- **Background autopilot.** A session running `/autopilot` in the background doesn't pause for the user to test between chunks — but it keeps every gate: CI green, the screenshot gate, and the `/review` loop.
 
 ## Development Process
 
 - Plan before coding. For non-trivial features, use `/plan` to draft the approach in plain English first, iterate with the user, and get explicit approval before writing code. Keep the plan in the conversation — do NOT persist it to a file in the repo. Stale plan docs drift away from the code; trust the code as the source of truth.
-- Feature-by-feature workflow. Work incrementally — after each logical chunk, summarize what/how/why and wait for the user to test before continuing.
+- Feature-by-feature workflow. Work incrementally — after each logical chunk, summarize what/how/why and wait for the user to test before continuing (not in a background `/autopilot` — see Workflow).
 - Verify and test changes. Trace through code, check edge cases (count=0, boundaries), read surrounding code before presenting work.
 - Harness-test AI-generated surfaces. When a change touches a feature with a test-harness probe (`tests/harness/probes/` — geometry today), run `python -m tests.harness for-diff` as part of `/review` and `/autopilot` and fold the result in. It drives the real app to confirm generated figures/solutions render correctly; `replay` mode is $0. A deterministic FAIL is a real bug, not a flake. Deeper generation-quality sweeps: `python -m tests.harness explore` (autonomous; promotes new failures to a $0 regression corpus).
 - **A prompt edit is the last resort, not the first.** When an AI-generated surface misbehaves (wrong figure, bad solution, misgrade, flaky output), don't reach for the LLM prompt first. Trace it to a root cause: deterministic bugs — wrong data passed into the call, an off-by-one, a parsing/serialization error, a missing guard, a stale cache, a render bug downstream — are common and fixable *for good*, whereas a prompt tweak is probabilistic, can regress other cases, and often just masks the real defect. Walk the whole path (inputs → the call → post-processing → render) and rule out a deterministic cause before touching the prompt. If you do change the prompt, state what deterministic causes you ruled out and why the prompt is genuinely at fault.
@@ -41,6 +43,7 @@
 
 ## Code quality
 
+- **File size.** Don't grow a file past ~800 lines. If the file you need to change is already near or over that, first extract the part you're touching into its own module (a refactor commit), then make your change there.
 - DRY: don't extract abstractions beyond what the task requires. Three similar lines is better than a premature abstraction. Inverse — extract a helper when at least 2 of these are true: (1) duplicated 3+ times, (2) the logic is complex enough that a name conveys real insight, (3) the call sites are likely to evolve together, (4) the duplication is where bugs cluster historically. If the only argument is "it's repeated," leave it inline.
 
 ## Frontend design
