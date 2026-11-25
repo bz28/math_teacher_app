@@ -169,14 +169,8 @@ async def _run(sql: str) -> None:
         await s.commit()
 
 
-_UPGRADE = (
-    f"UPDATE llm_calls SET cost_usd = cost_usd - ({mig._DELTA}) "
-    f"WHERE {mig.UPGRADE_SCOPE}"
-)
-_DOWNGRADE = (
-    f"UPDATE llm_calls SET cost_usd = cost_usd + ({mig._DELTA}) "
-    f"WHERE {mig.DOWNGRADE_SCOPE}"
-)
+_UPGRADE = f"UPDATE llm_calls SET cost_usd = {mig._NEW_R} WHERE {mig.UPGRADE_SCOPE}"
+_DOWNGRADE = f"UPDATE llm_calls SET cost_usd = {mig._OLD_R} WHERE {mig.DOWNGRADE_SCOPE}"
 
 
 async def test_upgrade_sql_corrects_only_rows_in_scope() -> None:
@@ -263,3 +257,39 @@ async def test_downgrade_is_a_true_inverse_and_idempotent() -> None:
     assert await _cost(rid) == pytest.approx(_OLD)
     await _run(_DOWNGRADE)
     assert await _cost(rid) == pytest.approx(_OLD), "replay must not re-add"
+
+
+async def test_tiny_cache_reads_are_never_double_corrected() -> None:
+    """The case an absolute tolerance got wrong.
+
+    cost_usd is stored as round(cost, 6), so a row sits up to 5e-7 from
+    its own formula — which exceeded the old delta/2 band whenever
+    cache_read_tokens was small. At cache_read_tokens = 3 a row the NEW
+    code wrote fell inside the upgrade scope and was shaved a second
+    time. Matching rounded-to-rounded has no band to straddle.
+    """
+    for cr in (1, 2, 3, 4, 5, 1024):
+        correct = round(
+            1_000 * 4e-6 + 500 * 20e-6 + cr * 4e-6 * 0.05, 6,
+        )
+        rid = await _row(
+            model="claude-opus-5-5", cache_read=cr,
+            created_at=_AFTER, cost=correct,
+        )
+        await _run(_UPGRADE)
+        assert await _cost(rid) == pytest.approx(correct), (
+            f"cache_read={cr}: an already-correct row was corrected again"
+        )
+
+
+async def test_small_cache_reads_are_still_corrected_when_wrong() -> None:
+    """And the mirror: an old-code row must not be skipped."""
+    for cr in (1024, 8192, 38_000):
+        old = round(1_000 * 4e-6 + 500 * 20e-6 + cr * 4e-6 * 0.1, 6)
+        new = round(1_000 * 4e-6 + 500 * 20e-6 + cr * 4e-6 * 0.05, 6)
+        rid = await _row(
+            model="claude-opus-5-5", cache_read=cr,
+            created_at=_BEFORE, cost=old,
+        )
+        await _run(_UPGRADE)
+        assert await _cost(rid) == pytest.approx(new), f"cache_read={cr}"

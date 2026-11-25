@@ -95,13 +95,30 @@ _DELTA = (
     f"* ({_WRONG_READ_MULT!r} - {_CORRECT_READ_MULT!r})"
 )
 
-# Half the correction separates the two cleanly: a row priced the old way
-# sits 0 away from _OLD_COST and a full delta from _NEW_COST, and the
-# reverse once corrected. Absorbs float8 round-trip noise without ever
-# straddling.
-UPGRADE_SCOPE = f"{_BASE} AND abs(cost_usd - {_OLD_COST}) < ({_DELTA}) / 2"
-DOWNGRADE_SCOPE = f"{_BASE} AND abs(cost_usd - {_NEW_COST}) < ({_DELTA}) / 2"
+# Matched on the ROUNDED value, because that is literally what was
+# stored: llm_client writes `round(cost, 6)` (llm_client.py:359, :374).
+#
+# An absolute tolerance was the wrong tool. The earlier `delta/2` band
+# was justified as absorbing "float8 round-trip noise" (~1e-16), but the
+# real discrepancy is the 1e-6 quantisation, up to 5e-7 — which exceeds
+# delta/2 whenever cache_read_tokens is small. At cache_read_tokens = 3 a
+# row the NEW code wrote lands 2.0e-7 from the old formula against a
+# 3.0e-7 band, so it would be "corrected" a second time. Unreachable in
+# practice (Anthropic's minimum cacheable prefix is 1024 tokens, where
+# the margin is ~200x), but the reasoning was wrong and the SQL-level
+# tests only ever exercised cache_read = 38,000.
+#
+# Comparing rounded to rounded needs no tolerance at all and is exact at
+# every token count. The `<>` guard skips rows where the correction is
+# below storage precision and the two forms are indistinguishable —
+# nothing to correct there anyway.
+_ROUND = "round(({expr})::numeric, 6)"
+_STORED = "round(cost_usd::numeric, 6)"
+_OLD_R = _ROUND.format(expr=_OLD_COST)
+_NEW_R = _ROUND.format(expr=_NEW_COST)
 
+UPGRADE_SCOPE = f"{_BASE} AND {_STORED} = {_OLD_R} AND {_OLD_R} <> {_NEW_R}"
+DOWNGRADE_SCOPE = f"{_BASE} AND {_STORED} = {_NEW_R} AND {_OLD_R} <> {_NEW_R}"
 
 def _report(direction: str) -> str:
     return f"""
@@ -124,8 +141,7 @@ def _report(direction: str) -> str:
 def upgrade() -> None:
     op.execute(_report("corrected down"))
     op.execute(
-        f"UPDATE llm_calls SET cost_usd = cost_usd - ({_DELTA}) "
-        f"WHERE {UPGRADE_SCOPE}",
+        f"UPDATE llm_calls SET cost_usd = {_NEW_R} WHERE {UPGRADE_SCOPE}",
     )
 
 
@@ -136,6 +152,5 @@ def downgrade() -> None:
     code wrote or double-apply on a replay.
     """
     op.execute(
-        f"UPDATE llm_calls SET cost_usd = cost_usd + ({_DELTA}) "
-        f"WHERE {DOWNGRADE_SCOPE}",
+        f"UPDATE llm_calls SET cost_usd = {_OLD_R} WHERE {DOWNGRADE_SCOPE}",
     )
