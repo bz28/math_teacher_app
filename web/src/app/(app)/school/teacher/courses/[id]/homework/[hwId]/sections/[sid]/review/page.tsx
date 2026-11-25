@@ -4,21 +4,21 @@ import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { parseProblemFocus, withSelectedStudent } from "@/lib/review-deep-link";
-import { createDetailCache } from "@/lib/detail-cache";
+import {
+  useClassRubric,
+  useDetailSlots,
+  useOtherSectionCounts,
+  useSubmissionDetailFetch,
+} from "./_hooks/use-review-data";
 import { ReopenControl } from "@/components/school/teacher/_pieces/reopen-control";
 import {
   teacher,
   type GradeBreakdownEntry,
   type IntegrityResolutionOutcome,
-  type TeacherIntegrityDetail,
   type TeacherRubric,
-  type ClassRubricRule,
-  type TeacherSubmissionDetail,
   type TeacherSubmissionRow,
 } from "@/lib/api";
 import { openGraphItems } from "@/components/school/teacher/_pieces/graph-check-review";
-import { effectiveRubric } from "@/lib/rubric";
-import { PHOTO_URLS_EXPIRED } from "@/lib/submission-photos";
 import type {
   GradeStatus,
   RosterEntry,
@@ -102,29 +102,7 @@ function HomeworkSectionReview({
   // AI's grades against their own stated criteria. Null when no rubric
   // was authored (all rubric fields empty or the HW predates rubrics).
   const [hwRubric, setHwRubric] = useState<TeacherRubric | null>(null);
-  // The class's rules — null until loaded (or if loading failed). Fetched
-  // on their own so a failure only hides them from the rubric panel.
-  const [classRules, setClassRules] = useState<ClassRubricRule[] | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    teacher
-      .courseRubric(courseId)
-      .then((res) => !cancelled && setClassRules(res.rules))
-      .catch(() => {
-        /* drift banner stays hidden; the homework rubric still shows */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [courseId]);
-  // What the grader applies now: this homework's rubric plus the class
-  // rules it hasn't skipped. Until the rules are known, only the
-  // homework's own. (The regrade banner compares only the homework's
-  // fields — see `rubricChanged`.)
-  const rubric = useMemo(
-    () => (classRules ? effectiveRubric(classRules, hwRubric) : hwRubric),
-    [classRules, hwRubric],
-  );
+  const rubric = useClassRubric(courseId, hwRubric);
   // Rubric visibility is a session preference, not a per-student one.
   // Lifting it here means expanding the rubric on student A keeps it
   // expanded when the teacher hits "Next student" — otherwise
@@ -217,45 +195,7 @@ function HomeworkSectionReview({
     );
     if (next) window.history.replaceState(null, "", next);
   }, [selectedStudentId, problemFocus]);
-  // The open student's detail, kept as-is across switches. Staleness
-  // for the current selection is detected at render via a
-  // submission_id comparison, avoiding a setState-in-effect on every
-  // switch. Fetch/save errors are scoped to a submissionId so a failure
-  // on one student's grade doesn't render on another student's card.
-  const [detail, setDetail] = useState<TeacherSubmissionDetail | null>(null);
-  // Full integrity detail (overall verdict + reasoning + transcript)
-  // is a separate endpoint from submission detail. Single slot keyed
-  // off submission_id, same staleness-by-derivation pattern as
-  // `detail`. Null on: HW has integrity disabled, or no check ran.
-  const [integrity, setIntegrity] = useState<TeacherIntegrityDetail | null>(null);
-  // The last few students' fetched details, so clicking back to one
-  // (A → B → A) doesn't re-download their work. Each entry is pinned
-  // to the roster row object it was fetched under: every change made
-  // from this page replaces that row, so a changed submission is a
-  // miss and refetches — a cached grade can't outlive an edit. See
-  // lib/detail-cache. Integrity is pinned to the row's integrity
-  // overview instead, and cached only once the check has finished; one
-  // still running is refetched like before.
-  const [detailCache] = useState(() => createDetailCache<TeacherSubmissionDetail>());
-  const [integrityCache] = useState(() =>
-    createDetailCache<TeacherIntegrityDetail>({
-      keep: (d) => d.overall_status === "complete" || d.overall_status === "skipped_unreadable",
-    }),
-  );
-  // Belt and braces for edits that change the open detail without
-  // touching its row (an optimistic grade or feedback edit before the
-  // save lands): once the slot no longer holds the object that came
-  // from the server, that copy is no longer what the teacher last saw.
-  useEffect(() => {
-    if (detail && !detailCache.holds(detail.submission_id, detail)) {
-      detailCache.invalidate(detail.submission_id);
-    }
-  }, [detail, detailCache]);
-  useEffect(() => {
-    if (integrity && !integrityCache.holds(integrity.submission_id, integrity)) {
-      integrityCache.invalidate(integrity.submission_id);
-    }
-  }, [integrity, integrityCache]);
+  const { detail, setDetail, integrity, setIntegrity, detailCache, integrityCache } = useDetailSlots();
   const [fetchError, setFetchError] = useState<
     { forSubmissionId: string; message: string } | null
   >(null);
@@ -263,32 +203,22 @@ function HomeworkSectionReview({
   const [saveError, setSaveError] = useState<
     { forSubmissionId: string; message: string } | null
   >(null);
-  // Counters for grades in *other* sections of this HW. Snapshotted
-  // from the initial fetch — the publish endpoint is HW-wide, so the
-  // dialog must disclose cross-section scope, and the header pill needs
-  // to distinguish "nothing to publish (nothing graded)" from "nothing
-  // to publish (everything already published)". Per-section counts are
-  // derived from roster and stay live as the teacher grades. `dirty`
-  // counts already-published grades the teacher has edited since —
-  // they're folded into the "to release" total alongside fresh ones.
-  const [pendingOtherSections, setPendingOtherSections] = useState(0);
-  const [dirtyOtherSections, setDirtyOtherSections] = useState(0);
-  const [gradedOtherSections, setGradedOtherSections] = useState(0);
-  // Reviewed (teacher-vetted) portions of the other-section pending /
-  // dirty counters above. Needed so the publish dialog can disclose how
-  // many of the to-release grades the teacher has actually checked, and
-  // so a "Publish only reviewed" run can decrement the cross-section
-  // counters by the right amount without a refetch.
-  const [pendingReviewedOtherSections, setPendingReviewedOtherSections] = useState(0);
-  const [dirtyReviewedOtherSections, setDirtyReviewedOtherSections] = useState(0);
-  // Other-section submissions about to be published (pending or dirty)
-  // whose integrity check landed on an unresolved flag_for_review. The
-  // publish action is HW-wide, so the soft publish-confirm must count
-  // these too — snapshotted at fetch time like the counters above.
-  const [flaggedOtherSections, setFlaggedOtherSections] = useState(0);
-  // Other-section submissions about to be published that still have
-  // graph items waiting on the teacher's ✓/✗ — same snapshot rule.
-  const [graphOtherSections, setGraphOtherSections] = useState(0);
+  const {
+    pendingOtherSections,
+    setPendingOtherSections,
+    dirtyOtherSections,
+    setDirtyOtherSections,
+    gradedOtherSections,
+    setGradedOtherSections,
+    pendingReviewedOtherSections,
+    setPendingReviewedOtherSections,
+    dirtyReviewedOtherSections,
+    setDirtyReviewedOtherSections,
+    flaggedOtherSections,
+    setFlaggedOtherSections,
+    graphOtherSections,
+    setGraphOtherSections,
+  } = useOtherSectionCounts();
   // Submission currently being marked reviewed via the explicit no-edit
   // affordance. Single slot — only one student is open at a time.
   const [markingReviewedId, setMarkingReviewedId] = useState<string | null>(null);
@@ -517,7 +447,7 @@ function HomeworkSectionReview({
     return () => {
       cancelled = true;
     };
-  }, [assignmentId, courseId, sectionId, focusStudentId, watchGrades]);
+  }, [assignmentId, courseId, sectionId, focusStudentId, watchGrades, setDirtyOtherSections, setDirtyReviewedOtherSections, setFlaggedOtherSections, setGradedOtherSections, setGraphOtherSections, setPendingOtherSections, setPendingReviewedOtherSections]);
 
   const selectedEntry = useMemo(
     () =>
@@ -547,86 +477,17 @@ function HomeworkSectionReview({
   const detailLoading =
     !!selectedSubmissionId && !detailIsCurrent && currentFetchError === null;
 
-  // Fetch only when we don't already have the current selection — from
-  // the cache when this row was fetched recently and hasn't changed.
-  useEffect(() => {
-    if (!selectedRow) return;
-    if (detail?.submission_id === selectedRow.id) return;
-    let cancelled = false;
-    const id = selectedRow.id;
-    detailCache
-      .load(id, selectedRow, () => teacher.submissionDetail(id))
-      .then((d) => {
-        if (cancelled) return;
-        setDetail(d);
-        // Clear any prior fetch error for this submission — a later
-        // retry that succeeds shouldn't leave the red banner showing
-        // alongside the now-loaded panel.
-        setFetchError((prev) => (prev?.forSubmissionId === id ? null : prev));
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setFetchError({
-          forSubmissionId: id,
-          message: e instanceof Error ? e.message : "Failed to load submission",
-        });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedRow, detail?.submission_id, detailCache]);
-
-  // A photo's presigned URL ran out (the tab sat open past the hour):
-  // sign fresh ones. Only `files` is replaced — the rest of `detail`
-  // can hold the teacher's unsaved edits.
-  useEffect(() => {
-    if (!selectedSubmissionId) return;
-    const id = selectedSubmissionId;
-    const refresh = () => {
-      teacher
-        .submissionDetail(id)
-        .then((d) =>
-          setDetail((cur) =>
-            cur?.submission_id === d.submission_id ? { ...cur, files: d.files } : cur,
-          ),
-        )
-        .catch(() => {});
-    };
-    window.addEventListener(PHOTO_URLS_EXPIRED, refresh);
-    return () => window.removeEventListener(PHOTO_URLS_EXPIRED, refresh);
-  }, [selectedSubmissionId]);
-
-  // Fetch the full integrity detail in parallel. Independent of
-  // submissionDetail so a missing/404 integrity record (HW had the
-  // check disabled, or the pipeline never ran) doesn't block the
-  // grading UI — the banner just hides.
-  //
-  // Cached against the row's integrity overview rather than the whole
-  // row: a grade save replaces the row but says nothing new about the
-  // check, while a resolution or a poll's fresh read replaces the
-  // overview. Depending on the row would refetch a 404 on every save.
-  const selectedOverview = selectedRow?.integrity_overview ?? null;
-  useEffect(() => {
-    if (!selectedSubmissionId) return;
-    if (integrity?.submission_id === selectedSubmissionId) return;
-    let cancelled = false;
-    const id = selectedSubmissionId;
-    integrityCache
-      .load(id, selectedOverview, () => teacher.integrityDetail(id))
-      .then((d) => {
-        if (cancelled) return;
-        setIntegrity(d);
-      })
-      .catch(() => {
-        // 404 / disabled — clear any stale integrity for the prior
-        // selection so we don't show another student's verdict.
-        if (cancelled) return;
-        setIntegrity((prev) => (prev?.submission_id === id ? prev : null));
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedSubmissionId, selectedOverview, integrity?.submission_id, integrityCache]);
+  useSubmissionDetailFetch({
+    selectedRow,
+    selectedSubmissionId,
+    detail,
+    setDetail,
+    setFetchError,
+    integrity,
+    setIntegrity,
+    detailCache,
+    integrityCache,
+  });
 
   const pageTitle = useMemo(() => {
     if (!hwTitle && !sectionName) return "Reviewing…";
@@ -734,7 +595,7 @@ function HomeworkSectionReview({
         )
         .catch(() => {});
     },
-    [],
+    [setIntegrity],
   );
 
   // Persist the current breakdown. Full-replacement semantics: we
@@ -809,7 +670,7 @@ function HomeworkSectionReview({
           : prev,
       );
     },
-    [],
+    [setDetail],
   );
 
   const saveState = (submissionId: string) => {
@@ -927,7 +788,7 @@ function HomeworkSectionReview({
         });
       }
     },
-    [applyGradeToRoster, applyGraphCall],
+    [applyGradeToRoster, applyGraphCall, setDetail],
   );
 
   const persistBreakdown = useCallback(
@@ -1022,7 +883,7 @@ function HomeworkSectionReview({
       }
       void persistBreakdown(detail.submission_id, nextBreakdown);
     },
-    [detail, persistBreakdown],
+    [detail, persistBreakdown, setDetail],
   );
 
   // Feedback writer — updates the per-problem student-facing feedback
@@ -1048,7 +909,7 @@ function HomeworkSectionReview({
       setDetail({ ...detail, breakdown: nextBreakdown });
       void persistBreakdown(detail.submission_id, nextBreakdown);
     },
-    [detail, persistBreakdown],
+    [detail, persistBreakdown, setDetail],
   );
 
   // Derived counts for the publish button state machine.
@@ -1262,7 +1123,7 @@ function HomeworkSectionReview({
         setPublishing(false);
       }
     },
-    [assignmentId, pendingReviewedOtherSections, dirtyReviewedOtherSections],
+    [assignmentId, pendingReviewedOtherSections, dirtyReviewedOtherSections, setDetail, setDirtyOtherSections, setDirtyReviewedOtherSections, setFlaggedOtherSections, setGraphOtherSections, setPendingOtherSections, setPendingReviewedOtherSections],
   );
 
   // Publish-button click gate. If every grade about to go out is approved
@@ -1350,7 +1211,7 @@ function HomeworkSectionReview({
         message: e instanceof Error ? e.message : "Couldn't start AI grading",
       });
     }
-  }, [assignmentId, watchGrades]);
+  }, [assignmentId, watchGrades, setDetail]);
 
   // Poll until every submission sent to the grader settles. A grade
   // lands in seconds to a minute; the old single refetch right after
@@ -1472,7 +1333,7 @@ function HomeworkSectionReview({
       if (timer) clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [polling, assignmentId, pollKick]);
+  }, [polling, assignmentId, pollKick, setDetail]);
 
   const onPublishClick = useCallback(() => {
     if (
@@ -1528,7 +1389,7 @@ function HomeworkSectionReview({
         setMarkingReviewedId(null);
       }
     },
-    [],
+    [setDetail],
   );
 
 
@@ -1570,7 +1431,7 @@ function HomeworkSectionReview({
         setMarkingReviewedId(null);
       }
     },
-    [],
+    [setDetail],
   );
 
   // Waive or restore one student's late penalty. The server re-scores
@@ -1607,7 +1468,7 @@ function HomeworkSectionReview({
     } finally {
       setWaivingLateId(null);
     }
-  }, []);
+  }, [setDetail]);
 
   // A reopen (or its undo) moves this student's due date, which re-prices
   // their lateness and possibly their score on the server. Refetch their
@@ -1638,7 +1499,7 @@ function HomeworkSectionReview({
         // The reopen itself landed; a stale row corrects on the next load.
       }
     },
-    [assignmentId],
+    [assignmentId, setDetail],
   );
 
   // Re-run AI grading with the assignment's current rubric. Overrides
@@ -1674,7 +1535,7 @@ function HomeworkSectionReview({
           }
         : d,
     );
-  }, [detailCache]);
+  }, [detailCache, setDetail]);
 
   const handleRegrade = useCallback(
     async (submissionId: string) => {
@@ -1729,7 +1590,7 @@ function HomeworkSectionReview({
         setRegradingSubmissionId(null);
       }
     },
-    [],
+    [setDetail],
   );
 
   // Next submitter whose grade isn't released to students yet —
