@@ -23,78 +23,17 @@ from api.core.geometry.facts import FACTS_TOOL, FigureFacts, as_facts, as_prompt
 from api.core.geometry.figure_check import givens_marked, parse_problem
 from api.core.llm_client import MODEL_REASON, call_claude_json
 from api.core.llm_schemas import FIGURE_REDRAW_SCHEMA
+from api.core.prompts import load_prompt
 
 logger = logging.getLogger(__name__)
 
 
-CONSTRUCTION_FIGURE_RULES = """\
-A figure (`figure_spec`) is a construction: you place named points at exact
-coordinates and list what to draw and mark. Code draws it and CHECKS it
-against the problem before anyone sees it; a figure that fails the check is
-not shown. Use `"type": "geometry", "shape": "construction"`.
-
-Rules:
-1. Include every point the problem names, with exactly those names (A, B,
-   A', M). A point needed only to place a line or an angle gets a hidden
-   name: "_" then lowercase letters or digits only ("_p1", "_q"; never
-   "_P" or "_mR"); it is never drawn or labelled.
-2. Choose coordinates so EVERY given is exactly true: parallel lines have the
-   same slope, perpendicular lines meet at 90°, a midpoint is exactly
-   halfway, a point "on" a segment lies on it, congruent segments have equal
-   lengths, congruent angles are equal, a bisector splits its angle exactly,
-   an angle stated as 50° measures 50°, lengths are in the stated
-   proportions. The statement to prove must be true in the drawing too.
-   Use a typical textbook layout about 6-10 units wide; x to the right,
-   y up. COMPUTE coordinates, never estimate them:
-   - an angle of k° at V: one arm along a direction you choose, the other
-     point at V + r·(cos(θ+k°), sin(θ+k°));
-   - a right angle at A opposite BC: put A on the circle with diameter BC;
-   - a point on segment AB: A + t·(B − A); a midpoint: the average;
-   - a bisector of ∠AVB: the ray at the average of the two arm directions;
-   - congruent or similar triangles: copy the first triangle's coordinates,
-     scaled by the ratio and moved (shift, and rotate if needed), so every
-     angle matches;
-   - stated lengths: place them at those lengths, or all scaled by one factor.
-   Give coordinates to 3 decimals.
-3. Draw every segment the problem names, every side of every triangle it
-   names, both sides of every angle it names, a ray as a `rays` entry
-   starting at its endpoint ("AB" is the ray from A through B), a line
-   through two points (line AB) as a `lines` entry through them, named lines
-   (p, q, t, ell_1) as named `lines`, a transversal when there is one, and
-   anything the teacher asks for. Draw nothing else.
-4. Mark the givens as a textbook does: `tick_groups` on congruent segments
-   (each congruent pair its own group), `arc_groups` on congruent angles,
-   `right_angles` where lines are perpendicular, `parallel_groups` on
-   parallel segments or lines. Each group lists at least two parts. NEVER
-   mark the statement to prove — the student has to prove it.
-5. Labels come only from the problem: numbered angles (∠1 →
-   `angle_labels` {"AEB": "1"}), and measures or lengths the problem states.
-   Never print an answer or any value the student has to find (nothing on
-   the angle or segment the problem asks for); a variable the problem uses
-   (x) may be shown. Every number on the figure must also
-   be in the problem text.
-6. It cannot draw 3D solids, curves other than circles (graphs of
-   functions, parabolas), coordinate grids, or pictures of real objects.
-   For those, don't emit a figure and say plainly that the diagram tool
-   can't draw it.
-
-Example — "Given: $\\overline{PR}$ bisects $\\angle QPS$ and
-$\\overline{PQ} \\cong \\overline{PS}$. Prove: $\\triangle PQR \\cong \\triangle PSR$":
-{"type": "geometry", "shape": "construction",
- "points": {"P": [0, 0], "Q": [4, 3], "R": [8, 0], "S": [4, -3]},
- "segments": ["PQ", "QR", "RS", "SP", "PR"],
- "tick_groups": [["PQ", "PS"]],
- "arc_groups": [["QPR", "RPS"]]}"""
+CONSTRUCTION_FIGURE_RULES = load_prompt("construction_figure_rules")
 
 
 _REDRAW_THINKING = 6000
 
-_REDRAW_SYSTEM = (
-    "You draw exact geometry figures for a math teacher's problem. You don't "
-    "draw pixels: you place named points at coordinates and list what to draw. "
-    "Code renders the figure and checks it against the problem.\n\n"
-    + CONSTRUCTION_FIGURE_RULES
-)
+_REDRAW_SYSTEM = load_prompt("figure_redraw_intro") + CONSTRUCTION_FIGURE_RULES
 
 
 async def redraw_figure(
@@ -193,71 +132,11 @@ async def draw_figure(
 
 # ── Reading the problem: two independent AI readings, checked by code ──
 
-_FACTS_VOCAB = """Fact kinds (items as the problem names them; angles "ABC" with the vertex in the
-middle, or "B", or "1"; segments, rays and two-point lines "AB"; named lines "m";
-triangles "ABC"; polygons "ABCD" in order):
-- parallel [l1, l2]; perpendicular [l1, l2] (point: where they meet, if stated)
-- congruent_segments [s1, s2, ...]; congruent_angles [a1, a2, ...]
-- equal_length [s] with value (a number) or expr; angle_measure [a] with value (degrees) or expr ("2x + 5")
-- midpoint [s] with point; on_segment [s] with point; on_line [l] with point; collinear [P, Q, R, ...]
-- intersect [l1, l2] with point; bisects_segment [bisector, s] (point if stated); bisects_angle [ray, angle]
-- right_angle [a]; opposite_rays [r1, r2] (same endpoint first)
-- vertical_angles / linear_pair / supplementary / complementary [a1, a2]
-- congruent_triangles / similar_triangles [t1, t2] with vertices in the stated correspondence
-- isosceles [t] (point: the apex, if the base, legs or vertex angle are stated); equilateral [t];
-  right_triangle [t] (point: the right-angle vertex, if stated)
-- parallelogram / rectangle / square / rhombus / trapezoid / isosceles_trapezoid / kite [polygon]
-  (items [] when the shape has no name: "the rectangle below")
-- on_circle [P, Q, ...] with circle (its center; "" if unnamed); tangent [l] with circle and point;
-  chord / diameter / radius [s] with circle; central_angle / inscribed_angle [a] with circle (value if stated)
-- numbered_angle ["1", angle it labels] when the problem says which angle ∠1 is
-- transversal [t, l1, l2] (t "" when unnamed)
-- alternate_interior / alternate_exterior / corresponding / same_side_interior [a1, a2]: two angles
-  the problem says a transversal makes in that position (items [] when it doesn't name them)
-- other: anything else stated about the figure (say it in quote)
-Naming a figure ("In △ABC", "quadrilateral ABCD") is not a fact: list it under triangles or polygons.
-Use only the names the problem itself uses; never invent one. When it names no points ("a
-rectangle has a width of 7"), points is [] and facts have items []: rectangle [], right_triangle [],
-equal_length [] with value for each length it gives (say which side in quote).
-Points are letters ("A", "B'"); "∠1" is an angle, not a point.
-Quotes: each fact's quote is the shortest exact run of the problem's own words that states it,
-copied character for character. It contains the names the fact is about and the word or symbol of
-its relation ("AB ∥ CD", "M is the midpoint of BC", "∠R is a right angle"), and nothing else the
-problem says. Facts may share a quote: never shorten or reword one to fit a fact.
-One fact per stated relation: a sentence that states two relations gives two facts.
-"each", "both", "respectively" and lists joined by "and" state a relation of several parts: give one
-fact per part, with the shared quote ("each base angle measures 50°": one angle_measure per base
-angle; "M is the midpoint of AC and BD": two midpoints; "cutting both lines at G and H
-respectively": one intersect per line). "one acute angle … the other": the first is the acute angle
-whose vertex comes first in the triangle's name.
-Only what the words state: no fact for a part the statement doesn't name (an equilateral
-triangle's other sides, a radius the problem doesn't mention, the right angle an altitude makes).
-A claim inside a hint or an instruction ("First prove that △QRT ≅ △SRT") goes under prove.
-A side extended past a vertex ("extending side RP beyond P", "BC is extended to point D") is a
-fact other whose quote is exactly that phrase.
-Write a mixed number as an improper fraction (2½x → "5x/2")."""
+_FACTS_VOCAB = load_prompt("figure_facts_vocab")
 
-_FACTS_SYSTEM_A = f"""You read geometry problems for a figure checker. List what the problem STATES
-about its figure — nothing you infer, derive or solve, and nothing from the solution.
+_FACTS_SYSTEM_A = load_prompt("figure_facts_system_a").format(facts_vocab=_FACTS_VOCAB)
 
-{_FACTS_VOCAB}
-
-Sections: points (every point named); segments, rays, lines, named_lines, triangles, polygons,
-circles (every part the problem names); givens (what the problem gives); prove (each statement
-the student must prove, show, explain or justify); find (each angle or segment the problem asks
-for; kind "other" for anything else, such as "determine whether …"); requested (parts the
-teacher's message asks to draw, by name)."""
-
-_FACTS_SYSTEM_B = f"""You are auditing a geometry problem before a diagram is drawn for it. Go through
-the problem one sentence at a time. For each sentence, record every relation it states as a fact
-(stated facts only: no theorems applied, no values solved for, nothing from the answer).
-Put a fact under prove when the sentence asks the student to prove / show / explain / justify /
-verify it, and under givens otherwise. Then list: every point name; the segments, rays, lines,
-named lines, triangles, polygons and circles the problem names; the angles and segments it asks
-you to find (find; a question such as "determine whether …" is find kind "other", never a
-fact); and the parts the teacher's message asks to have drawn, by name (requested).
-
-{_FACTS_VOCAB}"""
+_FACTS_SYSTEM_B = load_prompt("figure_facts_system_b").format(facts_vocab=_FACTS_VOCAB)
 
 
 async def _read_once(system: str, message: str, *, mode: str, user_id: str | None,

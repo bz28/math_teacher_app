@@ -9,6 +9,7 @@ from typing import Any, Literal
 from api.core.constants import DECOMPOSITION_CACHE_MAX_SIZE, DECOMPOSITION_CACHE_TTL_SECONDS
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
 from api.core.llm_schemas import DECOMPOSITION_SCHEMA
+from api.core.prompts import load_prompt
 from api.core.subjects import Subject, get_config
 
 logger = logging.getLogger(__name__)
@@ -97,111 +98,17 @@ def _cache_set(problem: str, decomp: "Decomposition") -> None:
     )
     _cache[problem] = (time.monotonic(), cacheable)
 
-_SYSTEM_PROMPT_TEMPLATE = (
-    "You are a {professor_role}.\n\n"
-
-    "Before solving, consider if there is a simpler or faster approach than "
-    "the obvious one. Prefer elegant shortcuts over mechanical procedures. "
-
-    "Always use the first step as a breakdown of the problem in plain english, "
-    "provide a generalization on how to approach the problem, "
-    "including what to look out for. "
-    "If the solution is not obvious or straightforward to an elementary student "
-    "then explain how we knew to take this approach. "
-    "Every step should have a clear transition/logic to it, make sure to have "
-    "plain english to help the student understand the problem and solution better.\n\n"
-    "Do NOT include any mention of approaches that are not the final/optimal "
-    "solution. Those will only confuse the student.\n\n"
-
-    "A step is one conceptual move. If two adjacent steps make the same move, "
-    "they're one step — merge them.\n\n"
-
-    "Every sentence in a step's description teaches. Cut narration "
-    "(\"now we'll multiply\"), problem restating, and previews of what's "
-    "coming. Just the math and the why.\n\n"
-
-    "Given a {domain} problem, solve it step-by-step.\n\n"
-    "Each step needs a short title (2-5 words) and a full description. "
-    "Titles answer \"what does this step do?\" — examples: "
-    "\"Distribute the 3\", \"Substitute x = 5\". Not: \"Now we can solve\".\n"
-    "Formatting rules for descriptions:\n"
-    "- Do NOT use HTML tags like <br> — use plain newlines (\\n) for line breaks\n"
-    "- Use LaTeX with $ delimiters for ALL math, even simple expressions like $2 \\times 3$ or $n = 5$\n"
-    "- Use $$ delimiters for display math on its own line (e.g., $$\\frac{{a}}{{b}}$$)\n"
-    "- Use **double asterisks** for emphasis on key terms\n"
-    "- For matrices, use $\\begin{{pmatrix}}...\\end{{pmatrix}}$\n"
-    "- For diagrams, use structured @@{{...}}@@ notation:\n"
-    "  - Chemistry: @@{{\"diagram_type\": \"smiles\",\n"
-    "    \"smiles\": \"SMILES_STRING\", \"label\": \"desc\"}}@@\n"
-    "  - Math graphs: @@{{\"diagram_type\": \"graph\",\n"
-    "    \"functions\": [{{\"fn\": \"x^2-4\"}}],\n"
-    "    \"xRange\": [-5,5], \"yRange\": [-5,10]}}@@\n"
-    "  - Physics/other: use <svg> blocks as before\n\n"
-    "For answer_type, use \"diagram\" with @@{{...}}@@ notation for chemistry/graph answers.\n\n"
-)
+_SYSTEM_PROMPT_TEMPLATE = load_prompt("step_decomposition_system")
 
 # Learn mode's step figures: the shape forms, rendered as the solver writes
 # them (a student's own problem has no checked figure to build on).
-_SHAPE_STEP_FIGURES = (
-    "Per-step geometry figures:\n"
-    "- For geometry problems where the construction evolves step by "
-    "step (drop a perpendicular, draw an altitude, construct a "
-    "chord, mark an inscribed angle), attach a `figure_spec` to the "
-    "step that introduces the new construction. The renderer draws "
-    "the updated figure with the new mark, replacing the previous "
-    "step's figure.\n"
-    "- For purely algebraic steps inside a geometry solution, OMIT "
-    "the figure_spec — repeating the same diagram with no visual "
-    "change is noise.\n"
-    "- Two supported shapes: triangle and circle (set `shape` "
-    "accordingly). Other shape categories (polygons, coordinate "
-    "plane, transformations) aren't supported yet — describe in "
-    "prose rather than emit a wrong shape.\n"
-    "- Triangles: single-character vertex names; for 90° angles use "
-    "`right_angle_at` (also draws the square marker).\n"
-    "- Circles: positive `radius` + named points on the circumference "
-    "with angle in degrees CCW from the positive x-axis. Chords are "
-    "two-character identifiers.\n"
-    "- Points OUTSIDE the circle (tangent–secant, two secants / power "
-    "of a point, two tangents): use `external_points` — each is the "
-    "intersection of two lines (a `tangent_at` an on-circle point, or a "
-    "`secant_through` two on-circle points). The renderer places the "
-    "point and draws the lines; don't fake an external point with a "
-    "chord between circumference points. For two secants from one "
-    "external point, put the two points nearest the external point "
-    "close together on the arc facing it (e.g. around 30° and 330°) and "
-    "the two far points on the other side (e.g. around 95° and 265°), so "
-    "both secants converge to the external point off one side; never "
-    "make the two chords parallel (parallel lines never meet).\n"
-    "- Polygons (4+ sides — squares, hexagons, etc.): use "
-    "`shape='polygon'` with `n_sides` (regular) or "
-    "`vertex_positions` (irregular). Don't use polygon mode for "
-    "triangles — `shape='triangle'` has the constraint solver.\n"
-    "- Compound (circle inscribed in / circumscribed around a "
-    "triangle): use `shape='triangle'` and set the optional "
-    "`inscribed_circle` or `circumscribed_circle` field. The "
-    "renderer computes the circle from the triangle's own "
-    "geometry — don't try to coordinate two separate shapes.\n"
-    "- Reuse the names from the problem text so students can track "
-    "which point is which across steps.\n"
-)
+_SHAPE_STEP_FIGURES = load_prompt("step_shape_figures")
 
 # A generated problem's step figures: the problem's checked construction
 # figure plus what the step adds, checked like the problem's own
 # (question_bank_generation._render_step_figures_with_retry). The first
 # paragraph is Ben's wording (2026-11-13), word for word.
-_CONSTRUCTION_STEP_FIGURES = (
-    "Per-step geometry figures:\n"
-    "Steps. Give a step its own figure only when that step changes the picture: "
-    "it draws a new line or point, or proves something worth marking. Keep the "
-    "problem's points exactly where they are and only add.\n"
-    "The problem's figure is given with the problem, as data. A step's figure is "
-    "the figure before it (the problem's, or the last step figure) with the same "
-    "point names and coordinates and everything it draws, plus what this step "
-    "adds. Name every new point in the step's description. Rule 4's \"never mark "
-    "the statement to prove\" is for the problem's figure: a step's figure may "
-    "mark what that step has shown.\n\n"
-)
+_CONSTRUCTION_STEP_FIGURES = load_prompt("step_construction_figures")
 
 # Which step figures the solver may emit: "shapes" (Learn mode), "construction"
 # (a generated problem with a checked construction figure), "none".

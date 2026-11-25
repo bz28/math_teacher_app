@@ -1,0 +1,43 @@
+Fact kinds (items as the problem names them; angles "ABC" with the vertex in the
+middle, or "B", or "1"; segments, rays and two-point lines "AB"; named lines "m";
+triangles "ABC"; polygons "ABCD" in order):
+- parallel [l1, l2]; perpendicular [l1, l2] (point: where they meet, if stated)
+- congruent_segments [s1, s2, ...]; congruent_angles [a1, a2, ...]
+- equal_length [s] with value (a number) or expr; angle_measure [a] with value (degrees) or expr ("2x + 5")
+- midpoint [s] with point; on_segment [s] with point; on_line [l] with point; collinear [P, Q, R, ...]
+- intersect [l1, l2] with point; bisects_segment [bisector, s] (point if stated); bisects_angle [ray, angle]
+- right_angle [a]; opposite_rays [r1, r2] (same endpoint first)
+- vertical_angles / linear_pair / supplementary / complementary [a1, a2]
+- congruent_triangles / similar_triangles [t1, t2] with vertices in the stated correspondence
+- isosceles [t] (point: the apex, if the base, legs or vertex angle are stated); equilateral [t];
+  right_triangle [t] (point: the right-angle vertex, if stated)
+- parallelogram / rectangle / square / rhombus / trapezoid / isosceles_trapezoid / kite [polygon]
+  (items [] when the shape has no name: "the rectangle below")
+- on_circle [P, Q, ...] with circle (its center; "" if unnamed); tangent [l] with circle and point;
+  chord / diameter / radius [s] with circle; central_angle / inscribed_angle [a] with circle (value if stated)
+- numbered_angle ["1", angle it labels] when the problem says which angle ∠1 is
+- transversal [t, l1, l2] (t "" when unnamed)
+- alternate_interior / alternate_exterior / corresponding / same_side_interior [a1, a2]: two angles
+  the problem says a transversal makes in that position (items [] when it doesn't name them)
+- other: anything else stated about the figure (say it in quote)
+Naming a figure ("In △ABC", "quadrilateral ABCD") is not a fact: list it under triangles or polygons.
+Use only the names the problem itself uses; never invent one. When it names no points ("a
+rectangle has a width of 7"), points is [] and facts have items []: rectangle [], right_triangle [],
+equal_length [] with value for each length it gives (say which side in quote).
+Points are letters ("A", "B'"); "∠1" is an angle, not a point.
+Quotes: each fact's quote is the shortest exact run of the problem's own words that states it,
+copied character for character. It contains the names the fact is about and the word or symbol of
+its relation ("AB ∥ CD", "M is the midpoint of BC", "∠R is a right angle"), and nothing else the
+problem says. Facts may share a quote: never shorten or reword one to fit a fact.
+One fact per stated relation: a sentence that states two relations gives two facts.
+"each", "both", "respectively" and lists joined by "and" state a relation of several parts: give one
+fact per part, with the shared quote ("each base angle measures 50°": one angle_measure per base
+angle; "M is the midpoint of AC and BD": two midpoints; "cutting both lines at G and H
+respectively": one intersect per line). "one acute angle … the other": the first is the acute angle
+whose vertex comes first in the triangle's name.
+Only what the words state: no fact for a part the statement doesn't name (an equilateral
+triangle's other sides, a radius the problem doesn't mention, the right angle an altitude makes).
+A claim inside a hint or an instruction ("First prove that △QRT ≅ △SRT") goes under prove.
+A side extended past a vertex ("extending side RP beyond P", "BC is extended to point D") is a
+fact other whose quote is exactly that phrase.
+Write a mixed number as an improper fraction (2½x → "5x/2").

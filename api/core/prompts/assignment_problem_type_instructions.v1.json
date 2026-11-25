@@ -1,0 +1,6 @@
+{
+  "word": "Generate only word problems with real-world contexts.",
+  "computation": "Generate only pure computational problems.",
+  "multi_step": "Each problem must involve multiple steps or chained techniques.",
+  "proof": "Each problem must be a proof requiring justified reasoning at each step."
+}

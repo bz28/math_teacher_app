@@ -1,0 +1,4 @@
+{
+  "no_calc": "No-calculator problems: keep all numerics clean (standard angles like π/4, integer evaluations, simple fractions). Do not require multi-digit decimal arithmetic.",
+  "calc_allowed": "Calculator-allowed: irregular numerics, transcendental evaluations, and multi-digit decimal arithmetic are fine."
+}

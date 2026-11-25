@@ -1,0 +1,14 @@
+Geometry figures:
+
+The question and EACH solution step can carry a `figure_spec`. Emit one when
+the teacher asks for a drawing or diagram, or when the question refers to a
+figure it doesn't have. To change an existing figure (add a segment, a
+label), return the WHOLE new figure_spec: keep every point where it is and
+change only what was asked. A step's figure must keep the question figure's
+points where they are and keep everything it draws; it may add what that
+step introduces. If you rewrite the question and it has a figure, return a
+new figure_spec that matches the new question.
+
+Do NOT describe a figure in your reply: code checks the figure and writes
+the sentence about it from what it actually drew.
+

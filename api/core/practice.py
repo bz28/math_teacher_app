@@ -7,6 +7,7 @@ import anthropic
 
 from api.core.llm_client import MODEL_HAIKU, MODEL_REASON, LLMMode, call_claude_json
 from api.core.llm_schemas import DISTRACTOR_SCHEMA, PRACTICE_GENERATE_SCHEMA
+from api.core.prompts import load_prompt, load_prompt_map
 from api.core.step_decomposition import decompose_problem
 from api.core.subjects import Subject, get_config
 from api.core.tutor import check_answer_equivalence
@@ -18,30 +19,7 @@ logger = logging.getLogger(__name__)
 # Distractor generation
 # ---------------------------------------------------------------------------
 
-_DISTRACTOR_PROMPT = """\
-You are a worldclass {professor_role} designing multiple choice test options.
-
-Given a {domain} problem and its correct answer, generate exactly 3 plausible but WRONG answers.
-
-Rules:
-- Each distractor should target a common student mistake (sign errors, off-by-one, \
-wrong formula, partial solution, etc.)
-- Distractors must be clearly wrong but look reasonable to a student who made an error
-- All 3 distractors must be DISTINCT from each other and from the correct answer. \
-Do not return the same value twice, even with different reasoning behind each.
-- Use LaTeX $ delimiters for ALL math, even simple expressions
-- CRITICAL — NO EXPLANATIONS: each distractor must contain ONLY the wrong answer value. \
-Do NOT append any commentary, label, or reason. Specifically forbidden are trailing \
-parentheticals like "(sign error)", "(forgot to subtract)", "(off by one)", \
-"(partial)" — these reveal which option is wrong to the student. Return only the \
-bare wrong value, exactly as a student would write it on their paper.
-- If the correct answer contains @@{{"diagram_type": "smiles", ...}}@@, generate 3 WRONG \
-SMILES structures using the same @@{{...}}@@ notation (wrong functional groups, wrong \
-charges, wrong connectivity)
-- If the correct answer contains @@{{"diagram_type": "graph", ...}}@@, generate 3 WRONG \
-graph definitions (wrong functions, shifted curves, etc.)
-
-"""
+_DISTRACTOR_PROMPT = load_prompt("practice_distractors")
 
 
 # Defense in depth for the rule above: even with the explicit instruction,
@@ -177,17 +155,7 @@ async def solve_problem(
 # Generate similar question texts (batch, no solving)
 # ---------------------------------------------------------------------------
 
-_GENERATE_QUESTIONS_TEMPLATE = """You are a {professor_role} generating practice problems.
-
-Given one or more {problems_noun}, generate similar problems that test the SAME
-concepts and require the SAME approach to solve.
-
-Rules:
-- Identify the concept and solving approach from the problem text alone
-- Each generated problem must be solvable with the same method as its source
-- Do NOT repeat or rephrase the originals — generate entirely new problems
-- Vary the numbers, names, and context while keeping the same difficulty
-- Return ONLY the problem text — do NOT include answers"""
+_GENERATE_QUESTIONS_TEMPLATE = load_prompt("practice_generate")
 
 
 def _build_generate_prompt(subject: str) -> str:
@@ -198,16 +166,7 @@ def _build_generate_prompt(subject: str) -> str:
     )
 
 
-_DIFFICULTY_INSTRUCTIONS: dict[str, str] = {
-    "easier": (
-        "Make the generated problems EASIER than the originals — "
-        "use simpler numbers, fewer steps, and more straightforward setups."
-    ),
-    "harder": (
-        "Make the generated problems HARDER than the originals — "
-        "use more complex numbers, more steps, edge cases, or require deeper insight."
-    ),
-}
+_DIFFICULTY_INSTRUCTIONS: dict[str, str] = load_prompt_map("practice_difficulty_instructions")
 
 
 async def generate_similar_questions(

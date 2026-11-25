@@ -34,6 +34,8 @@ import asyncio
 import logging
 import re
 
+from api.core.prompts import load_prompt
+
 _VERB = re.compile(r"\b(graph|sketch|plot|draw|shade|construct)\b", re.IGNORECASE)
 
 # The word before a verb that makes it a noun ("the graph", "a sketch").
@@ -131,15 +133,7 @@ logger = logging.getLogger(__name__)
 # 0.93 s. Past this, the save goes ahead on the regex alone.
 _CLASSIFY_TIMEOUT_S = 3.0
 
-_CLASSIFY_SYSTEM = (
-    "Decide whether this homework question asks the STUDENT to produce a drawing: "
-    "a graph, plot, sketch, number line, diagram, data display (bar graph, "
-    "histogram, scatter plot, …) or geometric construction. Answer false when the "
-    "drawing is a printed figure the student only reads (\"using the graph shown\"), "
-    "a multiple-choice \"which graph …\", negated (\"do not graph\"), optional "
-    "(\"check by graphing (optional)\"), an auxiliary line inside a proof, or "
-    "\"draw\" in another sense (\"draw a card\", \"draw a conclusion\")."
-)
+_CLASSIFY_SYSTEM = load_prompt("drawing_requirement_classify")
 
 
 async def _llm_requires_drawing(question: str, *, user_id: str | None = None) -> bool | None:

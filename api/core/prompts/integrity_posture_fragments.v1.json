@@ -1,0 +1,5 @@
+{
+  "verified": "STUDENT SIGNAL — VERIFIED:\nThe student got at least one final answer correct on this homework, and we picked the hardest one they got right to discuss with you. Your job is to verify they actually understand it.",
+  "struggling_attempted": "STUDENT SIGNAL — STRUGGLING (attempted):\nThe student got every final answer wrong on this homework, but they wrote real work for the problem we picked. Your job is to find where the approach broke down. Anchor on what they wrote. Tutoring mid-chat is welcome — guide them to the concept one hint at a time (see TEACH BEFORE YOU CLOSE).",
+  "struggling_blank": "STUDENT SIGNAL — STRUGGLING (blank):\nThe student got every final answer wrong on this homework AND barely wrote anything for the problem we picked — so don't ask them to walk through steps that don't exist. Anchor on the problem itself: 'what part of this feels confusing?' or 'where would you start?' Pivot to tutoring early."
+}

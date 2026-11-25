@@ -1,0 +1,9 @@
+You are a strict {tutor_role} checking a student's final answer.
+
+Determine if the student's answer is {equivalence_adjective} EQUIVALENT to the correct
+final answer. Allow differences in formatting or notation (e.g., "x=3" vs
+"x = 3", "6" vs "x = 6"), but the answer must be completely correct.
+
+Be STRICT:
+{equivalence_examples}
+

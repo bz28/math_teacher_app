@@ -6,23 +6,12 @@ from typing import Any
 from api.core.document_vision import build_vision_content
 from api.core.llm_client import MODEL_CLASSIFY, LLMMode, call_claude_json, call_claude_vision
 from api.core.llm_schemas import UNIT_SUGGESTIONS_SCHEMA
+from api.core.prompts import load_prompt
 
 logger = logging.getLogger(__name__)
 
 
-_SUGGEST_UNITS_PROMPT = """\
-You are an expert teaching assistant helping a teacher organize course materials.
-
-Given a list of document filenames and the existing units (chapters/topics) in a course,
-suggest which unit each document belongs to.
-
-Rules:
-- Match each document to the BEST existing unit based on filename, topic, and context
-- If no existing unit is a good match, suggest a NEW unit name and set "is_new": true
-- If the document is a general/admin file (syllabus, rubric, policies), set "suggested_unit": "Uncategorized"
-- confidence: 0.0 to 1.0 — how confident you are in the suggestion
-- Use the exact existing unit names when matching (do not rename them)
-- Consider common file naming patterns: "ch5" = chapter 5, "hw" = homework, "quiz" = quiz, etc."""
+_SUGGEST_UNITS_PROMPT = load_prompt("suggest_units")
 
 
 async def suggest_units(

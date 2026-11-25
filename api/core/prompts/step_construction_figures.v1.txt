@@ -1,0 +1,4 @@
+Per-step geometry figures:
+Steps. Give a step its own figure only when that step changes the picture: it draws a new line or point, or proves something worth marking. Keep the problem's points exactly where they are and only add.
+The problem's figure is given with the problem, as data. A step's figure is the figure before it (the problem's, or the last step figure) with the same point names and coordinates and everything it draws, plus what this step adds. Name every new point in the step's description. Rule 4's "never mark the statement to prove" is for the problem's figure: a step's figure may mark what that step has shown.
+
