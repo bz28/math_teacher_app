@@ -28,8 +28,6 @@ export function Footer() {
         <nav aria-labelledby="f-subjects">
           <h2 id="f-subjects">Subjects</h2>
           <Link href="/subjects/math">Math</Link>
-          <Link href="/subjects/physics">Physics</Link>
-          <Link href="/subjects/chemistry">Chemistry</Link>
         </nav>
         <nav aria-labelledby="f-company">
           <h2 id="f-company">Company</h2>
