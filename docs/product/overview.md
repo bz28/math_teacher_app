@@ -16,8 +16,8 @@ gives the teacher a class-at-a-glance view with the students who need help surfa
 first. It began as a single-student photo-tutoring app and has grown into a **school
 portal**: teachers run courses, assign homework, and review AI-drafted grades. The
 original self-study loop (Learn / Practice / Mock-test / Review / History) is hidden: its
-routes redirect every user to their school portal (a student not yet in a class sees the
-join-a-class view). Its code stays because school practice shares the same AI core.
+routes redirect to the portal: students to the school-student portal (the join-a-class view
+until they're enrolled), teachers and admins to the teacher portal. Its code stays because school practice shares the same AI core.
 All AI runs on Anthropic Claude.
 
 The product's headline capabilities are dramatized in the standalone sales demo
@@ -136,9 +136,10 @@ Concrete inventory of **what exists today**, derived from
 - Hub (`/`) + present mode (`/present`) with the four stories (integrity, grading,
   generation, teacher-day), all from bundled captured data.
 
-**Subjects (owner-confirmed):** **Veradic is math-only.** Some code still carries a
-`subject` field (self-study sessions, mobile subject pills) from an earlier physics/chemistry
-experiment; don't build on or market those subjects.
+**Subjects (owner-confirmed):** **Veradic is math-only.** New courses are created as math
+(the course form has no subject picker). A `subject` field still exists on courses, sessions
+and some hidden self-study UI from an earlier physics/chemistry experiment; don't build on or
+market those subjects.
 
 ## 5. Principles / non-goals
 
