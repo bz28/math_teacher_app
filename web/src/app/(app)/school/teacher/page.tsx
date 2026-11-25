@@ -11,7 +11,7 @@ import { TOUR_ACTIONS, TOUR_IDS, useTour, useTourAction } from "@/components/tou
 import { StatusPill } from "@/components/school/teacher/_pieces/status-pill";
 import { SubjectChip } from "@/components/school/teacher/_pieces/subject-chip";
 import { NeedsYouQueue } from "@/components/school/teacher/_pieces/needs-you-queue";
-import { Modal, Select } from "@/components/ui";
+import { Modal } from "@/components/ui";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function SchoolTeacherDashboard() {
@@ -324,7 +324,6 @@ function CourseRow({ course }: { course: TeacherCourse }) {
 
 function NewCourseModal({ onClose, onCreated }: { onClose: () => void; onCreated: (courseId: string) => void }) {
   const [name, setName] = useState("");
-  const [subject, setSubject] = useState("math");
   const [gradeLevel, setGradeLevel] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -346,7 +345,7 @@ function NewCourseModal({ onClose, onCreated }: { onClose: () => void; onCreated
     try {
       const created = await teacher.createCourse({
         name: name.trim(),
-        subject,
+        subject: "math", // Veradic is math-only
         grade_level: gradeLevel ? Number(gradeLevel) : undefined,
       });
       onCreated(created.id);
@@ -383,17 +382,6 @@ function NewCourseModal({ onClose, onCreated }: { onClose: () => void; onCreated
             />
           </Field>
 
-          <Field label="Subject">
-            <Select
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              className="w-full"
-            >
-              <option value="math">Math</option>
-              <option value="physics">Physics</option>
-              <option value="chemistry">Chemistry</option>
-            </Select>
-          </Field>
 
           <Field label="Grade level (optional)">
             <input
