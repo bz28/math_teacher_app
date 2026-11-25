@@ -25,7 +25,7 @@ harness error (browser crash, the API unreachable) RAISES and is swallowed by
 false-positive proposal would poison trust in the whole agent, so the bar for
 "failed" is high and the bar for "skip" is low.
 
-Flows run after the surface scan, sharing its browser + seeded world. Browser
+Flows share one browser and one seeded world per run. Browser
 flows use the web base URL; API flows use the API base URL (same backend the
 web app talks to).
 """
