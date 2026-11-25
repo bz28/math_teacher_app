@@ -624,6 +624,11 @@ async def _review_page_flow(
         async def shot(label: str) -> None:
             if shots:
                 os.makedirs(shots, exist_ok=True)
+                # Let a dialog's fade-in finish so the picture is the settled state.
+                await page.wait_for_function(
+                    "() => document.getAnimations().every(a => a.playState !== 'running')",
+                    timeout=_TIMEOUT_MS,
+                )
                 await page.screenshot(path=os.path.join(shots, f"{label}.png"))
 
         async def step(what: str, coro) -> bool:
