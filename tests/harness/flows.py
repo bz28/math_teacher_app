@@ -639,6 +639,9 @@ async def _review_page_flow(
                 issues.append(what)
                 return False
 
+        # Never let this flow release grades: the Publish button publishes
+        # straight through when nothing needs a confirm, so block the call.
+        await page.route("**/publish-grades*", lambda route: route.abort())
         roster = page.locator("aside", has_text="submitted").last
         await page.goto(url, wait_until="domcontentloaded", timeout=_TIMEOUT_MS)
         confirm_all = page.get_by_role("button", name=re.compile(r"Confirm all 1 confident"))
@@ -654,19 +657,22 @@ async def _review_page_flow(
         await shot("01-loaded")
 
         rubric_text = page.get_by_text("Correct answer with work shown.")
-        await page.locator("summary", has_text="Rubric").click(timeout=_TIMEOUT_MS)
+        await step("no Rubric panel to open",
+                   page.locator("summary", has_text="Rubric").click(timeout=_TIMEOUT_MS))
         await step("opening the Rubric panel did not show the rubric",
                    rubric_text.wait_for(timeout=_TIMEOUT_MS))
         await shot("02-rubric-open")
 
-        await page.get_by_role("button", name=re.compile(r"^Confirm\s*1$")).click(timeout=_TIMEOUT_MS)
-        confirmed = page.get_by_text("Confirmed", exact=False)
+        await step("no Confirm control on the confident row",
+                   page.get_by_role("button", name=re.compile(r"^Confirm\s*1$")).click(timeout=_TIMEOUT_MS))
+        confirmed = page.get_by_text(re.compile(r"^\u2713\s*Confirmed$"))
         await step("confirming the confident row did not mark it Confirmed",
                    confirmed.first.wait_for(timeout=_TIMEOUT_MS))
         await shot("03-confirmed")
 
         # Problem 1 is collapsed, so the first Full button is problem 2's.
-        await page.get_by_role("button", name="Full", exact=True).first.click(timeout=_TIMEOUT_MS)
+        await step("no Full grade button on problem 2",
+                   page.get_by_role("button", name="Full", exact=True).first.click(timeout=_TIMEOUT_MS))
         await step("grading problem 2 was not announced in the live region",
                    page.wait_for_function(
                        "() => /Problem 2/.test(document.querySelector("
@@ -677,25 +683,30 @@ async def _review_page_flow(
                    .wait_for(timeout=_TIMEOUT_MS))
         await shot("04-graded")
 
-        await roster.get_by_role("button", name=re.compile(rs.ungraded_student)).click(timeout=_TIMEOUT_MS)
+        await step(f"the roster has no row for {rs.ungraded_student}",
+                   roster.get_by_role("button", name=re.compile(rs.ungraded_student)).click(timeout=_TIMEOUT_MS))
         await step(f"selecting {rs.ungraded_student} did not open their work",
                    page.get_by_text("Not graded yet").first.wait_for(timeout=_TIMEOUT_MS))
-        if not await rubric_text.is_visible():
-            issues.append("the Rubric panel closed when switching students (it is a session preference)")
+        await step("the Rubric panel closed when switching students (it is a session preference)",
+                   rubric_text.wait_for(timeout=_TIMEOUT_MS))
         await shot("05-ungraded-student")
 
-        await roster.get_by_role("button", name=re.compile(rs.graded_student)).click(timeout=_TIMEOUT_MS)
+        await step(f"the roster has no row for {rs.graded_student}",
+                   roster.get_by_role("button", name=re.compile(rs.graded_student)).click(timeout=_TIMEOUT_MS))
         await step("coming back to the graded student lost the confirmed tick",
                    confirmed.first.wait_for(timeout=_TIMEOUT_MS))
 
-        await roster.get_by_role("button", name=re.compile(rs.absent_student)).click(timeout=_TIMEOUT_MS)
+        await step(f"the roster has no row for {rs.absent_student}",
+                   roster.get_by_role("button", name=re.compile(rs.absent_student)).click(timeout=_TIMEOUT_MS))
         await step(f"selecting {rs.absent_student} did not show the Not submitted card",
                    page.get_by_text("hasn\u2019t turned in this homework yet").or_(
                        page.get_by_text("hasn't turned in this homework yet")).wait_for(timeout=_TIMEOUT_MS))
         await shot("06-not-submitted")
 
-        await roster.get_by_role("button", name=re.compile(rs.graded_student)).click(timeout=_TIMEOUT_MS)
-        await confirm_all.or_(confirmed.first).first.wait_for(timeout=_TIMEOUT_MS)
+        await step(f"the roster has no row for {rs.graded_student}",
+                   roster.get_by_role("button", name=re.compile(rs.graded_student)).click(timeout=_TIMEOUT_MS))
+        await step("coming back to the graded student did not reopen their work",
+                   confirm_all.or_(confirmed.first).first.wait_for(timeout=_TIMEOUT_MS))
         dialog = page.get_by_role("dialog")
         for label, opener, what in (
             ("07-shortcuts",
@@ -709,7 +720,8 @@ async def _review_page_flow(
              "publish confirm"),
         ):
             await page.evaluate("document.activeElement && document.activeElement.blur()")
-            await opener()
+            if not await step(f"no control opens the {what} dialog", opener()):
+                continue
             if await step(f"the {what} dialog did not open", dialog.first.wait_for(timeout=_TIMEOUT_MS)):
                 await shot(label)
                 await page.keyboard.press("Escape")
