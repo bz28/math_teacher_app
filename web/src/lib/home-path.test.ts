@@ -12,6 +12,10 @@ describe("homePathFor", () => {
     assert.equal(homePathFor("student"), "/school/student");
   });
 
+  it("sends admins to the teacher portal, never the student portal", () => {
+    assert.equal(homePathFor("admin"), "/school/teacher");
+  });
+
   it("never points at the hidden self-study home", () => {
     for (const role of ["teacher", "student", "admin", null, undefined]) {
       assert.notEqual(homePathFor(role), "/home");

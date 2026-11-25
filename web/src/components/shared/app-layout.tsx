@@ -37,7 +37,8 @@ const teacherMobileNavItems = [
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { user } = useAuthStore();
-  const isTeacher = user?.role === "teacher";
+  // Admins pass every teacher check in the API, so they share its shell.
+  const isTeacher = user?.role === "teacher" || user?.role === "admin";
   // Veradic is schools-only: every student — school-linked, not yet in a
   // class, or a teacher's preview shadow — gets the school-student shell.
   const inner = isTeacher
