@@ -4,7 +4,7 @@ import {
   Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { api, type UnitEconomicsData } from "../lib/api";
-import { FEATURE_BUCKETS } from "../lib/llm_modes";
+import { FEATURE_BUCKETS, featureFor } from "../lib/llm_modes";
 import {
   computeMargin, marginAtPrice, type ModelChoice, type Scenario,
 } from "../lib/marginModel";
@@ -140,6 +140,9 @@ export default function UnitEconomics() {
   }, [params]);
 
   const [seededModels, setSeededModels] = useState<ModelChoice>({});
+  // Which knobs the window actually measured, as opposed to ones holding
+  // a fallback. "Chosen" is not "measured".
+  const [measuredKnobs, setMeasuredKnobs] = useState<Set<string>>(new Set());
   const models = useMemo(
     () => ({ ...seededModels, ...urlModels }),
     [seededModels, urlModels],
@@ -178,18 +181,42 @@ export default function UnitEconomics() {
         // configured model permanently — claiming Opus 5.5 "(running)"
         // for work that ran on something else, and repricing every
         // figure against the wrong target.
+        // Seeded through featureFor — the SAME mapping the pricing
+        // uses. Matching raw bucket membership instead let the two
+        // disagree: `decompose` is listed under tutoring but is
+        // generation work inside a generation job, so the Tutor knob was
+        // seeded from a generation leg, and a derived `_facts_` label
+        // appears in no bucket list at all so its knob was never seeded.
         const seeded: ModelChoice = {};
-        for (const b of FEATURE_BUCKETS) {
-          const match = Object.values(d.functions_by_unit)
-            .flat()
-            .find((f) => b.functions.includes(f.function));
-          // measured_catalog_id, not measured_model: the raw id can carry
-          // a date pin that matches no <option> value, which makes the
-          // select fall back to the first model in the list.
-          const id = match?.measured_catalog_id;
-          if (id) seeded[b.key] = id;
+        const spend: Record<string, number> = {};
+        for (const [kind, fns] of Object.entries(d.functions_by_unit)) {
+          for (const fn of fns) {
+            const key = featureFor(fn.function, kind);
+            const id = fn.measured_catalog_id;
+            // measured_catalog_id, not measured_model: the raw id can
+            // carry a date pin that matches no <option> value, which
+            // makes the select fall back to the first model in the list.
+            // Heaviest leg wins, so a knob reflects where its money goes.
+            if (id && fn.cost_per_unit > (spend[key] ?? -1)) {
+              spend[key] = fn.cost_per_unit;
+              seeded[key] = id;
+            }
+          }
+        }
+        // A knob with no measurement still needs a real value: leaving it
+        // undefined priced its legs at measured cost while the control
+        // displayed a model, so the row claimed a scenario it wasn't
+        // running.
+        const fallback =
+          d.model_catalog.find((m) => m.is_configured)?.id ??
+          d.model_catalog[0]?.id;
+        if (fallback) {
+          for (const b of FEATURE_BUCKETS) {
+            if (!seeded[b.key]) seeded[b.key] = fallback;
+          }
         }
         setSeededModels(seeded);
+        setMeasuredKnobs(new Set(Object.keys(spend)));
       })
       .catch((e) => !cancelled && setError(String(e?.message ?? e)))
       .finally(() => !cancelled && setLoading(false));
@@ -519,16 +546,9 @@ export default function UnitEconomics() {
             </thead>
             <tbody>
               {FEATURE_BUCKETS.map((b) => {
-                // Fall back to a configured model rather than "": an
-                // empty value matches no <option>, so the control renders
-                // with nothing selected and the rate column shows a dash.
-                const chosen =
-                  models[b.key] ||
-                  data.model_catalog.find((x) => x.is_configured)?.id ||
-                  data.model_catalog[0]?.id ||
-                  "";
+                const chosen = models[b.key] ?? "";
                 const m = data.model_catalog.find((x) => x.id === chosen);
-                const measuredHere = Boolean(models[b.key]);
+                const measuredHere = measuredKnobs.has(b.key);
                 return (
                   <tr key={b.key}>
                     <td>{b.label}</td>

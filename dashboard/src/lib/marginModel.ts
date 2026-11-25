@@ -21,7 +21,11 @@
  */
 
 import type { UnitCost, UnitEconomicsData, UnitFunction } from "./api";
-import { featureFor } from "./llm_modes";
+// Explicit .ts specifier so this module loads under `node --test`
+// as well as Vite. tsconfig.app.json already sets
+// allowImportingTsExtensions, and the type-only import above is
+// erased so it needs none.
+import { featureFor } from "./llm_modes.ts";
 
 /** Which model the operator picked for each simulator knob. */
 export type ModelChoice = Record<string, string>;
@@ -54,6 +58,10 @@ export interface CostLine {
   perStudentMonth: number;
   /** True when the measurement behind it was too thin to trust. */
   thin: boolean;
+  /** True when the window is too short to read a monthly rate from.
+   *  A different problem from `thin` with a different fix — more data
+   *  vs. a longer window — so the page must not conflate them. */
+  shortWindow: boolean;
   /** True when no model in the catalog could price it. */
   unpriced: boolean;
 }
@@ -128,13 +136,19 @@ export function computeMargin(
   data: UnitEconomicsData,
   s: Scenario,
 ): MarginResult {
+  // One floor for the school year, shared by every use below.
+  const schoolYearMonths = Math.max(s.schoolYearMonths, 1);
   const lines: CostLine[] = [];
   let anyUnpriced = false;
   let anyThin = false;
 
   // 1. Per-submission work — paid for every student, every time.
   for (const kind of SUBMISSION_KINDS) {
-    const perMonth = s[kind];
+    // Clamped, not merely `min={0}` on the input: the scenario is
+    // rebuilt from the URL, where a markup hint has no reach. A negative
+    // volume flips the sign of a cost line and reports a margin above
+    // 100% with a healthy green tone.
+    const perMonth = Math.max(s[kind], 0);
     const unit = unitOf(data, `submission:${kind}`);
     const fns = data.functions_by_unit[`submission:${kind}`];
     const { cost, unpriced } = repricedUnitCost(
@@ -154,6 +168,7 @@ export function computeMargin(
       label: kind,
       perStudentMonth: cost * perMonth,
       thin: thin && perMonth > 0,
+      shortWindow: Boolean(unit?.window_too_short) && perMonth > 0,
       unpriced: unpriced && perMonth > 0,
     });
   }
@@ -166,13 +181,14 @@ export function computeMargin(
   // no per-function profile when no generation ran), so fall back to it.
   const genPerUnit = gen.cost > 0 ? gen.cost : (genUnit?.cost_median ?? 0);
   const classSize = Math.max(s.studentsPerClass, 1);
-  const unitsPerMonth = s.unitsPerYear / Math.max(s.schoolYearMonths, 1);
+  const unitsPerMonth = Math.max(s.unitsPerYear, 0) / schoolYearMonths;
   const genThin = !genUnit || !genUnit.sufficient;
   lines.push({
     key: "generation:unit",
     label: "unit generation",
     perStudentMonth: (genPerUnit / classSize) * unitsPerMonth,
     thin: genThin && s.unitsPerYear > 0,
+    shortWindow: Boolean(genUnit?.window_too_short),
     unpriced: gen.unpriced && s.unitsPerYear > 0,
   });
   anyThin = anyThin || (genThin && s.unitsPerYear > 0);
@@ -199,6 +215,7 @@ export function computeMargin(
     label: "teacher-side AI",
     perStudentMonth: perTeacherMonth / Math.max(s.studentsPerTeacher, 1),
     thin: !teacher || !teacher.sufficient,
+    shortWindow: Boolean(teacher?.window_too_short),
     unpriced: teacherCost.unpriced,
   });
 
@@ -218,9 +235,17 @@ export function computeMargin(
         ? studentCost.cost
         : (student?.cost_mean ?? 0),
     thin: !student || !student.sufficient,
+    shortWindow: Boolean(student?.window_too_short),
     unpriced: studentCost.unpriced,
   });
 
+  // `thin` means too few observations and nothing else. A row whose
+  // `sufficient` was cleared purely by a short window is reported under
+  // `excluded`, because "collect more data" and "pick a longer window"
+  // send an operator to different places.
+  for (const line of lines) {
+    if (line.shortWindow) line.thin = false;
+  }
   anyThin = anyThin || lines.some((l) => l.thin);
 
   // A residual rate is cost / users / MONTHS. On a window far shorter
@@ -234,17 +259,18 @@ export function computeMargin(
   // named instead.
   const excluded: string[] = [];
   for (const line of lines) {
-    const unit = unitOf(data, line.key);
-    if (unit?.window_too_short && line.perStudentMonth > 0) {
+    if (line.shortWindow && line.perStudentMonth > 0) {
       excluded.push(line.label);
       line.perStudentMonth = 0;
     }
   }
 
   const costPerStudentMonth = lines.reduce((a, l) => a + l.perStudentMonth, 0);
-  // Clamped with the rest: a negative school year flips the sign of
-  // every cost and reports a margin above 100%.
-  const costPerStudentYear = costPerStudentMonth * Math.max(s.schoolYearMonths, 0);
+  // The SAME clamp the generation amortisation uses. Two different
+  // floors meant a half-month school year amortised generation over one
+  // month while the annual multiplier used 0.5 — two different years in
+  // one calculation.
+  const costPerStudentYear = costPerStudentMonth * schoolYearMonths;
 
   // Revenue: priced per student per SUBJECT, with a floor.
   //

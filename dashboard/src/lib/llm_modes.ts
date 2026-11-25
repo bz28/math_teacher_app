@@ -175,15 +175,19 @@ const CONTEXT_DEPENDENT: Record<string, { generation: string; other: string }> =
 };
 
 // construction_figures logs a DERIVED label — `${mode}_facts_a` /
-// `_facts_b`, not an LLM_MODES constant — against the generation job that
-// produced the figure. Unmapped, those legs fall to "other", which keeps
-// the "could not be repriced" banner permanently lit for any geometry
-// unit and leaves them outside the generation knob. Matched by suffix
-// because the prefix is whichever mode produced the figure.
-const DERIVED_SUFFIX_FEATURE: [string, string][] = [
-  ["_facts_a", "generation"],
-  ["_facts_b", "generation"],
-];
+// `_facts_b`, not an LLM_MODES constant. Unmapped, those legs fall to
+// "other", which keeps the "could not be repriced" banner permanently
+// lit for any geometry work. Matched by suffix because the prefix is
+// whichever mode produced the figure.
+//
+// Context-dependent for the same reason `decompose` is: the prefix can
+// be a generation mode OR bank_chat (question_bank_chat passes
+// mode=BANK_CHAT with no generation_job_id), so a flat
+// suffix -> "generation" map sent a teacher's bank-chat figure reads to
+// the Generate-problems knob while the Tutor+chat knob left them alone.
+// These are MODEL_REASON calls with a 4096-token budget, so they are
+// usually the largest legs in that family.
+const DERIVED_SUFFIX = ["_facts_a", "_facts_b"];
 
 const FEATURE_OF: Record<string, string> = Object.fromEntries(
   FEATURE_BUCKETS.flatMap((b) => b.functions.map((f) => [f, b.key])),
@@ -193,14 +197,18 @@ const FEATURE_OF: Record<string, string> = Object.fromEntries(
  *  anything unmapped — shown, never silently folded into a priced
  *  bucket, so a new function surfaces instead of skewing a margin. */
 export function featureFor(fnName: string, unitKind = ""): string {
+  const inGeneration = unitKind.startsWith("generation:");
+
   const ctx = CONTEXT_DEPENDENT[fnName];
-  if (ctx) {
-    return unitKind.startsWith("generation:") ? ctx.generation : ctx.other;
-  }
+  if (ctx) return inGeneration ? ctx.generation : ctx.other;
+
   const direct = FEATURE_OF[fnName];
   if (direct) return direct;
-  for (const [suffix, key] of DERIVED_SUFFIX_FEATURE) {
-    if (fnName.endsWith(suffix)) return key;
+
+  // A derived figure-read label follows the family it was measured in,
+  // not its prefix.
+  if (DERIVED_SUFFIX.some((suffix) => fnName.endsWith(suffix))) {
+    return inGeneration ? "generation" : "tutoring";
   }
   return "other";
 }
