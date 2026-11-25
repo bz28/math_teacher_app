@@ -102,3 +102,15 @@ def test_call_metadata_carries_prompt_versions() -> None:
         "prompt_versions": [prompt_version("safety_preamble"), prompt_version("grading_system")],
     }
     assert _with_prompt_versions(None, ())["prompt_versions"] == [prompt_version("safety_preamble")]
+
+
+def test_grading_logs_only_the_rubric_pieces_it_sent() -> None:
+    from api.core.grading_ai import _build_system_prompt
+    from api.core.prompts import prompt_ids_in
+
+    pieces = ("grading_default_full_credit", "grading_default_partial_credit", "grading_class_rules_intro")
+    custom = {"full_credit": "FC", "partial_credit": "PC"}
+    assert prompt_ids_in(_build_system_prompt(custom, []), *pieces) == ()
+    assert prompt_ids_in(_build_system_prompt(None, []), *pieces) == pieces[:2]
+    with_rules = {**custom, "rules": [{"id": "r1", "text": "Units", "points": 1}]}
+    assert prompt_ids_in(_build_system_prompt(with_rules, []), *pieces) == pieces[2:]
