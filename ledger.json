@@ -1,0 +1,32 @@
+[
+  {
+    "ts": "2026-11-25T09:04:07.736335+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-11-25T21:43:53.394423+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-11-25T21:57:44.701297+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  },
+  {
+    "ts": "2026-11-26T08:17:21.026243+00:00",
+    "kind": "scan",
+    "cost_usd": 0.0,
+    "note": "plan-path gather (no LLM)"
+  },
+  {
+    "ts": "2026-11-26T09:03:10.445106+00:00",
+    "kind": "llm-scan",
+    "cost_usd": 0.0,
+    "note": "0 defect group(s)"
+  }
+]

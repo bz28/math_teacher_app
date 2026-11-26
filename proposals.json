@@ -1,0 +1,211 @@
+[
+  {
+    "proposal": {
+      "surface_key": "admin.leads,admin.schools,admin.quality,admin.harness_runs,admin.llm_calls",
+      "title": "Fix CORS block and banner-overlap on the admin dashboard",
+      "category": "bug",
+      "severity": "high",
+      "rationale": "All 5 operator surfaces log identical CORS preflight failures (e.g. \"Access to fetch at 'http://localhost:8000/v1/admin/leads' ... blocked by CORS policy: No 'Access-Control-Allow-Origin' header\") and every page renders only a \"Couldn't load this view\" / \"API UNREACHABLE\" state with zero real data (shots/admin.leads.png, shots/admin.quality.png). Separately, both captured screenshots show the fixed \"No response from the backend\" banner overlapping and clipping the page's first content row (the \"SCOPE: Platform-wide...\" line is cut off directly beneath it) \u2014 a layout bug independent of the CORS cause that will recur on any real outage.",
+      "change": "Add the admin dashboard's origin to the API's CORS allow-list so admin fetches succeed in this environment/deployment. Separately, give the admin shell's content area top padding/margin equal to the error banner's rendered height (or move the banner into normal document flow instead of position:fixed/sticky) so it never overlaps the page's first heading/row when shown.",
+      "est_size": "S",
+      "confidence": 0.9,
+      "defect_key": "bug/admin-cors-unreachable",
+      "evidence": [],
+      "id": "d21c10cbc320",
+      "score": 2.7
+    },
+    "status": "proposed",
+    "created": "2026-11-25T21:47:01.007733+00:00",
+    "updated": "2026-11-25T21:47:01.007733+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "web.public.landing,demo.hub,demo.present,demo.present_integrity,demo.present_grading,demo.present_generation,demo.present_teacher_day",
+      "title": "Wrap demo and landing page content in proper landmark regions",
+      "category": "a11y",
+      "severity": "medium",
+      "rationale": "axe flags \"aside should not be contained in another landmark\" on the landing page and all 6 demo surfaces; the demo surfaces additionally fail \"document should have one main landmark\" and \"all page content should be contained by landmarks\" (38 elements, every demo page) \u2014 indicating the demo shell has no <main> wrapper and nests an <aside> inside another landmark.",
+      "change": "Wrap each demo page's primary content in a single <main> landmark, move the nested <aside> (sidebar/call-out) so it's a top-level landmark rather than nested inside another, and ensure the landing page's aside/complementary region isn't nested inside a parent landmark either. Re-run axe to confirm the landmark/region violations clear.",
+      "est_size": "S",
+      "confidence": 0.85,
+      "defect_key": "a11y/landmark-structure-demo",
+      "evidence": [],
+      "id": "f639330e1c8a",
+      "score": 1.7
+    },
+    "status": "proposed",
+    "created": "2026-11-25T21:47:01.007733+00:00",
+    "updated": "2026-11-25T21:47:01.007733+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "demo.present,demo.present_integrity,demo.present_grading,demo.present_generation,demo.present_teacher_day",
+      "title": "Make /present/<story> routes render their own story instead of the hub page",
+      "category": "bug",
+      "severity": "medium",
+      "rationale": "Screenshots of /present, /present/integrity, /present/grading, /present/generation, and /present/teacher-day are visually indistinguishable from demo.hub (\"/\") \u2014 same hero and the same full scroll through all four story cards \u2014 even though PRODUCT_CONTEXT.md describes present mode as dramatizing \"the four stories (integrity, grading, generation, teacher-day)\" as distinct experiences. If this holds on a live run (not just a capture-timing artifact), the sales demo's core differentiator \u2014 walking a prospect through one story at a time \u2014 isn't happening on direct navigation to a story route.",
+      "change": "Confirm whether /present/<story> is meant to deep-link into an isolated single-story presentation view; if so, fix the route so it renders (or scrolls to and isolates) that specific story instead of the full hub page, and verify by diffing each route's rendered content against the hub.",
+      "est_size": "M",
+      "confidence": 0.5,
+      "defect_key": "bug/present-story-routes-identical",
+      "evidence": [],
+      "id": "9036451e20a7",
+      "score": 0.5
+    },
+    "status": "proposed",
+    "created": "2026-11-25T21:47:01.007733+00:00",
+    "updated": "2026-11-25T21:47:01.007733+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Generate a class-level reteach mini-lesson, not just more student practice",
+      "category": "feature",
+      "severity": "medium",
+      "rationale": "PRODUCT_CONTEXT.md's teacher-day capability stops at \"a path from a struggle signal to a reteach/practice set\" via generated student practice problems \u2014 there's no capability for AI-generated teaching material (a worked example + talking points) the teacher could use to actually reteach a concept the whole class missed.",
+      "change": "When teacher-day analytics flag a concept the class collectively missed, add a one-click \"Generate reteach mini-lesson\" action producing a short worked example plus 2-3 talking points for the teacher to walk the class through \u2014 independently re-derived/checked the same way generated problem sets already are.",
+      "est_size": "M",
+      "confidence": 0.45,
+      "defect_key": "feature/class-reteach-minilesson",
+      "evidence": [],
+      "id": "1c1609aba311",
+      "score": 0.45
+    },
+    "status": "proposed",
+    "created": "2026-11-25T21:47:01.007733+00:00",
+    "updated": "2026-11-25T21:47:01.007733+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Give students a plain-language recap of their understanding-check conversation",
+      "category": "feature",
+      "severity": "low",
+      "rationale": "Per PRODUCT_CONTEXT.md, the understanding-check emits badges/confidence/reasoning for the teacher's audit (\"every turn ... is stored for audit\"), but nothing is described as surfaced back to the student after the conversation \u2014 the moment that \"catches the student who got the right answer without understanding\" currently only serves the teacher, not the student's own learning.",
+      "change": "After an understanding-check conversation ends, show the student a short, encouraging summary of what it revealed (e.g. \"you explained step 2 well, but mixed up the sign in step 3\") so the conversation itself becomes a learning artifact for the student, not only teacher-facing audit data.",
+      "est_size": "S",
+      "confidence": 0.4,
+      "defect_key": "feature/integrity-student-recap",
+      "evidence": [],
+      "id": "e72845bed894",
+      "score": 0.4
+    },
+    "status": "proposed",
+    "created": "2026-11-25T21:47:01.007733+00:00",
+    "updated": "2026-11-25T21:47:01.007733+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Flag question-bank gaps for the exact concepts students are weak on",
+      "category": "feature",
+      "severity": "low",
+      "rationale": "The feature map lists weak-spot/analytics detection and question-bank generation as separate capabilities with no described link between them \u2014 generation starts from a worksheet or topic a teacher picks, not from a detected class weak-spot signal, so a concept the class is struggling with can have no bank coverage with nothing prompting the teacher to close that gap.",
+      "change": "When teacher-day analytics show a concept with thin or no question-bank coverage, surface a \"generate bank questions for this gap\" prompt pre-seeded with that exact concept, so a detected weakness leads directly to a trusted, re-derived question set for it.",
+      "est_size": "S",
+      "confidence": 0.4,
+      "defect_key": "feature/weakspot-bank-gap-fill",
+      "evidence": [],
+      "id": "60ce04fb13e3",
+      "score": 0.4
+    },
+    "status": "proposed",
+    "created": "2026-11-25T21:47:01.007733+00:00",
+    "updated": "2026-11-25T21:47:01.007733+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "admin.leads,admin.schools,admin.quality,admin.harness_runs,admin.llm_calls",
+      "title": "Add the admin dashboard's dev origin to the API's CORS allow-list",
+      "category": "bug",
+      "severity": "high",
+      "rationale": "Every admin surface logs identical preflight failures: \"Access to fetch at 'http://localhost:8000/v1/admin/...' from origin 'http://localhost:5173' has been blocked by CORS policy\" (console_errors on all 5 admin.* entries in findings.json), and each screenshot shows the resulting \"Couldn't load this view / Can't reach our servers\" error state with the sidebar's status dot reading \"API unreachable\" (shots/admin.leads.png, shots/admin.quality.png). api/config.py:60-66 defines `cors_origins` with localhost:8081 and localhost:3000 but not localhost:5173, the Vite dev port the dashboard actually serves on (confirmed by the request origin in the error and by the findings.json surface URLs, e.g. http://localhost:5173/leads); api/middleware/setup.py:31 passes that list straight to CORSMiddleware. Fixing this also incidentally restores the missing level-one-heading axe hit on leads/schools/harness_runs/llm_calls \u2014 those pages early-return to an ErrorState with no <h1> when the fetch fails (dashboard/src/pages/Leads.tsx:151 etc. only render their real <h1> on success), so that hit is a symptom of this same bug, not a separate defect.",
+      "change": "Add \"http://localhost:5173\" to the default `cors_origins` list in api/config.py:60-66 (the dashboard's Vite dev server origin) so the local admin console can reach the API without every request being blocked at the preflight.",
+      "est_size": "S",
+      "confidence": 0.92,
+      "defect_key": "bug/admin-cors-origin-missing",
+      "evidence": [],
+      "id": "8be036485fb5",
+      "score": 2.76
+    },
+    "status": "proposed",
+    "created": "2026-11-26T08:23:02.822030+00:00",
+    "updated": "2026-11-26T08:23:02.822030+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "demo.present,demo.present_integrity,demo.present_grading,demo.present_generation,demo.present_teacher_day",
+      "title": "Fix the dead /present/* deep-link URLs in the sales demo",
+      "category": "bug",
+      "severity": "high",
+      "rationale": "shots/demo.present_integrity.png (and present, present_grading, present_generation, present_teacher_day) are pixel-identical in content to shots/demo.hub.png \u2014 same hero, same film, same flow spine \u2014 not the integrity/grading/generation/teacher-day story each URL names, and all five share the exact same axe hit counts as demo.hub (13 contrast, 1 aside-landmark, 1 one-main, 38 region elements). Root cause: tests/harness/improver/surfaces.py:91-95 catalogs these pages at /present, /present/integrity, /present/grading, /present/generation, /present/teacher-day, but demo/src/App.tsx only defines routes at /, /integrity, /grading, /generation, /teacher-day (no /present prefix) and sends anything unmatched through its catch-all `<Route path=\"*\" element={<Navigate to=\"/\" replace />} />`. So any real link built on the /present/... naming the app itself uses in its UI copy (\"present-bar\", \"Present: integrity\") \u2014 e.g. a sales rep's bookmark or shared URL \u2014 silently bounces to the hub instead of opening the intended story, with no visual sign anything is wrong.",
+      "change": "In demo/src/App.tsx, add the /present and /present/:story routes (mapping to DemoHub and the four Suspense-wrapped story components respectively) alongside the existing bare paths, so /present/integrity etc. render IntegritySet/GradingSet/GenerationSet/TeacherDaySet instead of falling through to the home redirect.",
+      "est_size": "S",
+      "confidence": 0.85,
+      "defect_key": "bug/demo-present-routes-redirect-home",
+      "evidence": [],
+      "id": "8275434183a2",
+      "score": 2.55
+    },
+    "status": "proposed",
+    "created": "2026-11-26T08:23:02.822030+00:00",
+    "updated": "2026-11-26T08:23:02.822030+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "demo.hub,demo.present,demo.present_integrity,demo.present_grading,demo.present_generation,demo.present_teacher_day",
+      "title": "Wrap the demo hub's content in a <main> landmark",
+      "category": "a11y",
+      "severity": "medium",
+      "rationale": "axe flags \"Document should have one main landmark\" and \"All page content should be contained by landmarks\" (38 elements) plus \"Aside should not be contained in another landmark\" on demo.hub and, because of the routing bug above, on every /present/* page too (they currently render the hub). demo/src/pages/DemoHub.tsx:20 roots the whole page in a plain `<div className=\"it-demo it-page\">` with no `<main>`, and App.tsx:38 wraps it in another bare `<div className=\"demo-hub-shell\">` \u2014 none of the hero/film/flow/ROI sections sit inside a landmark, and HeroBlock's `aside={<RosterPeek />}` (DemoHub.tsx:42) ends up nested inside whatever ancestor landmark exists rather than at the top level.",
+      "change": "Change DemoHub.tsx's root element (and/or the `demo-hub-shell` wrapper in App.tsx) to a `<main>` landmark, and move the RosterPeek `<aside>` so it's a direct child of that main rather than nested inside another sectioning element.",
+      "est_size": "S",
+      "confidence": 0.6,
+      "defect_key": "a11y/demo-hub-missing-main-landmark",
+      "evidence": [],
+      "id": "19c4903ea294",
+      "score": 1.2
+    },
+    "status": "proposed",
+    "created": "2026-11-26T08:23:02.822030+00:00",
+    "updated": "2026-11-26T08:23:02.822030+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Turn a surfaced struggle signal into a ready-to-teach reteach pack",
+      "category": "feature",
+      "severity": "low",
+      "rationale": "PRODUCT_CONTEXT.md \u00a73 says teacher-day gives \"a path from a struggle signal to a reteach/practice set,\" but the feature map (\u00a74) shows that path today only reaches Generation (more problems) and Practice \u2014 there's no artifact for the teacher to actually *run* the reteach with (a short re-explanation + warm-up + talking points for the one concept the class missed most).",
+      "change": "From the teacher-day to-do list, add a one-click \"Build a reteach pack\" action on a surfaced struggling concept that generates a short lesson-opener (re-explanation, 2-3 worked warm-up problems, and the specific misconception seen in submissions) the teacher can open at the start of the next class \u2014 reusing the existing generation + answer-verification pipeline, not a new grading surface.",
+      "est_size": "M",
+      "confidence": 0.4,
+      "defect_key": "feature/reteach-pack-generator",
+      "evidence": [],
+      "id": "f0f97a1012f1",
+      "score": 0.2
+    },
+    "status": "proposed",
+    "created": "2026-11-26T08:23:02.822030+00:00",
+    "updated": "2026-11-26T08:23:02.822030+00:00"
+  },
+  {
+    "proposal": {
+      "surface_key": "product",
+      "title": "Offer auto-differentiated easier/harder variants when generating an assignment",
+      "category": "feature",
+      "severity": "low",
+      "rationale": "PRODUCT_CONTEXT.md \u00a73/\u00a74 describes Generation producing one verified problem set per worksheet/topic and Practice generating similar problems per student, but nothing that tiers the *same* assignment by a student's grading history \u2014 today's one-size-fits-all set doesn't reflect that a class is mixed-level.",
+      "change": "When a teacher generates or publishes an assignment, offer an optional \"generate a scaffolded and an extension variant\" step that reuses the same answer-key verification already in assignment_generation.py, and let the teacher assign the right variant per student/group instead of hand-editing a second version.",
+      "est_size": "M",
+      "confidence": 0.35,
+      "defect_key": "feature/differentiated-assignment-tiers",
+      "evidence": [],
+      "id": "81863632736d",
+      "score": 0.175
+    },
+    "status": "proposed",
+    "created": "2026-11-26T08:23:02.822030+00:00",
+    "updated": "2026-11-26T08:23:02.822030+00:00"
+  }
+]
