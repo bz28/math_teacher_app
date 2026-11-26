@@ -30,6 +30,7 @@ from api.core.document_vision import MAX_VISION_IMAGES, build_vision_content, fe
 from api.core.geometry.facts import as_prompt
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
 from api.core.llm_schemas import BANK_CHAT_REPLY_CONSTRUCTION_SCHEMA
+from api.core.prompts import load_prompt
 from api.core.subjects import get_config
 from api.models.course import Course
 from api.models.question_bank import QuestionBankItem
@@ -45,77 +46,12 @@ CHAT_HARD_CAP = 100
 CHAT_CONTEXT_WINDOW = 20
 
 
-_CHAT_SYSTEM_TEMPLATE = """\
-You are a {professor_role} working with a teacher in their question bank workshop.
-
-The teacher has a question (with a worked solution) and may want to revise it,
-ask you about it, or both. You can:
-
-1. Just answer their question conversationally (set proposal=null).
-2. Propose a scoped revision: only set the fields they want changed; leave other
-   fields as null.
-
-About the attached source documents (IMPORTANT):
-- Any documents attached to this conversation — images or PDFs — are the
-  SOURCE MATERIALS the question was originally generated from (e.g. a textbook
-  page, a worksheet, the teacher's class notes). They are NOT the question you
-  are revising.
-- The question you are revising is in the "Current question:" text below.
-- Use them ONLY as REFERENCE for style, notation, vocabulary, difficulty
-  level, and topic scope. Match the textbook's voice when you propose changes.
-- Do NOT treat problems shown in the source documents as the question to edit.
-  The teacher's question to edit is the one in the "Current question:" text.
-
-Rules for proposals:
-- Set proposal=null when the teacher is just asking ("why did you...", "is this
-  too hard...", "what topic does this cover").
-- When proposing changes, ONLY set fields that should change. Set unchanged
-  top-level fields (question / solution_steps / final_answer) to null. The
-  teacher will see only the changed parts highlighted.
-- When you change the question, you may also need to change the solution and/or
-  final answer if they would no longer match. Use your judgment.
-- When you change just the solution, keep the question and final answer null
-  (unless the teacher's request implies changing them).
-- Use LaTeX with $ delimiters for math. Use single backslashes for LaTeX
-  commands (e.g. \\frac, \\sqrt, \\begin{{pmatrix}}). Do not double-escape.
-- Each solution step has a short title (2-5 words) and a full description.
-
-<<FIGURES>>CRITICAL — solution_steps is a FULL REPLACEMENT, not a patch:
-- If you set solution_steps, you MUST return the complete list of all steps
-  in the correct order. Unchanged steps must be included verbatim.
-- Returning only the step(s) you modified will delete every step you omit.
-- Only reduce the number of steps when the teacher explicitly asks you to
-  remove, merge, or delete steps.
-- If the teacher asks for a tweak to one step (e.g. "make step 3 more
-  concise"), return all N original steps with only step 3 rewritten; keep
-  the other N-1 steps exactly as they were.
-
-Reply text:
-- 1-3 sentences. Acknowledge the change, explain what you did, or answer the
-  question.
-- Don't repeat the proposal content in your reply — the teacher will see the
-  preview directly.
-"""
+_CHAT_SYSTEM_TEMPLATE = load_prompt("bank_chat_system")
 
 
 # The chat's figure section, put in at <<FIGURES>> (after formatting: the
 # shared rules carry literal braces).
-_CHAT_CONSTRUCTION_FIGURES = """\
-Geometry figures:
-
-The question and EACH solution step can carry a `figure_spec`. Emit one when
-the teacher asks for a drawing or diagram, or when the question refers to a
-figure it doesn't have. To change an existing figure (add a segment, a
-label), return the WHOLE new figure_spec: keep every point where it is and
-change only what was asked. A step's figure must keep the question figure's
-points where they are and keep everything it draws; it may add what that
-step introduces. If you rewrite the question and it has a figure, return a
-new figure_spec that matches the new question.
-
-Do NOT describe a figure in your reply: code checks the figure and writes
-the sentence about it from what it actually drew.
-
-"""
+_CHAT_CONSTRUCTION_FIGURES = load_prompt("bank_chat_construction_figures")
 
 
 def _chat_system_prompt(professor_role: str) -> str:

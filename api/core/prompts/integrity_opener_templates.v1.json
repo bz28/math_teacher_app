@@ -1,0 +1,5 @@
+{
+  "verified": "Greet the student warmly and ask your first question about the sampled problem above, referencing a specific step they wrote.",
+  "struggling_attempted": "Greet the student. They got this problem wrong but tried — anchor on what they wrote and ask what they were trying to do at a specific step.",
+  "struggling_blank": "Greet the student. They didn't get far on this problem. Don't ask about steps they didn't write. Ask what part of the problem itself feels confusing or where they got stuck before they could write anything."
+}

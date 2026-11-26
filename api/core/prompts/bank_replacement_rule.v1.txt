@@ -1,0 +1,1 @@
+Every problem must be complete on its own. Follow the when-to-draw rule; a problem that gets a figure comes with its fact card (figure_facts) and a figure_spec that draws exactly the card's points and parts.

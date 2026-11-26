@@ -11,6 +11,7 @@ from api.core.document_vision import build_vision_content
 from api.core.geometry.fact_card import is_blank_card
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json, call_claude_vision
 from api.core.llm_schemas import GENERATE_QUESTIONS_CONSTRUCTION_SCHEMA
+from api.core.prompts import load_prompt, load_prompt_map
 from api.core.step_decomposition import StepFigures, decompose_problem
 from api.core.subjects import Subject, get_config
 
@@ -19,51 +20,7 @@ logger = logging.getLogger(__name__)
 
 # ── Question generation ──
 
-_GENERATE_QUESTIONS_TEMPLATE = """\
-You are a {professor_role}.
-
-The teacher will review and approve each problem before it reaches their
-students; the bar is "would the teacher write this themselves" — not
-AI-flavored filler.
-
-# Sources of truth, in priority order
-
-1. The teacher's instructions in the message — the active intent. What
-   they want, what they don't, the angle. Lead from this.
-2. The reference materials they've attached — the topic, notation, grade
-   level, vocabulary, and style of problem their students have already
-   seen. Match what's shown, but write NEW problems: never copy a
-   problem from these attached documents, and never lightly re-number
-   one. (A reference question in the teacher's instructions is
-   different — follow the instructions for it.)
-3. The assignment's title — the topic, when it names one ("Parallel &
-   Perpendicular Lines", "Exponent Rules"). Every problem stays on it.
-   A title that names no topic ("HW 3", "Unit 1 Review", "test") says
-   nothing; ignore it.
-4. The unit name — the topic scope. Often just a number ("Unit 3").
-
-When a higher-priority source is silent, defer to the next one down.
-When they pull against each other, the higher one wins.
-
-# Output
-
-- Generate exactly the requested number of problems
-- Each problem is self-contained
-- LaTeX with $ delimiters; single backslashes for commands
-- Problem text only — no answers, no hints
-
-# Difficulty calibration
-
-Label each problem easy / medium / hard relative to THIS course's
-student level — NOT absolute math/science difficulty:
-- easy: direct application of one technique with clean numbers.
-  Would appear in the first few practice problems of this unit.
-- medium: chains two techniques OR requires choosing the right
-  approach from several options. Mid-textbook practice.
-- hard: synthesis, unusual setup, or a non-obvious step. Tough but
-  solvable with practice for THIS course.
-
-"""
+_GENERATE_QUESTIONS_TEMPLATE = load_prompt("assignment_generate_questions")
 
 
 # When a generated problem gets a figure: Ben's when-to-draw rule
@@ -76,66 +33,13 @@ student level — NOT absolute math/science difficulty:
 # (api/core/geometry/fact_card.py). Code writes the problem's words from the
 # card and checks the figure against the card, so nothing is read back from
 # the AI's wording. Shared with the regenerate prompt (question_bank_generation).
-FACT_CARD_RULES = (
-    'How to write a problem that gets a figure: fill in its fact card (`figure_facts`) and leave the '
-    'problem\'s text (`text`, or `question` when revising) empty. Code writes the problem from the '
-    'card, one fixed phrase per fact ("$\\overline{AB} \\parallel '
-    '\\overline{CD}$", "$M$ is the midpoint of $\\overline{BC}$"), then the question ("Prove: …", "Find '
-    '$m\\angle ABC$."), and checks the figure against the card. So every given, everything to prove or '
-    'find, and everything the student constructs is a fact on the card; nothing else reaches the student.\n'
-    '- points: every point the figure shows. segments, rays, lines (two points: "AB"), triangles, polygons, '
-    'circles (by center): every part the figure shows, including an auxiliary line the problem adds (the '
-    'median $\\overline{AD}$ in "Draw the median AD. Prove …" is a segment the figure shows).\n'
-    '- givens and prove: facts, each {kind, items, point, value, expr, circle}, naming only the card\'s points. '
-    'find: an angle ("ABC"), a segment\'s length ("AB"), or kind "other" with a variable ("x") a given\'s expr '
-    'uses.\n'
-    '- constructs: what the STUDENT constructs or draws themselves, as facts the construction makes true '
-    '("Construct the bisector of angle A meeting BC at D": bisects_angle ["AD", "BAC"] and on_segment ["BC"] '
-    'point "D"; "Construct the perpendicular bisector of AB": name the new line by two new points, '
-    'bisects_segment ["MN", "AB"] point "M" and perpendicular ["MN", "AB"] point "M"). The figure never '
-    'shows these parts, and a point only the construction makes (D, M, N) is not '
-    'under points. Such a problem gets a figure of its givens only (the triangle the student starts '
-    'from); this overrides "draw every point and segment the problem names" for what is under constructs.\n'
-    '- context: optional, one of the fixed settings the schema lists ("A carpenter is building a roof '
-    'frame."), or empty. The geometry is all on the card.\n'
-    '- hint: optional, one of the fixed method hints the schema lists, or empty. "Work backward from '
-    'what you need to prove." only when the card has something to prove.\n'
-    '- The figure_spec draws exactly the card\'s points and parts, every given true.\n'
-    'Fact kinds (angles "ABC" with the vertex in the middle, or "1" for a numbered angle):\n'
-    '- parallel [l1, l2]; perpendicular [l1, l2] point P (required: where they meet); congruent_segments [s1, s2]; '
-    'congruent_angles [a1, a2]\n'
-    '- equal_length [s] with value or expr ("2x + 1"); angle_measure [a] with value (degrees) or expr\n'
-    '- midpoint [s] point M; on_segment [s] point P; on_line [l] point P; collinear [P, Q, R] (in order '
-    'along the line); intersect '
-    '[l1, l2] point P; bisects_segment [bisector, s] (point); bisects_angle [ray, angle]; right_angle [a]; '
-    'opposite_rays [r1, r2]\n'
-    '- vertical_angles / linear_pair / supplementary / complementary / alternate_interior / '
-    'alternate_exterior / corresponding / same_side_interior [a1, a2]\n'
-    '- congruent_triangles / similar_triangles [t1, t2] in corresponding order; isosceles [t] (point: the '
-    'apex); equilateral [t]; right_triangle [t] (point: the right angle)\n'
-    '- parallelogram / rectangle / square / rhombus / trapezoid / isosceles_trapezoid / kite [polygon]\n'
-    '- on_circle [P, Q] circle O; tangent [l] circle O point P; chord / diameter / radius [s] circle O; '
-    'central_angle / inscribed_angle [a] circle O (value)\n'
-    '- numbered_angle ["1", angle it labels]; transversal [t, l1, l2]\n'
-    'Never put a theorem\'s name in a fact, the context or the hint.\n'
-)
+FACT_CARD_RULES = load_prompt("figure_fact_card_rules")
 
 # When a problem gets a figure (Ben, 2026-11-14; replaces the first
 # "When to draw" paragraph). TODO(text auditor): a separate PR may let a
 # real-world layout keep its story words once code can account for them;
 # until then the SHOULD case is written as plain geometry with named points.
-WHEN_TO_DRAW = (
-    "When to draw.\n"
-    "- MUST have a figure: the problem refers to a figure, or its answer depends on how named parts "
-    "are arranged (proofs, angle pairs, transversals, circle chords and tangents, composite shapes).\n"
-    "- SHOULD have a figure: a real-world layout a textbook would picture (a ladder against a wall, a "
-    "ramp, a floor plan). Write it as plain geometry with named points (see below), not as a story.\n"
-    "- OPTIONAL: a shape problem answered by a formula alone (a polygon's angle sum).\n"
-    "- NO figure: when the task is for the student to draw, construct or sketch it; when there is no "
-    "shape; when an exact drawing would reveal what is asked (acute or obtuse, \"are the lines "
-    "parallel?\"); graphs and 3D solids (the tool can't draw them).\n"
-    "- Every problem with a figure names its points, and names each line by two of its points.\n"
-)
+WHEN_TO_DRAW = load_prompt("figure_when_to_draw")
 
 _CONSTRUCTION_FIGURES_SECTION = (
     '# Figures (diagrams)\n'
@@ -158,83 +62,11 @@ def _build_question_generation_prompt(subject: str) -> str:
 # Each non-default value becomes a single bullet in the user message;
 # defaults (mixed/auto/either/frq) emit nothing so the unchanged
 # 1-click flow produces a prompt byte-identical to before.
-_PROBLEM_TYPE_INSTRUCTIONS = {
-    "word": "Generate only word problems with real-world contexts.",
-    "computation": "Generate only pure computational problems.",
-    "multi_step": "Each problem must involve multiple steps or chained techniques.",
-    "proof": "Each problem must be a proof requiring justified reasoning at each step.",
-}
-_ANSWER_FORM_INSTRUCTIONS = {
-    # Unlike every other value here, this one constrains how the problem
-    # is BUILT, not how a finished answer is written down: you cannot
-    # express sqrt(2) as a whole number, you can only choose givens that
-    # avoid it. Hence "design ... choose the given values".
-    #
-    # Two things this wording is carefully doing:
-    #
-    # 1. "integer ... negative, or zero". A model told "whole number"
-    #    reads the US-curriculum sense {0,1,2,...} and will avoid
-    #    negative answers — which quietly guts any unit where a negative
-    #    solution IS the point (solving equations, integer operations).
-    # 2. The escape hatch is "stay on topic and give the exact answer",
-    #    NOT "write a different problem". The prompt already demands
-    #    exactly N problems within the unit's scope, so inviting
-    #    substitution pushes a radicals or trig unit toward off-topic
-    #    output. Topic fidelity has to outrank clean numbers, and the
-    #    teacher-facing tooltip promises exactly this behaviour.
-    #
-    # Note this does NOT prevent a wrong answer reaching a student:
-    # generate_questions emits problem text only (see the template's
-    # "no answers, no hints" and GENERATE_QUESTIONS_SCHEMA), and the
-    # solver that does produce answers never sees these params. The
-    # worst case here is a problem whose honest answer isn't an integer
-    # — the teacher gets something they didn't ask for, not a lie.
-    "integer": (
-        "Design every problem so its final answer is an integer "
-        "(positive, negative, or zero — no fractions, decimals, or "
-        "radicals). Choose the given values so it works out exactly, "
-        "and NEVER round or approximate to reach one. Staying on the "
-        "unit's topic outranks this: if the topic cannot yield integer "
-        "answers (irrational roots, most trigonometric values), keep "
-        "the problem on-topic and let the answer be exact instead — do "
-        "not substitute an unrelated problem to satisfy this."
-    ),
-    "radical": "Express all final answers in radical form (no decimal approximations).",
-    "rational_exponent": "Express all final answers in rational-exponent form.",
-    "exact": "All final answers must be exact — no decimal approximations.",
-    "decimal_2": "Express final answers as decimals to 2 significant figures.",
-    "decimal_3": "Express final answers as decimals to 3 significant figures.",
-}
-_DIFFICULTY_INSTRUCTIONS = {
-    "easy": "Generate all problems at the EASY level per the difficulty calibration above.",
-    "medium": "Generate all problems at the MEDIUM level per the difficulty calibration above.",
-    "hard": "Generate all problems at the HARD level per the difficulty calibration above.",
-    "ramp": (
-        "Order problems by difficulty: roughly first third easy, middle "
-        "third medium, last third hard. For fewer than 3 problems, "
-        "distribute as evenly as possible."
-    ),
-}
-_CALCULATOR_INSTRUCTIONS = {
-    "no_calc": (
-        "No-calculator problems: keep all numerics clean (standard angles "
-        "like π/4, integer evaluations, simple fractions). Do not require "
-        "multi-digit decimal arithmetic."
-    ),
-    "calc_allowed": (
-        "Calculator-allowed: irregular numerics, transcendental "
-        "evaluations, and multi-digit decimal arithmetic are fine."
-    ),
-}
-_FORMAT_INSTRUCTIONS = {
-    "mcq": (
-        "These problems will be served as multiple choice. Each problem "
-        "should have one clear correct answer that's distinct from common "
-        "student misconceptions. Distractors (3 plausible wrong answers) "
-        "will be generated separately — do NOT include answer choices in "
-        "the problem text itself."
-    ),
-}
+_PROBLEM_TYPE_INSTRUCTIONS: dict[str, str] = load_prompt_map("assignment_problem_type_instructions")
+_ANSWER_FORM_INSTRUCTIONS: dict[str, str] = load_prompt_map("assignment_answer_form_instructions")
+_DIFFICULTY_INSTRUCTIONS: dict[str, str] = load_prompt_map("assignment_difficulty_instructions")
+_CALCULATOR_INSTRUCTIONS: dict[str, str] = load_prompt_map("assignment_calculator_instructions")
+_FORMAT_INSTRUCTIONS: dict[str, str] = load_prompt_map("assignment_format_instructions")
 
 
 def _translate_params_to_instructions(params: dict[str, Any] | None) -> list[str]:

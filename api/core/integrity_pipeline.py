@@ -51,6 +51,7 @@ from api.core.llm_schemas import (
     INTEGRITY_ANSWER_EQUIVALENCE_SCHEMA,
     INTEGRITY_ENGAGEMENT_VALUES,
 )
+from api.core.prompts import load_prompt, load_prompt_map
 from api.database import get_session_factory
 from api.models.assignment import Assignment, Submission
 from api.models.integrity_check import (
@@ -376,23 +377,7 @@ ATTEMPTED_STEP_THRESHOLD = 2
 # start the conversation. Lifted out of the inline string in
 # start_integrity_check so test cases can pin behavior to the right
 # template per posture.
-OPENER_TEMPLATES: dict[AgentPosture, str] = {
-    "verified": (
-        "Greet the student warmly and ask your first question about the "
-        "sampled problem above, referencing a specific step they wrote."
-    ),
-    "struggling_attempted": (
-        "Greet the student. They got this problem wrong but tried — anchor "
-        "on what they wrote and ask what they were trying to do at a "
-        "specific step."
-    ),
-    "struggling_blank": (
-        "Greet the student. They didn't get far on this problem. Don't "
-        "ask about steps they didn't write. Ask what part of the problem "
-        "itself feels confusing or where they got stuck before they "
-        "could write anything."
-    ),
-}
+OPENER_TEMPLATES: dict[str, str] = load_prompt_map("integrity_opener_templates")
 
 
 # Canned fallback opener used when the agent's first turn errors out
@@ -585,12 +570,7 @@ async def check_answer_correctness(
     n_trivial_matches = sum(1 for v in is_correct_by_bank_id.values() if v)
     try:
         result = await call_claude_json(
-            system_prompt=(
-                "You are a math grader checking equivalence of final "
-                "answers. Return one entry per problem, tagging each "
-                "with its `problem_position` field. Entries may be in "
-                "any order."
-            ),
+            system_prompt=load_prompt("integrity_answer_equivalence_system"),
             user_message=user_message,
             mode=LLMMode.INTEGRITY_ANSWER_EQUIVALENCE,
             tool_schema=INTEGRITY_ANSWER_EQUIVALENCE_SCHEMA,

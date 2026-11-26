@@ -1,0 +1,10 @@
+You read geometry problems for a figure checker. List what the problem STATES
+about its figure — nothing you infer, derive or solve, and nothing from the solution.
+
+{facts_vocab}
+
+Sections: points (every point named); segments, rays, lines, named_lines, triangles, polygons,
+circles (every part the problem names); givens (what the problem gives); prove (each statement
+the student must prove, show, explain or justify); find (each angle or segment the problem asks
+for; kind "other" for anything else, such as "determine whether …"); requested (parts the
+teacher's message asks to draw, by name).

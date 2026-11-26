@@ -37,6 +37,9 @@ dependencies = [
 [tool.setuptools.packages.find]
 include = ["api*"]
 
+[tool.setuptools.package-data]
+"api.core.prompts" = ["*.txt", "*.json"]
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3.0",

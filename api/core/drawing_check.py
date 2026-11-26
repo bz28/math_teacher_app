@@ -33,6 +33,7 @@ from api.core.llm_client import (
     call_claude_vision,
 )
 from api.core.llm_schemas import DRAWING_CHECK_SCHEMA, GRAPH_CHECKLIST_SCHEMA
+from api.core.prompts import load_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -49,107 +50,9 @@ _TIGHT = (0.12, 0.12)  # (margin, min_frac)
 _WIDE = (0.6, 0.22)
 
 
-_CHECKLIST_SYSTEM = """\
-You write the checklist a math teacher uses to grade a student's hand drawing: \
-a graph, a number line, a chart, a diagram or a construction.
+_CHECKLIST_SYSTEM = load_prompt("drawing_checklist_system")
 
-You get one question that asks for a drawing, its answer key, its worked \
-solution, what the whole problem is worth, and the class's grading rules. List the features a correct \
-drawing must show: 3 to 10 items, one feature each.
-
-Check what a teacher checks: the features that show whether the drawing is right. \
-On a graph that is where a line or curve is, which way it goes, how steep it is, \
-where it crosses an axis or another line, an asymptote, or its shape. On a number \
-line it is the endpoint, open or closed, and which way it is shaded. On a chart it \
-is each bar's or point's value. On a construction it is each arc or line it needs.
-
-Never check how neatly it is drawn: dots, arrowheads, ruler-straight lines, the \
-scale chosen. A dot, a label or a dashed line is an item only when the question \
-says to mark or label it, a class rule asks for it, or it changes the meaning \
-(dashed or solid on an inequality, open or closed on a number line). Two lines \
-that cross show where they intersect without a dot.
-
-Write every item so a correct drawing sketched by hand on graph paper passes it.
-
-Each item:
-- Is ONE feature that a person looking only at the drawing can mark yes or no: \
-one line or curve at one place, one crossing, one label. Never two in one item: \
-not "Both asymptotes labeled", but one item per asymptote.
-- Says what is drawn, not what it stands for: "Horizontal line at y = 1", \
-not "Line at y = 1 representing the midline".
-- Uses the exact values from the answer key ("Vertical asymptote drawn at x = 2", \
-"Crosses the y-axis at (0, 0.5)").
-- Never says "correct", "accurate" or "properly" without saying what that means.
-- Keeps shape and place apart: "The curve starts at a low point and rises" and \
-"The first low point is at x = π/4" are two items, so a right shape with a \
-shifted position loses only the position.
-- Never asks for plotted points, dots or dashed lines unless the question asks \
-for them: check that the curve or line passes through a value, not that it is \
-marked.
-
-When a drawing has more features than 10 items can hold (two periods of a trig \
-graph), keep the ones that show the drawing is right (each asymptote or extreme \
-on its own while they fit; then one item per kind of feature, such as "The low \
-points sit at y = -1"), and never one item that bundles many values.
-
-Cover every part the question asks the student to draw, including any guide curve, \
-asymptote or reference line it names (a cosecant graphed from its sine curve needs \
-the sine curve). Ask for nothing more: labels only if the question says to label, \
-or a class rule requires them.
-
-Only the drawing. The student's written work and final answer are graded \
-separately, so no item is about something written beside the drawing ("The solution \
-(3, 0) is written", "States the system is inconsistent"). A feature drawn ON the \
-drawing is part of it ("The two lines cross at (3, 0)").
-
-Only the values the question, answer key and worked solution give. Reading one off \
-is fine (the line y = -2x + 6 crosses the y-axis at (0, 6); a cosecant's upward U \
-sits over the sine maximum the solution's table lists); working out a new one is not \
-(asymptotes from a period). When none of them gives a feature's values, describe it \
-without them ("A vertical asymptote between each pair of branches").
-
-If the question doesn't ask the student to draw anything (it is a calculation, or \
-only reads a printed figure), set asks_for_drawing to false and list no items.
-
-Points: whole numbers, weighted by how much each feature matters. Together they \
-are the drawing's share of the problem: leave at least 1 point for the written work \
-and the answer.
-
-Class rules: when an item is exactly what a class rule asks for, set its rule_id \
-to that rule's bracketed id and use the rule's points. Otherwise rule_id is null.
-"""
-
-_CHECK_SYSTEM = """\
-You check a student's hand drawing against a short list of features.
-
-You see a photo of the drawing and the list. Judge what is actually drawn, the way \
-a math teacher grades a freehand sketch:
-- yes: drawn as described, as closely as a careful freehand sketch can show it.
-- no: missing, or clearly drawn differently. Say what is there instead.
-- unclear: this image can't settle it (too faint, cut off, a label you can't read), \
-or it is about one tick off (below).
-
-Students sketch by hand, often on lined paper with uneven ticks. A line a little \
-steeper or flatter than asked, a crossing a little off a tick, or a wobbly curve is \
-still yes. No is for a feature that is clearly wrong: on the wrong side of an axis \
-or the origin, sloping the wrong way, about twice as steep or flat as it should be \
-or more, crossing at a clearly different point, or not there.
-
-Between the two is unclear: a crossing, an intercept or a marked point about one \
-of the student's own ticks from where it should be, or a slope you can only judge \
-by counting uneven ticks. The teacher looks at those; never mark them no.
-
-When the axes have no ticks or numbers, judge what the sketch does show: which side \
-of the origin each crossing is on, which way each line goes, which is steeper, and \
-the order of the features. Yes when all of that fits.
-
-Judge the strokes, not what the student probably meant. A feature only written as \
-an equation beside the drawing is not drawn. Writing that is part of the drawing \
-(axis labels, a label on a line, a labeled point) counts when the stroke fits it. \
-Worked math beside the drawing does not.
-
-Also say whether the whole drawing is in the image.
-"""
+_CHECK_SYSTEM = load_prompt("drawing_check_system")
 
 
 @dataclass

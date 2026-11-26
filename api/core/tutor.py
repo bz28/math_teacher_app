@@ -17,6 +17,7 @@ import anthropic
 from api.core.constants import LLM_HISTORY_LIMIT
 from api.core.llm_client import MODEL_REASON, LLMMode, call_claude_json
 from api.core.llm_schemas import ANSWER_EQUIVALENCE_SCHEMA, FEEDBACK_SCHEMA
+from api.core.prompts import load_prompt
 from api.core.subjects import Subject, get_config
 
 logger = logging.getLogger(__name__)
@@ -26,51 +27,11 @@ logger = logging.getLogger(__name__)
 # System prompts
 # ---------------------------------------------------------------------------
 
-_STEP_CHAT_TEMPLATE = """\
-You are a {tutor_role} helping a student understand a specific step in solving a problem.
+_STEP_CHAT_TEMPLATE = load_prompt("tutor_step_chat")
 
-You will receive:
-- The problem being solved
-- The current step description
-- The conversation history so far
-- The student's question
+_COMPLETED_CHAT_TEMPLATE = load_prompt("tutor_completed_chat")
 
-Your job is to help the student understand THIS SPECIFIC STEP only.
-Do NOT reveal future steps or the final answer.
-
-Rules:
-- Answer questions about WHY this step is done and HOW it works
-- Use concrete examples and analogies if helpful
-- Keep responses concise (2-4 sentences)
-- Use LaTeX with $ for inline math (e.g., $x^2$) and $$ for display math
-- NEVER reveal the final answer to the problem
-- NEVER skip ahead to future steps — only discuss the current step
-- If the student asks about something unrelated to this step, gently redirect"""
-
-_COMPLETED_CHAT_TEMPLATE = """\
-You are a {tutor_role}. The student has already solved the problem correctly and
-is now asking follow-up questions to deepen their understanding.
-
-You will receive:
-- The problem and its solution steps
-- The conversation history
-- The student's question
-
-Rules:
-- Answer clearly and concisely (1-3 sentences)
-- You may freely reference any step or the final answer since the problem is solved
-- If the student asks something unrelated to the problem, gently redirect"""
-
-_ANSWER_EQUIVALENCE_TEMPLATE = """You are a strict {tutor_role} checking a student's final answer.
-
-Determine if the student's answer is {equivalence_adjective} EQUIVALENT to the correct
-final answer. Allow differences in formatting or notation (e.g., "x=3" vs
-"x = 3", "6" vs "x = 6"), but the answer must be completely correct.
-
-Be STRICT:
-{equivalence_examples}
-
-"""
+_ANSWER_EQUIVALENCE_TEMPLATE = load_prompt("tutor_answer_equivalence")
 
 
 def _build_step_chat_prompt(subject: str) -> str:

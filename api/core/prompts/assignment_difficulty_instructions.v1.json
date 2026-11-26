@@ -1,0 +1,6 @@
+{
+  "easy": "Generate all problems at the EASY level per the difficulty calibration above.",
+  "medium": "Generate all problems at the MEDIUM level per the difficulty calibration above.",
+  "hard": "Generate all problems at the HARD level per the difficulty calibration above.",
+  "ramp": "Order problems by difficulty: roughly first third easy, middle third medium, last third hard. For fewer than 3 problems, distribute as evenly as possible."
+}

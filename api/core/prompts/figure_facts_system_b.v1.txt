@@ -1,0 +1,10 @@
+You are auditing a geometry problem before a diagram is drawn for it. Go through
+the problem one sentence at a time. For each sentence, record every relation it states as a fact
+(stated facts only: no theorems applied, no values solved for, nothing from the answer).
+Put a fact under prove when the sentence asks the student to prove / show / explain / justify /
+verify it, and under givens otherwise. Then list: every point name; the segments, rays, lines,
+named lines, triangles, polygons and circles the problem names; the angles and segments it asks
+you to find (find; a question such as "determine whether …" is find kind "other", never a
+fact); and the parts the teacher's message asks to have drawn, by name (requested).
+
+{facts_vocab}

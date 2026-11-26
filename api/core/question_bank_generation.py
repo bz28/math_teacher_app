@@ -61,6 +61,7 @@ from api.core.llm_schemas import (
 )
 from api.core.part_labels import PRACTICE_SINGLE_ANSWER_RULE, is_multi_part
 from api.core.practice import generate_distractors
+from api.core.prompts import load_prompt
 from api.core.subjects import get_config
 from api.database import get_session_factory
 from api.models.assignment import Assignment
@@ -802,34 +803,7 @@ async def _run_job(job_id: uuid.UUID) -> None:
             await db.commit()
 
 
-_EXTRACT_WORKSHEET_TEMPLATE = """\
-You are a {professor_role} extracting problems from a teacher's worksheet.
-
-The teacher has uploaded pages of an existing worksheet or problem set
-(photos or a PDF). Extract every individual problem exactly as written
-— do NOT rewrite, simplify, or invent new problems. Preserve the
-original wording and any LaTeX notation.
-
-Rules:
-- Extract each problem as a separate item
-- Use LaTeX with $ delimiters for math expressions
-- Use single backslashes for LaTeX commands (e.g. \\frac, \\sqrt)
-- If a problem references a diagram or figure, describe it in brackets
-  at the end of the problem text (same as image extraction rules)
-- Skip headers, instructions, page numbers, and non-problem text
-- If you cannot read something clearly, skip it rather than guessing
-- Rate each problem's difficulty based on the content
-- Extract at most 40 problems. If the worksheet has more, extract the
-  first 40 and stop.
-- DO NOT emit a `figure_spec` on any extracted problem. The
-  extraction job's contract is "copy the textbook verbatim" — and
-  the geometry DSL only covers triangles / circles / polygons, so
-  any attempt to translate a textbook figure into a spec would
-  either fail or produce a structurally-different diagram. Leave
-  figure_spec null and rely on the bracket-described figure text in
-  the problem itself. The teacher will see the original photo
-  alongside the extracted problem on review.
-"""
+_EXTRACT_WORKSHEET_TEMPLATE = load_prompt("bank_extract_worksheet")
 
 
 async def _extract_from_files(
@@ -940,11 +914,7 @@ def _empty_result_message(docs_selected: int, docs_used: int) -> str:
     )
 
 
-_REPLACEMENT_RULE = (
-    "Every problem must be complete on its own. Follow the when-to-draw rule; a problem that "
-    "gets a figure comes with its fact card (figure_facts) and a figure_spec that draws exactly "
-    "the card's points and parts."
-)
+_REPLACEMENT_RULE = load_prompt("bank_replacement_rule")
 
 
 def shortfall_note(asked: int, kept: int) -> str:
@@ -1436,16 +1406,7 @@ def snapshot_history(item: QuestionBankItem) -> None:
     item.previous_requires_drawing = item.requires_drawing
 
 
-_REGENERATE_SYSTEM_TEMPLATE = """\
-You are a {professor_role} revising a single problem for a teacher's question bank.
-
-Return one question with its complete worked solution and final answer. The
-solution must be step-by-step and pedagogically clear. Use LaTeX with $ delimiters
-for math expressions. Use single backslashes for LaTeX commands (e.g. \\frac, \\sqrt,
-\\begin{{pmatrix}}). Do not double-escape.
-
-Each step must have a short title (2-5 words) and a full description.
-"""
+_REGENERATE_SYSTEM_TEMPLATE = load_prompt("bank_regenerate_system")
 
 
 async def regenerate_one(

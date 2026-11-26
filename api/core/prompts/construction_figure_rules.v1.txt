@@ -1,0 +1,57 @@
+A figure (`figure_spec`) is a construction: you place named points at exact
+coordinates and list what to draw and mark. Code draws it and CHECKS it
+against the problem before anyone sees it; a figure that fails the check is
+not shown. Use `"type": "geometry", "shape": "construction"`.
+
+Rules:
+1. Include every point the problem names, with exactly those names (A, B,
+   A', M). A point needed only to place a line or an angle gets a hidden
+   name: "_" then lowercase letters or digits only ("_p1", "_q"; never
+   "_P" or "_mR"); it is never drawn or labelled.
+2. Choose coordinates so EVERY given is exactly true: parallel lines have the
+   same slope, perpendicular lines meet at 90°, a midpoint is exactly
+   halfway, a point "on" a segment lies on it, congruent segments have equal
+   lengths, congruent angles are equal, a bisector splits its angle exactly,
+   an angle stated as 50° measures 50°, lengths are in the stated
+   proportions. The statement to prove must be true in the drawing too.
+   Use a typical textbook layout about 6-10 units wide; x to the right,
+   y up. COMPUTE coordinates, never estimate them:
+   - an angle of k° at V: one arm along a direction you choose, the other
+     point at V + r·(cos(θ+k°), sin(θ+k°));
+   - a right angle at A opposite BC: put A on the circle with diameter BC;
+   - a point on segment AB: A + t·(B − A); a midpoint: the average;
+   - a bisector of ∠AVB: the ray at the average of the two arm directions;
+   - congruent or similar triangles: copy the first triangle's coordinates,
+     scaled by the ratio and moved (shift, and rotate if needed), so every
+     angle matches;
+   - stated lengths: place them at those lengths, or all scaled by one factor.
+   Give coordinates to 3 decimals.
+3. Draw every segment the problem names, every side of every triangle it
+   names, both sides of every angle it names, a ray as a `rays` entry
+   starting at its endpoint ("AB" is the ray from A through B), a line
+   through two points (line AB) as a `lines` entry through them, named lines
+   (p, q, t, ell_1) as named `lines`, a transversal when there is one, and
+   anything the teacher asks for. Draw nothing else.
+4. Mark the givens as a textbook does: `tick_groups` on congruent segments
+   (each congruent pair its own group), `arc_groups` on congruent angles,
+   `right_angles` where lines are perpendicular, `parallel_groups` on
+   parallel segments or lines. Each group lists at least two parts. NEVER
+   mark the statement to prove — the student has to prove it.
+5. Labels come only from the problem: numbered angles (∠1 →
+   `angle_labels` {"AEB": "1"}), and measures or lengths the problem states.
+   Never print an answer or any value the student has to find (nothing on
+   the angle or segment the problem asks for); a variable the problem uses
+   (x) may be shown. Every number on the figure must also
+   be in the problem text.
+6. It cannot draw 3D solids, curves other than circles (graphs of
+   functions, parabolas), coordinate grids, or pictures of real objects.
+   For those, don't emit a figure and say plainly that the diagram tool
+   can't draw it.
+
+Example — "Given: $\overline{PR}$ bisects $\angle QPS$ and
+$\overline{PQ} \cong \overline{PS}$. Prove: $\triangle PQR \cong \triangle PSR$":
+{"type": "geometry", "shape": "construction",
+ "points": {"P": [0, 0], "Q": [4, 3], "R": [8, 0], "S": [4, -3]},
+ "segments": ["PQ", "QR", "RS", "SP", "PR"],
+ "tick_groups": [["PQ", "PS"]],
+ "arc_groups": [["QPR", "RPS"]]}

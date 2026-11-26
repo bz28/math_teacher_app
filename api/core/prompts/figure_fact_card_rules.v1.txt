@@ -1,0 +1,17 @@
+How to write a problem that gets a figure: fill in its fact card (`figure_facts`) and leave the problem's text (`text`, or `question` when revising) empty. Code writes the problem from the card, one fixed phrase per fact ("$\overline{AB} \parallel \overline{CD}$", "$M$ is the midpoint of $\overline{BC}$"), then the question ("Prove: …", "Find $m\angle ABC$."), and checks the figure against the card. So every given, everything to prove or find, and everything the student constructs is a fact on the card; nothing else reaches the student.
+- points: every point the figure shows. segments, rays, lines (two points: "AB"), triangles, polygons, circles (by center): every part the figure shows, including an auxiliary line the problem adds (the median $\overline{AD}$ in "Draw the median AD. Prove …" is a segment the figure shows).
+- givens and prove: facts, each {kind, items, point, value, expr, circle}, naming only the card's points. find: an angle ("ABC"), a segment's length ("AB"), or kind "other" with a variable ("x") a given's expr uses.
+- constructs: what the STUDENT constructs or draws themselves, as facts the construction makes true ("Construct the bisector of angle A meeting BC at D": bisects_angle ["AD", "BAC"] and on_segment ["BC"] point "D"; "Construct the perpendicular bisector of AB": name the new line by two new points, bisects_segment ["MN", "AB"] point "M" and perpendicular ["MN", "AB"] point "M"). The figure never shows these parts, and a point only the construction makes (D, M, N) is not under points. Such a problem gets a figure of its givens only (the triangle the student starts from); this overrides "draw every point and segment the problem names" for what is under constructs.
+- context: optional, one of the fixed settings the schema lists ("A carpenter is building a roof frame."), or empty. The geometry is all on the card.
+- hint: optional, one of the fixed method hints the schema lists, or empty. "Work backward from what you need to prove." only when the card has something to prove.
+- The figure_spec draws exactly the card's points and parts, every given true.
+Fact kinds (angles "ABC" with the vertex in the middle, or "1" for a numbered angle):
+- parallel [l1, l2]; perpendicular [l1, l2] point P (required: where they meet); congruent_segments [s1, s2]; congruent_angles [a1, a2]
+- equal_length [s] with value or expr ("2x + 1"); angle_measure [a] with value (degrees) or expr
+- midpoint [s] point M; on_segment [s] point P; on_line [l] point P; collinear [P, Q, R] (in order along the line); intersect [l1, l2] point P; bisects_segment [bisector, s] (point); bisects_angle [ray, angle]; right_angle [a]; opposite_rays [r1, r2]
+- vertical_angles / linear_pair / supplementary / complementary / alternate_interior / alternate_exterior / corresponding / same_side_interior [a1, a2]
+- congruent_triangles / similar_triangles [t1, t2] in corresponding order; isosceles [t] (point: the apex); equilateral [t]; right_triangle [t] (point: the right angle)
+- parallelogram / rectangle / square / rhombus / trapezoid / isosceles_trapezoid / kite [polygon]
+- on_circle [P, Q] circle O; tangent [l] circle O point P; chord / diameter / radius [s] circle O; central_angle / inscribed_angle [a] circle O (value)
+- numbered_angle ["1", angle it labels]; transversal [t, l1, l2]
+Never put a theorem's name in a fact, the context or the hint.
