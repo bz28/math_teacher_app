@@ -8,15 +8,16 @@
 
 ## 1. What Veradic is
 
-Veradic is an AI math-education platform built around one loop: a student photographs
+Veradic is an AI math-education platform — **schools-only** — built around one loop: a student photographs
 their handwritten homework, and the platform reads the work, **grades** every problem
 with a written justification (a "receipt"), runs a short conversational **understanding
 check** to distinguish real understanding from a memorized or copied right answer, and
 gives the teacher a class-at-a-glance view with the students who need help surfaced
 first. It began as a single-student photo-tutoring app and has grown into a **school
-portal**: teachers run courses, assign homework, and review AI-drafted grades, while the
-original self-study loop (Learn / Practice / Mock-test) still exists in the app, but new
-accounts are invite-only (see §2), so only pre-beta independent learners use it.
+portal**: teachers run courses, assign homework, and review AI-drafted grades. The
+original self-study loop (Learn / Practice / Mock-test / Review / History) is hidden: its
+routes redirect to the portal: students to the school-student portal (the join-a-class view
+until they're enrolled), teachers and admins to the teacher portal. Its code stays because school practice shares the same AI core.
 All AI runs on Anthropic Claude.
 
 The product's headline capabilities are dramatized in the standalone sales demo
@@ -40,7 +41,6 @@ signed up before then keep their accounts.
 | Segment | Who | Job-to-be-done |
 |---|---|---|
 | **Students — school** | Enrolled in a teacher's section via invite/join-class | Do assigned homework by photographing work, see grades + feedback, practice weak spots. |
-| **Students — independent** | Self-study learners, no class (pre-beta accounts only; no new sign-ups) | Snap or type any problem, get tutored step-by-step, generate practice, take mock tests. |
 | **Teachers** | Run courses/sections; institutional, or indie (pre-beta only) | Turn worksheets into trusted assignments, let AI grade + understanding-check the class, walk in knowing who is struggling and what to reteach — with far less grading time. |
 | **Schools / districts** | The institutions teachers belong to; the buyer for `/for-districts` | Roll Veradic out across teachers/classes with trust, privacy, and visibility into learning. |
 
@@ -81,7 +81,7 @@ demo content.
   analytics on which students are slipping and which concepts the class is missing, and a
   path from a struggle signal to a reteach/practice set. *Value: visibility into learning,
   ranked and surfaced — no spreadsheet.*
-- **Learn** (self-study; `SessionMode.LEARN`, `api/core/step_decomposition.py`,
+- **Learn** (self-study, hidden; `SessionMode.LEARN`, `api/core/step_decomposition.py`,
   `tutor.py`). Decomposes a problem into ordered teachable steps with an interactive tutor
   the student can chat with at any step. *Value: guided problem-solving, not answers.*
 - **Practice** (`api/core/practice.py`, `api/routes/practice.py`,
@@ -106,7 +106,7 @@ Concrete inventory of **what exists today**, derived from
 `web/src/app/**`, `api/routes/**`, and `api/models/**`.
 
 ### Student — web `(app)/` + `/school/student/*` and mobile
-- Self-study: Home, Learn + Learn session, Practice, Mock-test, Review, History (list + detail).
+- Self-study (hidden — routes redirect to the portal): Home, Learn + Learn session, Practice, Mock-test, Review, History.
 - Classroom: student school home, course detail, homework detail, per-assignment practice,
   grades, practice-history; join a section via invite/`JoinClassScreen`.
 - Homework submission by photo → extraction confirm → grade + integrity understanding-check chat.
@@ -138,9 +138,8 @@ Concrete inventory of **what exists today**, derived from
 
 **Subjects (owner-confirmed):** **math is the full, mature subject; physics and chemistry
 are partial.** They appear as marketing surfaces (subject pages + mobile subject pills) and
-self-study sessions carry a `subject`, but engine depth beyond math is not complete — so
-ideate *may* propose deepening physics/chemistry, and should not assume they are on par
-with math.
+as a course subject teachers can pick, but engine depth beyond math is not complete — so
+don't assume they are on par with math.
 
 ## 5. Principles / non-goals
 

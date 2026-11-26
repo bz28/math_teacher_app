@@ -1,6 +1,6 @@
 # Veradic
 
-Veradic is an AI math-education **school portal**. A student photographs their handwritten homework; the platform reads the work, grades every problem with a written "receipt," runs a short conversational understanding-check to catch the student who got the right answer without really understanding, and hands the teacher a class they can see at a glance — graded, with the few students who need attention surfaced first. It serves three audiences from one codebase: **students** (school-enrolled and independent learners), **teachers** (courses, assignments, grading, analytics), and **schools/districts** (the institutions teachers belong to). Alongside the class workflow it keeps a self-study loop — Learn, Practice, and Mock-test — for individual learners.
+Veradic is an AI math-education **school portal**. A student photographs their handwritten homework; the platform reads the work, grades every problem with a written "receipt," runs a short conversational understanding-check to catch the student who got the right answer without really understanding, and hands the teacher a class they can see at a glance — graded, with the few students who need attention surfaced first. It is **schools-only**, serving three audiences from one codebase: **students** (enrolled in a teacher's class), **teachers** (courses, assignments, grading, analytics), and **schools/districts** (the institutions teachers belong to). The older self-study screens (Learn, Practice, Mock-test, Review, History) are hidden: their routes redirect to the school portal, and their code stays because school practice shares the same AI core.
 
 > This README is a map of the codebase. Product and customer context lives in [`docs/product/overview.md`](docs/product/overview.md).
 
@@ -10,14 +10,13 @@ Veradic is an AI math-education **school portal**. A student photographs their h
 The primary product surface **and** the marketing site, one Next.js 16 App Router app (React 19, TypeScript, Tailwind v4, Zustand, Framer Motion, KaTeX).
 - **Public / marketing**: landing (`/`), `/for-districts`, `/demo` (request-a-demo), `/subjects/{math,physics,chemistry}`, and legal pages under `(legal)/` (`/privacy`, `/terms`, `/support`, `/trust`).
 - **Auth**: `/login`, `/register` (invite-only: students need a class join code or invite, teachers a teacher invite), `/set-password`, `/invite` (section join).
-- **Student app** (`(app)/`): `/home`, self-study `/learn` + `/practice` + `/mock-test` + `/review` + `/history`, and the classroom surface under `/school/student/*` (courses, homework, per-assignment practice, grades, practice-history).
+- **Student app** (`(app)/`): the classroom surface under `/school/student/*` (courses, homework, per-assignment practice, grades, practice-history). The hidden self-study routes (`/home`, `/learn`, `/practice`, `/mock-test`, `/review`, `/history`) redirect to the user's portal (`web/src/lib/home-path.ts`).
 - **Teacher portal**: `/school/teacher/*` — courses, units, sections, assignments/homework, per-section grade review, per-student drill-down.
 - **Billing**: `/pricing` (Stripe checkout).
 
 ### Mobile — `mobile/` (Expo / React Native)
-The student-facing native app (Expo 54, React Native 0.81, TypeScript, Zustand, KaTeX via WebView). App name/slug **Veradic**. Two tab sets chosen at login:
-- **Personal learner**: Solve (photo → extract → learn), History, Review (weak spots), Account.
-- **School student**: Home, Grades, Study/Practice, Account — plus Join-class, Homework, and the Integrity understanding-check chat.
+The student-facing native app (Expo 54, React Native 0.81, TypeScript, Zustand, KaTeX via WebView). App name/slug **Veradic**. Every student lands on the school tab set:
+- **School student**: Home, Grades, Study/Practice, Account — plus Join-class, Homework, and the Integrity understanding-check chat. (The personal-learner screens remain in the code but nothing routes to them.)
 - IAP via RevenueCat; generates its typed API client from `openapi.json` (`npm run gen:api`).
 
 ### Demo — `demo/` (standalone Vite pitch site, demo.veradicai.com)
