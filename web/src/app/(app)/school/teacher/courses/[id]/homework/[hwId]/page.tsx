@@ -20,6 +20,7 @@ import {
   type HomeworkGraphChecklist,
 } from "@/lib/api";
 import { jobNotices } from "@/lib/job-notice";
+import { generatingLabel, generationProgress } from "@/lib/generation-progress";
 import { normalizeRubric } from "@/lib/rubric";
 import { buildChoices } from "@/lib/practice-choices";
 import { evenSplit, MAX_TOTAL_POINTS, pointsRange } from "@/lib/points";
@@ -788,17 +789,13 @@ export default function HomeworkDetailPage({
   const activeGenerating = activeJobs.some(
     (j) => j.status !== "done" && j.status !== "failed",
   );
-  // Aggregate counts across every job feeding this HW. Drives the
-  // hero and inline strip — clone-as-practice can have N jobs, so
-  // displaying any single job's count would underreport.
-  const aggregateRequested = activeJobs.reduce(
-    (s, j) => s + j.requested_count,
-    0,
-  );
-  const aggregateProduced = activeJobs.reduce(
-    (s, j) => s + j.produced_count,
-    0,
-  );
+  // Counts across every job feeding this HW (hero + inline strip), or
+  // just the running uploads while one is being read.
+  const {
+    requested: aggregateRequested,
+    produced: aggregateProduced,
+    reading: readingUpload,
+  } = generationProgress(activeJobs);
 
   // Failed-generation surfacing. A job that ends `status:"failed"`
   // (backend failure OR the poll-ceiling timeout above) drops out of
@@ -1137,6 +1134,7 @@ export default function HomeworkDetailPage({
               <ProblemsGeneratingHero
                 requestedCount={aggregateRequested}
                 producedCount={aggregateProduced}
+                reading={readingUpload}
               />
             ) : problems.length === 0 ? (
               <ProblemsEmptyHero
@@ -1161,9 +1159,10 @@ export default function HomeworkDetailPage({
                     </span>
                     <span>
                       <span className="font-semibold">
-                        {aggregateProduced > 0
-                          ? `Generating ${aggregateRequested} more… · ${aggregateProduced} of ${aggregateRequested} ready`
-                          : `Generating ${aggregateRequested} more…`}
+                        {generatingLabel(aggregateRequested, readingUpload, "more")}
+                        {aggregateProduced > 0 && aggregateRequested > 0
+                          ? ` · ${aggregateProduced} of ${aggregateRequested} ready`
+                          : ""}
                       </span>{" "}
                       <span className="text-text-secondary">new ones land in the review queue when ready.</span>
                     </span>
@@ -1463,11 +1462,12 @@ function ProblemsEmptyHero({
 function ProblemsGeneratingHero({
   requestedCount,
   producedCount,
+  reading,
 }: {
   requestedCount: number;
   producedCount: number;
+  reading: boolean;
 }) {
-  const noun = requestedCount === 1 ? "problem" : "problems";
   // role="status" announces text changes politely — drives the "X of Y
   // ready" subcopy update so screen-reader users hear progress.
   return (
@@ -1478,12 +1478,14 @@ function ProblemsGeneratingHero({
     >
       <div className="animate-pulse text-5xl" aria-hidden="true">✨</div>
       <h3 className="mt-4 text-lg font-bold text-text-primary">
-        Generating {requestedCount} {noun}…
+        {generatingLabel(requestedCount, reading)}
       </h3>
       <p className="mt-1 text-xs text-text-muted">
-        {producedCount > 0
+        {producedCount > 0 && requestedCount > 0
           ? `${producedCount} of ${requestedCount} ready — they'll land in the review queue as the AI finishes each one.`
-          : "The AI is crafting them from your uploaded materials. Usually about 30 seconds."}
+          : reading
+            ? "The AI is copying each problem from your pages and working out its solution. They'll land in the review queue for you to approve."
+            : "The AI is writing them from your unit and materials. Usually about 30 seconds."}
       </p>
     </div>
   );

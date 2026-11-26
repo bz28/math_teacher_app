@@ -4,6 +4,7 @@ import { use, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { teacher, type BankItem } from "@/lib/api";
+import { oldestFirst } from "@/lib/generation-progress";
 import { WorkshopModal } from "@/components/school/teacher/workshop-modal";
 import { PageErrorState } from "@/components/ui/page-error-state";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -68,6 +69,7 @@ export default function HomeworkReviewPage({
         status: "pending",
         assignment_id: assignmentId,
       });
+      const items = oldestFirst(res.items);
       // Practice items are variations by design (clone-from-HW
       // parents each one on a source HW primary), so skip the
       // variation filter for practice — otherwise we'd drop every
@@ -75,9 +77,9 @@ export default function HomeworkReviewPage({
       // hides "generate similar" scaffolding attached to an existing
       // primary.
       if (assignmentType === "practice") {
-        return res.items;
+        return items;
       }
-      return res.items.filter((i) => i.parent_question_id === null);
+      return items.filter((i) => i.parent_question_id === null);
     },
     [courseId, assignmentId],
   );

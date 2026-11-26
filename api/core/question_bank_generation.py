@@ -15,7 +15,7 @@ import logging
 import re
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 from pydantic import ValidationError
@@ -1335,6 +1335,14 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
     # retry banner; no DB-side error path needed.
     requested_mcq = bool(job.params and job.params.get("format") == FORMAT_MCQ)
 
+    # created_at is the only record of a set's order: the review queue lists
+    # by it and approval files each problem by it. The column default is the
+    # transaction's start time, so a whole batch would tie and come back in
+    # any order: a worksheet's problem 6 could land first. One millisecond
+    # apart (the finest a browser's Date compares) keeps the order the
+    # problems were read or written in.
+    made_at = datetime.now(UTC)
+
     for idx, (q, s) in enumerate(zip(question_dicts, solutions), start=1):
         item_distractors = distractor_lists[idx - 1] or None
         item_format = (
@@ -1376,6 +1384,7 @@ async def _run_generation(db: AsyncSession, job: QuestionBankGenerationJob) -> N
             figure_spec=figure_spec,
             figure_svg=figure_svg,
             figure_facts=q.get("figure_facts") if figure_svg else None,
+            created_at=made_at + timedelta(milliseconds=idx),
         )
         db.add(item)
         if idx % _PROGRESS_BATCH == 0:
