@@ -6,6 +6,7 @@ import { AppLayout } from "@/components/shared/app-layout";
 import { PageTransition } from "@/components/shared/page-transition";
 import { TourProvider, type TourPersona } from "@/components/tour";
 import { ReportProblemProvider } from "@/components/school/teacher/report-problem";
+import { WalkthroughProvider } from "@/components/walkthrough";
 import { useAuthStore } from "@/stores/auth";
 
 export default function AppRouteLayout({
@@ -33,9 +34,13 @@ export default function AppRouteLayout({
             the sidebar fallback and every per-grade trigger on the
             review page open the same dialog with different context. */}
         <ReportProblemProvider>
-          <AppLayout>
-            <PageTransition>{children}</PageTransition>
-          </AppLayout>
+          {/* Teacher video walkthrough — openable from the sidebar, the
+              courses list, and each workspace tab's "Watch how" link. */}
+          <WalkthroughProvider>
+            <AppLayout>
+              <PageTransition>{children}</PageTransition>
+            </AppLayout>
+          </WalkthroughProvider>
         </ReportProblemProvider>
       </TourProvider>
     </AuthGuard>

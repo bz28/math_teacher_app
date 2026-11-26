@@ -2,12 +2,11 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { teacher, type TeacherCourse } from "@/lib/api";
 import { formatDueRelative } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
-import { TOUR_ACTIONS, TOUR_IDS, useTour, useTourAction } from "@/components/tour";
+import { WatchHow, useWalkthrough } from "@/components/walkthrough";
 import { StatusPill } from "@/components/school/teacher/_pieces/status-pill";
 import { SubjectChip } from "@/components/school/teacher/_pieces/subject-chip";
 import { NeedsYouQueue } from "@/components/school/teacher/_pieces/needs-you-queue";
@@ -37,44 +36,24 @@ export default function SchoolTeacherDashboard() {
     reload();
   }, []);
 
-  // ── Onboarding tour wiring ──
-  // A brand-new teacher lands here with no courses, so the courses list
-  // is where the Field Guide tour begins. This page owns the first-run
-  // auto-start and the live New-course handoff (step one); the tour's
-  // provider lives in the app layout, so its state survives the
-  // navigation into the freshly-created course, where it resumes at the
-  // "Create a section" step (the course workspace no longer auto-starts).
-  const router = useRouter();
-  const tour = useTour();
+  // ── First-login walkthrough ──
+  // A teacher who has never seen the video walkthrough gets it once, on
+  // their first visit to My Courses (desktop and mobile alike — it's just
+  // a video). Seen-state reuses the `tours_seen` "teacher" key, so
+  // teachers who already took the old spotlight tour aren't shown it.
+  // Marked seen on open, not close: a refresh mid-video must not loop it.
+  const walkthrough = useWalkthrough();
   const user = useAuthStore((s) => s.user);
-
-  useTourAction(TOUR_ACTIONS.openNewCourse, () => setShowNewCourse(true));
-  useTourAction(TOUR_ACTIONS.closeNewCourse, () => setShowNewCourse(false));
-
-  const autoStartedRef = useRef(false);
+  const markTourSeen = useAuthStore((s) => s.markTourSeen);
+  const autoOpenedRef = useRef(false);
   useEffect(() => {
-    if (autoStartedRef.current) return;
-    // Don't restart a tour that's already running. A remount while the
-    // tour is live — e.g. step one navigates into the new course, then
-    // the teacher hits browser Back to this page — must resume in place,
-    // not reset to the welcome and wipe progress. tours_seen still lacks
-    // "teacher" mid-tour, so this active-guard is what holds the line.
-    if (tour.isActive) return;
-    if (!user || user.role !== "teacher") return;
+    if (autoOpenedRef.current) return;
+    if (!user || user.role !== "teacher" || user.is_preview) return;
     if (user.tours_seen.includes("teacher")) return;
-    // Desktop only — the spotlight tour's targets live in controls that
-    // collapse/hide on mobile (e.g. the New-course button in a narrow
-    // header), so a phone auto-start would spotlight unreachable elements.
-    if (typeof window === "undefined" || !window.matchMedia("(min-width: 768px)").matches) return;
-    // Mount after first paint so the New-course button (step one's
-    // target) exists. Latch only when start() actually fires, so a
-    // cancelled frame reschedules rather than dropping the tour.
-    const raf = requestAnimationFrame(() => {
-      autoStartedRef.current = true;
-      tour.start("teacher");
-    });
-    return () => cancelAnimationFrame(raf);
-  }, [user, tour]);
+    autoOpenedRef.current = true;
+    walkthrough.open("welcome");
+    void markTourSeen("teacher");
+  }, [user, walkthrough, markTourSeen]);
 
   // Roll-ups across every course — the "what needs me right now" line
   // teachers want to see before they pick which course to open.
@@ -110,15 +89,22 @@ export default function SchoolTeacherDashboard() {
                   ? "Nothing here yet."
                   : describeWorkload(courses.length, totals)}
             </p>
+            {/* The walkthrough entry on phones, where the sidebar (and its
+                "Video walkthrough" item) is hidden. With no courses the
+                empty state carries its own link. */}
+            {courses.length > 0 && (
+              <WatchHow chapter="welcome" className="-ml-1.5 mt-2 md:hidden" />
+            )}
           </div>
-          <button
-            type="button"
-            data-tour-id={TOUR_IDS.teacherNewCourse}
-            className="shrink-0 rounded-[--radius-sm] bg-primary px-4 py-2 text-sm font-semibold tracking-[0.01em] text-white transition-colors hover:bg-primary-dark"
-            onClick={() => setShowNewCourse(true)}
-          >
-            New Course
-          </button>
+          <div className="flex shrink-0 items-center gap-3">
+            <button
+              type="button"
+              className="shrink-0 rounded-[--radius-sm] bg-primary px-4 py-2 text-sm font-semibold tracking-[0.01em] text-white transition-colors hover:bg-primary-dark"
+              onClick={() => setShowNewCourse(true)}
+            >
+              New Course
+            </button>
+          </div>
         </div>
       </motion.div>
 
@@ -144,6 +130,10 @@ export default function SchoolTeacherDashboard() {
           >
             Create your first course →
           </button>
+          <p className="mt-6 text-sm text-text-secondary">
+            New to Veradic? See the whole job, from setup to published grades.
+          </p>
+          <WatchHow chapter="welcome" className="mt-1" />
         </div>
       )}
 
@@ -175,27 +165,10 @@ export default function SchoolTeacherDashboard() {
 
       {showNewCourse && (
         <NewCourseModal
-          onClose={() => {
-            // During the first-run gate the dialog is the only forward
-            // path. Cancelling it returns to step one's spotlight (a
-            // re-prompt) — it must not advance, and must not leave a
-            // dangling resume bar. tour.back() while handed off runs the
-            // close action and drops back to the spotlight, same step.
-            if (tour.handoffActive) tour.back();
-            else setShowNewCourse(false);
-          }}
-          onCreated={(courseId) => {
+          onClose={() => setShowNewCourse(false)}
+          onCreated={() => {
             setShowNewCourse(false);
-            // During the first-run tour, creating a course advances past
-            // step one and carries the (layout-level) tour into the new
-            // course workspace, where it resumes at "Create a section".
-            // Outside the tour, just refresh the list in place.
-            if (tour.isActive) {
-              tour.next();
-              router.push(`/school/teacher/courses/${courseId}`);
-            } else {
-              reload();
-            }
+            reload();
           }}
         />
       )}
