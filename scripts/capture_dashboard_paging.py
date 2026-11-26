@@ -72,7 +72,6 @@ FIXED_TARGETS = [
     # before/after shots of a broken page. Run `alembic upgrade head` first;
     # a picture of an error page is worse than no picture.
     ("quality", "/quality"),  # server-paged
-    ("generation-quality", "/generation-quality"),  # server-paged
 ]
 
 
