@@ -211,5 +211,25 @@ export function useRosterLoad({
     return () => {
       cancelled = true;
     };
-  }, [assignmentId, courseId, sectionId, focusStudentId, watchGrades, setDirtyOtherSections, setDirtyReviewedOtherSections, setFlaggedOtherSections, setGradedOtherSections, setGraphOtherSections, setPendingOtherSections, setPendingReviewedOtherSections, setError, setHwDueAt, setHwRubric, setHwTitle, setRoster, setSectionName, setSelectedStudentId]);
+  }, [
+    assignmentId,
+    courseId,
+    sectionId,
+    focusStudentId,
+    watchGrades,
+    setDirtyOtherSections,
+    setDirtyReviewedOtherSections,
+    setFlaggedOtherSections,
+    setGradedOtherSections,
+    setGraphOtherSections,
+    setPendingOtherSections,
+    setPendingReviewedOtherSections,
+    setError,
+    setHwDueAt,
+    setHwRubric,
+    setHwTitle,
+    setRoster,
+    setSectionName,
+    setSelectedStudentId,
+  ]);
 }

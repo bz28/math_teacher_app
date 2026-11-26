@@ -987,7 +987,19 @@ function HomeworkSectionReview({
         setPublishing(false);
       }
     },
-    [assignmentId, pendingReviewedOtherSections, dirtyReviewedOtherSections, setDetail, setDirtyOtherSections, setDirtyReviewedOtherSections, setFlaggedOtherSections, setGraphOtherSections, setPendingOtherSections, setPendingReviewedOtherSections, setPublishConfirmOpen],
+    [
+      assignmentId,
+      pendingReviewedOtherSections,
+      dirtyReviewedOtherSections,
+      setDetail,
+      setDirtyOtherSections,
+      setDirtyReviewedOtherSections,
+      setFlaggedOtherSections,
+      setGraphOtherSections,
+      setPendingOtherSections,
+      setPendingReviewedOtherSections,
+      setPublishConfirmOpen,
+    ],
   );
 
   // Publish-button click gate. If every grade about to go out is approved
