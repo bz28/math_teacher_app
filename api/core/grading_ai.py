@@ -35,7 +35,7 @@ from api.core.llm_client import (
     call_claude_json,
 )
 from api.core.llm_schemas import AI_GRADING_SCHEMA
-from api.core.prompts import load_prompt
+from api.core.prompts import load_prompt, prompt_ids_in
 from api.models.assignment import Assignment, Submission, SubmissionGrade
 from api.models.course import Course
 from api.services.bank import load_problems_for_assignment
@@ -564,6 +564,11 @@ async def grade_submission_with_ai(
     # The saving only materializes when submissions are graded close
     # together — the ephemeral cache lives 5 minutes.
     system = _build_system_prompt(rubric, problems)
+    # The default credit text and the class-rules intro are in the prompt only
+    # when the rubric needs them; log the versions actually sent.
+    prompt_ids = ("grading_system", *prompt_ids_in(
+        system, "grading_default_full_credit", "grading_default_partial_credit", "grading_class_rules_intro",
+    ))
     user_message = _build_user_message(extraction, problems)
 
     # Opus, for the reason in `api.config` (llm_model_opus). It always
@@ -595,6 +600,7 @@ async def grade_submission_with_ai(
             user_id=user_id,
             submission_id=submission_id,
             call_metadata={"phase": "ai_grading", "attempt": attempt},
+            prompt_ids=prompt_ids,
         )
 
     result = await grade(1)

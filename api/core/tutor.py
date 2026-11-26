@@ -91,6 +91,7 @@ async def step_chat(
         _build_step_chat_prompt(subject), prompt, LLMMode.STEP_CHAT,
         tool_schema=FEEDBACK_SCHEMA,
         session_id=session_id, user_id=user_id, model=MODEL_REASON,
+        prompt_ids=("tutor_step_chat",),
     )
     return StepChatResult(feedback=str(data.get("feedback", "")))
 
@@ -124,6 +125,7 @@ async def completed_chat(
         _build_completed_chat_prompt(subject), prompt, LLMMode.STEP_CHAT,
         tool_schema=FEEDBACK_SCHEMA,
         session_id=session_id, user_id=user_id, model=MODEL_REASON,
+        prompt_ids=("tutor_completed_chat",),
     )
     return StepChatResult(feedback=str(data.get("feedback", "")))
 
@@ -148,6 +150,7 @@ async def check_answer_equivalence(
             _build_equivalence_prompt(subject), user_msg,
             mode=LLMMode.ANSWER_EQUIVALENCE, tool_schema=ANSWER_EQUIVALENCE_SCHEMA,
             session_id=session_id, user_id=user_id,
+            prompt_ids=("tutor_answer_equivalence",),
         )
         return bool(result.get("is_correct", False))
     except (anthropic.APIError, anthropic.APITimeoutError, RuntimeError):

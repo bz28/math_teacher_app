@@ -18,7 +18,7 @@ import logging
 import os
 import re
 import time
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, TypeVar
@@ -30,7 +30,7 @@ from api.config import settings
 from api.core.cost_tracker import PlatformStopError, cost_tracker
 from api.core.llm_logging import fire_and_forget_persist
 from api.core.llm_schemas import ToolSchema
-from api.core.prompts import load_prompt
+from api.core.prompts import load_prompt, prompt_version
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +153,20 @@ def _with_safety(user_system_prompt: str | None) -> str:
     if not user_system_prompt:
         return SAFETY_PREAMBLE
     return f"{SAFETY_PREAMBLE}\n\n{user_system_prompt}"
+
+
+def _with_prompt_versions(
+    call_metadata: dict[str, Any] | None, prompt_ids: Sequence[str],
+) -> dict[str, Any]:
+    """Record which versioned prompts built this call (see api/core/prompts).
+
+    The safety preamble wraps every system prompt, so it's always listed.
+    Lives in call_metadata so it's persisted on llm_calls without a schema
+    change and stays out of the harness cassette key."""
+    return {
+        **(call_metadata or {}),
+        "prompt_versions": [prompt_version(p) for p in ("safety_preamble", *prompt_ids)],
+    }
 
 
 def _build_thinking_kwargs(
@@ -521,6 +535,7 @@ def _cassetted(default_model: str) -> Callable[[_F], _F]:
                 MISS,
                 CassetteMissError,
                 build_identity,
+                note_prompt_versions,
                 summarize,
             )
 
@@ -537,6 +552,8 @@ def _cassetted(default_model: str) -> Callable[[_F], _F]:
                 cm.get("harness_cassette_key") if isinstance(cm, dict) else None
             )
             identity = build_identity(args_dict, default_model)
+            versions = _with_prompt_versions(cm, args_dict.get("prompt_ids", ()))["prompt_versions"]
+            note_prompt_versions(versions)
             if override is not None:
                 key = cassette.key(fn.__name__, {"k": str(override)})
             else:
@@ -556,7 +573,9 @@ def _cassetted(default_model: str) -> Callable[[_F], _F]:
                     "Re-run with HARNESS_LLM_MODE=record or auto to record it.",
                 )
             result = await fn(*args, **kwargs)
-            await cassette.put(fn.__name__, key, result, summarize(identity))
+            await cassette.put(
+                fn.__name__, key, result, {**summarize(identity), "prompt_versions": versions},
+            )
             return result
 
         return wrapper  # type: ignore[return-value]
@@ -581,6 +600,7 @@ async def call_claude_json(
     submission_id: str | None = None,
     generation_job_id: str | None = None,
     call_metadata: dict[str, Any] | None = None,
+    prompt_ids: Sequence[str] = (),
     timeout: float = 90.0,
 ) -> dict[str, object]:
     """Call Claude and return a structured JSON dict via tool use.
@@ -628,6 +648,7 @@ async def call_claude_json(
             retried at temperature 0 — the same request truncates the
             same way.
     """
+    call_metadata = _with_prompt_versions(call_metadata, prompt_ids)
     if not _circuit.allow_request():
         raise PlatformStopError("Circuit breaker is open — Claude API temporarily unavailable")
     await cost_tracker.check_limit()
@@ -1019,6 +1040,7 @@ async def call_claude_conversation(
     temperature: float | None = None,
     submission_id: str | None = None,
     call_metadata: dict[str, Any] | None = None,
+    prompt_ids: Sequence[str] = (),
     on_text: TextDeltaCallback | None = None,
 ) -> list[dict[str, Any]]:
     """Run one conversational turn with multiple tools available and
@@ -1061,6 +1083,7 @@ async def call_claude_conversation(
     Single attempt. Used by the integrity conversational agent; the
     caller handles retries when tool input validation fails.
     """
+    call_metadata = _with_prompt_versions(call_metadata, prompt_ids)
     if not _circuit.allow_request():
         raise RuntimeError(
             "Circuit breaker is open — Claude API temporarily unavailable",
@@ -1171,6 +1194,7 @@ async def call_claude_vision(
     submission_id: str | None = None,
     generation_job_id: str | None = None,
     call_metadata: dict[str, Any] | None = None,
+    prompt_ids: Sequence[str] = (),
 ) -> dict[str, object]:
     """Call Claude with image content (Vision) and return structured JSON via tool use.
 
@@ -1187,6 +1211,7 @@ async def call_claude_vision(
     every run. Mirrors call_claude_json's guard: extended thinking forces
     temperature 1.0, so a custom temperature requires thinking_budget=None.
     """
+    call_metadata = _with_prompt_versions(call_metadata, prompt_ids)
     if not _circuit.allow_request():
         raise PlatformStopError("Circuit breaker is open — Claude API temporarily unavailable")
     await cost_tracker.check_limit()

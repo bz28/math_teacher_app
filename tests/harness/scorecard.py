@@ -668,6 +668,8 @@ def add_parser(sub: Any) -> None:
 
 
 def run_cli(args: argparse.Namespace) -> int:
+    from tests.harness.cassette import used_prompt_versions
+
     # Checked before anything else: a mistyped path must not judge against an
     # empty baseline (every how-good and case check would silently pass).
     if not args.baseline.exists() and not args.write_baseline:
@@ -690,7 +692,11 @@ def run_cli(args: argparse.Namespace) -> int:
         args.baseline.write_text(json.dumps(baseline, indent=2, sort_keys=True) + "\n")
     ok = judge(rows, baseline, args.only)
     print(render(rows))  # noqa: T201
+    print("prompt versions: " + ", ".join(used_prompt_versions()))  # noqa: T201
     if args.json:
-        args.json.write_text(json.dumps([asdict(r) | {"status": r.status} for r in rows], indent=2))
+        args.json.write_text(json.dumps({
+            "prompt_versions": used_prompt_versions(),
+            "rows": [asdict(r) | {"status": r.status} for r in rows],
+        }, indent=2))
     sys.stdout.flush()
     return 0 if ok else 1

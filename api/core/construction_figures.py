@@ -90,6 +90,7 @@ async def redraw_figure(
             thinking_budget=_REDRAW_THINKING,
             max_tokens=_REDRAW_THINKING + 4096,
             generation_job_id=generation_job_id,
+            prompt_ids=("figure_redraw_intro", "construction_figure_rules"),
         )
     except Exception:
         logger.exception("figure redraw call failed")
@@ -122,6 +123,7 @@ async def draw_figure(
             _REDRAW_SYSTEM, message, mode=mode, tool_schema=FIGURE_REDRAW_SCHEMA, user_id=user_id,
             model=MODEL_REASON, thinking_budget=_REDRAW_THINKING, max_tokens=_REDRAW_THINKING + 4096,
             generation_job_id=generation_job_id,
+            prompt_ids=("figure_redraw_intro", "construction_figure_rules"),
         )
     except Exception:
         logger.exception("fresh figure call failed")
@@ -138,13 +140,17 @@ _FACTS_SYSTEM_A = load_prompt("figure_facts_system_a").format(facts_vocab=_FACTS
 
 _FACTS_SYSTEM_B = load_prompt("figure_facts_system_b").format(facts_vocab=_FACTS_VOCAB)
 
+_FACTS_IDS_A = ("figure_facts_system_a", "figure_facts_vocab")
+_FACTS_IDS_B = ("figure_facts_system_b", "figure_facts_vocab")
 
-async def _read_once(system: str, message: str, *, mode: str, user_id: str | None,
+
+async def _read_once(system: str, message: str, *, prompt_ids: tuple[str, ...], mode: str, user_id: str | None,
                      generation_job_id: str | None) -> Any:
 
     result = await call_claude_json(
         system, message, mode=mode, tool_schema=FACTS_TOOL, user_id=user_id, model=MODEL_REASON,
         max_tokens=4096, temperature=0.0, generation_job_id=generation_job_id,
+        prompt_ids=prompt_ids,
     )
     # `dropped` is code's own log of what it set aside, never the reading's.
     return FigureFacts.model_validate(result).model_copy(update={"dropped": [], "source": "reading", "constructs": []})
@@ -187,9 +193,9 @@ async def read_figure_facts(
     message += f"\n\nThe teacher's message:\n{request or '(none)'}"
     try:
         a, b = await asyncio.gather(
-            _read_once(_FACTS_SYSTEM_A, message, mode=f"{mode}_facts_a", user_id=user_id,
+            _read_once(_FACTS_SYSTEM_A, message, prompt_ids=_FACTS_IDS_A, mode=f"{mode}_facts_a", user_id=user_id,
                        generation_job_id=generation_job_id),
-            _read_once(_FACTS_SYSTEM_B, message, mode=f"{mode}_facts_b", user_id=user_id,
+            _read_once(_FACTS_SYSTEM_B, message, prompt_ids=_FACTS_IDS_B, mode=f"{mode}_facts_b", user_id=user_id,
                        generation_job_id=generation_job_id),
         )
     except Exception:

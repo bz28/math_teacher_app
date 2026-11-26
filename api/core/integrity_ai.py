@@ -273,6 +273,7 @@ async def extract_student_work_from_pages(
         user_id=user_id,
         submission_id=str(submission_id) if submission_id else None,
         call_metadata={"phase": "vision_extract"},
+        prompt_ids=("integrity_extract_system",),
     )
     # Every drawing is RECORDED (a missed requires_drawing flag must be
     # recoverable by flipping it and regrading); only the ones the grader
@@ -411,6 +412,7 @@ async def _verify_one(
                     "problem_position": v.get("problem_position"),
                     "margin": margin,
                 },
+                prompt_ids=("integrity_verify_crop",),
             )
         except Exception:  # noqa: BLE001 — verification is best-effort
             logger.exception("visual_work verify failed submission=%s", submission_id)
@@ -725,6 +727,7 @@ async def run_agent_turn(
         submission_id=submission_id,
         call_metadata=call_metadata,
         on_text=on_text,
+        prompt_ids=("integrity_agent_system", "integrity_posture_fragments", "integrity_opener_templates"),
     )
     return [_AgentContentBlock(b) for b in blocks]
 
@@ -845,4 +848,5 @@ async def diagnose_wrong_problem(
         model=MODEL_HAIKU,
         submission_id=submission_id,
         call_metadata=call_metadata,
+        prompt_ids=("integrity_diagnose_wrong_system",),
     )

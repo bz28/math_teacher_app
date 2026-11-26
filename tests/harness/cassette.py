@@ -81,6 +81,7 @@ _IDENTITY_EXCLUDE = {
     "generation_job_id",
     "call_metadata",
     "max_retries",
+    "prompt_ids",
     # Operational, not response-determining: changing a call's timeout must
     # not invalidate its recordings.
     "timeout",
@@ -188,6 +189,20 @@ class Cassette:
 
 
 _instance: Cassette | None = None
+
+# Every prompt version (api/core/prompts) a cassetted call in this process
+# used, recorded or replayed — what an eval run reports it ran against.
+# Process-wide, not per Cassette: probes that point HARNESS_CASSETTE_DIR
+# elsewhere get a fresh instance, and the run's record must span them all.
+_used_prompt_versions: set[str] = set()
+
+
+def note_prompt_versions(versions: list[str]) -> None:
+    _used_prompt_versions.update(versions)
+
+
+def used_prompt_versions() -> list[str]:
+    return sorted(_used_prompt_versions)
 
 
 def get_cassette() -> Cassette | None:

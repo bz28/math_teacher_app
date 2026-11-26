@@ -85,6 +85,12 @@ def load_prompt(name: str) -> str:
     return prompt_file(name, "txt").read_bytes().decode("utf-8")
 
 
+def prompt_ids_in(text: str, *names: str) -> tuple[str, ...]:
+    """The named text prompts that appear verbatim in ``text`` — for rules a
+    caller passes into a free-text argument (e.g. a teacher's instructions)."""
+    return tuple(n for n in names if load_prompt(n) in text)
+
+
 @cache
 def load_prompt_map(name: str) -> dict[str, str]:
     """A keyed set of prompt fragments (e.g. one per posture)."""

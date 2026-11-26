@@ -115,6 +115,15 @@ _CONSTRUCTION_STEP_FIGURES = load_prompt("step_construction_figures")
 StepFigures = Literal["shapes", "construction", "none"]
 
 
+def _step_prompt_ids(figures: StepFigures) -> tuple[str, ...]:
+    """The prompt files `_build_system_prompt` assembles for this figure mode."""
+    return ("step_decomposition_system", *{
+        "shapes": ("step_shape_figures",),
+        "construction": ("step_construction_figures", "construction_figure_rules"),
+        "none": (),
+    }[figures])
+
+
 def _build_system_prompt(subject: str, figures: StepFigures = "shapes") -> str:
     cfg = get_config(subject)
     prompt = _SYSTEM_PROMPT_TEMPLATE.format(
@@ -341,6 +350,7 @@ async def decompose_problem(
             thinking_budget=2000,
             user_id=user_id,
             generation_job_id=generation_job_id,
+            prompt_ids=_step_prompt_ids(figures),
         )
     else:
         result = await call_claude_json(
@@ -353,6 +363,7 @@ async def decompose_problem(
             thinking_budget=2000,
             user_id=user_id,
             generation_job_id=generation_job_id,
+            prompt_ids=_step_prompt_ids(figures),
         )
 
     steps, final_answer, answer_type = _parse_decomposition(result)

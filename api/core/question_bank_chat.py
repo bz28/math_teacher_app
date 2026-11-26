@@ -247,6 +247,7 @@ async def chat_with_bank_item(
                 user_id=str(user_id),
                 model=MODEL_REASON,
                 max_tokens=4096,
+                prompt_ids=("bank_chat_system", "bank_chat_construction_figures", "construction_figure_rules"),
             )
         else:
             result = await call_claude_json(
@@ -257,6 +258,7 @@ async def chat_with_bank_item(
                 user_id=str(user_id),
                 model=MODEL_REASON,
                 max_tokens=4096,
+                prompt_ids=("bank_chat_system", "bank_chat_construction_figures", "construction_figure_rules"),
             )
     except Exception as e:
         logger.exception("Bank chat call failed")
