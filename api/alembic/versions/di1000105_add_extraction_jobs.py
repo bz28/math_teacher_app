@@ -29,11 +29,15 @@ each, for work nobody asked for. That is `stage_for`'s
 difference between a backfill that heals a backlog and one that invents
 one.
 
-Only the last 14 days. This table lands months after the first read was
+Never one with a grade on it (the drain skips those too, see
+`extraction_queue._run_job`). Only the last 14 days. This table lands months after the first read was
 owed, and a submission older than that with no read is one a teacher has
 long since graded by hand or written off: reading it now bills a Vision
 call for a result nobody will open, and puts a read under a grade the
 teacher already approved. A student who is still waiting is recent.
+
+"No read" is SQL NULL or JSON `null`: a retake or a reopened turn-in
+clears the column with an UPDATE, which writes JSON `null`.
 
 Submissions the student already confirmed or flagged are excluded by
 `extraction IS NULL` on its own: neither stamp is reachable without an
@@ -121,9 +125,16 @@ def upgrade() -> None:
         SELECT gen_random_uuid(), s.id, s.assignment_id, 'queued', 0
         FROM submissions s
         JOIN assignments a ON a.id = s.assignment_id
-        WHERE s.extraction IS NULL
+        WHERE (s.extraction IS NULL OR s.extraction::text = 'null')
           AND (a.integrity_check_enabled OR a.ai_grading_enabled)
           AND s.submitted_at > now() - interval '14 days'
+          AND NOT EXISTS (
+              SELECT 1 FROM submission_grades g
+              WHERE g.submission_id = s.id
+                AND (g.final_score IS NOT NULL
+                     OR g.teacher_score IS NOT NULL
+                     OR g.grade_published_at IS NOT NULL)
+          )
         """
     )
 

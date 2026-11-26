@@ -1098,3 +1098,102 @@ async def test_a_retake_during_the_read_is_read_again_not_lost(
         )).scalar_one()
     assert extraction["read"] == 2
     assert (await _job(sid)).status == STATUS_DONE
+
+
+@pytest.mark.asyncio
+async def test_a_retake_just_after_the_read_lands_is_not_closed_as_done(
+    world: dict[str, Any],
+) -> None:
+    """The narrow half of the retake race: the read lands, the drain sees
+    it, and THEN the retake clears it (to JSON `null`, as its UPDATE
+    writes) and re-enqueues — a no-op, because the job is still
+    `running`. The `done` stamp must notice the read is gone and requeue,
+    or the new photos are never read.
+    """
+    sid = await _seed_submission(world)
+    await _enqueue(world, sid)
+    job = await _job(sid)
+    async with get_session_factory()() as s:
+        await s.execute(
+            text("UPDATE extraction_jobs SET status = 'running' WHERE id = :i"),
+            {"i": job.id},
+        )
+        # What the retake's UPDATE ... SET extraction = None writes.
+        await s.execute(
+            text("UPDATE submissions SET extraction = 'null'::json WHERE id = :i"),
+            {"i": sid},
+        )
+        await s.commit()
+
+    await _finish(job.id, status=STATUS_DONE)
+
+    assert (await _job(sid)).status == STATUS_QUEUED
+
+
+@pytest.mark.asyncio
+async def test_a_landed_read_still_closes_the_job(
+    world: dict[str, Any],
+) -> None:
+    sid = await _seed_submission(world)
+    await _enqueue(world, sid)
+    job = await _job(sid)
+    await _mark_extracted(sid)
+
+    await _finish(job.id, status=STATUS_DONE)
+
+    assert (await _job(sid)).status == STATUS_DONE
+
+
+@pytest.mark.asyncio
+async def test_a_graded_submission_is_never_read_under_its_grade(
+    world: dict[str, Any],
+) -> None:
+    """A teacher graded by hand after a failed read. A read landing now
+    would pop the student's confirm screen on returned homework."""
+    sid = await _seed_submission(world)
+    await _enqueue(world, sid)
+    async with get_session_factory()() as s:
+        await s.execute(
+            text("INSERT INTO submission_grades (id, submission_id, final_score) "
+                 "VALUES (:g, :s, 8)"),
+            {"g": uuid.uuid4(), "s": sid},
+        )
+        await s.commit()
+
+    with patch(_TARGET, new_callable=AsyncMock) as read:
+        await drain()
+
+    read.assert_not_called()
+    assert (await _job(sid)).status == STATUS_SKIPPED
+
+
+@pytest.mark.asyncio
+async def test_a_retake_mid_read_on_the_last_attempt_is_not_parked(
+    world: dict[str, Any],
+) -> None:
+    """The dropped stale read isn't the job's failure: on its last
+    attempt it must go back to the queue, not park the new photos."""
+    sid = await _seed_submission(world)
+    await _enqueue(world, sid)
+    async with get_session_factory()() as s:
+        await s.execute(
+            text("UPDATE extraction_jobs SET attempts = :n WHERE submission_id = :s"),
+            {"n": MAX_ATTEMPTS - 1, "s": sid},
+        )
+        await s.commit()
+
+    async def retaken(_sid: uuid.UUID) -> None:
+        async with get_session_factory()() as s:
+            await s.execute(
+                text("UPDATE submissions SET submitted_at = now() + "
+                     "interval '1 second' WHERE id = :i"),
+                {"i": sid},
+            )
+            await s.commit()
+
+    with patch(_TARGET, new_callable=AsyncMock, side_effect=retaken):
+        await drain()
+
+    job = await _job(sid)
+    assert job.status == STATUS_QUEUED
+    assert job.attempts == MAX_ATTEMPTS - 1

@@ -41,13 +41,14 @@ from collections import Counter
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, func, literal, or_, select, update
+from sqlalchemy import CursorResult, Text, exists, func, literal, or_, select, update
+from sqlalchemy import cast as sa_cast
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.safe_errors import safe_error, traceback_is_safe
 from api.database import get_session_factory
-from api.models.assignment import Assignment, Submission
+from api.models.assignment import Assignment, Submission, SubmissionGrade
 from api.models.extraction_job import (
     MAX_ATTEMPTS,
     STATUS_DONE,
@@ -394,7 +395,7 @@ async def _finish(
         values["finished_at"] = _now()
 
     async with get_session_factory()() as db:
-        await db.execute(
+        stamp = (
             update(ExtractionJob)
             .where(
                 ExtractionJob.id == job_id,
@@ -422,7 +423,56 @@ async def _finish(
             )
             .values(**values)
         )
+        if status == STATUS_DONE:
+            # `done` only while the read is still there, checked in the
+            # same statement as the stamp. A retake (or a turn-in after a
+            # reopen) clears the read and re-enqueues, but its re-enqueue
+            # is a no-op on a `running` job; if it lands between the
+            # caller's "did a read land?" check and this stamp, a plain
+            # `done` would close the job over photos nobody has read.
+            stamp = stamp.where(exists().where(
+                Submission.id == ExtractionJob.submission_id,
+                _read_present(),
+            ))
+        result = cast("CursorResult[Any]", await db.execute(stamp))
+        if status == STATUS_DONE and result.rowcount == 0:
+            # The read was cleared under us: back to the queue, so the
+            # next drain reads the new photos.
+            await db.execute(
+                update(ExtractionJob)
+                .where(
+                    ExtractionJob.id == job_id,
+                    ExtractionJob.status == STATUS_RUNNING,
+                )
+                .values(
+                    status=STATUS_QUEUED,
+                    started_at=None,
+                    finished_at=None,
+                    updated_at=_now(),
+                )
+            )
         await db.commit()
+
+
+def _grade_present() -> Any:
+    """SQL for "a teacher or the grader has put a score on this"."""
+    return or_(
+        SubmissionGrade.final_score.isnot(None),
+        SubmissionGrade.teacher_score.isnot(None),
+        SubmissionGrade.grade_published_at.isnot(None),
+    )
+
+
+def _read_present() -> Any:
+    """SQL for "this submission has a read".
+
+    Both NULL and JSON `null` mean no read: an UPDATE that sets the
+    column to None writes JSON `null`, which is what a retake leaves
+    behind, so `IS NOT NULL` alone would call a cleared read present.
+    """
+    return Submission.extraction.isnot(None) & (
+        sa_cast(Submission.extraction, Text) != "null"
+    )
 
 
 async def _extract_one(job: ExtractionJob) -> str:
@@ -515,6 +565,23 @@ async def _run_job(job: ExtractionJob) -> str:
         await _finish(job.id, status=STATUS_SKIPPED)
         return _SKIPPED
 
+    # Never read under a grade. A teacher who graded or published by hand
+    # after a failed read has moved on; a read landing now pops the
+    # student's confirm screen on homework already returned, and their
+    # corrections from it go nowhere (grading skips a scored
+    # submission). A retake clears the grade before it re-enqueues, so a
+    # retake's job never lands here.
+    async with get_session_factory()() as db:
+        graded = (await db.execute(
+            select(exists().where(
+                SubmissionGrade.submission_id == job.submission_id,
+                _grade_present(),
+            ))
+        )).scalar_one()
+    if graded:
+        await _finish(job.id, status=STATUS_SKIPPED)
+        return _SKIPPED
+
     # Never re-read a submission that already has an extraction. A job
     # can legitimately return to `queued` AFTER the read landed — the
     # `_finish` stamp can fail on a connection blip, and a worker can
@@ -592,6 +659,29 @@ async def _run_job(job: ExtractionJob) -> str:
     # submission takes its job row with it and there is nothing left to
     # drain. Reaching this line means the submission exists and the read
     # genuinely did not land.
+    # Or the photos changed under the read: a retake or a turn-in after a
+    # reopen restamped `submitted_at` after this claim, and the stale read
+    # was dropped on purpose. Not this job's failure — give the attempt
+    # back, so the new photos are read rather than parked unread.
+    async with get_session_factory()() as db:
+        resubmitted_at = (await db.execute(
+            select(Submission.submitted_at).where(
+                Submission.id == job.submission_id,
+            )
+        )).scalar_one_or_none()
+    if (
+        resubmitted_at is not None
+        and job.started_at is not None
+        and resubmitted_at > job.started_at
+    ):
+        await _finish(
+            job.id,
+            status=STATUS_QUEUED,
+            error="photos changed during the read; reading the new ones",
+            refund_attempt=True,
+        )
+        return _FAILED
+
     exhausted = job.attempts >= MAX_ATTEMPTS
     await _finish(
         job.id,
