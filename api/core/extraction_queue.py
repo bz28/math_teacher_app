@@ -46,6 +46,7 @@ from sqlalchemy import cast as sa_cast
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.grading_queue import has_any_grade_clause
 from api.core.safe_errors import safe_error, traceback_is_safe
 from api.database import get_session_factory
 from api.models.assignment import Assignment, Submission, SubmissionGrade
@@ -454,15 +455,6 @@ async def _finish(
         await db.commit()
 
 
-def _grade_present() -> Any:
-    """SQL for "a teacher or the grader has put a score on this"."""
-    return or_(
-        SubmissionGrade.final_score.isnot(None),
-        SubmissionGrade.teacher_score.isnot(None),
-        SubmissionGrade.grade_published_at.isnot(None),
-    )
-
-
 def _read_present() -> Any:
     """SQL for "this submission has a read".
 
@@ -575,7 +567,7 @@ async def _run_job(job: ExtractionJob) -> str:
         graded = (await db.execute(
             select(exists().where(
                 SubmissionGrade.submission_id == job.submission_id,
-                _grade_present(),
+                has_any_grade_clause(),
             ))
         )).scalar_one()
     if graded:

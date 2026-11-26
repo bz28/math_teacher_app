@@ -131,9 +131,17 @@ def upgrade() -> None:
           AND NOT EXISTS (
               SELECT 1 FROM submission_grades g
               WHERE g.submission_id = s.id
+                -- `grading_queue.has_any_grade_clause`: any grade data
+                -- at all, the same test the retake guard uses.
                 AND (g.final_score IS NOT NULL
+                     OR g.ai_score IS NOT NULL
+                     OR COALESCE(g.ai_breakdown::text, 'null') NOT IN ('null', '[]', '{}')
                      OR g.teacher_score IS NOT NULL
-                     OR g.grade_published_at IS NOT NULL)
+                     OR COALESCE(g.breakdown::text, 'null') NOT IN ('null', '[]', '{}')
+                     OR g.graded_at IS NOT NULL
+                     OR g.reviewed_at IS NOT NULL
+                     OR g.published_final_score IS NOT NULL
+                     OR COALESCE(g.published_breakdown::text, 'null') NOT IN ('null', '[]', '{}'))
           )
         """
     )

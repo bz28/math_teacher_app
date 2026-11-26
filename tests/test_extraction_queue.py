@@ -1197,3 +1197,26 @@ async def test_a_retake_mid_read_on_the_last_attempt_is_not_parked(
     job = await _job(sid)
     assert job.status == STATUS_QUEUED
     assert job.attempts == MAX_ATTEMPTS - 1
+
+
+@pytest.mark.asyncio
+async def test_a_half_graded_submission_is_not_read_either(
+    world: dict[str, Any],
+) -> None:
+    """Grading started (reviewed, no score yet) counts as graded — the
+    same `has_any_grade` test the retake guard uses."""
+    sid = await _seed_submission(world)
+    await _enqueue(world, sid)
+    async with get_session_factory()() as s:
+        await s.execute(
+            text("INSERT INTO submission_grades (id, submission_id, reviewed_at) "
+                 "VALUES (:g, :s, now())"),
+            {"g": uuid.uuid4(), "s": sid},
+        )
+        await s.commit()
+
+    with patch(_TARGET, new_callable=AsyncMock) as read:
+        await drain()
+
+    read.assert_not_called()
+    assert (await _job(sid)).status == STATUS_SKIPPED
