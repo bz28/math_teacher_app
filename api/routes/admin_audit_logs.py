@@ -1,18 +1,14 @@
 """Admin endpoints for querying FERPA + activity logs.
 
 Surfaces both logs to the internal dashboard:
-- GET /admin/audit-logs/student-access — every teacher/admin read of a
-  student record. The canonical query a district lawyer or
-  procurement officer asks for: "show me everyone who touched
-  student X's records." Filterable by target student, accessor, or
-  record type.
 - GET /admin/activity — every notable actor write (admin OR teacher):
   assignment/generation/grade mutations, deletes, role changes, etc.
   Filterable by actor, actor role, action name (supports "grade.*"
   prefix glob), target type, school, and time window. Powers both the
   AuditLogs page and the per-teacher observability hub.
 
-- GET /admin/audit-logs/timeline — the two logs above MERGED into one
+- GET /admin/audit-logs/timeline — the FERPA student-record access log
+  and the activity log MERGED into one
   chronological stream with an access/write facet, so a FERPA
   record-read and the write that caused it sit side by side. Powers the
   redesigned compliance surface: date-range window, actor/target
@@ -62,82 +58,6 @@ async def _name_map(
     )
     return {
         str(r.id): {"name": r.name, "email": r.email} for r in result.all()
-    }
-
-
-@router.get("/audit-logs/student-access")
-async def student_access_log(
-    current_user: CurrentUser = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
-    target_student_id: uuid.UUID | None = Query(None),
-    accessor_user_id: uuid.UUID | None = Query(None),
-    record_type: str | None = Query(None),
-    school_id: uuid.UUID | None = Query(None),
-    limit: int = Query(100, ge=1, le=500),
-    offset: int = Query(0, ge=0),
-) -> dict[str, Any]:
-    """Paginated FERPA student-record access log.
-
-    The (target_student_id, accessed_at) composite index makes the
-    canonical "all access to one student" query a fast indexed range
-    scan even at scale.
-    """
-    base = select(StudentRecordAccessLog)
-    if target_student_id is not None:
-        base = base.where(StudentRecordAccessLog.target_student_id == target_student_id)
-    if accessor_user_id is not None:
-        base = base.where(StudentRecordAccessLog.accessor_user_id == accessor_user_id)
-    if record_type:
-        base = base.where(StudentRecordAccessLog.record_type == record_type)
-    if school_id is not None:
-        base = base.where(StudentRecordAccessLog.school_id == school_id)
-
-    total = (
-        await db.execute(select(func.count()).select_from(base.subquery()))
-    ).scalar() or 0
-
-    rows = (
-        await db.execute(
-            base.order_by(StudentRecordAccessLog.accessed_at.desc())
-            .limit(limit)
-            .offset(offset)
-        )
-    ).scalars().all()
-
-    ids: set[uuid.UUID] = set()
-    for r in rows:
-        if r.accessor_user_id:
-            ids.add(r.accessor_user_id)
-        if r.target_student_id:
-            ids.add(r.target_student_id)
-    names = await _name_map(db, ids)
-
-    def _display(uid: uuid.UUID | None) -> dict[str, str | None]:
-        if uid is None:
-            return {"name": None, "email": None}
-        return names.get(str(uid), {"name": None, "email": None})
-
-    return {
-        "total": total,
-        "limit": limit,
-        "offset": offset,
-        "entries": [
-            {
-                "id": str(r.id),
-                "accessor_user_id": str(r.accessor_user_id) if r.accessor_user_id else None,
-                "accessor_name": _display(r.accessor_user_id)["name"],
-                "accessor_email": _display(r.accessor_user_id)["email"],
-                "accessor_role": r.accessor_role,
-                "target_student_id": str(r.target_student_id) if r.target_student_id else None,
-                "target_student_name": _display(r.target_student_id)["name"],
-                "record_type": r.record_type,
-                "record_id": str(r.record_id) if r.record_id else None,
-                "school_id": str(r.school_id) if r.school_id else None,
-                "ip_address": r.ip_address,
-                "accessed_at": r.accessed_at.isoformat(),
-            }
-            for r in rows
-        ],
     }
 
 

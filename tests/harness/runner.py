@@ -65,68 +65,6 @@ class RunConfig:
     constraint: str | None = None
 
 
-def _summary_fields(result: RunResult) -> dict[str, object]:
-    det_pass = sum(1 for it in result.items if it.passed)
-    # The dashboard's single "judge mean" spans both judge flavors: the vision
-    # judge (figure quality, from captures) and the text judge (problem
-    # correctness, from item_judgments). A probe uses one or the other.
-    judged = [c.judge for c in result.captures if c.judge is not None]
-    judged += [j for j in result.item_judgments if j is not None]
-    judge_mean = (
-        round(sum(j.mean for j in judged) / len(judged), 2) if judged else None
-    )
-    return {
-        "probe": result.probe_name,
-        "mode": result.mode,
-        "items_generated": len(result.items),
-        "det_pass": det_pass,
-        "det_total": len(result.items),
-        "captures": len(result.captures),
-        "judge_count": len(judged),
-        "judge_mean": judge_mean,
-        "cost_usd": result.cost_usd,
-        "passed": len(result.items) > 0 and det_pass == len(result.items),
-        "note": result.note,
-        "prompt": result.prompt,
-    }
-
-
-async def write_harness_run(fields: dict[str, object], summary_db_url: str) -> str | None:
-    """Insert one HarnessRun row into the MAIN app DB the admin dashboard reads
-    (separate from the harness's own test DB). Shared by the run and explore
-    paths. Best-effort: returns the new row id on success, or None on any
-    failure rather than crashing the harness — the summary is observability,
-    never load-bearing. (Truthy id / falsy None keeps the old bool callers
-    working.)"""
-    try:
-        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
-        from api.models.harness_run import HarnessRun
-
-        engine = create_async_engine(summary_db_url)
-        try:
-            async with async_sessionmaker(engine, expire_on_commit=False)() as s:
-                row = HarnessRun(**fields)
-                s.add(row)
-                await s.commit()
-                return str(row.id)
-        finally:
-            await engine.dispose()
-    except Exception:  # noqa: BLE001 — summary is observability, never fatal
-        return None
-
-
-async def persist_run_summary(
-    result: RunResult, report_html: str, summary_db_url: str,
-) -> str | None:
-    """Write a one-row run summary (including the self-contained HTML report)
-    to the admin dashboard's DB. Best-effort via write_harness_run; returns the
-    new run id (or None on failure)."""
-    return await write_harness_run(
-        {"report_html": report_html, **_summary_fields(result)}, summary_db_url,
-    )
-
-
 async def run_probe(probe: Probe, cfg: RunConfig) -> RunResult:
     started = _utcnow()
     seed = await seed_world()

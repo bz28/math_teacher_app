@@ -120,25 +120,25 @@ with sync_playwright() as pw:
 
     # 1. A value under the RETIRED key must not scope anything.
     p, reqs = fresh(b, {RETIRED_KEY: LINCOLN})
-    visit(p, "/overview")
+    visit(p, "/reports")
     strip = p.inner_text(".scope-line")
-    check("retired key: overview request unscoped", *scoped_to(reqs, "/admin/overview", None))
+    check("retired key: reports request unscoped", *scoped_to(reqs, "/admin/reports", None))
     check("retired key: strip says All schools", "All schools" in strip, strip)
     check("retired key: old key removed", stored(p, RETIRED_KEY) is None)
 
     # 2. Schools list fails while a school is saved: the strip must not
     #    claim All schools, and must offer the way out.
     p, reqs = fresh(b, {SCOPE_KEY: LINCOLN}, fail_schools=True)
-    visit(p, "/overview")
+    visit(p, "/reports")
     strip = p.inner_text(".scope-line")
-    check("list down: request still scoped", *scoped_to(reqs, "/admin/overview", LINCOLN))
+    check("list down: request still scoped", *scoped_to(reqs, "/admin/reports", LINCOLN))
     check("list down: strip does not claim All schools", "All schools —" not in strip, strip)
     clear = p.locator("text=Show all schools")
     check("list down: clear action present", clear.count() == 1)
     if clear.count():
         clear.click()
         p.wait_for_timeout(2000)
-        check("list down: clearing unscopes", *scoped_to(reqs, "/admin/overview", None))
+        check("list down: clearing unscopes", *scoped_to(reqs, "/admin/reports", None))
 
     # 3. /schools/:id sets the scope even when the list fails.
     p, reqs = fresh(b, {SCOPE_KEY: RIVER}, fail_schools=True)
@@ -170,15 +170,15 @@ with sync_playwright() as pw:
     # 6. A school created AFTER the console loaded its school list can be
     #    scoped: opening it refetches the list instead of resetting to All.
     p, reqs = fresh(b, {})
-    visit(p, "/overview")  # the list is loaded now, without the new school
+    visit(p, "/reports")  # the list is loaded now, without the new school
     created = _get_json(f"{API}/admin/schools", {
         "name": "Brand New Academy", "contact_name": "N",
         "contact_email": f"new{os.getpid()}{len(results)}@newacademy.org",
     }, token=tok["access_token"])["id"]
     spa_go(p, f"/schools/{created}")
     check("new school: route scope kept after list recheck", stored(p) == created, str(stored(p)))
-    spa_go(p, "/overview")
-    check("new school: pages scoped to it", *scoped_to(reqs, "/admin/overview", created))
+    spa_go(p, "/reports")
+    check("new school: pages scoped to it", *scoped_to(reqs, "/admin/reports", created))
     check("new school: strip names it", "Brand New Academy" in p.inner_text(".scope-line"),
           p.inner_text(".scope-line"))
 
@@ -199,7 +199,7 @@ with sync_playwright() as pw:
 
     p, reqs = fresh(b, {})
     p.context.route("**/v1/admin/schools", _flaky)
-    visit(p, "/overview")  # list loaded, without the new school
+    visit(p, "/reports")  # list loaded, without the new school
     created = _get_json(f"{API}/admin/schools", {
         "name": "Second New Academy", "contact_name": "N",
         "contact_email": f"second{os.getpid()}{len(results)}@newacademy.org",
@@ -213,7 +213,7 @@ with sync_playwright() as pw:
 
     # 7. A non-UUID school route never becomes the scope.
     p, reqs = fresh(b, {SCOPE_KEY: LINCOLN})
-    visit(p, "/overview")
+    visit(p, "/reports")
     spa_go(p, "/schools/not-a-school")
     check("bad /schools/:id leaves scope alone", stored(p) == LINCOLN, str(stored(p)))
 

@@ -1,7 +1,7 @@
 """The admin rail's school switcher must actually scope every page.
 
 The switcher used to select only which school "Teachers & classes"
-opened; Overview, the AI-quality tabs and the Teacher-reports inbox
+opened; the AI-quality tabs and the Teacher-reports inbox
 ignored it and always answered for the whole platform. Each of those
 endpoints now takes `school_id`, and this file pins, per endpoint:
 
@@ -177,30 +177,6 @@ async def _get(client: AsyncClient, world: dict[str, Any], url: str,
     return body
 
 
-async def test_overview_is_scoped(client: AsyncClient, world: dict[str, Any]) -> None:
-    url = "/v1/admin/overview?hours=24"
-    a = await _get(client, world, url, "a")
-    b = await _get(client, world, url, "b")
-    every = await _get(client, world, url, None)
-
-    # Cost and calls follow the call's own school; the NULL-school call
-    # is in neither school.
-    assert (a["total_cost"], a["total_calls"]) == (1.0, 1)
-    assert (b["total_cost"], b["total_calls"]) == (2.0, 1)
-    assert (every["total_cost"], every["total_calls"]) == (7.0, 3)
-    # Sessions follow their user. Alpha's preview student ran one too,
-    # and it is excluded in every scope, so A + B == All.
-    assert a["total_sessions"] == 1
-    assert b["total_sessions"] == 2
-    assert every["total_sessions"] == 3
-    # Users: teacher + real students, never the preview account.
-    assert a["total_users"] == 2
-    assert b["total_users"] == 3
-    # 5 school users + the admin.
-    assert every["total_users"] == 6
-    assert [s["name"] for s in a["top_spenders"]] == ["Alpha Teacher"]
-
-
 async def test_reports_inbox_is_scoped(client: AsyncClient, world: dict[str, Any]) -> None:
     url = "/v1/admin/reports?status=open"
     a = await _get(client, world, url, "a")
@@ -255,41 +231,6 @@ async def test_extraction_quality_is_scoped(client: AsyncClient, world: dict[str
     assert every["summary"]["settled"] == 3
     assert {c["course"] for c in a["cases"]} == {world["a"]["course"]}
     assert a["total_count"] == 1
-
-
-async def test_solution_quality_is_scoped(client: AsyncClient, world: dict[str, Any]) -> None:
-    url = "/v1/admin/quality"
-    a = await _get(client, world, url, "a")
-    b = await _get(client, world, url, "b")
-    every = await _get(client, world, url, None)
-
-    assert (a["summary"]["judged"], a["summary"]["repaired"]) == (2, 1)
-    assert (b["summary"]["judged"], b["summary"]["repaired"]) == (1, 1)
-    assert every["summary"]["judged"] == 3
-    assert {q["title"] for q in a["questions"]} == {"Alpha Q0", "Alpha Q1"}
-    assert a["total_count"] == 2
-
-
-async def test_generation_board_is_scoped(client: AsyncClient, world: dict[str, Any]) -> None:
-    url = "/v1/admin/generation-quality/board"
-    a = await _get(client, world, url, "a")
-    b = await _get(client, world, url, "b")
-    every = await _get(client, world, url, None)
-
-    assert a["summary"]["settled"] == 2
-    assert b["summary"]["settled"] == 1
-    assert every["summary"]["settled"] == 3
-    assert {q["title"] for q in a["questions"]} == {"Alpha Q0", "Alpha Q1"}
-
-
-async def test_generation_board_rejects_a_bad_school_id(
-    client: AsyncClient, world: dict[str, Any],
-) -> None:
-    res = await client.get(
-        "/v1/admin/generation-quality/board", params={"school_id": "nope"},
-        headers=auth_headers(world["token"]),
-    )
-    assert res.status_code == 400
 
 
 async def test_llm_calls_and_users_are_scoped(

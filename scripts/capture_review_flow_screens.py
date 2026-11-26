@@ -27,6 +27,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from api.core.auth import create_access_token, create_refresh_token, hash_password
+from api.database import get_session_factory
 from api.models.assignment import (
     Assignment,
     AssignmentSection,
@@ -40,7 +41,6 @@ from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.unit import Unit
 from api.models.user import User
-from api.database import get_session_factory
 from tests.harness.browser import HarnessBrowser
 
 WEB_BASE = os.environ.get("WEB_BASE", "http://localhost:3130").rstrip("/")
