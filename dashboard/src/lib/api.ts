@@ -309,190 +309,6 @@ export interface UserDeleteImpact {
   enrollments_removed: number;
 }
 
-export interface HarnessRun {
-  id: string;
-  probe: string;
-  mode: string;
-  items_generated: number;
-  det_pass: number;
-  det_total: number;
-  captures: number;
-  judge_count: number;
-  judge_mean: number | null;
-  cost_usd: number | null;
-  passed: boolean;
-  note: string | null;
-  prompt: string | null;
-  created_at: string;
-}
-
-/** Per-probe current health — the AI-quality regression alarm band. */
-export interface ProbeHealth {
-  probe: string;
-  latest_run_id: string;
-  latest_mode: string;
-  latest_passed: boolean;
-  latest_det_pass: number;
-  latest_det_total: number;
-  /** Previous run's deterministic result, for the regression delta (null if the probe has only ever run once). */
-  prev_det_pass: number | null;
-  prev_det_total: number | null;
-  /** Most recent non-null judge score in the window — NOT a lifetime average. */
-  recent_judge_mean: number | null;
-  last_run_at: string;
-  /** Deterministic pass-rate (0–1) per recent run, oldest→newest. */
-  spark: number[];
-  total_runs: number;
-}
-
-export interface HarnessRunsData {
-  runs: HarnessRun[];
-  total_count: number;
-  probe_health: ProbeHealth[];
-  summary: {
-    recent_window: number;
-    recent_failing: number;
-    recent_cost: number;
-    probe_count: number;
-    newest_run_at: string | null;
-  };
-}
-
-export type GoldenStatus = "pass" | "fail" | "pending";
-
-export interface GoldenCase {
-  id: string;
-  probe: string;
-  name: string;
-  constraint: string;
-  adversarial: boolean;
-  expected_shapes: string[];
-  rationale: string | null;
-  last_status: GoldenStatus;
-  is_regression: boolean;
-  last_run_at: string | null;
-  last_model: string | null;
-  last_run_id: string | null;
-  last_output: string | null;
-  rerun_requested: boolean;
-  retired: boolean;
-}
-
-export interface GoldenSetData {
-  cases: GoldenCase[];
-  stats: {
-    set_size: number;
-    last_run: { at: string | null; model: string | null };
-    pass_rate: { passing: number; evaluated: number };
-    regressions: number;
-  };
-}
-
-export interface GoldenCaseCreate {
-  probe: string;
-  name: string;
-  constraint: string;
-  adversarial: boolean;
-  expected_shapes: string[];
-  rationale: string | null;
-}
-
-
-// ── Generation quality ───────────────────────────────────────────────
-// A generated question a teacher had to rewrite is the clearest signal
-// the generation prompt is wrong. `tracking_since` rides on every
-// response because these events are only recorded FORWARD — without it
-// an empty page would read as "no teacher has ever edited a question".
-
-export interface EditedQuestion {
-  id: string;
-  title: string;
-  question: string;
-  status: string;
-  source: string;
-  generation_prompt: string | null;
-  edit_count: number;
-  last_edited_at: string | null;
-}
-
-export interface EditedQuestionsData {
-  questions: EditedQuestion[];
-  total: number;
-  tracking_since: string;
-}
-
-export interface QuestionEditEntry {
-  id: string;
-  kind: string;
-  before: string | null;
-  after: string | null;
-  created_at: string;
-  editor: string | null;
-  school: string | null;
-}
-
-export interface QuestionEditHistory {
-  id: string;
-  title: string;
-  question: string;
-  final_answer: string | null;
-  status: string;
-  source: string;
-  generation_prompt: string | null;
-  edits: QuestionEditEntry[];
-  tracking_since: string;
-}
-
-// ── Generation quality board ─────────────────────────────────────────
-// Every generated question and what became of it. The page it replaces
-// listed only questions someone had edited, so a perfect question was
-// invisible and the count had nothing to divide by.
-//
-// The three failure modes are counted separately rather than summed:
-// one rejection is not four edits, and averaging them would hide which
-// kind of wrong the prompt is.
-
-export type GenerationOutcome = "clean" | "repaired" | "redone" | "rejected";
-
-export interface GenerationBoardSummary {
-  settled: number;
-  clean: number;
-  repaired: number;
-  redone: number;
-  rejected: number;
-  /** Still pending review — excluded from the rate, never folded in. */
-  awaiting: number;
-  clean_rate: number;
-  /** Too few settled questions for the rate to mean anything. */
-  thin: boolean;
-}
-
-export interface GenerationBoardQuestion {
-  id: string;
-  title: string;
-  question: string;
-  status: string;
-  outcome: GenerationOutcome;
-  generation_prompt: string | null;
-  created_at: string | null;
-}
-
-export interface GenerationBoardData {
-  summary: GenerationBoardSummary;
-  questions: GenerationBoardQuestion[];
-  total_count: number;
-  tracking_since: string;
-}
-
-
-export interface GenerationQualitySummary {
-  total_edits: number;
-  questions_touched: number;
-  by_kind: Record<string, number>;
-  tracking_since: string;
-}
-
-
 // ── Handwriting extraction quality ───────────────────────────────────
 // Scores `image_extract` — the Vision call that reads a photo of
 // handwritten work — judged by the student who wrote the page. Unlike
@@ -664,28 +480,7 @@ export interface AssignmentDetailData {
 }
 
 export const api = {
-  overview: (params?: Record<string, string>) => request<OverviewData>("/admin/overview", params),
   llmCalls: (params?: Record<string, string>) => request<LLMCallsData>("/admin/llm-calls", params),
-  harnessRuns: (params?: Record<string, string>) => request<HarnessRunsData>("/admin/harness-runs", params),
-  harnessReport: (id: string) => request<{ html: string }>(`/admin/harness-runs/${id}/report`),
-  goldenSet: () => request<GoldenSetData>("/admin/golden-set"),
-  addGoldenCase: (body: GoldenCaseCreate) => mutate<GoldenCase>("/admin/golden-set", "POST", body),
-  retireGoldenCase: (id: string, retired: boolean) =>
-    mutate<GoldenCase>(`/admin/golden-set/${id}/retire`, "PATCH", { retired }),
-  rerunGoldenEval: (ids: string[] = []) =>
-    mutate<{ requested: number }>("/admin/golden-set/rerun", "POST", { ids }),
-  solutionQuality: (params?: Record<string, string>) =>
-    request<SolutionQualityData>("/admin/quality", params),
-  solutionRepairs: (itemId: string) =>
-    request<SolutionRepairHistory>(`/admin/quality/${itemId}`),
-  editedQuestions: (params?: Record<string, string>) =>
-    request<EditedQuestionsData>("/admin/generation-quality/questions", params),
-  questionEditHistory: (id: string) =>
-    request<QuestionEditHistory>(`/admin/generation-quality/questions/${id}`),
-  generationBoard: (params?: Record<string, string>) =>
-    request<GenerationBoardData>("/admin/generation-quality/board", params),
-  generationQualitySummary: (params?: Record<string, string>) =>
-    request<GenerationQualitySummary>("/admin/generation-quality/summary", params),
   extractionQuality: (params?: Record<string, string>) =>
     request<ExtractionQualityData>("/admin/extraction-quality", params),
   extractionDetail: (submissionId: string) =>
@@ -701,8 +496,6 @@ export const api = {
   gradingQualityOverrides: (params?: Record<string, string>) =>
     request<GradingOverridesData>("/admin/grading-quality/overrides", params),
   users: (params?: Record<string, string>) => request<UsersData>("/admin/users", params),
-  studentAccessLog: (params?: Record<string, string>) =>
-    request<StudentAccessLogData>("/admin/audit-logs/student-access", params),
   activityLog: (params?: Record<string, string>) =>
     request<ActivityLogData>("/admin/activity", params),
   auditTimeline: (params?: Record<string, string>) =>
@@ -823,28 +616,6 @@ export const api = {
 };
 
 // Types
-export interface OverviewData {
-  total_sessions: number;
-  active_users: number;
-  new_users: number;
-  total_users: number;
-  deleted_accounts: number;
-  total_cost: number;
-  total_calls: number;
-  failed_calls: number;
-  error_rate: number;
-  avg_latency_ms: number;
-  // p95 of successful-call latency over the same window/population as
-  // avg_latency_ms. Leads the latency tile — the average hides the
-  // slow tail that actually degrades the experience.
-  p95_latency_ms: number;
-  by_mode: { mode: string; count: number }[];
-  by_subject: { subject: string; count: number }[];
-  sessions_by_day: { day: string; count: number }[];
-  cost_by_day: { day: string; cost: number }[];
-  top_spenders: { name: string; email: string | null; total_cost: number }[];
-}
-
 export interface LLMCallsData {
   total_count_window: number;
   total_cost_window: number;
@@ -922,73 +693,6 @@ export interface SubmissionSummary {
   integrity_headline: string | null;
   integrity_status: string | null;
   integrity_resolution: string | null;
-}
-
-
-// ── Solution quality ─────────────────────────────────────────────────
-// Scores `decompose`, the call that works a question's step-by-step
-// solution, judged by whether a teacher had to fix the answer.
-//
-// This replaced an LLM judge that never ran once: the table it read was
-// empty by construction, so the page rendered a red "WEAK" verdict and
-// 0.0/5 on every dimension — asserting the AI was bad at a job nobody
-// had ever measured.
-//
-// Solutions have no rejection of their own; binning belongs to the
-// QUESTION that owns the solution. The two exclusions are therefore
-// reported by reason rather than lumped together — "the question was
-// rejected" says what happened, "never assessed" only describes our
-// bookkeeping.
-
-export type SolutionOutcome = "clean" | "repaired";
-
-export interface SolutionQualitySummary {
-  judged: number;
-  clean: number;
-  repaired: number;
-  /** Excluded — the question was binned, so its solution never got a look. */
-  question_rejected: number;
-  /** Excluded — still pending review. */
-  awaiting: number;
-  clean_rate: number;
-  thin: boolean;
-}
-
-export interface SolutionQuestion {
-  id: string;
-  title: string;
-  question: string;
-  final_answer: string | null;
-  outcome: SolutionOutcome;
-  created_at: string | null;
-}
-
-export interface SolutionQualityData {
-  summary: SolutionQualitySummary;
-  questions: SolutionQuestion[];
-  total_count: number;
-  tracking_since: string;
-}
-
-export interface SolutionRepairEntry {
-  id: string;
-  kind: string;
-  field: string;
-  before: string | null;
-  after: string | null;
-  created_at: string;
-  editor: string | null;
-  school: string | null;
-}
-
-export interface SolutionRepairHistory {
-  id: string;
-  title: string;
-  question: string;
-  final_answer: string | null;
-  status: string;
-  edits: SolutionRepairEntry[];
-  tracking_since: string;
 }
 
 
@@ -1474,28 +1178,6 @@ export interface UsersData {
 }
 
 // ── Audit logs ──
-
-export interface StudentAccessLogEntry {
-  id: string;
-  accessor_user_id: string | null;
-  accessor_name: string | null;
-  accessor_email: string | null;
-  accessor_role: string;
-  target_student_id: string | null;
-  target_student_name: string | null;
-  record_type: string;
-  record_id: string | null;
-  school_id: string | null;
-  ip_address: string | null;
-  accessed_at: string;
-}
-
-export interface StudentAccessLogData {
-  total: number;
-  limit: number;
-  offset: number;
-  entries: StudentAccessLogEntry[];
-}
 
 export interface ActivityLogEntry {
   id: string;
