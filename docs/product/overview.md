@@ -8,7 +8,7 @@
 
 ## 1. What Veradic is
 
-Veradic is an AI math-education platform — **math-only, schools-only** — built around one loop: a student photographs
+Veradic is an AI math-education platform — **schools-only** — built around one loop: a student photographs
 their handwritten homework, and the platform reads the work, **grades** every problem
 with a written justification (a "receipt"), runs a short conversational **understanding
 check** to distinguish real understanding from a memorized or copied right answer, and
@@ -130,16 +130,16 @@ Concrete inventory of **what exists today**, derived from
 
 ### Public / marketing — web
 - Landing, `/for-districts`, `/demo` (request-a-demo → contact lead),
-  `/subjects/math`, legal (`privacy` / `terms` / `support` / `trust`).
+  `/subjects/{math,physics,chemistry}`, legal (`privacy` / `terms` / `support` / `trust`).
 
 ### Sales demo — `demo/` (standalone, no auth/API)
 - Hub (`/`) + present mode (`/present`) with the four stories (integrity, grading,
   generation, teacher-day), all from bundled captured data.
 
-**Subjects (owner-confirmed):** **Veradic is math-only.** New courses are created as math
-(the course form has no subject picker). A `subject` field still exists on courses, sessions
-and some hidden self-study UI from an earlier physics/chemistry experiment; don't build on or
-market those subjects.
+**Subjects (owner-confirmed):** **math is the full, mature subject; physics and chemistry
+are partial.** They appear as marketing surfaces (subject pages + mobile subject pills) and
+as a course subject teachers can pick, but engine depth beyond math is not complete — so
+don't assume they are on par with math.
 
 ## 5. Principles / non-goals
 

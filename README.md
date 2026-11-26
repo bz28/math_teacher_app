@@ -1,6 +1,6 @@
 # Veradic
 
-Veradic is an AI math-education **school portal**. A student photographs their handwritten homework; the platform reads the work, grades every problem with a written "receipt," runs a short conversational understanding-check to catch the student who got the right answer without really understanding, and hands the teacher a class they can see at a glance — graded, with the few students who need attention surfaced first. It is **math-only and schools-only**, serving three audiences from one codebase: **students** (enrolled in a teacher's class), **teachers** (courses, assignments, grading, analytics), and **schools/districts** (the institutions teachers belong to). The older self-study screens (Learn, Practice, Mock-test, Review, History) are hidden: their routes redirect to the school portal, and their code stays because school practice shares the same AI core.
+Veradic is an AI math-education **school portal**. A student photographs their handwritten homework; the platform reads the work, grades every problem with a written "receipt," runs a short conversational understanding-check to catch the student who got the right answer without really understanding, and hands the teacher a class they can see at a glance — graded, with the few students who need attention surfaced first. It is **schools-only**, serving three audiences from one codebase: **students** (enrolled in a teacher's class), **teachers** (courses, assignments, grading, analytics), and **schools/districts** (the institutions teachers belong to). The older self-study screens (Learn, Practice, Mock-test, Review, History) are hidden: their routes redirect to the school portal, and their code stays because school practice shares the same AI core.
 
 > This README is a map of the codebase. Product and customer context lives in [`docs/product/overview.md`](docs/product/overview.md).
 
@@ -8,7 +8,7 @@ Veradic is an AI math-education **school portal**. A student photographs their h
 
 ### Web — `web/` (Next.js, veradicai.com)
 The primary product surface **and** the marketing site, one Next.js 16 App Router app (React 19, TypeScript, Tailwind v4, Zustand, Framer Motion, KaTeX).
-- **Public / marketing**: landing (`/`), `/for-districts`, `/demo` (request-a-demo), `/subjects/math`, and legal pages under `(legal)/` (`/privacy`, `/terms`, `/support`, `/trust`).
+- **Public / marketing**: landing (`/`), `/for-districts`, `/demo` (request-a-demo), `/subjects/{math,physics,chemistry}`, and legal pages under `(legal)/` (`/privacy`, `/terms`, `/support`, `/trust`).
 - **Auth**: `/login`, `/register` (invite-only: students need a class join code or invite, teachers a teacher invite), `/set-password`, `/invite` (section join).
 - **Student app** (`(app)/`): the classroom surface under `/school/student/*` (courses, homework, per-assignment practice, grades, practice-history). The hidden self-study routes (`/home`, `/learn`, `/practice`, `/mock-test`, `/review`, `/history`) redirect to the user's portal (`web/src/lib/home-path.ts`).
 - **Teacher portal**: `/school/teacher/*` — courses, units, sections, assignments/homework, per-section grade review, per-student drill-down.
