@@ -31,15 +31,28 @@ WORK_SUBMISSION_TTL_MINUTES = 30  # Discard work diagnosis after this window
 # Image / file upload handling
 # ---------------------------------------------------------------------------
 MAX_IMAGE_BYTES = 5 * 1024 * 1024  # 5 MB after base64 decode
-# PDFs are larger by nature (multi-page scans); 25 MB matches the
-# teacher_documents.py upload cap and Anthropic's document-block limit.
-MAX_PDF_BYTES = 25 * 1024 * 1024
-# Whole-submission cap. With ≤10 files at up to 25 MB each the worst
-# case is 250 MB, which we don't want hitting the row store. 50 MB is
+# PDFs are larger by nature (multi-page scans). 23 MB is the largest PDF
+# whose base64 still fits one model request (MAX_TOTAL_SOURCE_B64_BYTES,
+# 31 MiB, in document_vision.py): a long PDF is sent whole as a document
+# block, and anything bigger would be accepted, stored, and then never
+# reach the model. tests/test_upload_size_limit.py pins the fit.
+MAX_PDF_BYTES = 23 * 1024 * 1024
+# Whole-submission cap. With ≤10 files at up to 23 MB each the worst
+# case is 230 MB, which we don't want hitting the row store. 50 MB is
 # generous for real homework (a 10-photo phone submission tops out
 # around 30 MB after client-side resize) and saves the DB from
 # pathological payloads.
 MAX_SUBMISSION_TOTAL_BYTES = 50 * 1024 * 1024
+# Request-body caps for the routes that carry files. Uploads travel as
+# base64 JSON (4/3 the raw size), so the global 10 MB body cap rejected
+# any PDF over ~7.5 MB before the PDF check above ever ran. Each cap fits
+# that route's largest valid body once encoded, plus room for the JSON.
+# Every other route keeps settings.max_request_size.
+_JSON_SLACK = 2 * 1024 * 1024
+# One file: a materials document.
+MAX_SINGLE_UPLOAD_REQUEST_BYTES = MAX_PDF_BYTES * 4 // 3 + _JSON_SLACK
+# A whole student turn-in (submit, retake, page-orientation check).
+MAX_SUBMISSION_REQUEST_BYTES = MAX_SUBMISSION_TOTAL_BYTES * 4 // 3 + _JSON_SLACK
 # Hard cap on number of files per submission. Mirrors the teacher
 # upload cap. Real homework submissions are 1-3 pages; 10 leaves
 # headroom for multi-page worksheets.

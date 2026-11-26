@@ -60,11 +60,17 @@ import {
  */
 
 // Backend caps mirrored client-side so we can reject oversized files
-// before encoding+POSTing 25MB of base64. Magic-byte detection still
+// before encoding+POSTing 23MB of base64. Magic-byte detection still
 // happens server-side; this is just an early bail for the obvious case.
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const MAX_PDF_BYTES = 25 * 1024 * 1024;
+const MAX_PDF_BYTES = 23 * 1024 * 1024;
 const MAX_FILES = 10;
+// Extraction sends every file to the model in one request, so the batch
+// shares that request's budget (MAX_TOTAL_SOURCE_B64_BYTES in
+// api/core/document_vision.py; the server refuses past it). Measured on
+// the base64 we send.
+const MAX_TOTAL_B64_BYTES = 31 * 1024 * 1024;
+const MAX_TOTAL_MB = 23;
 const ACCEPT = "image/jpeg,image/png,application/pdf";
 
 type Mode = "generate" | "upload";
@@ -346,6 +352,12 @@ export function NewHomeworkModal({
     run(async () => {
       const valid = stagedFiles.filter((f) => !f.error && f.base64);
       if (valid.length === 0) throw new Error("Add at least one file");
+      const totalB64 = valid.reduce((n, f) => n + f.base64.length, 0);
+      if (totalB64 > MAX_TOTAL_B64_BYTES) {
+        throw new Error(
+          `These files are over ${MAX_TOTAL_MB} MB together. Remove some, or split them across two uploads.`,
+        );
+      }
       const id = await createDraft();
       let startedGeneration = true;
       try {
@@ -394,7 +406,7 @@ export function NewHomeworkModal({
     // PDFs go through untouched — resizeImageForUpload is image-only.
     if (isPdf) {
       if (file.size > MAX_PDF_BYTES) {
-        return errorRow(file, "Too large (max 25MB)");
+        return errorRow(file, "Too large (max 23MB)");
       }
       try {
         const base64 = await fileToBase64(file);
@@ -1187,7 +1199,7 @@ function UploadSection({
             Drop photos or a PDF, or click to browse
           </span>
           <span className="text-[11px] text-text-muted">
-            Up to {MAX_FILES} files · JPEG/PNG up to 5MB · PDF up to 25MB
+            Up to {MAX_FILES} files, {MAX_TOTAL_MB} MB in total · JPEG/PNG up to 5 MB each
           </span>
         </button>
         <input

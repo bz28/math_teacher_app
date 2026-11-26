@@ -721,7 +721,7 @@ function FirstTimeDropzone({
           </p>
 
           <p className="text-[11px] font-medium text-text-muted">
-            PDF, PNG or JPG · images up to 5 MB
+            PDF up to 23 MB · PNG or JPG up to 5 MB
           </p>
         </div>
       </UploadDropzone>

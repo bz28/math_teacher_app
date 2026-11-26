@@ -176,7 +176,8 @@ async def test_fetch_source_documents_skips_over_budget_doc(
 ) -> None:
     """An oversized doc is skipped, not raised on. Base64 inflates a
     25MB PDF to ~33MB — past Anthropic's 32MB request cap — so the
-    budget must degrade the run rather than fail it."""
+    budget must degrade the run rather than fail it (uploads now cap a
+    single PDF to fit, but several selected together can still overflow)."""
     seed = await _seed([("huge.pdf", "application/pdf", "J" * 64)])
     monkeypatch.setattr(dv, "MAX_TOTAL_SOURCE_B64_BYTES", 16)
     async with get_session_factory()() as s:

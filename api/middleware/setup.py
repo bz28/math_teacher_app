@@ -3,9 +3,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
 from api.config import settings
+from api.core.constants import MAX_SINGLE_UPLOAD_REQUEST_BYTES, MAX_SUBMISSION_REQUEST_BYTES
+from api.core.document_vision import MAX_TOTAL_SOURCE_B64_BYTES
 from api.middleware.errors import UnhandledErrorMiddleware
 from api.middleware.logging import LoggingMiddleware
-from api.middleware.security import RequestSizeLimitMiddleware, SecurityHeadersMiddleware
+from api.middleware.security import (
+    UPLOAD_DOCUMENT,
+    UPLOAD_SUBMISSION,
+    UPLOAD_WORKSHEET,
+    RequestSizeLimitMiddleware,
+    SecurityHeadersMiddleware,
+)
 
 
 def configure_middleware(app: FastAPI) -> None:
@@ -20,7 +28,17 @@ def configure_middleware(app: FastAPI) -> None:
     app.add_middleware(UnhandledErrorMiddleware)
 
     # Request size limit
-    app.add_middleware(RequestSizeLimitMiddleware, max_size=settings.max_request_size)
+    app.add_middleware(
+        RequestSizeLimitMiddleware,
+        max_size=settings.max_request_size,
+        # File-carrying routes get room for their files (signed-in only).
+        upload_caps=[
+            (UPLOAD_DOCUMENT, MAX_SINGLE_UPLOAD_REQUEST_BYTES),
+            # The worksheet batch goes to the model in one request.
+            (UPLOAD_WORKSHEET, MAX_TOTAL_SOURCE_B64_BYTES + 2 * 1024 * 1024),
+            (UPLOAD_SUBMISSION, MAX_SUBMISSION_REQUEST_BYTES),
+        ],
+    )
 
     # Security headers
     app.add_middleware(SecurityHeadersMiddleware)

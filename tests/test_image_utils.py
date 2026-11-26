@@ -73,7 +73,7 @@ class TestValidateAndDecodeUpload:
             validate_and_decode_upload(_b64(oversized))
 
     def test_rejects_oversized_pdf(self) -> None:
-        # PDFs are allowed up to 25MB; one byte over should fail. Build
+        # PDFs are allowed up to MAX_PDF_BYTES; one byte over should fail. Build
         # the smallest blob that crosses the cap.
         oversized = _PDF_HEADER + b"\x00" * (MAX_PDF_BYTES - len(_PDF_HEADER) + 1)
         with pytest.raises(ValueError, match="File too large"):
@@ -88,7 +88,7 @@ class TestValidateAndDecodeUpload:
         assert len(raw) == MAX_IMAGE_BYTES
 
     def test_pdf_above_image_cap_accepted(self) -> None:
-        # A PDF between the image cap (5MB) and PDF cap (25MB) is the
+        # A PDF between the image cap (5MB) and PDF cap (23MB) is the
         # entire reason for the per-format cap split — confirm it works.
         big = _PDF_HEADER + b"\x00" * (MAX_IMAGE_BYTES + 1024 - len(_PDF_HEADER))
         raw, media_type = validate_and_decode_upload(_b64(big))
