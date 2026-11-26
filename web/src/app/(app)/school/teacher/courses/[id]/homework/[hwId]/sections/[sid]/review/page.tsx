@@ -1,10 +1,17 @@
 "use client";
 
-import { Suspense, use, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  READING_TRUST_COPY,
-  needsReadingCheck,
-} from "@/components/school/teacher/reading-trust";
+  Suspense,
+  use,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { READING_TRUST_COPY, needsReadingCheck } from "@/components/school/teacher/reading-trust";
 import {
   ReportProblemTrigger,
   useReportPageContext,
@@ -25,21 +32,16 @@ import {
   ResolveIntegrityControl,
   RowDispositionPill,
   UNFINISHED_CHECK_COPY,
-  UNFINISHED_CHECK_TITLE,
   type IntegrityActivityNotableTurnLite,
 } from "@/components/school/teacher/_pieces/integrity-pieces";
-import { Skeleton } from "@/components/ui";
-import { isFlaggedSubmission } from "@/components/school/teacher/roster-flagged";
 import { PdfView } from "@/components/ui/pdf-view";
 import { WorkGalleryModal } from "@/components/school/teacher/_pieces/work-gallery";
 import { ReopenControl } from "@/components/school/teacher/_pieces/reopen-control";
 import {
   teacher,
-  type AiGradeBlock,
   type AiGradeEntry,
   type GradeBreakdownEntry,
   type GradeDeduction,
-  type IntegrityDisposition,
   type IntegrityResolutionOutcome,
   type SubmissionAttempt,
   type SubmissionFile,
@@ -48,225 +50,63 @@ import {
   type UnfinishedCheck,
   type TeacherRubric,
   type ClassRubricRule,
-  type TeacherGraphCheck,
   type TeacherSubmissionDetail,
   type TeacherSubmissionDetailProblem,
   type TeacherSubmissionDrawing,
   type TeacherSubmissionRow,
   type TeacherSubmissionStep,
 } from "@/lib/api";
-import { GraphCheckReview, openGraphItems } from "@/components/school/teacher/_pieces/graph-check-review";
+import {
+  GraphCheckReview,
+  openGraphItems,
+} from "@/components/school/teacher/_pieces/graph-check-review";
 import { effectiveRubric, rubricChanged, rubricFields } from "@/lib/rubric";
 import { PHOTO_URLS_EXPIRED, onPhotoError } from "@/lib/submission-photos";
 import { deductionPoints, earnedPoints, formatPoints } from "@/lib/points";
-
-type GradeStatus = GradeBreakdownEntry["score_status"];
-
-// ── Keyboard grading — focus-safety helpers ─────────────────────────
-//
-// The grading shortcuts (1/2/3, j/k, Enter…) live on a document-level
-// listener so they work no matter where focus sits in the problems
-// pane. That power makes guarding against accidental hijacks the whole
-// game: a teacher typing "2/3" in a feedback box, or a percent into the
-// partial input, must NEVER trip a grade shortcut.
-//
-// `isTypingTarget` is the gate — when the active element is any text
-// surface (input, textarea, select, or contenteditable) the global
-// handler bails entirely. We read `document.activeElement` rather than
-// the event target because the listener is global and we care about
-// where focus actually *is*, not where the key originated.
-function isTypingTarget(el: Element | null): boolean {
-  if (!el) return false;
-  const tag = el.tagName;
-  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return true;
-  return (el as HTMLElement).isContentEditable === true;
-}
-
-// Any open modal on this page renders a `[role="dialog"]` (the shared
-// Modal — publish/regrade confirms — plus the verdict-legend, integrity
-// conversation, and image lightbox). They're all conditionally rendered,
-// so a match means a dialog is genuinely open. While one is, the grading
-// shortcuts must NOT fire — otherwise 1/2/3 would grade the problem
-// *behind* the dialog and Enter/→ would switch students underneath a
-// publish/regrade confirm. The dialog owns the keyboard until it closes.
-function isDialogOpen(): boolean {
-  return document.querySelector('[role="dialog"]') !== null;
-}
-
-// `isActionableTarget` distinguishes a focused button/link (which
-// handles its own Enter/Space activation) from a focused problem row
-// (an inert tabIndex=-1 div). We only treat Enter as "next student"
-// when focus is NOT on an actionable control, so pressing Enter on a
-// focused grade button activates that button instead of double-firing
-// a student advance.
-function isActionableTarget(el: Element | null): boolean {
-  if (!el) return false;
-  const tag = el.tagName;
-  if (tag === "BUTTON" || tag === "A") return true;
-  return el.getAttribute("role") === "button";
-}
-
-
-/**
- * Grading review workspace: one HW × one section.
- *
- * Route: /school/teacher/courses/[id]/homework/[hwId]/sections/[sid]/review
- *
- * Two-pane layout — left is the full section roster (every enrolled
- * student, whether they've submitted or not), right is the selected
- * student's work. Students who haven't submitted are visible in the
- * list with a "Not submitted" marker so the teacher can spot missing
- * work at a glance.
- *
- * Grading model: per-problem Full/Partial/Zero picks auto-save on
- * every click (the backend accepts full-replacement breakdown writes).
- * The overall percent is the backend's average of the per-problem
- * percents; we show it live in the detail pane's summary card. A
- * "Next student →" button jumps to the next submitter that still
- * needs a published grade. Publishing is a one-click, HW-wide action
- * gated by a confirmation dialog (the backend publishes every graded
- * submission on the HW at once — the dialog discloses cross-section
- * scope when applicable).
- */
-type RosterEntry = {
-  student_id: string;
-  student_name: string;
-  student_email: string;
-  /** Present if the student has submitted; null if they haven't. */
-  submission: TeacherSubmissionRow | null;
-  /** Their personal due date, when the teacher reopened it for them. */
-  personal_due_at: string | null;
-};
-
-type RosterFilter = "all" | "needs_me" | "flagged" | "low_confidence";
-
-// AI grader confidence bands. The pipeline reports a calibrated 0-1
-// score per problem; we read it, never compute it. <0.6 is the
-// long-standing "alarm" threshold (amber low-confidence emphasis);
-// 0.6-0.85 is medium; >=0.85 is high. Surfacing all three — instead of
-// only the alarm — lets a teacher triage toward the calls the model was
-// least sure of, the safety rail a future bulk-accept feature needs.
-const CONFIDENCE_LOW = 0.6;
-const CONFIDENCE_HIGH = 0.85;
-
-// Shared empty set for the "this state belongs to a different submission"
-// derivation — avoids allocating a new Set on every render while a
-// student's confirm/expand selections are scoped to their submission id.
-const EMPTY_ID_SET: ReadonlySet<string> = new Set<string>();
-
-function confidenceBand(c: number): "high" | "medium" | "low" {
-  if (c >= CONFIDENCE_HIGH) return "high";
-  if (c >= CONFIDENCE_LOW) return "medium";
-  return "low";
-}
-
-// A problem the AI is confident about — high band (>=0.85) on a present
-// AI grade. These COLLAPSE to a one-line confirm row in the triage detail
-// pane; everything else (medium / low / no AI grade) stays fully
-// expanded. A teacher override re-expands the row (handled at the call
-// site via the override check) so the teacher is never editing inside a
-// collapsed summary.
-function isConfidentAi(ai: AiGradeEntry | null): boolean {
-  return ai !== null && ai.confidence !== null && ai.confidence >= CONFIDENCE_HIGH;
-}
-
-// The grading key that re-affirms the AI's suggestion in place. Quarter
-// scale: 1=full, 5=zero, partial→nearest quarter key (2=75, 3=50, 4=25).
-// Pressing this key on a collapsed confident row CONFIRMS it; pressing
-// any other grade key is an override that expands + re-grades.
-function aiConfirmKey(ai: AiGradeEntry | null): "1" | "2" | "3" | "4" | "5" | null {
-  if (!ai) return null;
-  if (ai.score_status === "full") return "1";
-  if (ai.score_status === "zero") return "5";
-  if (ai.percent >= 62.5) return "2";
-  if (ai.percent >= 37.5) return "3";
-  return "4";
-}
-
-// Has the teacher moved a problem off the AI's call? Compares the live
-// grade entry to the AI suggestion (status, and percent for partials).
-// Used both to draw the "revert" breadcrumb and to force a confident
-// row back open — a teacher mid-edit must never be editing inside a
-// collapsed one-liner.
-function teacherOverrodeAi(
-  entry: GradeBreakdownEntry | null,
-  ai: AiGradeEntry | null,
-): boolean {
-  if (!ai || !entry) return false;
-  if (entry.score_status !== ai.score_status) return true;
-  return (
-    entry.score_status === "partial" &&
-    Math.round(entry.percent) !== Math.round(ai.percent)
-  );
-}
-
-// The AI's call on a graph problem, with the teacher's ✗ on items the
-// drawing check left unclear taken off — the grade the AI's check and
-// her calls make together. Measuring "did she override the AI" against
-// this keeps a ✗ from reading as an override (and "revert" from undoing
-// it); ✓ changes nothing, since an unclear item already kept its points.
-// Her calls count even once she re-scores the problem by hand, so
-// "revert" goes back to the AI's call with them, not without.
-function withGraphCalls(
-  ai: AiGradeEntry | null,
-  graph: TeacherGraphCheck | null | undefined,
-): AiGradeEntry | null {
-  if (!ai || !graph || graph.points <= 0) return ai;
-  const off = graph.items
-    .filter((i) => i.verdict === "unclear" && i.teacher === "no")
-    .reduce((sum, i) => sum + (i.points * 100) / graph.points, 0);
-  if (off === 0) return ai;
-  const percent = Math.min(Math.max(ai.percent - off, 0), 100);
-  const score_status = percent >= 100 ? "full" : percent <= 0 ? "zero" : "partial";
-  return { ...ai, percent, score_status };
-}
-
-// A teacher's ✓ / ✗ on a graph checklist item, and what the server
-// sends back once it has re-scored the problem.
-type GraphCall = { problemId: string; n: number; verdict: "yes" | "no" };
-type GraphCallResult = Awaited<ReturnType<typeof teacher.setGraphItemVerdict>>;
-
-// Always-on AI confidence indicator for a single grade. Reads the
-// pipeline's calibrated value — never computes or mutates it. Null
-// (historical, pre-confidence rows) renders nothing so those stay
-// neutral. Low keeps the loud amber pill it always had; high/medium are
-// deliberately quiet (a hairline dot + muted label) so a teacher
-// grading 30 papers is only pulled toward the uncertain calls.
-function ConfidenceSignal({ confidence }: { confidence: number | null }) {
-  if (confidence === null) return null;
-  const band = confidenceBand(confidence);
-  const pct = Math.round(confidence * 100);
-
-  if (band === "low") {
-    return (
-      <span
-        className="inline-flex items-center gap-1 rounded-[--radius-pill] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-[color:var(--color-warning-dark)] dark:bg-[color:var(--color-warning)]/10"
-        title={`AI reported low confidence (${pct}%) — review this one carefully`}
-      >
-        <span aria-hidden>⚠</span>
-        Low confidence · {pct}%
-      </span>
-    );
-  }
-
-  const dotClass =
-    band === "high"
-      ? "bg-[color:var(--color-success)]"
-      : "bg-[color:var(--color-warning)]";
-  const label = band === "high" ? "High" : "Medium";
-  return (
-    <span
-      className="inline-flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-text-muted"
-      title={`AI grading confidence: ${label.toLowerCase()} (${pct}%)`}
-    >
-      <span
-        aria-hidden
-        className={`inline-block h-1.5 w-1.5 rounded-full ${dotClass}`}
-      />
-      AI · {label} {pct}%
-    </span>
-  );
-}
+import type {
+  GradeStatus,
+  RosterEntry,
+  RosterFilter,
+  GraphCall,
+  GraphCallResult,
+  StepAnchor,
+  IntegrityBannerKey,
+} from "./_lib/types";
+import { isTypingTarget, isDialogOpen, isActionableTarget } from "./_lib/focus";
+import {
+  CONFIDENCE_LOW,
+  EMPTY_ID_SET,
+  isConfidentAi,
+  aiConfirmKey,
+  teacherOverrodeAi,
+  withGraphCalls,
+  isFlagged,
+  needsTeacher,
+  isAwaitingGrade,
+  aiSkipReason,
+  AI_SKIP_COPY,
+  chipGradeLabel,
+  canAiGrade,
+  isAiGrading,
+  AI_GRADE_POLL_TIMEOUT_MS,
+  sameRow,
+  aiGradePollDelay,
+  hasGraphToCheck,
+  hasLowConfidence,
+  classOnly,
+  applyRosterFilter,
+  rowStatusLabel,
+  reviewMarker,
+  lateLabel,
+  formatPercent,
+  unitsNotInWorkNote,
+  recordedLabel,
+  pageLabelFor,
+} from "./_lib/grading";
+import { NEUTRAL_STYLE, INTEGRITY_STYLE } from "./_lib/integrity-style";
+import { ConfidenceSignal } from "./_components/confidence-signal";
+import { DetailSkeleton, ReviewLoadingSkeleton } from "./_components/skeletons";
+import { VerdictLegendTrigger, KeyboardShortcutsModal } from "./_components/reference-modals";
 
 // Suspense boundary required because the inner component reads
 // useSearchParams (the ?student= deep-link focus), which opts the page
@@ -2812,173 +2652,6 @@ function RegradeConfirmDialog({
   );
 }
 
-// ────────────────────────────────────────────────────────────────────
-// Roster filter — narrows the left pane to "anything that needs me"
-// or "only the flagged ones". Default "all" keeps the section view.
-// `needs_me` is the scan-mode for grading mode: hides students whose
-// submissions are already published-and-clean. `flagged` is the
-// scan-mode for the integrity check, hiding everything that isn't
-// a verdict requiring teacher attention.
-// ────────────────────────────────────────────────────────────────────
-
-function isFlagged(entry: RosterEntry): boolean {
-  return !!entry.submission && isFlaggedSubmission(entry.submission);
-}
-
-function needsTeacher(entry: RosterEntry): boolean {
-  const sub = entry.submission;
-  if (!sub) return false;
-  // Settled state is a published-and-clean grade. Everything else —
-  // ungraded, graded-but-not-published, dirty, integrity-flagged — is
-  // work that wants the teacher's attention.
-  if (sub.grade_published_at !== null && !sub.grade_dirty) return false;
-  return true;
-}
-
-// Pure read-only predicate over already-loaded roster data: true when
-// any problem on the submission carries an AI grade the model flagged
-// as low confidence. `breakdown` preserves the AI's per-problem
-// confidence (a teacher click never rewrites it — see setProblemGrade),
-// so this needs no extra fetch. Historical rows without a confidence
-// value contribute nothing, matching the always-on signal's neutral
-// treatment of null.
-/** Turned in, no grade yet, and a grade is genuinely still coming.
- *
- *  Deliberately NOT just `final_score === null`. An unreadable
- *  submission also has no score, but the confirm path records the skip
- *  and never enqueues it (`school_student_practice`), so no grade is on
- *  its way and no `grading_jobs` row exists. Counting it as awaiting
- *  made "Grade N ungraded" a permanent no-op — it moved zero jobs,
- *  refetched to the identical state, and never disappeared. Its own
- *  status pill already says "Couldn't read · grade manually"; the
- *  grouping has to agree with the pill. */
-function isAwaitingGrade(entry: RosterEntry): boolean {
-  const sub = entry.submission;
-  if (!sub) return false;
-  if (sub.final_score !== null) return false;
-  return (
-    sub.ai_grading_status !== "skipped_unreadable" &&
-    sub.ai_grading_status !== "skipped_too_long"
-  );
-}
-
-/** Why the AI left a submission for the teacher to grade by hand: the
- *  photo couldn't be read, or the homework was too long to grade in one
- *  pass. Null once a grade exists. Reads the stamped disposition AND the
- *  row's `ai_grade_block`, since the grading poll refreshes the row but
- *  not the open detail pane. */
-type AiSkip = "unreadable" | "too_long";
-function aiSkipReason(
-  aiGradingStatus: string | null,
-  block: AiGradeBlock | null | undefined,
-  finalScore: number | null,
-): AiSkip | null {
-  if (finalScore !== null) return null;
-  if (aiGradingStatus === "skipped_unreadable" || block === "unreadable") {
-    return "unreadable";
-  }
-  if (aiGradingStatus === "skipped_too_long" || block === "too_long") {
-    return "too_long";
-  }
-  return null;
-}
-
-const AI_SKIP_COPY: Record<AiSkip, { status: string; title: string; body: string }> = {
-  unreadable: {
-    status: "Couldn't read · grade manually",
-    title: "Couldn’t read this submission",
-    body:
-      "The work was too unclear to read, so nothing was auto-graded. Open " +
-      "the pages and grade it by hand — the grading controls work the " +
-      "same, there’s just no AI suggestion to start from.",
-  },
-  too_long: {
-    status: "Too long for AI · grade by hand",
-    title: "Too long for the AI to grade",
-    body:
-      "This submission is too long for the AI to grade in one pass, so " +
-      "nothing was auto-graded. Please grade it by hand — the grading " +
-      "controls work the same, there’s just no AI suggestion to start from.",
-  },
-};
-
-/** "Full" / "No credit" / "Partial 70%" — how a grade reads on a
- *  report chip. */
-function chipGradeLabel(status: string, percent: number | null | undefined): string {
-  if (status === "full") return "Full";
-  if (status === "zero") return "No credit";
-  return `Partial ${Math.round(percent ?? 0)}%`;
-}
-
-/** The server says the AI grader can take this submission: never
- *  graded in any form, readable work the student has confirmed (not
- *  flagged as misread), AI grading on. */
-function canAiGrade(sub: TeacherSubmissionRow): boolean {
-  return sub.ai_grade_block === null;
-}
-
-/** A grade is on its way: sent from this page and not yet landed, or a
- *  drain is working on it right now. */
-function isAiGrading(
-  sub: TeacherSubmissionRow,
-  pending: ReadonlySet<string>,
-): boolean {
-  if (sub.final_score !== null) return false;
-  return pending.has(sub.id) || sub.grading_job_status === "running";
-}
-
-// One grade usually lands in 10–40s; a class takes longer because the
-// queue grades the first submission alone to warm the shared prompt
-// cache. Past the timeout the page stops watching and shows the
-// server's state as-is — a still-queued row offers the button again.
-// Each poll reads the whole homework's roster (there is no lighter
-// endpoint), so it backs off: quick while a single grade is likely to
-// land, slower once it's clearly a class-sized batch.
-const AI_GRADE_POLL_TIMEOUT_MS = 4 * 60 * 1000;
-// Whether a poll's fresh read of a row says anything the page doesn't
-// already have. Whole-row comparison on purpose: a list of "the fields
-// that matter" is a list someone forgets to extend.
-function sameRow(a: TeacherSubmissionRow, b: TeacherSubmissionRow): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
-}
-function aiGradePollDelay(elapsedMs: number): number {
-  if (elapsedMs < 20_000) return 3000;
-  if (elapsedMs < 60_000) return 5000;
-  return 10_000;
-}
-
-/** A graph item the drawing check couldn't decide, waiting on her. */
-function hasGraphToCheck(entry: RosterEntry): boolean {
-  return (entry.submission?.graph_items_open ?? 0) > 0;
-}
-
-function hasLowConfidence(entry: RosterEntry): boolean {
-  const breakdown = entry.submission?.breakdown;
-  if (!breakdown) return false;
-  return breakdown.some(
-    (b) => b.confidence !== null && b.confidence < CONFIDENCE_LOW,
-  );
-}
-
-/** Her students, without her own rehearsal. See the two-populations
- *  note in HomeworkSectionReview: class counts use this, action counts
- *  use the full roster. */
-function classOnly(entries: RosterEntry[]): RosterEntry[] {
-  return entries.filter((e) => !e.submission?.is_preview);
-}
-
-function applyRosterFilter(
-  roster: RosterEntry[],
-  filter: RosterFilter,
-): RosterEntry[] {
-  if (filter === "all") return roster;
-  // Same population the chips count — see RosterFilterBar.
-  if (filter === "needs_me") return classOnly(roster).filter(needsTeacher);
-  if (filter === "low_confidence")
-    return classOnly(roster).filter(hasLowConfidence);
-  return classOnly(roster).filter(isFlagged);
-}
-
 function RosterFilterBar({
   roster,
   value,
@@ -3079,81 +2752,6 @@ function RosterChip({
         </span>
       )}
     </button>
-  );
-}
-
-// ────────────────────────────────────────────────────────────────────
-// Loading skeletons — mirror the settled layout so the page redraws in
-// place instead of blanking to bare text. The detail skeleton matters
-// most: it fires on every student switch, the most frequent transition
-// on this surface. Built from the shared `Skeleton` (a low-amplitude
-// animate-pulse).
-// ────────────────────────────────────────────────────────────────────
-
-function RosterRowSkeleton() {
-  return (
-    <div className="flex flex-col gap-1.5 border-b border-border-light px-4 py-2.5 last:border-b-0">
-      <div className="flex items-center justify-between gap-2">
-        <Skeleton className="h-3.5 w-2/5" />
-        <Skeleton className="h-3 w-7" />
-      </div>
-      <div className="flex items-center gap-1.5">
-        <Skeleton className="h-1.5 w-1.5 rounded-full" />
-        <Skeleton className="h-2.5 w-1/2" />
-      </div>
-    </div>
-  );
-}
-
-function DetailSkeleton() {
-  return (
-    <div className="space-y-4" role="status" aria-busy="true">
-      <span className="sr-only">Loading student work…</span>
-      <div className="space-y-3 rounded-[--radius-xl] border border-border-light bg-surface p-5 shadow-sm">
-        <Skeleton className="h-5 w-1/3" />
-        <Skeleton className="h-3.5 w-2/3" />
-      </div>
-      {[0, 1].map((i) => (
-        <div
-          key={i}
-          className="space-y-3 rounded-[--radius-xl] border border-border-light bg-surface p-5 shadow-sm"
-        >
-          <Skeleton className="h-4 w-1/4" />
-          <Skeleton className="h-3.5 w-full" />
-          <Skeleton className="h-3.5 w-5/6" />
-          <div className="flex gap-2 pt-1">
-            <Skeleton className="h-7 w-16" />
-            <Skeleton className="h-7 w-16" />
-            <Skeleton className="h-7 w-16" />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function ReviewLoadingSkeleton() {
-  return (
-    <div
-      className="mt-5 grid gap-5 md:grid-cols-[280px_1fr]"
-      role="status"
-      aria-busy="true"
-    >
-      <span className="sr-only">Loading roster…</span>
-      <aside className="self-start rounded-[--radius-xl] border border-border-light bg-surface shadow-sm">
-        <div className="border-b border-border-light px-4 py-2.5">
-          <Skeleton className="h-3 w-3/4" />
-        </div>
-        <div>
-          {Array.from({ length: 6 }).map((_, i) => (
-            <RosterRowSkeleton key={i} />
-          ))}
-        </div>
-      </aside>
-      <section className="min-w-0">
-        <DetailSkeleton />
-      </section>
-    </div>
   );
 }
 
@@ -3477,128 +3075,6 @@ function StudentRow({
       )}
     </button>
   );
-}
-
-function rowStatusLabel(
-  entry: RosterEntry,
-  aiGrading: false | "watched" | "unwatched" = false,
-): {
-  text: string;
-  dotClass: string;
-} {
-  const sub = entry.submission;
-  if (!sub) {
-    return { text: "Not submitted", dotClass: "bg-gray-300" };
-  }
-  // Sent to the AI grader, grade not back yet. Above the flagged branch
-  // on purpose: the teacher chose to AI-grade a flagged submission, and
-  // "Reader misread" would read as though her click did nothing.
-  if (aiGrading === "unwatched") {
-    return {
-      text: "Still grading · refresh to check",
-      dotClass: "bg-primary",
-    };
-  }
-  if (aiGrading) {
-    return {
-      text: "AI grading…",
-      dotClass: "animate-pulse bg-primary",
-    };
-  }
-  // Student said "the reader got my work wrong" on the confirm screen —
-  // the submission skipped AI grading + integrity entirely and needs a
-  // manual pass. Surface it loudly (red) until the teacher publishes a
-  // clean grade, at which point the published branch below takes over.
-  if (
-    sub.extraction_flagged_at &&
-    !(sub.grade_published_at && !sub.grade_dirty)
-  ) {
-    return {
-      text: "Reader misread · review",
-      dotClass: "bg-[color:var(--color-error)]",
-    };
-  }
-  // A graph item the check couldn't decide holds up Approve — say so
-  // before any graded/published state reads as finished.
-  if (hasGraphToCheck(entry) && !sub.reviewed_at) {
-    const n = sub.graph_items_open ?? 0;
-    return {
-      text: `${n === 1 ? "1 graph item" : `${n} graph items`} to check`,
-      dotClass: "bg-[color:var(--color-warning)]",
-    };
-  }
-  // The AI skipped it (unreadable photo, or too long to grade in one
-  // pass) and never produced a grade — call it out distinctly so the
-  // teacher knows this row needs a manual pass, not just an unopened
-  // suggestion. Warning dot, reusing the same amber token the dirty/
-  // ungraded states use. Once a grade exists the skip reads null and the
-  // published / graded branches below take over.
-  const skip = aiSkipReason(sub.ai_grading_status, sub.ai_grade_block, sub.final_score);
-  if (skip) {
-    return {
-      text: AI_SKIP_COPY[skip].status,
-      dotClass: "bg-[color:var(--color-warning)]",
-    };
-  }
-  if (sub.grade_published_at) {
-    if (sub.grade_dirty) {
-      return { text: "Edited · not yet sent", dotClass: "bg-[color:var(--color-warning)]" };
-    }
-    return { text: "Published", dotClass: "bg-green-500" };
-  }
-  if (sub.final_score !== null) {
-    return { text: "Graded, not published", dotClass: "bg-[color:var(--color-warning)]" };
-  }
-  if (sub.ai_grade_block === "awaiting_confirmation") {
-    return { text: "Waiting for student to confirm", dotClass: "bg-gray-300" };
-  }
-  if (sub.ai_grade_block === "extracting") {
-    return { text: "Reading work…", dotClass: "animate-pulse bg-gray-400" };
-  }
-  if (sub.ai_grade_block === "no_extraction") {
-    return { text: "Work not read yet", dotClass: "bg-gray-400" };
-  }
-  return { text: "Needs review", dotClass: "bg-gray-400" };
-}
-
-// Per-student approval marker for the roster, so the teacher sees review
-// progress at a glance. `reviewed_at` means she stands behind the grade:
-// the explicit Approve on an AI grade, or a hand grade (no AI score) with
-// every problem scored — the server stamps that itself, since there's no
-// AI number to vouch for. So an unstamped hand grade can only mean some
-// problems are still unscored, and the marker says that rather than
-// "Not reviewed", which would send her looking for an Approve button
-// that isn't there. Returns null when there's nothing to approve yet (no
-// grade — ungraded / skipped-unreadable, where the status label already
-// tells the story).
-function reviewMarker(
-  sub: TeacherSubmissionRow,
-): { text: string; tone: "reviewed" | "unreviewed" } | null {
-  if (sub.final_score === null) return null;
-  if (sub.reviewed_at) return { text: "Approved", tone: "reviewed" };
-  if (sub.ai_score === null) return { text: "Partly graded", tone: "unreviewed" };
-  return { text: "Not reviewed", tone: "unreviewed" };
-}
-
-// ────────────────────────────────────────────────────────────────────
-// Submission detail — right pane. The student's submitted pages
-// (images + PDFs) are the source of truth; typed answers sit
-// alongside the answer key so the teacher can compare without
-// switching contexts. Per-problem Full/Partial/Zero picks auto-save
-// on click.
-// ────────────────────────────────────────────────────────────────────
-
-/** "1 day late" / "3 days late". */
-function lateLabel(days: number): string {
-  if (days <= 0) return "late";
-  return `${days} ${days === 1 ? "day" : "days"} late`;
-}
-
-/** A percent for the penalty line: whole numbers as-is, else one
- *  decimal — 10% off 85% is 76.5%, and rounding it would hide the cut. */
-function formatPercent(value: number): string {
-  const r = Math.round(value * 10) / 10;
-  return Number.isInteger(r) ? String(r) : r.toFixed(1);
 }
 
 /**
@@ -5221,22 +4697,8 @@ function RubricSection({
   );
 }
 
-// ────────────────────────────────────────────────────────────────────
-// One row of student work in the review panel. Renders the canonical
-// (edited if the student corrected it on the confirm screen, else
-// original Vision) text, plus an expandable disclosure exposing the
-// original Vision read whenever the student edited the row. The
-// teacher's daily flow stays clean — the badge is a quiet signal,
-// not a diff — but verification against the original is one tap away.
-// ────────────────────────────────────────────────────────────────────
-
-// Anchor highlight for a student-work step that a receipt deduction
-// points at — a color-matched tint + numbered badge so the eye links the
-// "−20% sign error" ledger line to the exact step it happened on. Two
-// tones (amber / info) cycle across a problem's deductions so multiple
-// anchors stay visually distinct, matching the receipt's badge colors.
-type StepAnchor = { tone: "amber" | "info" };
 const ANCHOR_TONES = ["amber", "info"] as const;
+
 const ANCHOR_STYLE: Record<
   "amber" | "info",
   { wrap: string; badge: string; idRef: (id: string) => string }
@@ -5336,16 +4798,6 @@ function StudentStepRow({
       </div>
     </div>
   );
-}
-
-// The reader writes the units a question asks for into the answer even
-// when the student wrote none ("15.76" read as "15.76 ft"). A unit that
-// appears nowhere in the work is pointed out so the teacher checks the
-// photo before crediting it.
-function unitsNotInWorkNote(units: string[]): string {
-  const named = units.map((u) => `“${u}”`);
-  const list = named.length > 1 ? `${named.slice(0, -1).join(", ")} and ${named.at(-1)}` : named[0];
-  return `${list} ${units.length > 1 ? "aren’t" : "isn’t"} written anywhere in the student’s work — check the photo.`;
 }
 
 // The body of a drawing the extractor reported but a zoomed second look
@@ -5520,14 +4972,6 @@ function DrawingsPanel({
   );
 }
 
-// "Table" for a proof's Statements/Reasons grid, "Graph" for a graph —
-// naming what was recorded keeps a quiet line from overclaiming.
-function recordedLabel(drawn: TeacherSubmissionDrawing[]): string {
-  const kinds = [...new Set(drawn.map((d) => d.kind.replace("_", " ")))];
-  if (kinds.length !== 1 || kinds[0] === "other") return "Drawing";
-  return kinds[0].charAt(0).toUpperCase() + kinds[0].slice(1);
-}
-
 /**
  * The status after a drawing's kind. A table is text in a grid — nothing
  * is "plotted" and the zoomed check can't read it — so it gets no status
@@ -5630,22 +5074,6 @@ function OtherWorkDisclosure({
       )}
     </div>
   );
-}
-
-// The page marker's label. "p. 3" for one page, "p. 3-5" for work that
-// runs across a break, and an explicit list when the set has gaps —
-// a student who flipped back leaves pages 1 and 4, and rendering that as
-// "p. 1-4" would claim work on 2 and 3 that isn't there.
-// Null when the extraction didn't tag a page, so the row shows no marker
-// rather than a guess: a wrong page number costs the teacher more than
-// no page number does.
-function pageLabelFor(pages: number[]): string | null {
-  if (pages.length === 0) return null;
-  const first = pages[0]!;
-  const last = pages[pages.length - 1]!;
-  if (first === last) return `p. ${first}`;
-  const contiguous = last - first + 1 === pages.length;
-  return contiguous ? `p. ${first}-${last}` : `p. ${pages.join(", ")}`;
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -6937,412 +6365,6 @@ function GradeBtn({
         </span>
       )}
     </button>
-  );
-}
-
-// Visual treatment for each disposition. Paired with both an icon
-// and explicit copy so color-only signal is never the whole story
-// (colorblind-safe by design).
-// Icon badge color (`iconBg`) carries the disposition valence in a
-// solid, high-contrast form. The surrounding card stays on a light
-// tint (`bg`) as soft context, but the TITLE lives in neutral
-// `text-text-primary` so it's always unambiguously readable — we
-// learned from two prior passes that light colored text on tinted
-// bg reads as washed-out regardless of contrast math.
-type IntegrityBannerKey =
-  | IntegrityDisposition
-  | "unfinished"
-  | "extracting"
-  | "awaiting_student"
-  | "in_progress"
-  | "skipped_unreadable"
-  | "needs_review";
-
-const NEUTRAL_STYLE = {
-  bg: "bg-[color:var(--color-surface-alt-2)]",
-  border: "border-border-light",
-  iconBg: "bg-gray-400 text-white dark:bg-gray-500",
-};
-
-const INTEGRITY_STYLE: Record<
-  IntegrityBannerKey,
-  { bg: string; border: string; iconBg: string; icon: string; label: string }
-> = {
-  pass: {
-    bg: "bg-green-50 dark:bg-green-900/20",
-    border: "border-green-200 dark:border-green-900/40",
-    iconBg: "bg-green-600 text-white",
-    icon: "✓",
-    label: "Student understood their own work",
-  },
-  needs_practice: {
-    bg: "bg-blue-50 dark:bg-blue-900/20",
-    border: "border-blue-200 dark:border-blue-900/40",
-    iconBg: "bg-blue-600 text-white",
-    icon: "↻",
-    label: "Procedural knowledge — consider revisiting the concept",
-  },
-  tutor_pivot: {
-    bg: "bg-[color:var(--color-warning-bg)]",
-    border: "border-[color:var(--color-warning)]/30",
-    iconBg: "bg-[color:var(--color-warning-dark)] text-white",
-    icon: "?",
-    label: "Student was lost — got tutored through it",
-  },
-  flag_for_review: {
-    bg: "bg-[color:var(--color-error-light)] ",
-    border: "border-[color:var(--color-error-border)] ",
-    iconBg: "bg-[color:var(--color-error)] text-white",
-    icon: "⚑",
-    label: "Review — correct work but couldn't explain it",
-  },
-  needs_review: {
-    ...NEUTRAL_STYLE,
-    icon: "◌",
-    label: "Inconclusive — teacher review",
-  },
-  // Dashed border + outlined ◐: the same "something is missing" mark as
-  // the roster pill, and deliberately no verdict color.
-  unfinished: {
-    bg: "bg-[color:var(--color-surface-alt-2)]",
-    border: "border-dashed border-text-muted/60",
-    iconBg: "border border-text-muted/70 bg-surface text-text-secondary",
-    icon: "◐",
-    label: UNFINISHED_CHECK_TITLE,
-  },
-  extracting: {
-    ...NEUTRAL_STYLE,
-    icon: "…",
-    label: "Preparing the integrity check…",
-  },
-  awaiting_student: {
-    ...NEUTRAL_STYLE,
-    icon: "·",
-    label: "Integrity check hasn't been started yet",
-  },
-  in_progress: {
-    ...NEUTRAL_STYLE,
-    icon: "…",
-    label: "Integrity check running",
-  },
-  skipped_unreadable: {
-    ...NEUTRAL_STYLE,
-    icon: "·",
-    label: "Couldn't read student's work — review their submission",
-  },
-};
-
-// ── Verdict legend ──────────────────────────────────────────────────
-//
-// Nine disposition / status states is a lot to learn from icons alone.
-// First-time teachers consistently asked "what does ↻ mean vs ⚑?" so
-// we surface a small affordance in the roster header that opens a
-// keyed reference card. Same icons + colors as the live banner, so
-// what the teacher learns here matches what they see on each row.
-//
-// The labels deliberately drop the implementation jargon (`pass` /
-// `tutor_pivot` / `flag_for_review`) — teachers see the meaning, not
-// the enum.
-
-const VERDICT_LEGEND_ITEMS: { key: IntegrityBannerKey; description: string }[] = [
-  { key: "pass", description: "Student explained their work clearly. Probably did the assignment themselves." },
-  { key: "needs_practice", description: "Got the right answer mechanically but couldn't show why it works. Worth revisiting in class." },
-  { key: "tutor_pivot", description: "Student got stuck and the AI walked them through it. Their submitted work doesn't reflect what they could do alone." },
-  { key: "flag_for_review", description: "Submitted work is correct but the student couldn't explain it. Most likely cheating signal — open the conversation to decide." },
-  { key: "needs_review", description: "Check ran but couldn't reach a verdict (e.g. ran out of turns). Manual review recommended." },
-  { key: "unfinished", description: "The student didn't finish the check — never confirmed their reading, never answered, or left partway. Not a flag — there's just no understanding signal. Grade their written work; if they never confirmed the reading, it hasn't been AI-graded, so grade it by hand." },
-  { key: "skipped_unreadable", description: "Vision couldn't read the student's submission. Grade manually, or have them re-submit." },
-  { key: "extracting", description: "Vision is still parsing the student's work. The verdict will arrive shortly." },
-  { key: "in_progress", description: "Student is actively chatting with the AI. Verdict pending." },
-  { key: "awaiting_student", description: "Student submitted but hasn't started the integrity conversation yet." },
-];
-
-function VerdictLegendTrigger() {
-  const [open, setOpen] = useState(false);
-  // Capture the trigger so we can restore focus on close — without
-  // this, after closing the modal focus jumps to <body> and the
-  // teacher loses their place in the page.
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
-  return (
-    <>
-      <button
-        ref={triggerRef}
-        type="button"
-        onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1 rounded-[--radius-sm] px-1.5 py-0.5 text-[11px] font-semibold text-text-muted transition-colors hover:bg-[color:var(--color-surface-alt-2)] hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-        aria-label="Show integrity verdict legend"
-      >
-        <span aria-hidden>ℹ</span>
-        <span className="uppercase tracking-wider">Guide</span>
-      </button>
-      {open && (
-        <VerdictLegendModal
-          onClose={() => {
-            setOpen(false);
-            // Defer until after React unmounts the modal so the trigger
-            // is back in the document and focusable.
-            requestAnimationFrame(() => triggerRef.current?.focus());
-          }}
-        />
-      )}
-    </>
-  );
-}
-
-function VerdictLegendModal({ onClose }: { onClose: () => void }) {
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-
-  // Escape closes — keyboard parity with the rest of the app's
-  // dialogs. Listener lives on document so it fires regardless of
-  // current focus inside the modal.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onClose();
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  // Move focus into the dialog on open so screen readers announce
-  // the title and Tab cycles within the legend's controls. The
-  // wrapper has tabIndex={-1} purely to make it focusable.
-  useEffect(() => {
-    dialogRef.current?.focus();
-  }, []);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center"
-      onClick={onClose}
-    >
-      <div
-        ref={dialogRef}
-        tabIndex={-1}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="verdict-legend-title"
-        className="w-full max-w-lg rounded-[--radius-xl] bg-surface p-6 shadow-xl focus:outline-none"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2
-              id="verdict-legend-title"
-              className="text-lg font-bold text-text-primary"
-            >
-              What the verdicts mean
-            </h2>
-            <p className="mt-1 text-xs text-text-muted">
-              Veradic asks each student to explain a sample of their work after
-              they submit. The verdict on each row is what the AI concluded
-              from that conversation.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="rounded-full p-1 text-text-muted transition-colors hover:bg-[color:var(--color-surface-alt-2)] hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-          >
-            <span aria-hidden className="text-lg leading-none">×</span>
-          </button>
-        </div>
-        <ul className="mt-4 space-y-3">
-          {VERDICT_LEGEND_ITEMS.map(({ key, description }) => {
-            const style = INTEGRITY_STYLE[key];
-            return (
-              <li key={key} className="flex items-start gap-3">
-                <span
-                  className={`mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-sm font-bold ${style.iconBg}`}
-                  aria-hidden
-                >
-                  {style.icon}
-                </span>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-text-primary">
-                    {style.label}
-                  </p>
-                  <p className="mt-0.5 text-xs text-text-secondary">
-                    {description}
-                  </p>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-        <div className="mt-6 flex justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-          >
-            Got it
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Keyboard shortcuts cheatsheet ───────────────────────────────────
-//
-// A small, dismissible reference for the grading keys, opened by "?"
-// or the quiet "Press ? for shortcuts" hint. Same modal vocabulary as
-// the integrity verdict legend above (Escape-closes, click-outside,
-// focus moved into the dialog) so the page has one consistent dialog
-// behaviour.
-
-const SHORTCUT_GROUPS: { heading: string; rows: { keys: string[]; label: string }[] }[] = [
-  {
-    heading: "Grade the focused problem",
-    rows: [
-      { keys: ["1"], label: "Full credit — 100%" },
-      { keys: ["2"], label: "Partial — 75%" },
-      { keys: ["3"], label: "Partial — 50%" },
-      { keys: ["4"], label: "Partial — 25%" },
-      { keys: ["5"], label: "No credit — 0%" },
-    ],
-  },
-  {
-    heading: "Confident (collapsed) rows",
-    rows: [
-      { keys: ["1", "5"], label: "The AI's own key confirms in place + advances" },
-    ],
-  },
-  {
-    heading: "Move",
-    rows: [
-      { keys: ["J", "↓"], label: "Next problem" },
-      { keys: ["K", "↑"], label: "Previous problem" },
-    ],
-  },
-  {
-    heading: "Students",
-    rows: [{ keys: ["Enter", "→"], label: "Next student" }],
-  },
-  {
-    heading: "The work",
-    rows: [{ keys: ["W"], label: "Open the student's pages" }],
-  },
-  {
-    heading: "Help",
-    rows: [
-      { keys: ["?"], label: "Toggle this cheatsheet" },
-      { keys: ["Esc"], label: "Close, or leave a text field" },
-    ],
-  },
-];
-
-function Kbd({ children }: { children: React.ReactNode }) {
-  return (
-    <kbd className="inline-flex min-w-[1.5rem] items-center justify-center rounded-[--radius-sm] border border-border-light bg-[color:var(--color-surface-alt-2)] px-1.5 py-0.5 font-sans text-[11px] font-bold text-text-secondary shadow-sm">
-      {children}
-    </kbd>
-  );
-}
-
-function KeyboardShortcutsModal({ onClose }: { onClose: () => void }) {
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-
-  // Escape closes — bubble phase, matching the verdict legend. The
-  // panel's grading listener bails while this modal is open, so the
-  // two never fight over a keystroke.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" || e.key === "?") {
-        e.preventDefault();
-        onClose();
-      }
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  // Move focus into the dialog so SR announces the title and Tab cycles
-  // inside; the wrapper has tabIndex={-1} purely to be focusable.
-  useEffect(() => {
-    dialogRef.current?.focus();
-  }, []);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 sm:items-center"
-      onClick={onClose}
-    >
-      <div
-        ref={dialogRef}
-        tabIndex={-1}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="kbd-shortcuts-title"
-        className="w-full max-w-md rounded-[--radius-xl] bg-surface p-6 shadow-xl focus:outline-none"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2
-              id="kbd-shortcuts-title"
-              className="text-lg font-bold text-text-primary"
-            >
-              Keyboard shortcuts
-            </h2>
-            <p className="mt-1 text-xs text-text-muted">
-              Grade without leaving the keyboard — press a number to score the
-              highlighted problem, then it advances to the next ungraded one.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="rounded-full p-1 text-text-muted transition-colors hover:bg-[color:var(--color-surface-alt-2)] hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-          >
-            <span aria-hidden className="text-lg leading-none">×</span>
-          </button>
-        </div>
-        <div className="mt-4 space-y-4">
-          {SHORTCUT_GROUPS.map((group) => (
-            <div key={group.heading}>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
-                {group.heading}
-              </p>
-              <ul className="mt-2 space-y-1.5">
-                {group.rows.map((row) => (
-                  <li
-                    key={row.label}
-                    className="flex items-center justify-between gap-4"
-                  >
-                    <span className="text-sm text-text-primary">{row.label}</span>
-                    <span className="flex shrink-0 items-center gap-1">
-                      {row.keys.map((k, i) => (
-                        <span key={k} className="flex items-center gap-1">
-                          {i > 0 && (
-                            <span className="text-[11px] text-text-muted">or</span>
-                          )}
-                          <Kbd>{k}</Kbd>
-                        </span>
-                      ))}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
-        </div>
-        <div className="mt-6 flex justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
-          >
-            Got it
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }
 
