@@ -44,6 +44,8 @@ from sqlalchemy.orm import load_only, undefer
 from api.core import photo_store
 from api.core.audit_log import record_student_activity
 from api.core.constants import MAX_PDF_BYTES, MAX_SUBMISSION_FILES, MAX_SUBMISSION_TOTAL_BYTES
+from api.core.extraction_queue import drain as extraction_drain
+from api.core.extraction_queue import enqueue_submission as enqueue_extraction
 from api.core.image_utils import (
     MIN_PAGE_LONG_EDGE,
     PAGE_ROTATIONS,
@@ -54,8 +56,6 @@ from api.core.image_utils import (
     rotate_upload,
     validate_and_decode_upload,
 )
-from api.core.extraction_queue import drain as extraction_drain
-from api.core.extraction_queue import enqueue_submission as enqueue_extraction
 from api.core.integrity_pipeline import (
     NextStep,
     spawn_diagnosis_seeding,

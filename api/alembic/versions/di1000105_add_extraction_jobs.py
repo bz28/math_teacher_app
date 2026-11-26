@@ -29,6 +29,12 @@ each, for work nobody asked for. That is `stage_for`'s
 difference between a backfill that heals a backlog and one that invents
 one.
 
+Only the last 14 days. This table lands months after the first read was
+owed, and a submission older than that with no read is one a teacher has
+long since graded by hand or written off: reading it now bills a Vision
+call for a result nobody will open, and puts a read under a grade the
+teacher already approved. A student who is still waiting is recent.
+
 Submissions the student already confirmed or flagged are excluded by
 `extraction IS NULL` on its own: neither stamp is reachable without an
 extraction to rule on.
@@ -44,8 +50,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "cn1000083"
-down_revision: str | Sequence[str] | None = "cm1000082"
+revision: str = "di1000105"
+down_revision: str | Sequence[str] | None = "dh1000104"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -117,6 +123,7 @@ def upgrade() -> None:
         JOIN assignments a ON a.id = s.assignment_id
         WHERE s.extraction IS NULL
           AND (a.integrity_check_enabled OR a.ai_grading_enabled)
+          AND s.submitted_at > now() - interval '14 days'
         """
     )
 

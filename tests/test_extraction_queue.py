@@ -1046,3 +1046,55 @@ async def test_the_attempt_refund_cannot_drive_the_budget_negative(
 
     await _finish(job_id, status=STATUS_QUEUED, error="x", refund_attempt=True)
     assert (await _job(sid)).attempts == 0, "the budget went negative"
+
+
+@pytest.mark.asyncio
+async def test_a_retake_during_the_read_is_read_again_not_lost(
+    world: dict[str, Any],
+) -> None:
+    """A retake (or a turn-in after a reopen) can replace the photos while
+    Vision is reading the old ones. The re-enqueue it makes is a no-op on
+    a `running` job, and the stale read is dropped by the `submitted_at`
+    guard — so the only thing standing between the new photos and "never
+    read" is the queue noticing no read landed and requeueing.
+    """
+    sid = await _seed_submission(world)
+    await _enqueue(world, sid)
+    calls = 0
+
+    async def read_while_retaken(*_a: Any, **_k: Any) -> dict[str, Any]:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            # The retake lands mid-read: new photos, restamped clock.
+            async with get_session_factory()() as s:
+                await s.execute(
+                    text("UPDATE submissions SET submitted_at = now() + "
+                         "interval '1 second' WHERE id = :i"),
+                    {"i": sid},
+                )
+                await s.commit()
+        return {"steps": [], "final_answers": [], "read": calls}
+
+    with (
+        patch(
+            "api.core.integrity_ai.extract_student_work",
+            new_callable=AsyncMock, side_effect=read_while_retaken,
+        ),
+        patch(
+            "api.services.bank.load_problems_for_assignment",
+            new_callable=AsyncMock, return_value=[],
+        ),
+    ):
+        await drain()
+        job = await _job(sid)
+        assert job.status == STATUS_QUEUED
+        await drain()
+
+    assert calls == 2
+    async with get_session_factory()() as s:
+        extraction = (await s.execute(
+            text("SELECT extraction FROM submissions WHERE id = :i"), {"i": sid},
+        )).scalar_one()
+    assert extraction["read"] == 2
+    assert (await _job(sid)).status == STATUS_DONE
