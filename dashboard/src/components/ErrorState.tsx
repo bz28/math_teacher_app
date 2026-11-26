@@ -2,7 +2,7 @@
  * Distinct load-failure panel with a Retry action.
  *
  * Used by pages that gate their whole render behind a single fetch
- * (Overview, LLMCalls, Quality) and by pages whose empty state is
+ * (LLMCalls) and by pages whose empty state is
  * otherwise indistinguishable from a failed load (Leads). Without
  * this, a 4xx/5xx either freezes on "Loading…" forever or masquerades
  * as an empty result — this makes the failure honest and recoverable

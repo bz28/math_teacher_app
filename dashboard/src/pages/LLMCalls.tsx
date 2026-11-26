@@ -33,7 +33,7 @@ export default function LLMCalls() {
   const tracePathFor = (submissionId: string) => `/submissions/${submissionId}/trace`;
 
   const [data, setData] = useState<LLMCallsData | null>(null);
-  // Time window is URL-driven so deep links from Overview / SchoolDetail /
+  // Time window is URL-driven so deep links from SchoolDetail /
   // TeacherDetail ("View calls (30d)" → ?hours=720, failed calls → ?status=
   // failed) land on the window + scope they advertised.
   const [hours, setHours] = useState(searchParams.get("hours") ?? "24");

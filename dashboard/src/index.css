@@ -2408,6 +2408,11 @@ table.dt tr:last-child td { border-bottom: none; }
   flex-direction: column;
   gap: 12px;
 }
+/* Users · Audit log — consulted, not worked in, so one quiet line. */
+.rail-foot-links {
+  display: flex;
+  gap: 4px;
+}
 .rail-status {
   display: flex;
   align-items: center;

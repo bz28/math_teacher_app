@@ -5,7 +5,7 @@ import { api, type SchoolListItem } from "./api";
  * Which school the console is scoped to — or `null` for All schools.
  *
  * This is the console's scope. Every page whose data belongs to schools
- * (Overview, the AI-quality tabs, Teacher reports, LLM calls, Users,
+ * (the accuracy pages, Teacher reports, LLM calls, Users,
  * Audit log) reads it and sends it as `school_id`; the backend filters on
  * it. Pages whose data belongs to no school (Schools directory, Leads,
  * Evals, Harness) ignore it, and the rail's scope line says so.

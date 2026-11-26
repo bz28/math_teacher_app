@@ -12,47 +12,26 @@ interface NavItem {
   end?: boolean;
 }
 
-// The rail is a HIERARCHY, not a list of equals.
+// The rail is the console's two jobs, in order of how often they're done.
 //
-// This console has one job that gets done daily — inspect what the system
-// actually did for a real teacher, and judge whether the AI's output was
-// any good — and a long tail of things consulted occasionally. Giving all
-// eleven destinations the same weight made the daily work compete with
-// billing plumbing for the same glance.
+// DEBUG is the daily work: start from the calls, drill school → teacher →
+// student → submission, or come in from a teacher's report or an accuracy
+// case. MONEY joins below it as its pages land — a group pointing at an
+// unbuilt page is worse than no group. Users and Audit log are consulted,
+// not worked in, so they sit in the foot.
 //
-// So the primary tier is the work; everything else sits below a rule in
-// muted type. Nothing is hidden — demoted is not deleted — but the eye
-// lands on the two or three things that are actually why you opened this.
+// Leads is still routed (old links keep working) but has no slot here: it
+// is on its way out of the console.
 
-/** The selected school's own page. Shown only when one is selected —
- *  under All schools the Schools directory is the way in. */
-const SCHOOL_LINKS: { to: (id: string) => string; label: string }[] = [
-  // Named for what the page leads with, not "Overview" — a platform
-  // Overview also exists, and two identical labels in one rail is a coin
-  // toss every time you look for either.
-  { to: (id) => `/schools/${id}`, label: "Teachers & classes" },
-];
-
-/**
- * Tier one. Deliberately short, and deliberately only things that EXIST:
- * a primary slot pointing at an unbuilt page is worse than no slot. The
- * student-conversation viewer and the rollout-state teacher list join
- * this tier as they land.
- */
-const PRIMARY: NavItem[] = [
-  { to: "/ai-quality", label: "Quality" },
-  { to: "/reports", label: "Teacher reports" },
-];
-
-/**
- * Tier two: real, reachable, and quiet. Business and platform plumbing —
- * consulted, not worked in.
- */
-const SECONDARY: NavItem[] = [
-  { to: "/overview", label: "Platform health" },
+const DEBUG: NavItem[] = [
+  { to: "/llm-calls", label: "Calls" },
   { to: "/schools", label: "Schools", end: true },
-  { to: "/leads", label: "Leads" },
-  { to: "/llm-calls", label: "LLM calls & spend" },
+  { to: "/reports", label: "Teacher reports" },
+  // Accuracy is extraction quality until the merged page lands.
+  { to: "/extraction-quality", label: "Accuracy" },
+];
+
+const FOOT: NavItem[] = [
   { to: "/users", label: "Users" },
   { to: "/audit-logs", label: "Audit log" },
 ];
@@ -174,20 +153,9 @@ export default function Layout() {
 
         <SchoolSwitcher selected={school} />
 
-        {/* ── Tier one — the work ─────────────────────────────────── */}
+        <div className="nav-section-label">Debug</div>
         <div className="nav-primary">
-          {school.id &&
-            SCHOOL_LINKS.map((l) => (
-              <NavLink
-                key={l.label}
-                to={l.to(school.id!)}
-                end
-                className="nav-link nav-link-primary"
-              >
-                {l.label}
-              </NavLink>
-            ))}
-          {PRIMARY.map((n) => (
+          {DEBUG.map((n) => (
             <NavLink
               key={n.to}
               to={n.to}
@@ -201,21 +169,18 @@ export default function Layout() {
           ))}
         </div>
 
-        {/* ── Tier two — reference ────────────────────────────────── */}
-        <div className="nav-secondary">
-          {SECONDARY.map((n) => (
-            <NavLink
-              key={n.to}
-              to={n.to}
-              end={n.end}
-              className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
-            >
-              {n.label}
-            </NavLink>
-          ))}
-        </div>
-
         <div className="rail-foot">
+          <div className="nav-secondary rail-foot-links">
+            {FOOT.map((n) => (
+              <NavLink
+                key={n.to}
+                to={n.to}
+                className={({ isActive }) => `nav-link ${isActive ? "active" : ""}`}
+              >
+                {n.label}
+              </NavLink>
+            ))}
+          </div>
           <div className={`rail-status ${apiDown ? "rail-status-down" : "rail-status-ok"}`}>
             <span aria-hidden="true" className="rail-status-dot" />
             {apiDown ? "API unreachable" : "System OK"}
