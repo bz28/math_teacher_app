@@ -29,7 +29,7 @@ import { SessionScreen } from "./src/components/SessionScreen";
 import { SolveScreen } from "./src/components/SolveScreen";
 import { TeacherGateScreen } from "./src/components/TeacherGateScreen";
 import { useColors } from "./src/theme";
-import { clearAuth, fetchMe, getUserId, getUserRole, getUserSchoolId, loadStoredAuth, setOnSessionExpired } from "./src/services/api";
+import { clearAuth, fetchMe, getUserId, getUserRole, loadStoredAuth, setOnSessionExpired } from "./src/services/api";
 import { decideLanding } from "./src/utils/routing";
 import { initRevenueCat } from "./src/services/revenuecat";
 import { useEntitlementStore } from "./src/stores/entitlements";
@@ -118,7 +118,7 @@ function AppRoot() {
         setScreen("auth");
         return;
       }
-      const landing = decideLanding(getUserRole(), getUserSchoolId());
+      const landing = decideLanding(getUserRole());
       // Teachers/admins get the web-app gate, not the student UI.
       if (landing === "teacher-gate") {
         setScreen("teacher-gate");
@@ -129,12 +129,8 @@ function AppRoot() {
         await initRevenueCat(userId).catch(() => {});
       }
       fetchEntitlements().catch(() => {});
-      if (landing === "school-home") {
-        setIsSchoolStudent(true);
-        setScreen("school-home");
-        return;
-      }
-      setScreen("solve");
+      setIsSchoolStudent(true);
+      setScreen("school-home");
     });
   }, [fetchEntitlements, initializeOnboardingFlags]);
 
@@ -164,22 +160,17 @@ function AppRoot() {
       <SafeAreaProvider>
         <AuthScreen
           onAuth={async (justRegistered) => {
-            // Resolve role/school before routing so a teacher who signs in
-            // lands on the gate and a school student lands on their home,
-            // not the personal study UI.
+            // Resolve the role before routing: a teacher lands on the gate,
+            // every student on their classroom home (schools-only).
             const me = await fetchMe();
-            const landing = decideLanding(me?.role, me?.school_id);
-            if (!justRegistered && landing === "teacher-gate") {
+            const landing = decideLanding(me?.role);
+            if (landing === "teacher-gate") {
               setScreen("teacher-gate");
               return;
             }
             const userId = me?.id ?? getUserId();
-            if (landing === "school-home") {
-              setIsSchoolStudent(true);
-              setScreen("school-home");
-            } else {
-              setScreen("solve");
-            }
+            setIsSchoolStudent(true);
+            setScreen("school-home");
             // Await init for new registrations so the post-signup paywall
             // doesn't open before RC is configured — otherwise getOfferings
             // throws and the trial pitch silently collapses to "Subscribe
@@ -193,10 +184,6 @@ function AppRoot() {
               }
             }
             fetchEntitlements().catch(() => {});
-            // School students are covered by their school — never pitch them Pro.
-            if (justRegistered && landing !== "school-home") {
-              usePaywallStore.getState().show("post_signup");
-            }
           }}
           onTeacherGate={() => setScreen("teacher-gate")}
           defaultToRegister={fromOnboarding}

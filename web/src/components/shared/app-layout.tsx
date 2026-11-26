@@ -19,17 +19,7 @@ import { SkipToMainLink } from "@/components/shared/skip-to-main-link";
 import { SchoolStudentLayout } from "@/components/school/student/school-student-layout";
 import { TeacherUsagePill } from "@/components/shared/teacher-usage-pill";
 import { useToast } from "@/components/ui";
-import { FlagIcon } from "@/components/ui/icons";
 import { useTour } from "@/components/tour";
-
-// ── Student nav items ──
-
-const studentNavItems = [
-  { label: "Home", href: "/home", icon: HomeIcon },
-  { label: "History", href: "/history", icon: HistoryIcon },
-  { label: "Review", href: "/review", icon: ReviewIcon },
-  { label: "Account", href: "/account", icon: AccountIcon },
-];
 
 // ── Teacher nav items ──
 
@@ -47,30 +37,13 @@ const teacherMobileNavItems = [
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { user } = useAuthStore();
-  const pathname = usePathname();
-  const isTeacher = user?.role === "teacher";
-  // School-linked students get their own sidebar shell — but only
-  // inside the school world. On shared routes (/account) and personal
-  // routes (/home, /history, /learn, /practice), the regular top-bar
-  // layout keeps its nav coherent: otherwise a school student on
-  // /home would see a sidebar whose nav items point nowhere useful.
-  //
-  // Preview shadows of solo teachers (no school_id) also belong in
-  // this shell — the whole point of the student preview is to see the
-  // school-student experience, not the personal study app's nav.
-  const isSchoolStudent =
-    user?.role === "student" && (!!user?.school_id || user.is_preview);
-  const inSchoolWorld =
-    pathname.startsWith("/school/student") || pathname === "/account";
-
-  let inner: React.ReactNode;
-  if (isTeacher) {
-    inner = <TeacherLayout>{children}</TeacherLayout>;
-  } else if (isSchoolStudent && inSchoolWorld) {
-    inner = <SchoolStudentLayout>{children}</SchoolStudentLayout>;
-  } else {
-    inner = <StudentLayout>{children}</StudentLayout>;
-  }
+  // Admins pass every teacher check in the API, so they share its shell.
+  const isTeacher = user?.role === "teacher" || user?.role === "admin";
+  // Veradic is schools-only: every student — school-linked, not yet in a
+  // class, or a teacher's preview shadow — gets the school-student shell.
+  const inner = isTeacher
+    ? <TeacherLayout>{children}</TeacherLayout>
+    : <SchoolStudentLayout>{children}</SchoolStudentLayout>;
 
   // Preview banner hoisted out of SchoolStudentLayout so a previewing
   // teacher always sees the exit affordance — including on routes
@@ -207,150 +180,6 @@ function PreviewBanner() {
       >
         Back to teacher view
       </button>
-    </div>
-  );
-}
-
-// ── Student layout (existing top bar + bottom tabs) ──
-
-function StudentLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const { user, logout } = useAuthStore();
-  const tour = useTour();
-  // School-linked students only start sessions from class-scoped flows;
-  // the Learn tab would drop them into the personal free-form path.
-  const showLearnTab = !user?.school_id;
-  // The personal-learner tour belongs only to non-school learners; a
-  // school student who wanders to a personal route (they carry school_id)
-  // has their own "student" tour in the school sidebar instead.
-  const isPersonalLearner = user?.role === "student" && !user?.school_id;
-  // History is dead weight for school-linked students: their tutor time
-  // runs through homework/practice flows, which write Submission rows,
-  // not the section-tagged Session rows /history reads — so the tab is
-  // always empty for them. Drop it from their nav; personal learners
-  // keep it (their free-form sessions populate it).
-  const navItems = user?.school_id
-    ? studentNavItems.filter((item) => item.href !== "/history")
-    : studentNavItems;
-
-  return (
-    <div className="flex flex-1 flex-col">
-      <SkipToMainLink />
-
-      {/* Top bar — warm paper, hairline-bottom border. Nav uses an
-          underline-on-active treatment (decision B): no tinted pill
-          backgrounds, just text color + 2px accent underline. Same
-          editorial restraint as the dashboard's sidebar nav. */}
-      <header className="sticky top-0 z-40 border-b border-border-light bg-[color:var(--color-surface-alt)]/85 backdrop-blur-md">
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
-          <div className="flex items-center gap-7">
-            <Link href="/home" className="flex items-center gap-2">
-              <LogoMark size={28} />
-              <span className="text-base font-bold tracking-[-0.01em] text-text-primary">
-                Veradic AI
-              </span>
-            </Link>
-
-            <nav className="hidden items-center gap-5 md:flex">
-              {navItems.map((item) => {
-                const active = pathname.startsWith(item.href);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={cn(
-                      "relative flex items-center gap-1.5 py-1 text-sm font-medium transition-colors",
-                      active
-                        ? "text-text-primary"
-                        : "text-text-secondary hover:text-text-primary",
-                    )}
-                  >
-                    <item.icon active={active} />
-                    {item.label}
-                    {active && (
-                      <span
-                        aria-hidden
-                        className="pointer-events-none absolute bottom-0 left-0 right-0 h-[2px] bg-[color:var(--color-primary)]"
-                      />
-                    )}
-                  </Link>
-                );
-              })}
-            </nav>
-          </div>
-
-          <div className="flex items-center gap-3">
-            {isPersonalLearner && (
-              <button
-                onClick={() => tour.start("personal")}
-                className="hidden rounded-[--radius-sm] px-3 py-1.5 text-sm font-medium text-text-secondary transition-colors hover:text-text-primary sm:block"
-              >
-                Take the tour
-              </button>
-            )}
-            <span className="hidden text-sm font-medium text-text-secondary sm:block">
-              {user?.name}
-            </span>
-            <button
-              onClick={logout}
-              className="rounded-[--radius-sm] px-3 py-1.5 text-sm font-medium text-text-muted transition-colors hover:bg-error-light hover:text-error"
-            >
-              Sign Out
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <main id="main-content" className="mx-auto w-full max-w-6xl flex-1 px-6 py-8 pb-24 md:pb-8">
-        {children}
-      </main>
-
-      {/* Mobile bottom tab bar — hairline top, active state uses ink
-          text + thin top-edge accent (no tinted pill bg). */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border-light bg-[color:var(--color-surface-alt)]/95 backdrop-blur-md md:hidden">
-        <div className="flex h-16 items-stretch">
-          {navItems.map((item) => {
-            const active = pathname.startsWith(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn(
-                  "relative flex flex-1 flex-col items-center justify-center gap-1 transition-colors",
-                  active ? "text-text-primary" : "text-text-muted",
-                )}
-              >
-                {active && (
-                  <span
-                    aria-hidden
-                    className="pointer-events-none absolute inset-x-6 top-0 h-[2px] bg-[color:var(--color-primary)]"
-                  />
-                )}
-                <item.icon active={active} />
-                <span className="text-[10px] font-semibold">{item.label}</span>
-              </Link>
-            );
-          })}
-          {showLearnTab && (
-            <Link
-              href="/learn"
-              className={cn(
-                "relative flex flex-1 flex-col items-center justify-center gap-1 transition-colors",
-                pathname.startsWith("/learn") ? "text-text-primary" : "text-text-muted",
-              )}
-            >
-              {pathname.startsWith("/learn") && (
-                <span
-                  aria-hidden
-                  className="pointer-events-none absolute inset-x-6 top-0 h-[2px] bg-[color:var(--color-primary)]"
-                />
-              )}
-              <LearnIcon active={pathname.startsWith("/learn")} />
-              <span className="text-[10px] font-semibold">Learn</span>
-            </Link>
-          )}
-        </div>
-      </nav>
     </div>
   );
 }
@@ -568,49 +397,11 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
 
 // ── Icons ──
 
-function HomeIcon({ active }: { active: boolean }) {
-  return (
-    <svg className={cn("h-5 w-5", active ? "text-text-primary" : "text-text-muted")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-      <polyline points="9 22 9 12 15 12 15 22" />
-    </svg>
-  );
-}
-
-function ReviewIcon({ active }: { active: boolean }) {
-  // Reuses the shared FlagIcon glyph (flagged work → Review), adapted to
-  // the nav's active-aware coloring contract.
-  return (
-    <FlagIcon
-      className={cn("h-5 w-5", active ? "text-text-primary" : "text-text-muted")}
-    />
-  );
-}
-
-function HistoryIcon({ active }: { active: boolean }) {
-  return (
-    <svg className={cn("h-5 w-5", active ? "text-text-primary" : "text-text-muted")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 12a9 9 0 109-9 9.75 9.75 0 00-6.74 2.74L3 8" />
-      <path d="M3 3v5h5" />
-      <path d="M12 7v5l4 2" />
-    </svg>
-  );
-}
-
 function AccountIcon({ active }: { active: boolean }) {
   return (
     <svg className={cn("h-5 w-5", active ? "text-text-primary" : "text-text-muted")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" />
       <circle cx="12" cy="7" r="4" />
-    </svg>
-  );
-}
-
-function LearnIcon({ active }: { active: boolean }) {
-  return (
-    <svg className={cn("h-5 w-5", active ? "text-text-primary" : "text-text-muted")} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z" />
-      <path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z" />
     </svg>
   );
 }
