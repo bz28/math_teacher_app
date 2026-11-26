@@ -1,7 +1,7 @@
 """align the remaining schema drift with the models
 
-Revision ID: ci1000078
-Revises: ch1000077
+Revision ID: dj1000106
+Revises: di1000105
 Create Date: 2026-08-24 00:00:00.000000
 
 `alembic check` has never passed on this repo, so nothing has been
@@ -58,8 +58,8 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "ci1000078"
-down_revision: str | None = "ch1000077"
+revision: str = "dj1000106"
+down_revision: str | None = "di1000105"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
