@@ -1,38 +1,21 @@
-"""Flow-arm unit tests — the parts that don't need a live browser: evidence
-shaping, and the load-bearing invariant that an infra error never becomes a
-false-positive proposal."""
+"""Flow-arm unit tests — the parts that don't need a live browser: selection,
+and the load-bearing invariant that an infra error never becomes a false
+failure."""
 
 from __future__ import annotations
 
 import pytest
 
-from tests.harness.improver import flows
-from tests.harness.improver.flows import (
+from tests.harness import flows
+from tests.harness.flows import (
     FlowResult,
-    flow_alert_md,
-    flow_failures,
     run_flows,
 )
 
 
-def test_flow_failures_keeps_only_failures() -> None:
-    rs = [FlowResult("login", "Student login", True), FlowResult("b", "B", False, ["broke"])]
-    assert flow_failures(rs) == [{"flow": "b", "title": "B", "issues": ["broke"]}]
-
-
-def test_flow_alert_md_empty_when_nothing_broke() -> None:
-    assert flow_alert_md([]) == ""
-
-
-def test_flow_alert_md_renders_failures() -> None:
-    md = flow_alert_md([{"flow": "login", "title": "Student login", "issues": ["broke"]}])
-    assert "Student login" in md and "broke" in md
-    assert "not auto-fixable" in md.lower()  # signals it pages a human, not the fix queue
-
-
 async def test_run_flows_drops_infra_errors(monkeypatch: pytest.MonkeyPatch) -> None:
     """A flow that raises (browser crash, API unreachable) is DROPPED — not
-    turned into a failure → proposal. Only a flow that ran and reported issues
+    turned into a failure. Only a flow that ran and reported issues
     counts."""
     async def boom(_b: object, _u: str, _a: str, _s: object) -> FlowResult:
         raise RuntimeError("playwright crashed")
@@ -44,7 +27,6 @@ async def test_run_flows_drops_infra_errors(monkeypatch: pytest.MonkeyPatch) -> 
     results = await run_flows(None, "http://x", "http://api", None)  # type: ignore[arg-type]
 
     assert [r.name for r in results] == ["ok"]  # boom dropped, no false flag
-    assert flow_failures(results) == []
 
 
 def test_flow_names_cover_all_journeys() -> None:

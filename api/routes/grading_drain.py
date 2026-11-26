@@ -10,8 +10,7 @@ cron (Railway/Vercel), a GitHub Actions schedule, anything that can make
 a POST. The queue is the durable part; the clock is swappable.
 
 Guarded by a shared secret (`X-Grading-Token`), never a user session, and
-disabled with a 503 when the token isn't configured — same shape as the
-harness ingest endpoint. Without that, an unauthenticated caller could
+disabled with a 503 when the token isn't configured. Without that, an unauthenticated caller could
 force every pending class on the platform to grade on demand, which is
 real money.
 

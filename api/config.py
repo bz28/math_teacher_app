@@ -22,21 +22,10 @@ class Settings(BaseSettings):
     github_dispatch_token: str = ""
     github_repo: str = "bz28/math_teacher_app"
 
-    # Harness ingest — shared secret that lets CI (GitHub Actions, which can't
-    # open a Postgres connection to prod) POST autonomous-harness run summaries
-    # to the admin "Harness Runs" tab over HTTPS. Empty token disables the
-    # endpoint (503).
-    harness_ingest_token: str = ""
     # Shared secret for POST /internal/grading/drain. Empty disables
     # the endpoint (503) rather than leaving it open — an unguarded
     # drain lets anyone force every pending class to grade on demand.
     grading_drain_token: str = ""
-
-    # Improver — a static service key the scheduled LLM-defect scan presents
-    # (X-Improver-Key) to the read-only defect endpoint. Admin JWTs expire in
-    # minutes, so they can't be a stored CI secret; this long random key can.
-    # Empty disables service-key auth (admin JWT still works); rotate to revoke.
-    improver_api_key: str = ""
 
     # Student homework photos (api/core/photo_store.py) — an S3-compatible
     # bucket (Railway Storage Bucket in production; private, presigned

@@ -24,6 +24,7 @@ from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.unit import Unit
 from api.models.user import User
+from api.routes.teacher_insights import _FLAG_MIN_COUNTED
 
 
 @dataclass
@@ -65,7 +66,7 @@ async def seed_world() -> Seed:
             password_hash=hash_password("x"), grade_level=8, role="student",
             name="Harness Student",
         )
-        # Platform-level admin (no school) so the improver can scan the admin
+        # Platform-level admin (no school) so harness runs can drive the admin
         # dashboard surfaces, which sit behind require_admin.
         admin = User(
             email=f"harness_admin_{uuid.uuid4().hex[:6]}@t.com",
@@ -359,14 +360,17 @@ async def seed_workshop_item(seed: Seed) -> str:
         return str(item.id)
 
 
-async def seed_submitted_submission(seed: Seed) -> str:
-    """A fresh student enrolled in the seeded section with one SUBMITTED
-    submission on the seeded homework — the precondition for the
-    grade-and-publish flow. A distinct student (not the seeded one) so it
-    never collides with the submit-homework flow on the
-    UNIQUE(assignment_id, student_id) constraint. Returns the submission id.
+async def seed_submitted_submission(seed: Seed) -> tuple[str, str, str]:
+    """A published one-problem homework in the seeded section, with a fresh
+    student's SUBMITTED submission on it — the precondition for the
+    grade-and-publish flow. Its own homework, because the seeded one has no
+    problems and a grade only counts problems the homework actually has. A
+    distinct student (not the seeded one) so it never collides with the
+    submit-homework flow on UNIQUE(assignment_id, student_id). Returns the
+    assignment id, the submission id, and the problem's (bank item) id.
     """
     course_id = uuid.UUID(seed.course_id)
+    now = datetime.now(UTC)
     async with get_session_factory()() as s:
         section_id = (await s.execute(
             select(SectionEnrollment.section_id).where(
@@ -374,6 +378,24 @@ async def seed_submitted_submission(seed: Seed) -> str:
                 SectionEnrollment.course_id == course_id,
             ).limit(1)
         )).scalar_one()
+        hw = Assignment(
+            course_id=course_id, unit_ids=[uuid.UUID(seed.unit_id)],
+            teacher_id=uuid.UUID(seed.teacher_id), title="Grade HW",
+            type="homework", status="published", content={"problem_ids": []},
+            integrity_check_enabled=False,
+        )
+        s.add(hw)
+        await s.flush()
+        item = QuestionBankItem(
+            course_id=course_id, unit_id=uuid.UUID(seed.unit_id),
+            originating_assignment_id=hw.id, title="Factor",
+            question="Solve x^2 - 5x + 6 = 0.", final_answer="x = 2, 3",
+            status="approved", source="generated",
+        )
+        s.add(item)
+        await s.flush()
+        hw.content = {"problem_ids": [str(item.id)]}
+        s.add(AssignmentSection(assignment_id=hw.id, section_id=section_id, published_at=now))
         student = User(
             email=f"harness_submitter_{uuid.uuid4().hex[:6]}@t.com",
             password_hash=hash_password("x"), grade_level=8, role="student",
@@ -385,20 +407,20 @@ async def seed_submitted_submission(seed: Seed) -> str:
             section_id=section_id, course_id=course_id, student_id=student.id,
         ))
         submission = Submission(
-            assignment_id=uuid.UUID(seed.assignment_id), student_id=student.id,
+            assignment_id=hw.id, student_id=student.id,
             section_id=section_id, status="submitted", files=[], is_late=False,
         )
         s.add(submission)
         await s.commit()
-        return str(submission.id)
+        return str(hw.id), str(submission.id), str(item.id)
 
 
-async def seed_insights_homework(seed: Seed) -> str:
-    """A published one-problem homework in the seeded section, with one
-    submission the teacher has APPROVED (reviewed_at set) scored zero —
-    the precondition for the Student Insights flow, which only counts
-    approved or published grades. A distinct student so it never collides
-    with the other flows' submissions. Returns the student's name."""
+async def seed_insights_homework(seed: Seed) -> None:
+    """A published one-problem homework in the seeded section, with enough
+    submissions the teacher has APPROVED (reviewed_at set) scored zero for
+    Insights to flag the problem — the precondition for the Student Insights
+    flow, which only counts approved or published grades. Distinct students
+    so they never collide with the other flows' submissions."""
     course_id = uuid.UUID(seed.course_id)
     now = datetime.now(UTC)
     async with get_session_factory()() as s:
@@ -426,26 +448,28 @@ async def seed_insights_homework(seed: Seed) -> str:
         await s.flush()
         hw.content = {"problem_ids": [str(item.id)]}
         s.add(AssignmentSection(assignment_id=hw.id, section_id=section_id, published_at=now))
-        name = "Harness Insights Student"
-        student = User(
-            email=f"harness_insights_{uuid.uuid4().hex[:6]}@t.com",
-            password_hash=hash_password("x"), grade_level=8, role="student", name=name,
-        )
-        s.add(student)
-        await s.flush()
-        s.add(SectionEnrollment(section_id=section_id, course_id=course_id, student_id=student.id))
-        submission = Submission(
-            assignment_id=hw.id, student_id=student.id, section_id=section_id,
-            status="submitted", files=[], is_late=False,
-        )
-        s.add(submission)
-        await s.flush()
-        s.add(SubmissionGrade(
-            submission_id=submission.id, final_score=0.0, graded_at=now, reviewed_at=now,
-            breakdown=[{"problem_id": str(item.id), "score_status": "zero", "percent": 0}],
-        ))
+        # Insights flags a problem only once enough grades count, so seed
+        # exactly that many approved zero-credit grades.
+        for i in range(_FLAG_MIN_COUNTED):
+            student = User(
+                email=f"harness_insights_{uuid.uuid4().hex[:6]}@t.com",
+                password_hash=hash_password("x"), grade_level=8, role="student",
+                name=f"Harness Insights Student {i + 1}",
+            )
+            s.add(student)
+            await s.flush()
+            s.add(SectionEnrollment(section_id=section_id, course_id=course_id, student_id=student.id))
+            submission = Submission(
+                assignment_id=hw.id, student_id=student.id, section_id=section_id,
+                status="submitted", files=[], is_late=False,
+            )
+            s.add(submission)
+            await s.flush()
+            s.add(SubmissionGrade(
+                submission_id=submission.id, final_score=0.0, graded_at=now, reviewed_at=now,
+                breakdown=[{"problem_id": str(item.id), "score_status": "zero", "percent": 0}],
+            ))
         await s.commit()
-        return name
 
 
 async def seed_confirmable_submission(

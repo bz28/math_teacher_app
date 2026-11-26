@@ -65,7 +65,7 @@ class LLMMode:
     ANSWER_EQUIVALENCE = "answer_equivalence"
     IMAGE_EXTRACT = "image_extract"
     DIAGNOSE_WORK = "diagnose_work"
-    # Used by the TEST HARNESS (tests/harness/eval.py and the improver)
+    # Used by the TEST HARNESS (tests/harness/eval.py)
     # to label its own grading calls. Unrelated to the deleted
     # solution-quality judge — removing it broke six harness call sites,
     # and CI could not see it because mypy runs over api/ only.

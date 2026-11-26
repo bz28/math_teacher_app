@@ -21,8 +21,7 @@ name: Grading queue drain
 # Config (Settings → Secrets and variables → Actions):
 #   GRADING_DRAIN_TOKEN (secret) — must match the backend's
 #                                  `grading_drain_token` setting.
-#   PROD_API_BASE (variable)     — prod API root incl. /v1. Already used by
-#                                  the improver workflows; not sensitive.
+#   PROD_API_BASE (variable)     — prod API root incl. /v1; not sensitive.
 #
 # Until BOTH are set this job no-ops loudly rather than failing the run — a
 # red X every five minutes trains people to ignore the workflow, and the

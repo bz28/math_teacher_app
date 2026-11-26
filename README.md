@@ -32,8 +32,8 @@ FastAPI (Python 3.12, SQLAlchemy 2 async, Alembic, asyncpg) serving everything u
 - **Endpoint groups** (`api/routes/`, mounted in `api/main.py`): `auth`, `session` (learn/practice/mock-test), `practice`, `image` (extraction), `work` (work diagnosis), `integrity_check`, `weak_spots`, `teacher/*` (courses, sections, units, assignments, grades, documents, question-bank, practice-activity, preview, visibility), `school_student_practice`, `billing` + `webhook`, `contact`, and `admin/*` (leads, schools, users, overview, quality, grading-quality, harness, llm) + `admin_audit_logs`.
 - **AI core** (`api/core/`): step decomposition, tutor, grading (`grading_ai`), integrity (`integrity_ai` + `integrity_pipeline`), document vision + image extraction, assignment/question-bank generation, subjects, a geometry figure engine, cost tracking + LLM logging.
 
-### Harness & improver — `tests/harness/`
-An autonomous browser harness (Playwright + cached Chromium, token injection, isolated seed, cassette `$0` replay, cost tracker) that drives the **real running app** to test AI-generated surfaces (figures, solutions, grading). On top of it sits the **autonomous improver**: it scans the app, produces ranked/deduped improvement proposals, and — on approval — implements, reviews, and opens a PR. The route catalog it walks lives in `tests/harness/improver/surfaces.py`. See [`tests/harness/improver/README.md`](tests/harness/improver/README.md).
+### Harness — `tests/harness/`
+A browser harness (Playwright + cached Chromium, token injection, isolated seed, cassette `$0` replay, cost tracker) that drives the **real running app** to test AI-generated surfaces (figures, solutions, grading) with probes, and core user journeys (login, join class, submit homework, grade + publish) with flows (`tests/harness/flows.py`, nightly in `harness-flows.yml`). See [`tests/harness/README.md`](tests/harness/README.md).
 
 ## Run it
 
