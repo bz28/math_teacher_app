@@ -300,3 +300,27 @@ async def test_not_tied_row_survives_a_call_owned_by_nobody_in_the_role(
     body = await _get(client, w, group_by="teacher")
     assert body["rows"][-1]["key"] is None
     assert body["rows"][-1]["share"] == pytest.approx(2 / 7, abs=1e-4)
+
+
+# --------------------------------------------------------------------------
+# Review round 2 — a school's teachers and classes leave preview out too
+# --------------------------------------------------------------------------
+
+async def test_school_detail_teacher_and_class_costs_leave_out_preview(
+    client: AsyncClient,
+) -> None:
+    """The $16 preview grading ran on a submission to Ms T's homework in P1.
+    Her row and P1's must read customer spend only, like every cost page."""
+    w = await _seed()
+    detail = (await client.get(
+        f"/v1/admin/schools/{w.radnor_id}",
+        headers=auth_headers(create_access_token(w.admin_id, "admin")),
+    )).json()
+
+    ms_t = next(t for t in detail["teachers"] if t["id"] == w.teacher_id)
+    assert ms_t["cost_30d"] == pytest.approx(5.0)
+    assert ms_t["call_count_30d"] == 2
+    sections = detail["unassigned_sections"] + [
+        s for t in detail["teachers"] for s in t["sections"]
+    ]
+    assert sum(s["cost_30d"] for s in sections) == pytest.approx(4.0)

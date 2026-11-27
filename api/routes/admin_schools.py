@@ -321,6 +321,7 @@ async def get_school(
     # ── Teachers + their spend (the one whose-call rule) ────────────
     owners = call_owners(
         window.covers(LLMCall.created_at),
+        not_preview(),
         owners_in=select(User.id).where(User.school_id == school.id, User.role == "teacher"),
     )
     teacher_stats_sq = (
@@ -410,7 +411,7 @@ async def get_school(
         .join(Submission, Submission.id == LLMCall.submission_id)
         .join(Section, Section.id == Submission.section_id)
         .join(Course, Course.id == Section.course_id)
-        .where(Course.school_id == school.id, window.covers(LLMCall.created_at))
+        .where(Course.school_id == school.id, window.covers(LLMCall.created_at), not_preview())
         .group_by(Submission.section_id)
     )).all()
     section_cost = {r.section_id: float(r.cost) for r in cost_rows}
