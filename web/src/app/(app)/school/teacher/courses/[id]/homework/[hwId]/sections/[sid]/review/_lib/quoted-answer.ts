@@ -11,12 +11,31 @@ export type QuotedAnswer = {
    *  context. Null when no AI turn came before it. */
   question: string | null;
   turn: TeacherIntegrityTranscriptTurn;
+  /** Why the activity rollup marked this answer (a paste, a tab-out);
+   *  empty when it didn't. Shown on the quote, since the evidence
+   *  disclosure leaves this turn out rather than repeat it. */
+  reasons: IntegrityActivityReason[];
 };
 
 export type FlaggedTurn = {
   turn: TeacherIntegrityTranscriptTurn;
   reasons: IntegrityActivityReason[];
 };
+
+// A marked ordinal without telemetry is skipped: the reason copy is
+// computed from it and would read "pasted 0 chars".
+function markedReasons(d: Detail): Map<number, IntegrityActivityReason[]> {
+  const out = new Map<number, IntegrityActivityReason[]>();
+  for (const n of d.activity_summary?.notable_turns ?? []) {
+    if (n.reasons.length > 0) out.set(n.ordinal, n.reasons);
+  }
+  for (const t of d.transcript) {
+    if (out.has(t.ordinal) && (t.role !== "student" || !t.telemetry)) {
+      out.delete(t.ordinal);
+    }
+  }
+  return out;
+}
 
 function answers(d: Detail): TeacherIntegrityTranscriptTurn[] {
   return d.transcript.filter(
@@ -35,21 +54,18 @@ export function quotedAnswer(d: Detail): QuotedAnswer | null {
     d.transcript
       .filter((t) => t.role === "agent" && t.ordinal < turn.ordinal)
       .at(-1)?.content ?? null;
-  return { question, turn };
+  return { question, turn, reasons: markedReasons(d).get(turn.ordinal) ?? [] };
 }
 
 /** The answers the activity rollup marked (a paste, a long tab-out), in
  *  conversation order — the evidence behind an activity flag, which the
- *  card shows collapsed. A marked ordinal without telemetry is skipped:
- *  the reason copy is computed from it and would read "pasted 0 chars". */
+ *  card shows collapsed. Leaves out the last answer: the card already
+ *  quotes it, with its reasons. */
 export function flaggedTurns(d: Detail): FlaggedTurn[] {
-  const notable = new Map(
-    (d.activity_summary?.notable_turns ?? []).map((n) => [n.ordinal, n]),
-  );
-  return answers(d).flatMap((turn) => {
-    const n = notable.get(turn.ordinal);
-    return n && n.reasons.length > 0 && turn.telemetry
-      ? [{ turn, reasons: n.reasons }]
-      : [];
+  const marked = markedReasons(d);
+  const all = answers(d);
+  return all.slice(0, -1).flatMap((turn) => {
+    const reasons = marked.get(turn.ordinal);
+    return reasons ? [{ turn, reasons }] : [];
   });
 }

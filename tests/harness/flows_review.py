@@ -217,6 +217,7 @@ async def review_integrity_flow(
         await step("the card does not quote the student's last answer",
                    page.get_by_text(rs.last_answer).locator("visible=true").first
                    .wait_for(timeout=_TIMEOUT_MS))
+        await shot("01-flagged")
         # The paste is evidence under the activity flag, collapsed — not
         # the quote, which stays the last answer.
         evidence = page.locator("details:visible", has_text="What they sent on")
@@ -236,7 +237,6 @@ async def review_integrity_flow(
         # inside it would be read out on every student switch.
         if await page.locator("[role=status]:visible", has_text=rs.last_answer).count():
             issues.append("the quoted answer sits inside the card's live region")
-        await shot("01-flagged")
 
         await step("clicking 'Cleared — no concern' did nothing",
                    card_chips.get_by_role("button", name="Cleared — no concern")

@@ -327,7 +327,12 @@ function FlaggedTurnsEvidence({ turns }: { turns: FlaggedTurn[] }) {
             <p className="text-[10px] font-semibold uppercase tracking-[0.06em] text-text-muted">
               {reasons.map((r) => activityReasonText(r, turn)).join(" · ")}
             </p>
-            <div className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap border-l-2 border-text-muted/40 pl-2.5 text-xs leading-snug text-text-primary">
+            {/* Focusable so a long paste scrolls from the keyboard too. */}
+            <div
+              tabIndex={0}
+              aria-label="Text sent on this turn"
+              className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary border-l-2 border-text-muted/40 pl-2.5 text-xs leading-snug text-text-primary"
+            >
               <MathText text={turn.content} />
             </div>
           </li>
@@ -338,10 +343,13 @@ function FlaggedTurnsEvidence({ turns }: { turns: FlaggedTurn[] }) {
 }
 
 function QuotedAnswerExcerpt({ quote }: { quote: QuotedAnswer }) {
+  const note = quote.reasons
+    .map((r) => activityReasonText(r, quote.turn))
+    .join(" · ");
   return (
     <figure className="mt-3 rounded-[--radius-md] border border-border-light bg-surface px-3 py-2.5">
       <figcaption className="text-[10px] font-semibold uppercase tracking-[0.06em] text-text-muted">
-        Their last answer
+        Their last answer{note && <> · {note}</>}
       </figcaption>
       {quote.question && (
         <p className="mt-1.5 line-clamp-2 text-[11px] leading-snug text-text-muted">

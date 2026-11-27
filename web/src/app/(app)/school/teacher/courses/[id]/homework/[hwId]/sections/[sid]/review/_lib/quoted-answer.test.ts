@@ -40,6 +40,7 @@ test("quotes the last non-empty answer and the AI question before it", () => {
   const q = quotedAnswer({ transcript, activity_summary: null });
   assert.equal(q?.turn.content, "idk the same thing");
   assert.equal(q?.question, "What if the sign flipped?");
+  assert.deepEqual(q?.reasons, []);
 });
 
 test("a paste-marked earlier answer does NOT replace the last answer as the quote", () => {
@@ -59,6 +60,23 @@ test("flaggedTurns: the marked answers with their reasons, in order", () => {
 test("flaggedTurns: none without an activity summary or notable turns", () => {
   assert.deepEqual(flaggedTurns({ transcript, activity_summary: null }), []);
   assert.deepEqual(flaggedTurns({ transcript, activity_summary: summary([]) }), []);
+});
+
+test("flaggedTurns: in conversation order across several marked turns", () => {
+  const t = [
+    turn(0, "student", "first", true), turn(1, "student", "second", true), turn(2, "student", "last"),
+  ];
+  const f = flaggedTurns({ transcript: t, activity_summary: summary([
+    { ordinal: 1, reasons: ["long_tab_out"] }, { ordinal: 0, reasons: ["full_paste"] },
+  ]) });
+  assert.deepEqual(f.map((x) => x.turn.content), ["first", "second"]);
+});
+
+test("a marked LAST answer is not repeated as evidence; its reasons ride on the quote", () => {
+  const t = [turn(0, "agent", "Why?"), turn(1, "student", "pasted final", true)];
+  const d = { transcript: t, activity_summary: summary([{ ordinal: 1, reasons: ["full_paste"] }]) };
+  assert.deepEqual(flaggedTurns(d), []);
+  assert.deepEqual(quotedAnswer(d)?.reasons, ["full_paste"]);
 });
 
 test("flaggedTurns: a marked ordinal without telemetry is skipped", () => {
