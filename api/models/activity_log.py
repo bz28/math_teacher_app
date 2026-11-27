@@ -22,7 +22,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import DateTime, ForeignKey, Index, String, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -31,6 +31,9 @@ from api.database import Base
 
 class ActivityLog(Base):
     __tablename__ = "activity_log"
+    # Everything that happened to one record — the admin case file's
+    # grade timeline reads a submission's rows and its homework's.
+    __table_args__ = (Index("ix_activity_log_target", "target_type", "target_id"),)
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
