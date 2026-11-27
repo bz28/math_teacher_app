@@ -98,7 +98,9 @@ async def users(
     # whose-call rule (api/core/llm_attribution.py): a student owns calls
     # they made or that ran on their submissions, a teacher calls they
     # made or that ran on submissions to their homework.
-    owners = call_owners(LLMCall.created_at >= since)
+    owners = call_owners(
+        LLMCall.created_at >= since, owners_in=select(scope_user_ids.c.id),
+    )
 
     # Total spend (scope-filtered, in period). Each call once, however
     # many in-scope people own it — a student and their teacher share
@@ -106,10 +108,7 @@ async def users(
     total_spend = (await db.execute(
         select(func.coalesce(func.sum(LLMCall.cost_usd), 0.0))
         .where(
-            LLMCall.id.in_(
-                select(owners.c.call_id)
-                .where(owners.c.owner_id.in_(select(scope_user_ids.c.id)))
-            ),
+            LLMCall.id.in_(select(owners.c.call_id)),
         )
     )).scalar() or 0.0
 

@@ -315,7 +315,10 @@ async def get_school(
     window = last_days(30)
 
     # ── Teachers + their spend (the one whose-call rule) ────────────
-    owners = call_owners(window.covers(LLMCall.created_at))
+    owners = call_owners(
+        window.covers(LLMCall.created_at),
+        owners_in=select(User.id).where(User.school_id == school.id, User.role == "teacher"),
+    )
     teacher_stats_sq = (
         select(
             owners.c.owner_id.label("user_id"),

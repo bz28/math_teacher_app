@@ -70,7 +70,11 @@ def resolve_window(
         if date_to else datetime.now(UTC)
     )
     if end <= start:
-        raise HTTPException(status_code=400, detail="'from' must be on or before 'to'")
+        detail = (
+            "'from' must be on or before 'to'" if date_to
+            else "'from' is in the future"
+        )
+        raise HTTPException(status_code=400, detail=detail)
     return Window(start, end)
 
 

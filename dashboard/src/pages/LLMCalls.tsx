@@ -215,6 +215,7 @@ export default function LLMCalls() {
           <option value="24">Last 24 hours</option>
           <option value="168">Last 7 days</option>
           <option value="720">Last 30 days</option>
+          <option value="2160">Last 90 days</option>
         </select>
         <select aria-label="Filter by user" value={userFilter} onChange={(e) => setParam("user", e.target.value)}>
           <option value="">All users</option>

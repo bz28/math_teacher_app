@@ -15,7 +15,9 @@ where its user sits today.
 A call from the submission pipeline whose submission is gone
 (`submission_id` NULL — the FK is ON DELETE SET NULL) is a "deleted
 submission" call. It stays with the student who made it (`user_id`) and
-its stamped school; it is never re-attributed to anyone else.
+its stamped school; it is never re-attributed to anyone else. Rows from
+before the pipeline stamped `submission_id` at all (`SUBMISSION_STAMPED_SINCE`)
+are NULL for that reason, not a delete, and are not labelled.
 
 Two shapes of the same rule:
 
@@ -27,9 +29,10 @@ Two shapes of the same rule:
 """
 
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import ColumnElement, and_, or_, select, union
+from sqlalchemy import ColumnElement, Select, and_, or_, select, union
 from sqlalchemy.sql.selectable import Subquery
 
 from api.core.llm_client import LLMMode
@@ -41,6 +44,7 @@ from api.models.llm_call import LLMCall
 SUBMISSION_FUNCTIONS: frozenset[str] = frozenset({
     LLMMode.AI_GRADING,
     LLMMode.DRAWING_CHECK,
+    LLMMode.GRAPH_FEEDBACK,
     LLMMode.INTEGRITY_EXTRACT,
     LLMMode.INTEGRITY_AGENT,
     LLMMode.INTEGRITY_ANSWER_EQUIVALENCE,
@@ -48,15 +52,30 @@ SUBMISSION_FUNCTIONS: frozenset[str] = frozenset({
 })
 
 
-def is_deleted_submission_call(function: str, submission_id: object) -> bool:
+# The first submission-pipeline call that carried its submission_id
+# (measured on prod, read-only). The column was added in April with no
+# backfill and the pipeline began stamping it here; every such call
+# before this is NULL because it was never recorded, not because its
+# submission was deleted.
+SUBMISSION_STAMPED_SINCE = datetime(2026, 9, 6, 15, 22, tzinfo=UTC)
+
+
+def is_deleted_submission_call(
+    function: str, submission_id: object, created_at: datetime,
+) -> bool:
     """The row-level form of `deleted_submission_calls()`."""
-    return submission_id is None and function in SUBMISSION_FUNCTIONS
+    return (
+        submission_id is None
+        and function in SUBMISSION_FUNCTIONS
+        and created_at >= SUBMISSION_STAMPED_SINCE
+    )
 
 
 def deleted_submission_calls() -> ColumnElement[bool]:
     return and_(
         LLMCall.submission_id.is_(None),
         LLMCall.function.in_(SUBMISSION_FUNCTIONS),
+        LLMCall.created_at >= SUBMISSION_STAMPED_SINCE,
     )
 
 
@@ -75,26 +94,33 @@ def calls_of(user_id: uuid.UUID | str) -> ColumnElement[bool]:
     )
 
 
-def call_owners(*where: Any) -> Subquery:
+def call_owners(*where: Any, owners_in: Select[Any] | None = None) -> Subquery:
     """(call_id, owner_id) for every call matching `where`, once per owner.
+
+    `owners_in` (a select of user ids) keeps only those owners, inside
+    each arm, so a page about a few people never aggregates the whole
+    platform's calls.
 
     `union` (not union all) collapses a call that reaches the same person
     by two arms — a teacher who ran a call on a submission to their own
     homework is one owner, not two.
     """
+    def only(owner: Any) -> list[Any]:
+        return [] if owners_in is None else [owner.in_(owners_in)]
+
     made = select(LLMCall.id.label("call_id"), LLMCall.user_id.label("owner_id")).where(
-        LLMCall.user_id.isnot(None), *where,
+        LLMCall.user_id.isnot(None), *where, *only(LLMCall.user_id),
     )
     handed_in = (
         select(LLMCall.id, Submission.student_id)
         .join(Submission, Submission.id == LLMCall.submission_id)
-        .where(*where)
+        .where(*where, *only(Submission.student_id))
     )
     set_by = (
         select(LLMCall.id, Assignment.teacher_id)
         .join(Submission, Submission.id == LLMCall.submission_id)
         .join(Assignment, Assignment.id == Submission.assignment_id)
-        .where(*where)
+        .where(*where, *only(Assignment.teacher_id))
     )
     return union(made, handed_in, set_by).subquery("call_owners")
 
