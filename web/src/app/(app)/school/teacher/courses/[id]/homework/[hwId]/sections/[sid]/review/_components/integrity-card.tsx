@@ -165,10 +165,14 @@ export function IntegrityCard({
     <>
       <div
         className={`rounded-[--radius-xl] border ${style.border} ${style.bg} p-3.5`}
-        role="status"
-        aria-live="polite"
       >
-        <div className="flex min-w-0 items-start gap-2.5">
+        {/* Only the verdict line is live: the quote and outcome chips
+            below would turn every student switch into a long readout. */}
+        <div
+          className="flex min-w-0 items-start gap-2.5"
+          role="status"
+          aria-live="polite"
+        >
           <span
             className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-sm font-bold ${style.iconBg}`}
             aria-hidden
