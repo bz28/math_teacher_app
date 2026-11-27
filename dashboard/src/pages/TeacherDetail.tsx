@@ -141,7 +141,7 @@ export default function TeacherDetail() {
             row — the largest number in the largest slot on the console's
             hero page — which put spend ahead of the work on the one screen
             you open when a teacher reports a problem. It moved down beside
-            the calls it describes; the calls panel header carries it now. */}
+            the calls it describes: it lives in the calls panel below now. */}
         <div style={{ display: "flex", gap: 28, alignItems: "flex-start", flexWrap: "wrap" }}>
           <HeadlineStat label="Students" value={data.total_students.toLocaleString()} />
           <HeadlineStat label="Generations" value={u.generations.toLocaleString()} />
@@ -205,11 +205,6 @@ export default function TeacherDetail() {
       {/* ── ③ AI generations + activity timeline (richest surface) ── */}
       <TeacherActivitySection teacherId={t.id} />
 
-      {/* Every model call she caused, openable in place. The page already
-          linked out to a pre-filtered /llm-calls, which answers "how much
-          did she cost" but not the question you actually have when she
-          reports something odd: what did we send, and what came back. That
-          was one click into another page with the filter to re-apply. */}
       {/* ── What she assigned ─────────────────────────────────────
           Above "Work handed in" so the page reads in the order the work
           happens: she builds an assignment, students hand it in, a
@@ -236,10 +231,10 @@ export default function TeacherDetail() {
       </section>
 
       {/* ── Work handed in ───────────────────────────────────────
-          Above Model calls deliberately. A complaint is about a GRADE far
-          more often than about a generation, and grading/integrity calls
-          are billed to the student who submitted — so they are absent
-          from the panel below and reachable only through here. */}
+          A complaint is about a GRADE far more often than about a
+          generation, so the submissions sit here, one click from each
+          one's case file. Their grading and integrity calls are already
+          counted in the calls panel above. */}
       <section className="table-card" style={{ marginBottom: 24 }}>
         <div
           style={{

@@ -275,12 +275,14 @@ async def test_teacher_cost_follows_the_whose_call_rule(
     assert bob["cost_30d"] == pytest.approx(0.20)
     assert bob["call_count_30d"] == 1
 
-    # And it is the number the teacher's own page shows.
-    page = (await client.get(
-        f"/v1/admin/users/{seeded['anna_id']}/students",
+    # And it is the number her page's calls panel shows.
+    panel = (await client.get(
+        "/v1/admin/llm-calls/summary",
+        params={"teacher_id": seeded["anna_id"], "hours": "720"},
         headers=auth_headers(seeded["admin_token"]),
     )).json()
-    assert page["teacher"]["total_cost_30d"] == pytest.approx(anna["cost_30d"])
+    assert panel["spend"] == pytest.approx(anna["cost_30d"])
+    assert panel["calls"] == anna["call_count_30d"]
 
 
 async def test_students_have_no_plan_and_carry_grades(

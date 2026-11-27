@@ -296,7 +296,6 @@ async def test_school_a_overview_reflects_seeded_data(
 
     # 1 of the 5 calls was failed; counts hit both 24h and 7d windows.
     assert data["failed_calls_24h"] == 1
-    assert data["failed_calls_7d"] == 1
 
     # Activity this week — 1 active section, 1 teacher, 1 student, 1 HW
     # published, 1 submission.

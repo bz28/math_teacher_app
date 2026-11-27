@@ -22,6 +22,9 @@ const COLORS = ["#14130f", "#4a6b3a", "#b8431a", "#3d5a78", "#a66b15", "#6b21a8"
 type CallRow = LLMCallsData["calls"][number];
 type Status = "" | "ok" | "failed";
 
+
+/** The calls-with-no-school bucket; the API takes it as a school_id. */
+const INTERNAL_SCHOOL = "internal";
 export default function LLMCalls() {
   const [searchParams, setSearchParams] = useSearchParams();
   const confirm = useConfirm();
@@ -56,7 +59,12 @@ export default function LLMCalls() {
   const entityFilter = Boolean(
     userFilter || teacherFilter || studentFilter || assignmentFilter || submissionFilter || sessionFilter,
   );
-  const schoolFilter = entityFilter ? null : scope;
+  // `?school=internal` narrows to calls with no school (admin, internal
+  // tools). The rail can't hold that bucket — its scope is a real school
+  // or all of them — so the page keeps it in the URL as its own filter;
+  // a school id in `?school=` is taken by the rail instead (Layout).
+  const internalOnly = searchParams.get("school") === INTERNAL_SCHOOL;
+  const schoolFilter = entityFilter ? null : internalOnly ? INTERNAL_SCHOOL : scope;
   const status: Status = ((): Status => {
     const s = searchParams.get("status");
     return s === "ok" || s === "failed" ? s : "";
@@ -117,6 +125,13 @@ export default function LLMCalls() {
   };
   const setParam = (key: string, value: string) => setParams({ [key]: value });
   const pickFunction = (fn: string) => setParam("function", fn);
+  // A band line describes the last 24h of the band's own scope — the
+  // school, nothing narrower — so following one drops every narrower
+  // filter, or the list it lands on is a different set of calls.
+  const followBand = (changes: Record<string, string>) => setParams({
+    user: "", teacher: "", student: "", assignment: "", submission: "", session: "", model: "",
+    function: "", hours: "", from: "", to: "", ...changes,
+  });
 
   const handleDebug = async (callId: string) => {
     const ok = await confirm({
@@ -209,6 +224,7 @@ export default function LLMCalls() {
   // one is on — a filtered total must not read as the window's.
   const narrowed = Boolean(fnFilter || modelFilter || status || search || entityFilter);
   const badges: { key: string; label: string; title: string }[] = [
+    internalOnly && !entityFilter && { key: "school", label: "Internal only", title: "Calls that belong to no school" },
     assignmentFilter && { key: "assignment", label: `Homework: ${shortId(assignmentFilter)}`, title: "Every call on a submission to this homework" },
     submissionFilter && { key: "submission", label: `Submission: ${shortId(submissionFilter)}`, title: submissionFilter },
     sessionFilter && { key: "session", label: `Session: ${shortId(sessionFilter)}`, title: sessionFilter },
@@ -256,10 +272,8 @@ export default function LLMCalls() {
       {/* What needs a human now — each line a link into its calls. */}
       <AttentionBand
         schoolId={schoolFilter}
-        onFunction={(fn, failedOnly) => {
-          setParams({ function: fn, status: failedOnly ? "failed" : "", hours: "", from: "", to: "" });
-        }}
-        onSchool={(id) => setParams({ school: id, status: "failed", hours: "", from: "", to: "" })}
+        onFunction={(fn, failedOnly) => followBand({ function: fn, status: failedOnly ? "failed" : "" })}
+        onSchool={(id) => followBand({ school: id, status: "failed" })}
       />
 
       {/* ── Filters — every one narrows the numbers and the rows ─────── */}

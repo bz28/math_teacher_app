@@ -1099,7 +1099,6 @@ export interface SchoolOverviewData {
     last_week: ActivityCounts;
   };
   failed_calls_24h: number;
-  failed_calls_7d: number;
 }
 
 export interface CreateSchoolBody {
@@ -1176,14 +1175,10 @@ export interface TeacherStudentsData {
      *  ActivityLog alone, which read NOT STARTED on teachers whose own
      *  page listed recent work. Null if they've genuinely never acted. */
     last_active_at: string | null;
-    /** Every call this teacher's CLASSROOM caused in 30d, including the
-     *  grading and integrity calls billed to the students who
-     *  submitted. */
-    call_count_30d: number;
-    /** The generation half only — all the Content generation panel can
-     *  show, since it filters on the teacher's own user id. */
+    /** Calls she made herself in 30d — the generation half, all the
+     *  Content generation panel can show. Her full count (with calls
+     *  on her homework) is the calls panel's. */
     generated_call_count_30d: number;
-    total_cost_30d: number;
   };
   usage: TeacherUsage;
   sections: TeacherRosterSection[];
@@ -1508,8 +1503,6 @@ export interface StudentDetailData {
      *  homework. */
     last_active_at: string | null;
     last_submitted_at: string | null;
-    call_count_30d: number;
-    total_cost_30d: number;
   };
   sections: StudentSection[];
   funnel: Record<SubmissionStage, number>;

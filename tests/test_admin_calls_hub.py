@@ -18,6 +18,7 @@ from sqlalchemy import select
 from api.database import get_session_factory
 from api.models.assignment import Submission
 from api.models.llm_call import LLMCall
+from api.models.user import User
 from api.routes.admin_llm_attention import attention_items
 from tests.conftest import auth_headers
 from tests.test_llm_attribution import _call, world  # noqa: F401  (fixture)
@@ -135,3 +136,26 @@ async def test_attention_endpoint_validates_the_school(
         headers=auth_headers(world["token"]),
     )
     assert r.status_code == 400
+
+
+async def test_band_internal_line_matches_the_internal_failed_calls(
+    client: AsyncClient, world: dict[str, Any],  # noqa: F811
+) -> None:
+    """The band's "Internal · N failed" opens `school_id=internal` +
+    failed — that list must hold exactly the N the band counted."""
+    async with get_session_factory()() as s:
+        admin = (await s.execute(select(User.id).where(User.role == "admin"))).scalar_one()
+    now = datetime.now(UTC)
+    await _add(*[
+        _call(user_id=admin, school_id=None, function="judge", success=False,
+              cost_usd=0.0, created_at=now - timedelta(hours=1 + i))
+        for i in range(3)
+    ])
+    band = await _get(client, world, "/v1/admin/llm-calls/attention")
+    internal = [i for i in band["items"] if i["kind"] == "school_failures" and i["school_id"] == "internal"]
+    assert [(i["school_name"], i["failed"]) for i in internal] == [("Internal", 3)]
+    listed = await _get(
+        client, world, "/v1/admin/llm-calls/summary",
+        hours="24", school_id="internal", success="false",
+    )
+    assert listed["failed"] == internal[0]["failed"]
