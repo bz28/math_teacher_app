@@ -2754,6 +2754,28 @@ export interface paths {
         patch: operations["update_assignment_v1_teacher_assignments__assignment_id__patch"];
         trace?: never;
     };
+    "/v1/teacher/assignments/{assignment_id}/duplicate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Duplicate Homework Route
+         * @description Copy a homework into a new draft, in its course or another of the
+         *     teacher's: problems, grading rules, points, late policy and
+         *     instructions. Nothing is generated and nothing needs review again.
+         */
+        post: operations["duplicate_homework_route_v1_teacher_assignments__assignment_id__duplicate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teacher/assignments/{assignment_id}/grade-pending": {
         parameters: {
             query?: never;
@@ -4982,6 +5004,19 @@ export interface components {
              * @default
              */
             reason: string;
+        };
+        /**
+         * DuplicateHomeworkRequest
+         * @description Where the copy goes and when it's due. Sections and the due date
+         *     are picked fresh: the source's own never carry over.
+         */
+        DuplicateHomeworkRequest: {
+            /** Course Id */
+            course_id?: string | null;
+            /** Due At */
+            due_at?: string | null;
+            /** Section Ids */
+            section_ids?: string[];
         };
         /** EntitlementLimits */
         EntitlementLimits: {
@@ -11637,6 +11672,43 @@ export interface operations {
                 content: {
                     "application/json": {
                         [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    duplicate_homework_route_v1_teacher_assignments__assignment_id__duplicate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assignment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DuplicateHomeworkRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
                     };
                 };
             };

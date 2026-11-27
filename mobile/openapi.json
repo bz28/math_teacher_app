@@ -1396,6 +1396,45 @@
         "title": "DismissRequest",
         "type": "object"
       },
+      "DuplicateHomeworkRequest": {
+        "description": "Where the copy goes and when it's due. Sections and the due date\nare picked fresh: the source's own never carry over.",
+        "properties": {
+          "course_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Course Id"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          },
+          "section_ids": {
+            "items": {
+              "format": "uuid",
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Section Ids",
+            "type": "array"
+          }
+        },
+        "title": "DuplicateHomeworkRequest",
+        "type": "object"
+      },
       "EntitlementLimits": {
         "properties": {
           "daily_chats_limit": {
@@ -15286,6 +15325,67 @@
           }
         ],
         "summary": "Update Assignment",
+        "tags": [
+          "teacher"
+        ]
+      }
+    },
+    "/v1/teacher/assignments/{assignment_id}/duplicate": {
+      "post": {
+        "description": "Copy a homework into a new draft, in its course or another of the\nteacher's: problems, grading rules, points, late policy and\ninstructions. Nothing is generated and nothing needs review again.",
+        "operationId": "duplicate_homework_route_v1_teacher_assignments__assignment_id__duplicate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assignment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Assignment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DuplicateHomeworkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Duplicate Homework Route V1 Teacher Assignments  Assignment Id  Duplicate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Duplicate Homework Route",
         "tags": [
           "teacher"
         ]

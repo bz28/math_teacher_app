@@ -1,6 +1,7 @@
 """Teacher routes that copy a homework's problems into a practice set."""
 
 import uuid
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -8,6 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.audit_log import record_activity
 from api.core.entitlements import Entitlement, check_entitlement
 from api.core.question_bank_generation import schedule_generation_job
 from api.database import get_db
@@ -18,7 +20,11 @@ from api.models.section import Section
 from api.models.user import User
 from api.routes.teacher_assignments import get_teacher_assignment
 from api.routes.teacher_courses import get_teacher_course
-from api.services.assignment_duplicate import homework_bank_items, queue_variation_jobs
+from api.services.assignment_duplicate import (
+    duplicate_homework,
+    homework_bank_items,
+    queue_variation_jobs,
+)
 
 router = APIRouter()
 
@@ -169,3 +175,62 @@ async def add_practice_problems(
     for jid in job_ids:
         schedule_generation_job(jid)
     return {"id": str(practice.id), "job_ids": [str(j) for j in job_ids]}
+
+
+class DuplicateHomeworkRequest(BaseModel):
+    """Where the copy goes and when it's due. Sections and the due date
+    are picked fresh: the source's own never carry over."""
+    course_id: uuid.UUID | None = None  # None → the homework's own course
+    due_at: str | None = None
+    section_ids: list[uuid.UUID] = Field(default_factory=list, max_length=100)
+
+
+@router.post("/assignments/{assignment_id}/duplicate", status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
+async def duplicate_homework_route(
+    request: Request,
+    assignment_id: uuid.UUID,
+    body: DuplicateHomeworkRequest,
+    current_user: CurrentUser = Depends(require_teacher),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Copy a homework into a new draft, in its course or another of the
+    teacher's: problems, grading rules, points, late policy and
+    instructions. Nothing is generated and nothing needs review again."""
+    source = await get_teacher_assignment(db, assignment_id, current_user.user_id)
+    if source.type != "homework":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only homeworks can be duplicated",
+        )
+    target_course_id = body.course_id or source.course_id
+    await get_teacher_course(db, target_course_id, current_user.user_id)
+    due_at = None
+    if body.due_at:
+        try:
+            due_at = datetime.fromisoformat(body.due_at)
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid due_at format")
+        if due_at.tzinfo is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="due_at needs a timezone",
+            )
+
+    dup = await duplicate_homework(
+        db, source,
+        target_course_id=target_course_id,
+        teacher_id=current_user.user_id,
+        due_at=due_at,
+        section_ids=body.section_ids,
+    )
+    await record_activity(
+        db, current_user, "assignment.duplicate", "assignment", dup.id,
+        {"title": dup.title, "source_id": str(source.id)},
+    )
+    await db.commit()
+    return {
+        "id": str(dup.id),
+        "title": dup.title,
+        "status": dup.status,
+        "course_id": str(dup.course_id),
+    }

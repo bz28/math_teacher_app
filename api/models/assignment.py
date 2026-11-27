@@ -38,10 +38,11 @@ class Assignment(Base):
     source_type: Mapped[str | None] = mapped_column(
         String(20), nullable=True,
     )  # upload | ai_generated | library | manual
-    # When a practice set was cloned from a homework, this is the source
-    # HW's id. Null for scratch-built practice and for any non-practice
-    # assignment. ON DELETE SET NULL keeps the practice set alive if the
-    # source HW is removed — it just loses its "Cloned from" label.
+    # The homework this one was made from: a practice set cloned from a
+    # homework, or a homework duplicated from another course. Null for
+    # everything built from scratch (and same-course duplicates, which
+    # share their questions anyway). ON DELETE SET NULL keeps the copy
+    # alive if the source is removed — it just loses its "from" label.
     source_homework_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("assignments.id", ondelete="SET NULL"),

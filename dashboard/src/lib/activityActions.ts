@@ -105,6 +105,11 @@ export const ACTIVITY_ACTIONS: Record<ActivityFamily, ActivityAction[]> = {
       detail: (m) => join(str(m, "title"), str(m, "status")) || "Edited assignment",
     },
     {
+      action: "assignment.duplicate",
+      label: "Duplicated",
+      detail: (m) => quoted(m, "title", "Duplicated a homework"),
+    },
+    {
       action: "assignment.publish",
       label: "Published",
       detail: (m) => quoted(m, "title", "Published"),

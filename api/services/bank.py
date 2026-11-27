@@ -264,6 +264,48 @@ def problem_ids_in_content(content: Any) -> list[str]:
     return []
 
 
+async def rehome_shared_bank_items(db: AsyncSession, assignment: Assignment) -> int:
+    """Before an assignment is deleted, hand the questions it originated
+    that a homework in the course still uses (a same-course duplicate, Add
+    from bank, a practice set's question picked onto a homework) to that
+    homework, with their versions. `originating_assignment_id` cascades on
+    delete, so without this the homework loses those problems. A version
+    moves only with its own question, so a practice set's versions of
+    homework questions still go with the set. Returns how many moved."""
+    owned = (await db.execute(
+        select(QuestionBankItem).where(QuestionBankItem.originating_assignment_id == assignment.id)
+    )).scalars().all()
+    if not owned:
+        return 0
+    others = (await db.execute(
+        select(Assignment.id, Assignment.content)
+        .where(
+            Assignment.course_id == assignment.course_id,
+            Assignment.id != assignment.id,
+            Assignment.type == "homework",
+        )
+        .order_by(Assignment.created_at.desc())
+    )).all()
+    # Newest homework first: the copy the teacher is working on now.
+    new_home: dict[str, uuid.UUID] = {}
+    for other_id, content in others:
+        for pid in problem_ids_in_content(content):
+            new_home.setdefault(pid, other_id)
+    moved: dict[uuid.UUID, uuid.UUID] = {
+        item.id: new_home[str(item.id)] for item in owned if str(item.id) in new_home
+    }
+    # A version follows its question, and only when that question moves.
+    for item in owned:
+        if item.id not in moved and item.parent_question_id in moved:
+            moved[item.id] = moved[item.parent_question_id]
+    for item in owned:
+        if item.id in moved:
+            item.originating_assignment_id = moved[item.id]
+    if moved:
+        await db.flush()
+    return len(moved)
+
+
 async def used_in_assignments_map(
     db: AsyncSession, course_id: uuid.UUID,
 ) -> dict[str, list[dict[str, Any]]]:

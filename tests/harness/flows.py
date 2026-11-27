@@ -47,6 +47,7 @@ from tests.harness.flows_homework import (
     add_from_bank_flow,
     add_from_bank_on_homework_flow,
     create_homework_flow,
+    duplicate_homework_flow,
 )
 from tests.harness.seed import (
     WORKSHOP_FLOW_FIGURE,
@@ -735,7 +736,7 @@ _FLOWS = (
     _retake_photos_flow, _reopen_resubmit_flow,
     _join_class_flow, _submit_homework_flow, _grade_publish_flow,
     _workshop_steps_flow, _review_page_flow, create_homework_flow, add_from_bank_flow,
-    generation_survives_leaving_flow, add_from_bank_on_homework_flow,
+    generation_survives_leaving_flow, add_from_bank_on_homework_flow, duplicate_homework_flow,
 )
 
 
