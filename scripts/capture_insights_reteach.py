@@ -21,7 +21,9 @@ predates the table.
 SHOTS is a comma list of: insights (the tab, Period 1), reason (the
 first reason opened to its students), live (the older homework, whose
 set is live, for the tray's practiced count), review (the draft set's
-review queue, first version beside its original). Shots land in
+review queue, first version beside its original), set (the live set's
+page, and with who hasn't practiced opened), hw (a homework's page, to
+check it's unchanged). Shots land in
 docs/design/insights-reteach-<shot>-<OUT>.png.
 """
 
@@ -273,6 +275,25 @@ async def main() -> int:
                 await page.mouse.move(1, 1)
                 await page.wait_for_timeout(800)
                 await page.screenshot(path=str(OUT_DIR / f"insights-reteach-review-{OUT}.png"), full_page=True)
+            if "hw" in SHOTS:
+                await page.goto(f"{WEB_BASE}/school/teacher/courses/{w['course']}/homework/{w['elim']}",
+                                wait_until="networkidle", timeout=90000)
+                await page.get_by_text("Delete homework").first.wait_for(timeout=60000)
+                await page.mouse.move(1, 1)
+                await page.wait_for_timeout(800)
+                await page.screenshot(path=str(OUT_DIR / f"insights-reteach-hw-{OUT}.png"), full_page=True)
+            if "set" in SHOTS:
+                await page.goto(f"{WEB_BASE}/school/teacher/courses/{w['course']}/homework/{w['live']}",
+                                wait_until="networkidle", timeout=90000)
+                await page.get_by_text("Solve by substitution").first.wait_for(timeout=60000)
+                await page.mouse.move(1, 1)
+                await page.wait_for_timeout(800)
+                await page.screenshot(path=str(OUT_DIR / f"insights-reteach-set-{OUT}.png"), full_page=True)
+                who = page.get_by_role("button", name="Show who hasn't")
+                if await who.count():
+                    await who.click()
+                    await page.wait_for_timeout(400)
+                    await page.screenshot(path=str(OUT_DIR / f"insights-reteach-set-open-{OUT}.png"), full_page=True)
             print(f"  page errors: {len(errors)}")
             for e in errors[:10]:
                 print(f"    ! {e}")

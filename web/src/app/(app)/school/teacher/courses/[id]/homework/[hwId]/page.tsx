@@ -22,6 +22,7 @@ import {
   usePendingProblems,
 } from "./_lib/use-homework-loads";
 import { usePreviewAsStudent } from "./_lib/use-preview-as-student";
+import { useSetPracticed } from "./_lib/use-set-practiced";
 import { ActionBar } from "./_components/action-bar";
 import { CollapsibleSection, ConfigBlock, configSummary } from "./_components/config-block";
 import { DeleteHomework } from "./_components/delete-homework";
@@ -30,6 +31,7 @@ import { InstructionsBlock } from "./_components/instructions-block";
 import { GenerationStalledBanner, PendingReviewLink } from "./_components/problems-heroes";
 import { ProblemsSection } from "./_components/problems-section";
 import { RemoveProblemsView } from "./_components/remove-problems-view";
+import { WhoPracticed } from "./_components/who-practiced";
 
 /**
  * Full-page detail for a single homework. Handles all lifecycle
@@ -73,6 +75,7 @@ export default function HomeworkDetailPage({
   const { busy, error, setError, run } = useAsyncAction();
   const { pending, reloadPending } = usePendingProblems(courseId, assignmentId);
   const inboxRows = useHomeworkInbox(hw?.status, courseId, assignmentId);
+  const setPracticed = useSetPracticed(assignmentId, hw?.type, hw?.status);
   const courseSections = useCourseSections(courseId);
   const {
     setActiveJobs,
@@ -371,11 +374,13 @@ export default function HomeworkDetailPage({
         <>
           {isPublished && (
             <div className="mt-4 rounded-[--radius-md] border border-primary/20 bg-primary-bg/30 p-3 text-xs text-text-secondary">
-              Published — students can see this. Points, grading rules
-              and instructions stay editable; unpublish to change the
-              problem list, title, due date, or sections.
+              {graded
+                ? "Published — students can see this. Points, grading rules and instructions stay editable; unpublish to change the problem list, title, due date, or sections."
+                : `Live for ${hw.section_names.join(", ") || "its periods"}. Unpublish to change the problems or the periods.`}
             </div>
           )}
+
+          {setPracticed && <WhoPracticed sections={setPracticed.sections} />}
 
           {/* Submission summary — only shown for published HWs. Tells
               the teacher at a glance how many students have submitted
@@ -422,6 +427,7 @@ export default function HomeworkDetailPage({
             assignmentId={assignmentId}
             graded={graded}
             isPublished={isPublished}
+            practiced={setPracticed?.problems}
             generation={{
               active: activeGenerating,
               requested: aggregateRequested,
@@ -481,7 +487,12 @@ export default function HomeworkDetailPage({
             <p className="mt-4 text-xs text-[color:var(--color-error)]">{workshopError}</p>
           )}
 
-          <DeleteHomework disabled={isPublished} busy={busy} onDelete={remove} />
+          <DeleteHomework
+            noun={graded ? "homework" : "practice set"}
+            disabled={isPublished}
+            busy={busy}
+            onDelete={remove}
+          />
         </>
       )}
     </div>

@@ -25,6 +25,7 @@ export function ProblemsSection({
   courseId,
   assignmentId,
   graded,
+  practiced,
   isPublished,
   generation,
   saveStates,
@@ -45,6 +46,9 @@ export function ProblemsSection({
   assignmentId: string;
   graded: boolean;
   isPublished: boolean;
+  /** A live practice set: students who answered each problem, by bank
+   *  item id (absent = nobody yet). Undefined otherwise. */
+  practiced?: Record<string, number>;
   /** The generation jobs feeding this homework, summed. */
   generation: { active: boolean; requested: number; produced: number; reading: boolean };
   saveStates: Record<ConfigField, SaveState>;
@@ -167,6 +171,7 @@ export function ProblemsSection({
                 onChecklistChanged={onChecklistChanged}
                 reveal={reveal?.bankItemId === p.bank_item_id ? reveal.n : undefined}
                 published={isPublished}
+                practiced={practiced ? (practiced[p.bank_item_id] ?? 0) : undefined}
               />
             ))}
           </ul>

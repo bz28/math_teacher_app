@@ -1565,6 +1565,12 @@ export type InsightsHomework = Schemas["InsightsHomework"];
 export type InsightsProblem = Schemas["InsightsProblem"];
 export type InsightsPractice = Schemas["InsightsPractice"];
 
+/** Who in each of a practice set's periods has practiced it, and how
+ *  many answered each problem. Mirrors GET /teacher/assignments/{id}/practiced
+ *  (api/routes/teacher_practice_activity.py). Ungraded: no scores. */
+export type SetPracticed = Schemas["SetPracticed"];
+export type PracticedSection = Schemas["PracticedSection"];
+
 /** A teacher's "Report a problem" — the context is a snapshot of what
  *  they were looking at, so every field is nullable. */
 export interface TeacherReportPayload {
@@ -1946,6 +1952,9 @@ export const teacher = {
    *  the class didn't get full credit, with the common reasons why), and
    *  the practice set made from it.
    *  Omit `assignmentId` to get the newest homework with counted grades. */
+  setPracticed(assignmentId: string) {
+    return apiFetch<SetPracticed>(`/teacher/assignments/${assignmentId}/practiced`);
+  },
   sectionInsights(courseId: string, sectionId: string, assignmentId?: string) {
     const q = assignmentId ? `?assignment_id=${encodeURIComponent(assignmentId)}` : "";
     return apiFetch<SectionInsightsResponse>(
