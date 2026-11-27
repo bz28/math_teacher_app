@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   teacher,
@@ -16,17 +16,25 @@ import { MAX_TOTAL_POINTS } from "@/lib/points";
 import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
 import { useDialogDismiss } from "@/hooks/use-dialog-dismiss";
 import { topUnits } from "@/lib/units";
-import { formatDue, fileToBase64, formatFileSize } from "@/lib/utils";
-import { ImageResizeError, resizeImageForUpload } from "@/lib/image-resize";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { useDocumentUploads } from "@/hooks/use-document-uploads";
-import { FileTextIcon, ImageIcon, UploadIcon, XIcon } from "@/components/ui/icons";
-import { Button } from "@/components/ui/button";
 import {
   AssignmentDetailsStep,
   AssignmentProblemsStep,
-  LATE_POLICY_OPTIONS,
 } from "./assignment-wizard-steps";
+import {
+  DiscardConfirmDialog,
+  ModeTabs,
+  ReviewStep,
+  WizardStepper,
+  type Mode,
+} from "./homework-wizard-chrome";
+import {
+  MAX_TOTAL_B64_BYTES,
+  MAX_TOTAL_MB,
+  UploadSection,
+  useStagedFiles,
+} from "./homework-wizard-upload";
 import { GradingSetupCard } from "./grading-setup-card";
 import {
   GenerationParamsCustomize,
@@ -59,21 +67,6 @@ import {
  * single click instead of a configuration trip.
  */
 
-// Backend caps mirrored client-side so we can reject oversized files
-// before encoding+POSTing 23MB of base64. Magic-byte detection still
-// happens server-side; this is just an early bail for the obvious case.
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
-const MAX_PDF_BYTES = 23 * 1024 * 1024;
-const MAX_FILES = 10;
-// Extraction sends every file to the model in one request, so the batch
-// shares that request's budget (MAX_TOTAL_SOURCE_B64_BYTES in
-// api/core/document_vision.py; the server refuses past it). Measured on
-// the base64 we send.
-const MAX_TOTAL_B64_BYTES = 31 * 1024 * 1024;
-const MAX_TOTAL_MB = 23;
-const ACCEPT = "image/jpeg,image/png,application/pdf";
-
-type Mode = "generate" | "upload";
 type Step = 1 | 2 | 3 | 4;
 
 const STEPS: { n: Step; label: string }[] = [
@@ -82,20 +75,6 @@ const STEPS: { n: Step; label: string }[] = [
   { n: 3, label: "Grading" },
   { n: 4, label: "Review" },
 ];
-
-interface StagedFile {
-  id: string;
-  filename: string;
-  size: number;
-  mediaType: "image/jpeg" | "image/png" | "application/pdf";
-  /** Raw base64 (no data: prefix) — what the API expects. */
-  base64: string;
-  /** data: URL preview for image thumbnails; null for PDFs. */
-  previewUrl: string | null;
-  /** Per-row error if validation failed. Kept on a row so the teacher
-   *  sees what was rejected, with valid files staged alongside. */
-  error?: string;
-}
 
 export function NewHomeworkModal({
   courseId,
@@ -146,13 +125,19 @@ export function NewHomeworkModal({
   const [docsLoaded, setDocsLoaded] = useState(false);
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
 
+
   // ── Step 2 (upload) ──
-  // Files stay staged across mode switches so a teacher who clicks
-  // Generate by accident doesn't lose their photos.
-  const [stagedFiles, setStagedFiles] = useState<StagedFile[]>([]);
+  const {
+    stagedFiles,
+    dragActive,
+    fileInputRef,
+    handleFiles,
+    removeStagedFile,
+    onDragOver,
+    onDragLeave,
+    onDrop,
+  } = useStagedFiles(busy);
   const [scopeHint, setScopeHint] = useState("");
-  const [dragActive, setDragActive] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // ── Step 3 — Grading ──
   const [rubric, setRubric] = useState<TeacherRubric | null>(null);
@@ -374,111 +359,6 @@ export function NewHomeworkModal({
       onCreated(id, { startedGeneration });
     });
 
-  // ── Upload-mode staging ──
-
-  const ACCEPTED_TYPES = new Set([
-    "image/jpeg",
-    "image/png",
-    "application/pdf",
-  ]);
-
-  const newRowId = () =>
-    typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-
-  const errorRow = (file: File, message: string): StagedFile => ({
-    id: newRowId(),
-    filename: file.name,
-    size: file.size,
-    mediaType: "image/jpeg", // unused on error rows
-    base64: "",
-    previewUrl: null,
-    error: message,
-  });
-
-  const stageOne = async (file: File): Promise<StagedFile> => {
-    if (!ACCEPTED_TYPES.has(file.type)) {
-      return errorRow(file, "Only JPEG, PNG, and PDF are accepted");
-    }
-    const isPdf = file.type === "application/pdf";
-
-    // PDFs go through untouched — resizeImageForUpload is image-only.
-    if (isPdf) {
-      if (file.size > MAX_PDF_BYTES) {
-        return errorRow(file, "Too large (max 23MB)");
-      }
-      try {
-        const base64 = await fileToBase64(file);
-        return {
-          id: newRowId(),
-          filename: file.name,
-          size: file.size,
-          mediaType: "application/pdf",
-          base64,
-          previewUrl: null,
-        };
-      } catch {
-        return errorRow(file, "Could not read file");
-      }
-    }
-
-    // Images: resize before staging so a phone photo lands well under
-    // the 5 MB server cap.
-    try {
-      const blob = await resizeImageForUpload(file);
-      if (blob.size > MAX_IMAGE_BYTES) {
-        return errorRow(file, "Too large (max 5MB)");
-      }
-      const base64 = await fileToBase64(blob as File);
-      const mediaType: StagedFile["mediaType"] =
-        blob === file ? (file.type as StagedFile["mediaType"]) : "image/jpeg";
-      return {
-        id: newRowId(),
-        filename: file.name,
-        size: blob.size,
-        mediaType,
-        base64,
-        previewUrl: `data:${mediaType};base64,${base64}`,
-      };
-    } catch (err) {
-      if (err instanceof ImageResizeError) {
-        return errorRow(file, err.message);
-      }
-      throw err;
-    }
-  };
-
-  const handleFiles = async (files: FileList | File[]) => {
-    const list = Array.from(files);
-    if (list.length === 0) return;
-    const remaining = Math.max(0, MAX_FILES - stagedFiles.length);
-    const next = list.slice(0, remaining);
-    const staged = await Promise.all(next.map(stageOne));
-    setStagedFiles((prev) => [...prev, ...staged]);
-  };
-
-  const removeStagedFile = (id: string) => {
-    setStagedFiles((prev) => prev.filter((f) => f.id !== id));
-  };
-
-  const onDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    if (!dragActive) setDragActive(true);
-  };
-  const onDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragActive(false);
-  };
-  const onDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragActive(false);
-    if (busy) return;
-    if (e.dataTransfer.files?.length) {
-      void handleFiles(e.dataTransfer.files);
-    }
-  };
-
   // ── Motion ──
   const variants = reduceMotion
     ? {
@@ -570,7 +450,7 @@ export function NewHomeworkModal({
 
           {/* Stepper progress indicator */}
           <div className="border-b border-border-light bg-bg-subtle/40 px-6 py-3">
-            <WizardStepper step={step} onJump={(n) => goTo(n)} />
+            <WizardStepper steps={STEPS} step={step} onJump={(n) => goTo(n)} />
           </div>
 
           {/* Body */}
@@ -825,472 +705,3 @@ export function NewHomeworkModal({
   );
 }
 
-// ── Discard-unsaved-work confirm ──
-//
-// A stacked alert that fronts a dismiss attempt on a dirty wizard, so a
-// stray Escape / backdrop click can't silently throw away a homework the
-// teacher spent minutes composing. Self-contained: it owns its own
-// Escape-to-cancel and a Tab focus-trap (capture phase so it beats the
-// wizard's document listener), and it never touches the wizard state
-// beyond the two callbacks. The wizard is held non-dismissible while this
-// is open, so the two dismiss layers never fight.
-function DiscardConfirmDialog({
-  onKeepEditing,
-  onDiscard,
-}: {
-  onKeepEditing: () => void;
-  onDiscard: () => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-
-  // Move focus into the prompt on open, landing on the safe default
-  // ("Keep editing") so an accidental Enter can't discard the work. On
-  // close we restore focus to whatever the teacher was on (the field they
-  // Escaped from, or the ✕ they clicked) — the standard dialog contract.
-  // On Discard the whole wizard unmounts and its own hook restores the
-  // pre-wizard focus, so this restore harmlessly no-ops there.
-  useEffect(() => {
-    const trigger = document.activeElement as HTMLElement | null;
-    const first = ref.current?.querySelector<HTMLElement>("button");
-    first?.focus();
-    return () => trigger?.focus();
-  }, []);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        onKeepEditing();
-        return;
-      }
-      if (e.key === "Tab" && ref.current) {
-        const focusable = ref.current.querySelectorAll<HTMLElement>("button");
-        if (focusable.length === 0) return;
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault();
-          last.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault();
-          first.focus();
-        }
-      }
-    };
-    // Capture phase: run before the wizard's bubble-phase keydown handler
-    // so our Escape/Tab wins while the prompt is up.
-    document.addEventListener("keydown", onKey, true);
-    return () => document.removeEventListener("keydown", onKey, true);
-  }, [onKeepEditing]);
-
-  return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-[color:var(--color-overlay)] p-4 backdrop-blur-sm"
-      onClick={onKeepEditing}
-    >
-      <div
-        ref={ref}
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="hw-discard-title"
-        aria-describedby="hw-discard-body"
-        className="w-full max-w-sm rounded-[--radius-xl] border border-border-light bg-surface p-6 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2
-          id="hw-discard-title"
-          className="font-serif text-lg leading-tight tracking-[-0.01em] text-text-primary"
-        >
-          Discard this homework?
-        </h2>
-        <p id="hw-discard-body" className="mt-2 text-sm text-text-secondary">
-          Your problems and settings will be lost.
-        </p>
-        <div className="mt-5 flex justify-end gap-2">
-          <Button variant="secondary" size="sm" onClick={onKeepEditing}>
-            Keep editing
-          </Button>
-          <Button variant="danger" size="sm" onClick={onDiscard}>
-            Discard
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── Stepper ──
-
-function WizardStepper({
-  step,
-  onJump,
-}: {
-  step: Step;
-  onJump: (n: Step) => void;
-}) {
-  return (
-    <ol className="flex items-center">
-      {STEPS.map((s, i) => {
-        const state =
-          s.n < step ? "done" : s.n === step ? "current" : "upcoming";
-        // Only completed steps are clickable — forward jumps must pass
-        // the Details validation gate.
-        const clickable = s.n < step;
-        return (
-          <li key={s.n} className="flex flex-1 items-center last:flex-none">
-            <button
-              type="button"
-              onClick={() => clickable && onJump(s.n)}
-              disabled={!clickable}
-              aria-current={state === "current" ? "step" : undefined}
-              className={`group flex items-center gap-2 ${
-                clickable ? "cursor-pointer" : "cursor-default"
-              }`}
-            >
-              <span
-                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold transition-colors ${
-                  state === "current"
-                    ? "bg-primary text-white"
-                    : state === "done"
-                      ? "border border-primary/40 bg-primary/10 text-primary group-hover:bg-primary/20"
-                      : "border border-border-light bg-surface text-text-muted"
-                }`}
-              >
-                {state === "done" ? "✓" : s.n}
-              </span>
-              <span
-                className={`hidden text-[11px] font-semibold uppercase tracking-[0.12em] sm:inline ${
-                  state === "upcoming" ? "text-text-muted" : "text-text-primary"
-                }`}
-              >
-                {s.label}
-              </span>
-            </button>
-            {i < STEPS.length - 1 && (
-              <span
-                aria-hidden
-                className={`mx-2 h-px flex-1 ${
-                  s.n < step ? "bg-primary/40" : "bg-border-light"
-                }`}
-              />
-            )}
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
-
-// ── Generate / Upload mode toggle ──
-
-function ModeTabs({
-  mode,
-  onChange,
-  disabled,
-}: {
-  mode: Mode;
-  onChange: (m: Mode) => void;
-  disabled: boolean;
-}) {
-  const tabs: { key: Mode; label: string }[] = [
-    { key: "generate", label: "Generate" },
-    { key: "upload", label: "Upload" },
-  ];
-  const onKeyDown = (e: React.KeyboardEvent, idx: number) => {
-    if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
-    e.preventDefault();
-    const dir = e.key === "ArrowRight" ? 1 : -1;
-    const next = (idx + dir + tabs.length) % tabs.length;
-    onChange(tabs[next].key);
-  };
-  return (
-    <div role="tablist" aria-label="Homework problem source" className="flex gap-1.5">
-      {tabs.map((t, i) => {
-        const selected = mode === t.key;
-        return (
-          <button
-            key={t.key}
-            type="button"
-            role="tab"
-            aria-selected={selected}
-            tabIndex={selected ? 0 : -1}
-            disabled={disabled}
-            onClick={() => onChange(t.key)}
-            onKeyDown={(e) => onKeyDown(e, i)}
-            className={`rounded-full px-4 py-1.5 text-xs font-semibold transition-colors ${
-              selected
-                ? "bg-primary text-white"
-                : "bg-bg-subtle text-text-primary hover:bg-bg-base"
-            } disabled:opacity-50`}
-          >
-            {t.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-// ── Review step ──
-
-function ReviewStep({
-  title,
-  unitNames,
-  unitCount,
-  dueAt,
-  latePolicy,
-  sectionCount,
-  mode,
-  count,
-  fileCount,
-  hasRubric,
-  totalPoints,
-}: {
-  title: string;
-  unitNames: string[];
-  unitCount: number;
-  dueAt: string;
-  latePolicy: string;
-  sectionCount: number;
-  mode: Mode;
-  count: number;
-  fileCount: number;
-  hasRubric: boolean;
-  totalPoints: number;
-}) {
-  const lateLabel =
-    LATE_POLICY_OPTIONS.find((o) => o.value === latePolicy)?.label ?? latePolicy;
-  const unitsText =
-    unitNames.length > 0
-      ? unitNames.join(", ")
-      : `${unitCount} unit${unitCount === 1 ? "" : "s"}`;
-  const problemsText =
-    mode === "generate"
-      ? `Generate ${count} problem${count === 1 ? "" : "s"} with AI`
-      : fileCount > 0
-        ? `Extract from ${fileCount} uploaded page${fileCount === 1 ? "" : "s"}`
-        : "No pages added yet";
-
-  return (
-    <div className="space-y-5">
-      <p className="text-xs text-text-muted">
-        One last look. Creating sets the due date, sections, late policy and
-        grading rubric in one go — then the AI&apos;s problems land in a review
-        queue, where you approve them and publish.
-      </p>
-
-      <dl className="overflow-hidden rounded-[--radius-md] border border-border-light">
-        <SummaryRow label="Title" value={title.trim() || "Untitled"} />
-        <SummaryRow label="Units" value={unitsText} />
-        <SummaryRow
-          label="Due"
-          value={dueAt ? formatDue(new Date(dueAt).toISOString()) : "No due date"}
-          muted={!dueAt}
-        />
-        <SummaryRow label="Late policy" value={lateLabel} />
-        <SummaryRow
-          label="Sections"
-          value={
-            sectionCount === 0
-              ? "All sections in this course"
-              : `${sectionCount} section${sectionCount === 1 ? "" : "s"}`
-          }
-          muted={sectionCount === 0}
-        />
-        <SummaryRow label="Problems" value={problemsText} muted={mode === "upload" && fileCount === 0} />
-        <SummaryRow label="Points" value={`${totalPoints}, split evenly`} />
-        <SummaryRow
-          label="Grading"
-          value={hasRubric ? "Class rules + rules for this homework" : "Class rules"}
-          muted={!hasRubric}
-          last
-        />
-      </dl>
-    </div>
-  );
-}
-
-function SummaryRow({
-  label,
-  value,
-  muted,
-  last,
-}: {
-  label: string;
-  value: string;
-  muted?: boolean;
-  last?: boolean;
-}) {
-  return (
-    <div
-      className={`flex items-baseline gap-4 px-4 py-2.5 ${
-        last ? "" : "border-b border-border-light"
-      }`}
-    >
-      <dt className="w-28 shrink-0 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
-        {label}
-      </dt>
-      <dd
-        className={`min-w-0 flex-1 text-sm ${
-          muted ? "italic text-text-muted" : "text-text-primary"
-        }`}
-      >
-        {value}
-      </dd>
-    </div>
-  );
-}
-
-// ── Upload pane (worksheet photos / PDF → Vision extraction) ──
-
-function UploadSection({
-  fileInputRef,
-  dragActive,
-  stagedFiles,
-  scopeHint,
-  onScopeHintChange,
-  onDragOver,
-  onDragLeave,
-  onDrop,
-  onFilesSelected,
-  onRemoveStaged,
-  disabled,
-}: {
-  fileInputRef: React.RefObject<HTMLInputElement | null>;
-  dragActive: boolean;
-  stagedFiles: StagedFile[];
-  scopeHint: string;
-  onScopeHintChange: (v: string) => void;
-  onDragOver: (e: React.DragEvent) => void;
-  onDragLeave: (e: React.DragEvent) => void;
-  onDrop: (e: React.DragEvent) => void;
-  onFilesSelected: (files: FileList) => void;
-  onRemoveStaged: (id: string) => void;
-  disabled: boolean;
-}) {
-  const fullCount = stagedFiles.length;
-  const atCap = fullCount >= MAX_FILES;
-  return (
-    <div className="space-y-3" role="tabpanel" aria-label="Upload">
-      <div>
-        <label className="block text-sm font-bold text-text-primary">
-          Upload pages
-        </label>
-        <p className="mt-1 text-[11px] text-text-muted">
-          Snap or drop a worksheet — the AI transcribes the problems verbatim
-          into the review queue.
-        </p>
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          onDragOver={onDragOver}
-          onDragLeave={onDragLeave}
-          onDrop={onDrop}
-          disabled={disabled || atCap}
-          aria-label="Add files"
-          className={`mt-2 flex w-full flex-col items-center justify-center gap-1.5 rounded-[--radius-md] border border-dashed px-4 py-6 text-center transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-            dragActive
-              ? "border-primary bg-primary/5"
-              : "border-border-light bg-bg-subtle hover:border-primary"
-          }`}
-        >
-          <UploadIcon className="h-5 w-5 text-text-muted" />
-          <span className="text-xs font-semibold text-text-primary">
-            Drop photos or a PDF, or click to browse
-          </span>
-          <span className="text-[11px] text-text-muted">
-            Up to {MAX_FILES} files, {MAX_TOTAL_MB} MB in total · JPEG/PNG up to 5 MB each
-          </span>
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept={ACCEPT}
-          multiple
-          capture="environment"
-          className="hidden"
-          onChange={(e) => {
-            if (e.target.files?.length) onFilesSelected(e.target.files);
-            e.target.value = "";
-          }}
-        />
-      </div>
-
-      {fullCount > 0 && (
-        <ul className="space-y-1.5" aria-label="Staged files">
-          {stagedFiles.map((f) => (
-            <li
-              key={f.id}
-              className="flex min-h-[44px] items-center gap-3 rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2"
-            >
-              {f.previewUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={f.previewUrl}
-                  alt=""
-                  className="h-10 w-10 flex-shrink-0 rounded object-cover"
-                />
-              ) : f.mediaType === "application/pdf" ? (
-                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded bg-bg-subtle text-text-muted">
-                  <FileTextIcon className="h-5 w-5" />
-                </div>
-              ) : (
-                <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded bg-bg-subtle text-text-muted">
-                  <ImageIcon className="h-5 w-5" />
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-semibold text-text-primary">
-                  {f.filename}
-                </p>
-                <p className="text-[11px] text-text-muted">
-                  {formatFileSize(f.size)}
-                  {f.mediaType === "application/pdf" ? " · PDF" : ""}
-                </p>
-                {f.error && (
-                  <p className="mt-0.5 text-[11px] text-[color:var(--color-error)]">{f.error}</p>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => onRemoveStaged(f.id)}
-                disabled={disabled}
-                aria-label={`Remove ${f.filename}`}
-                className="-mx-1 inline-flex h-11 w-11 items-center justify-center rounded text-text-muted hover:bg-bg-subtle hover:text-text-primary disabled:opacity-50"
-              >
-                <XIcon className="h-4 w-4" />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {fullCount > 0 && (
-        <p className="text-[11px] text-text-muted">
-          {fullCount} of {MAX_FILES}
-        </p>
-      )}
-
-      <div>
-        <label
-          htmlFor="hw-scope"
-          className="block text-sm font-bold text-text-primary"
-        >
-          Which problems?{" "}
-          <span className="font-normal text-text-muted">· optional</span>
-        </label>
-        <p className="mt-1 text-[11px] text-text-muted">
-          Tell the AI which problems to pull. Leave blank to extract everything.
-        </p>
-        <input
-          id="hw-scope"
-          type="text"
-          value={scopeHint}
-          onChange={(e) => onScopeHintChange(e.target.value)}
-          placeholder="e.g. Q1-13 odd, skip word problems"
-          disabled={disabled}
-          className="mt-2 w-full rounded-[--radius-md] border border-border-light bg-bg-base px-3 py-2 text-sm text-text-primary focus:border-primary focus:outline-none disabled:opacity-50"
-        />
-      </div>
-    </div>
-  );
-}
