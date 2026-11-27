@@ -5,6 +5,9 @@ raise and get dropped by `run_flows`, and nothing here publishes."""
 
 from __future__ import annotations
 
+import asyncio
+
+from playwright.async_api import Route
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from tests.harness.browser import HarnessBrowser
@@ -291,9 +294,23 @@ async def review_integrity_flow(
         #    and offers no Retry;
         #  - a failed undo offers Retry, and a newer resolve retires it.
         change = page.get_by_role("button", name="Change", exact=True).locator("visible=true")
-        retry = page.get_by_role("button", name="Retry", exact=True).first
 
-        async def re_resolve(outcome: str) -> bool:
+        toasts = page.get_by_role("region", name="Notifications")
+        retry = toasts.get_by_role("button", name="Retry", exact=True).first
+
+        async def clear_toasts() -> None:
+            # Each scenario starts with no toasts, so the Undo it clicks
+            # is the one ITS resolve raised, not a leftover.
+            # dispatch_event, not click: a toast mid-exit-animation is
+            # never "stable", so click() would wait on it forever.
+            close = toasts.get_by_role("button", name="Dismiss notification")
+            for button in await close.all():
+                await button.dispatch_event("click")
+            await close.first.wait_for(state="detached", timeout=_TIMEOUT_MS)
+
+        async def re_resolve(outcome: str, *, clear: bool = True) -> bool:
+            if clear:
+                await clear_toasts()
             return (
                 await step(f"no Change control to re-resolve as {outcome}",
                            change.first.click(timeout=_TIMEOUT_MS))
@@ -304,9 +321,20 @@ async def review_integrity_flow(
                                undo.wait_for(timeout=_TIMEOUT_MS))
             )
 
-        await page.route("**/resolve/undo", lambda route: route.fulfill(
-            status=409, content_type="application/json",
-            body='{"detail": "Nothing to undo"}'))
+        async def nothing_to_undo(route: Route) -> None:
+            # Make the server disagree with the card first (as if a
+            # co-teacher resolved it since), so only a real resync from
+            # the server can show the right review.
+            async with get_session_factory()() as s:
+                row = (await s.execute(select(IntegrityCheckSubmission).where(
+                    IntegrityCheckSubmission.submission_id == uuid.UUID(rs.submission_id))
+                )).scalar_one()
+                row.resolution = "confirmed_concern"
+                await s.commit()
+            await route.fulfill(status=409, content_type="application/json",
+                                body='{"detail": "Nothing to undo"}')
+
+        await page.route("**/resolve/undo", nothing_to_undo)
         if await re_resolve("Contacted student"):
             await undo.click(timeout=_TIMEOUT_MS)
             await step("a 409 on Undo did not say there was nothing to undo",
@@ -314,7 +342,8 @@ async def review_integrity_flow(
             if await retry.count():
                 issues.append("a 409 on Undo offered Retry (it can never succeed)")
             await step("after a 409 on Undo the card did not show the server's review",
-                       page.get_by_text(re.compile(r"Reviewed.*Contacted")).locator("visible=true")
+                       page.get_by_text(re.compile(r"Reviewed.*Confirmed concern"))
+                       .locator("visible=true")
                        .first.wait_for(timeout=_TIMEOUT_MS))
         await page.unroute("**/resolve/undo")
 
@@ -323,11 +352,32 @@ async def review_integrity_flow(
             await undo.click(timeout=_TIMEOUT_MS)
             if await step("a failed Undo offered no Retry",
                           retry.wait_for(timeout=_TIMEOUT_MS)):
-                await re_resolve("Cleared — no concern")
+                await re_resolve("Cleared — no concern", clear=False)
                 # Well under the toast's own 8 s life, so only a real
                 # retire (not the toast timing out) passes.
                 await step("a newer resolve left the old Retry-undo toast up",
                            retry.wait_for(state="detached", timeout=3000))
+        await page.unroute("**/resolve/undo")
+
+        # An Undo that fails AFTER a newer resolve landed must not offer
+        # Retry: the server would take back the newer resolve instead.
+        release = asyncio.Event()
+
+        async def slow_fail(route: Route) -> None:
+            await release.wait()
+            await route.abort()
+
+        await page.route("**/resolve/undo", slow_fail)
+        if await re_resolve("Contacted student"):
+            await undo.click(timeout=_TIMEOUT_MS)
+            await re_resolve("Cleared — no concern")  # clears toasts; undo still in flight
+            release.set()
+            await step("a stale failed Undo did not report its failure",
+                       page.get_by_text("Couldn't undo the review.").last
+                       .wait_for(timeout=_TIMEOUT_MS))
+            if await retry.count():
+                issues.append("an Undo that failed after a newer resolve offered Retry "
+                              "(it would take back the newer resolve)")
         await page.unroute("**/resolve/undo")
 
     async with get_session_factory()() as s:

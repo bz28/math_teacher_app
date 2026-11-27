@@ -497,6 +497,12 @@ export function ResolveIntegrityControl({
         toast.info("Nothing to undo — showing the current review.");
         return;
       }
+      if (undoToastBySubmission.has(submissionId)) {
+        // A newer resolve landed while this undo was in flight; a Retry
+        // now would take back THAT resolve, not the one this undo meant.
+        toast.error("Couldn't undo the review.");
+        return;
+      }
       undoToastBySubmission.set(
         submissionId,
         toast.error("Couldn't undo the review.", {
