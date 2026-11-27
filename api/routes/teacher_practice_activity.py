@@ -265,6 +265,22 @@ async def get_set_practiced(
     course = await get_teacher_course(db, practice.course_id, current_user.user_id)
     practice_id, school_id = practice.id, course.school_id
 
+    # FERPA: the not-yet list names students. Authz is confirmed above, so
+    # log the access before reading the roster, as the other teacher reads
+    # do. The helper never raises (a failure goes to the error log); it
+    # rolls back on one, which expires ORM objects, so only plain values
+    # are read after it.
+    await log_student_record_access(
+        db,
+        accessor_user_id=current_user.user_id,
+        accessor_role=current_user.role,
+        target_student_id=None,
+        record_type="practice_roster",
+        record_id=practice_id,
+        accessor_school_id=school_id,
+        request=request,
+    )
+
     sections = (await db.execute(
         select(Section.id, Section.name)
         .join(AssignmentSection, AssignmentSection.section_id == Section.id)
@@ -285,7 +301,7 @@ async def get_set_practiced(
     for _sec, sid, item in rows:
         by_problem.setdefault(str(item), set()).add(sid)
 
-    out = SetPracticed(
+    return SetPracticed(
         sections=[
             PracticedSection(
                 section_id=sec.id,
@@ -302,17 +318,3 @@ async def get_set_practiced(
         ],
         problems={item: len(sids) for item, sids in by_problem.items()},
     )
-    # FERPA: the not-yet list names students. Logged last, from plain
-    # values: a failed log rolls the session back, which expires every
-    # ORM object, and the read must still succeed (admin_students._log_read).
-    await log_student_record_access(
-        db,
-        accessor_user_id=current_user.user_id,
-        accessor_role=current_user.role,
-        target_student_id=None,
-        record_type="practice_roster",
-        record_id=practice_id,
-        accessor_school_id=school_id,
-        request=request,
-    )
-    return out

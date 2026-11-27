@@ -396,9 +396,10 @@ async def test_set_practiced_is_for_the_sets_own_teacher_and_practice_only(
 
 
 async def test_set_practiced_still_answers_when_the_access_log_fails(
-    client: AsyncClient, world: dict[str, Any], monkeypatch: Any,
+    client: AsyncClient, world: dict[str, Any], monkeypatch: Any, caplog: Any,
 ) -> None:
-    """A failed FERPA log rolls the session back; the read must not 500."""
+    """A failed FERPA log rolls the session back; the read must not 500,
+    and the failure goes to the error log rather than vanishing."""
     from api.core import audit_log
 
     class Broken:
@@ -412,3 +413,5 @@ async def test_set_practiced_still_answers_when_the_access_log_fails(
                          headers=_auth(world["teacher_token"]))
     assert r.status_code == 200, r.text
     assert r.json()["sections"][0]["practiced"] == 2
+    assert any(rec.levelname == "ERROR" and "Failed to log student record access" in rec.getMessage()
+               for rec in caplog.records)
