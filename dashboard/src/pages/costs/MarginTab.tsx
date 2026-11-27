@@ -1,10 +1,11 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import StatTile from "../../components/StatTile";
 import type { Stage, UnitEconomicsData } from "../../lib/costsApi";
 import { computeMargin, marginAtPrice, type ModelChoice, type Scenario } from "./marginModel";
 import {
-  STAGES, cardPriceFor, defaultModels, ratesUnmeasured, readRateCard, scenarioDefaults, stageOptions,
+  STAGES, cardPriceFor, defaultModels, ratesUnmeasured, readRateCard, scenarioDefaults, snapshotParams,
+  stageOptions, unknownModels,
   type NumKey,
 } from "./marginScenario";
 import PricingPanel from "./PricingPanel";
@@ -27,7 +28,7 @@ const USAGE: Slider[] = [
   { key: "quiz", label: "Quizzes per student per month", max: 8, step: 0.01 },
   { key: "test", label: "Tests per student per month", max: 4, step: 0.01 },
   { key: "practice", label: "Practice sets per student per month", max: 12, step: 0.01 },
-  { key: "studentsPerTeacher", label: "Students per teacher", max: 200, step: 1 },
+  { key: "studentsPerTeacher", label: "Students per teacher", max: 200, step: 0.1 },
   { key: "studentsPerClass", label: "Students per class", max: 40, step: 1 },
   { key: "unitsPerYear", label: "Units generated per class per year", max: 30, step: 1 },
 ];
@@ -73,6 +74,8 @@ export default function MarginTab({ data, modelLabel }: Props) {
     if (v) models[s] = v;
   }
   const setModel = (s: Stage, id: string) => set(`m_${s}`, id === seeded[s] ? null : id);
+  const unknown = unknownModels(models, data.model_catalog);
+  const [copied, setCopied] = useState(false);
 
   const rateCard = readRateCard(params.get("rates"));
   const nums = Object.fromEntries(
@@ -84,6 +87,16 @@ export default function MarginTab({ data, modelLabel }: Props) {
   const months = Math.max(scenario.schoolYearMonths, 1);
   // Until the operator sets a rate themselves.
   const noRates = ratesUnmeasured(data) && RATE_KEYS.every((k) => params.get(k) === null);
+  const platformRates = RATE_KEYS.some((k) => defaults[k].source === "platform" && params.get(k) === null);
+
+  const copyLink = () => {
+    const q = snapshotParams(params, nums, models, rateCard);
+    const url = `${window.location.origin}${window.location.pathname}?${q.toString()}`;
+    void navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
 
   return (
     <div className="costs-margin">
@@ -107,10 +120,31 @@ export default function MarginTab({ data, modelLabel }: Props) {
         />
       </div>
 
+      <div className="costs-margin-actions">
+        <button type="button" className="link-btn" onClick={copyLink}>
+          {copied ? "Copied — every input pinned" : "Copy link to this scenario"}
+        </button>
+      </div>
+
+      {platformRates && !noRates && (
+        <div className="costs-note" role="note">
+          This scope has no submission rates of its own in this window, so usage starts at the platform
+          average (every school, same window).
+        </div>
+      )}
+
+      {unknown.length > 0 && (
+        <div className="costs-note warn" role="note">
+          This link names a model the catalog doesn&rsquo;t price for{" "}
+          {unknown.map((s) => data.models_in_use[s].label).join(", ")} ({unknown.map((s) => models[s]).join(", ")}),
+          so that stage keeps its measured cost.
+        </div>
+      )}
+
       {noRates && (
         <div className="costs-note warn" role="note">
           This window measured no submission rates
-          {data.measured.window_too_short ? " (it's under a week)" : " (no one handed anything in)"}, so usage
+          {data.measured.window_too_short ? " (it's under a week)" : ", here or across the platform"}, so usage
           starts at 0 and the margin leaves out grading, reading and integrity cost. Set the rates below or pick a
           longer window before reading it.
         </div>
@@ -144,7 +178,11 @@ export default function MarginTab({ data, modelLabel }: Props) {
                   onChange={(e) => setNum(s.key, e.target.value)}
                 />
                 <span className="costs-caption">
-                  {d.measured ? `measured: ${d.value}` : `assumption · started at ${d.value}`}
+                  {d.source === "measured"
+                    ? `measured: ${d.value}`
+                    : d.source === "platform"
+                      ? `platform average: ${d.value}`
+                      : `assumption · started at ${d.value}`}
                 </span>
               </label>
             );
@@ -200,6 +238,16 @@ export default function MarginTab({ data, modelLabel }: Props) {
             ))}
           </tbody>
         </table>
+        {r.trustDeltaPct !== null && (
+          <p className="costs-foot">
+            Trust check: the calls these costs come from, repriced at published rates on the models that ran,
+            land {Math.abs(r.trustDeltaPct) < 0.05 ? "exactly on" : `${Math.abs(r.trustDeltaPct).toFixed(1)}% ${r.trustDeltaPct > 0 ? "above" : "below"}`}{" "}
+            what was recorded
+            {r.trustUncheckedLegs > 0
+              ? ` (${r.trustUncheckedLegs} function${r.trustUncheckedLegs === 1 ? "" : "s"} on unpriced models not checked)`
+              : ""}.
+          </p>
+        )}
       </section>
 
       <section className="costs-section">

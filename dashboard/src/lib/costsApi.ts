@@ -135,11 +135,15 @@ export interface Measured {
   window_too_short: boolean;
   active_students: number;
   submissions: Record<SubmissionKind, number>;
-  /** null when no student submitted — unknown, not zero. */
   /** null when no one handed anything in — unknown, not four zeros. */
   submissions_per_student_month: Record<SubmissionKind, number> | null;
+  /** Every school, same window: a scope with no rate falls back to it. */
+  platform_submissions_per_student_month: Record<SubmissionKind, number> | null;
   teachers: number;
   students: number;
+  /** Teachers with teacher-side AI in the window — what that cost is per. */
+  active_teachers: number;
+  /** Active students per active teacher. */
   students_per_teacher: number | null;
 }
 

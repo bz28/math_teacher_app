@@ -88,7 +88,8 @@ function data(over: Partial<UnitEconomicsData> = {}): UnitEconomicsData {
       window_too_short: false, active_students: 90,
       submissions: { homework: 90, quiz: 0, test: 0, practice: 0 },
       submissions_per_student_month: { homework: 1, quiz: 0, test: 0, practice: 0 },
-      teachers: 3, students: 90, students_per_teacher: 30,
+      platform_submissions_per_student_month: { homework: 1, quiz: 0, test: 0, practice: 0 },
+      teachers: 3, students: 90, active_teachers: 3, students_per_teacher: 30,
     },
     models_in_use: {
       vision: { label: "Read handwriting", model: OPUS, catalog_id: OPUS, cost_usd: 1 },
@@ -371,4 +372,13 @@ test("an unmeasured kind used at a rate of 0 does not raise the thin warning", (
   const r = computeMargin(d, scenario({ quiz: 0 }));
   assert.equal(r.lines.find((l) => l.key === "submission:quiz")!.thin, false);
   assert.equal(r.anyThin, false, "a warning on every scenario gets ignored");
+});
+
+
+test("a measured unit with no function profile holds its median, never $0", () => {
+  const d = data();
+  d.functions_by_unit = {};
+  const hw = computeMargin(d, scenario({ homework: 2 })).lines.find((l) => l.key === "submission:homework")!;
+  assert.equal(hw.perStudentMonth, 0.6, "0.3 median × 2 a month");
+  assert.equal(hw.unpriced, true, "and says it couldn't be repriced");
 });

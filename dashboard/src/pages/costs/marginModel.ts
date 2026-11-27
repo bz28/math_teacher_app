@@ -123,12 +123,6 @@ function repricedUnitCost(
   return { cost, unpriced };
 }
 
-/** What the unit costs on the models we ACTUALLY ran — the trust check. */
-function measuredUnitCost(fns: UnitFunction[] | undefined): number {
-  if (!fns) return 0;
-  return fns.reduce((acc, f) => acc + f.cost_per_unit, 0);
-}
-
 export function computeMargin(
   data: UnitEconomicsData,
   s: Scenario,
@@ -149,7 +143,12 @@ export function computeMargin(
     const perMonth = Math.max(s[kind], 0);
     const unit = unitOf(data, `submission:${kind}`);
     const fns = data.functions_by_unit[`submission:${kind}`];
-    const { cost, unpriced } = repricedUnitCost(fns, s.models);
+    // A measured unit with no function profile (can't happen while both
+    // come from one join, but the page shouldn't depend on that) holds
+    // its measured median and says it couldn't be repriced — never $0.
+    const { cost, unpriced } = fns && fns.length > 0
+      ? repricedUnitCost(fns, s.models)
+      : { cost: unit?.cost_median ?? 0, unpriced: Boolean(unit && unit.n > 0) };
     // No measurement at all → contribute nothing, but say so rather
     // than let a missing bucket read as "free".
     const thin = !unit || !unit.sufficient;
@@ -359,4 +358,4 @@ export function marginAtPrice(
   return ((revenue - cost) / revenue) * 100;
 }
 
-export { SUBMISSION_KINDS, measuredUnitCost };
+export { SUBMISSION_KINDS };

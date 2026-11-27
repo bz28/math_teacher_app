@@ -7,7 +7,7 @@ import { test } from "node:test";
 import type { CatalogModel, UnitEconomicsData } from "../../lib/costsApi.ts";
 import {
   DEFAULT_RATE_CARD, cardPriceFor, defaultModels, ratesUnmeasured, readRateCard, scenarioDefaults,
-  stageOptions,
+  snapshotParams, stageOptions, unknownModels,
 } from "./marginScenario.ts";
 import { windowDays } from "./unitWindows.ts";
 
@@ -37,7 +37,8 @@ function data(over: Partial<UnitEconomicsData["measured"]> = {}): UnitEconomicsD
       window_too_short: false, active_students: 90,
       submissions: { homework: 126, quiz: 9, test: 0, practice: 0 },
       submissions_per_student_month: { homework: 1.4049, quiz: 0.1, test: 0, practice: 0 },
-      teachers: 3, students: 92, students_per_teacher: 30.67,
+      platform_submissions_per_student_month: { homework: 1.4049, quiz: 0.1, test: 0, practice: 0 },
+      teachers: 3, students: 92, active_teachers: 3, students_per_teacher: 30.67,
       ...over,
     },
     models_in_use: {
@@ -54,31 +55,34 @@ function data(over: Partial<UnitEconomicsData["measured"]> = {}): UnitEconomicsD
 
 test("homeworks per month start at the measured rate, not a hardcoded 8", () => {
   const d = scenarioDefaults(data());
-  assert.deepEqual(d.homework, { value: 1.4, measured: true });
-  assert.deepEqual(d.quiz, { value: 0.1, measured: true });
+  assert.deepEqual(d.homework, { value: 1.4, source: "measured" });
+  assert.deepEqual(d.quiz, { value: 0.1, source: "measured" });
   // A rare quiz habit is a measured rate, not a measured zero.
   assert.deepEqual(scenarioDefaults(data({
     submissions_per_student_month: { homework: 1.4, quiz: 0.0326, test: 0, practice: 0 },
-  })).quiz, { value: 0.03, measured: true });
-  assert.deepEqual(d.studentsPerTeacher, { value: 31, measured: true });
+  })).quiz, { value: 0.03, source: "measured" });
+  assert.deepEqual(d.studentsPerTeacher, { value: 30.7, source: "measured" });
 });
 
 test("a short window's rates are not taken as measured", () => {
   // Thirty minutes after a cutover, one submission is "30 a month".
   const d = scenarioDefaults(data({ window_too_short: true }));
-  assert.deepEqual(d.homework, { value: 0, measured: false });
+  assert.deepEqual(d.homework, { value: 0, source: "assumed" });
 });
 
 test("no submissions at all is unmeasured, not a measured zero", () => {
-  const d = scenarioDefaults(data({ submissions_per_student_month: null, students_per_teacher: null }));
-  assert.equal(d.homework.measured, false);
-  assert.deepEqual(d.studentsPerTeacher, { value: 30, measured: false });
+  const d = scenarioDefaults(data({
+    submissions_per_student_month: null, platform_submissions_per_student_month: null,
+    students_per_teacher: null,
+  }));
+  assert.equal(d.homework.source, "assumed");
+  assert.deepEqual(d.studentsPerTeacher, { value: 30, source: "assumed" });
 });
 
 test("assumptions are labelled as assumptions", () => {
   const d = scenarioDefaults(data());
-  assert.deepEqual(d.unitsPerYear, { value: 8, measured: false });
-  assert.deepEqual(d.enrollment, { value: 92, measured: false });
+  assert.deepEqual(d.unitsPerYear, { value: 8, source: "assumed" });
+  assert.deepEqual(d.enrollment, { value: 92, source: "assumed" });
 });
 
 test("each stage starts on the model that actually ran, by catalog id", () => {
@@ -116,12 +120,47 @@ test("the card prices by enrollment tier and subject count", () => {
   assert.equal(cardPriceFor(DEFAULT_RATE_CARD, 5000, 9), 14);
 });
 
-test("no measured rates says so, and whole students per teacher", () => {
+test("no measured rates says so only when the platform has none either", () => {
   assert.equal(ratesUnmeasured(data()), false);
-  assert.equal(ratesUnmeasured(data({ submissions_per_student_month: null })), true);
+  assert.equal(ratesUnmeasured(data({ submissions_per_student_month: null })), false);
+  assert.equal(ratesUnmeasured(data({
+    submissions_per_student_month: null, platform_submissions_per_student_month: null,
+  })), true);
   assert.equal(ratesUnmeasured(data({ window_too_short: true })), true);
-  // The slider steps by 1: a 30.67 default it can't hold is lost on touch.
-  assert.equal(scenarioDefaults(data()).studentsPerTeacher.value, 31);
+});
+
+test("a scope with no rate starts at the platform average, labelled so", () => {
+  const d = scenarioDefaults(data({
+    submissions_per_student_month: null,
+    platform_submissions_per_student_month: { homework: 2.345, quiz: 0, test: 0.5, practice: 0 },
+  }));
+  assert.deepEqual(d.homework, { value: 2.35, source: "platform" });
+  assert.deepEqual(d.test, { value: 0.5, source: "platform" });
+  // A scope's own rate always wins over the platform's.
+  assert.equal(scenarioDefaults(data()).homework.source, "measured");
+});
+
+test("students per teacher keeps its tenth: a small pilot isn't 0", () => {
+  assert.equal(scenarioDefaults(data({ students_per_teacher: 0.4 })).studentsPerTeacher.value, 0.4);
+});
+
+test("a copied link pins every input; a bare one carries only what moved", () => {
+  const base = new URLSearchParams("tab=margin&homework=3");
+  const nums = { ...Object.fromEntries(Object.entries(scenarioDefaults(data())).map(([k, v]) => [k, v.value])), homework: 3 };
+  const q = snapshotParams(base, nums as never, { vision: "claude-opus-5-5", grading: "claude-haiku-4-5" }, DEFAULT_RATE_CARD);
+  assert.equal(q.get("tab"), "margin");
+  assert.equal(q.get("homework"), "3");
+  assert.equal(q.get("quiz"), "0.1", "an untouched input is pinned at its value now");
+  assert.equal(q.get("enrollment"), "92");
+  assert.equal(q.get("m_vision"), "claude-opus-5-5");
+  assert.equal(q.get("m_grading"), "claude-haiku-4-5");
+  assert.deepEqual(JSON.parse(q.get("rates")!), DEFAULT_RATE_CARD);
+  assert.equal(base.get("quiz"), null, "the page's own URL is left alone");
+});
+
+test("a link's model the catalog doesn't price is named", () => {
+  assert.deepEqual(unknownModels({ vision: "claude-opus-5-5", grading: "gpt-9" }, CATALOG), ["grading"]);
+  assert.deepEqual(unknownModels({ vision: "claude-opus-5-5" }, CATALOG), []);
 });
 
 test("a days value the picker doesn't offer reads as the default window", () => {

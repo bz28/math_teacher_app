@@ -100,7 +100,7 @@ export default function UnitCostsTab({ data, modelLabel }: Props) {
                         reads as one rather than as a pricey unit. */}
                     {u.runs_per_unit != null && (
                       <span className="costs-caption">
-                        {u.runs_per_unit.toFixed(1)} run{u.runs_per_unit === 1 ? "" : "s"} / unit
+                        {u.runs_per_unit.toFixed(1)} run{u.runs_per_unit.toFixed(1) === "1.0" ? "" : "s"} / unit
                       </span>
                     )}
                   </td>

@@ -22,7 +22,10 @@ export default function NumberField({ value, onCommit, onBlur, ...rest }: Props)
       onChange={(e) => {
         const v = e.target.value;
         setDraft(v);
-        if (v.trim() !== "" && Number.isFinite(Number(v))) onCommit(v);
+        if (v.trim() === "" || !Number.isFinite(Number(v))) return;
+        onCommit(v);
+        // Below the floor the parent clamps: show what it kept, not "-5".
+        if (rest.min !== undefined && Number(v) < Number(rest.min)) setDraft(null);
       }}
       onBlur={(e) => { setDraft(null); onBlur?.(e); }}
     />

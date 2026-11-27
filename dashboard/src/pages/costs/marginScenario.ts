@@ -35,38 +35,74 @@ export type NumKey = Exclude<keyof Scenario, "models" | "pricePerStudent">;
 
 export interface Default {
   value: number;
-  /** true = read off the window; false = an assumption. */
-  measured: boolean;
+  /** measured = this scope's own window; platform = every school's, same
+   *  window, where this scope has no rate of its own; assumed = nothing
+   *  in the data says. */
+  source: "measured" | "platform" | "assumed";
 }
 
 // Rates to the hundredth: a 0.03-a-month quiz habit is measured, not 0.
+const round1 = (n: number) => Math.round(n * 10) / 10;
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /** Every numeric input's starting value, and whether it was measured. */
 export function scenarioDefaults(d: UnitEconomicsData): Record<NumKey, Default> {
   const m = d.measured;
-  // A rate read off a window shorter than a week is noise, not a rate.
-  const rates = m.window_too_short ? null : m.submissions_per_student_month;
+  // A rate read off a window shorter than a week is noise, not a rate —
+  // the platform's included, being read off the same window.
+  const own = m.window_too_short ? null : m.submissions_per_student_month;
+  const platform = m.window_too_short ? null : m.platform_submissions_per_student_month;
   const rate = (k: SubmissionKind): Default =>
-    rates ? { value: round2(rates[k]), measured: true } : { value: 0, measured: false };
+    own ? { value: round2(own[k]), source: "measured" }
+      : platform ? { value: round2(platform[k]), source: "platform" }
+        : { value: 0, source: "assumed" };
   const out = {} as Record<NumKey, Default>;
-  for (const [k, v] of Object.entries(ASSUMED)) out[k as NumKey] = { value: v, measured: false };
+  for (const [k, v] of Object.entries(ASSUMED)) out[k as NumKey] = { value: v, source: "assumed" };
   out.homework = rate("homework");
   out.quiz = rate("quiz");
   out.test = rate("test");
   out.practice = rate("practice");
-  // Whole students: the slider steps by 1, and a 23.4 it can't hold
-  // would be lost the first time anyone touched it.
+  // To a tenth, which the slider steps by: rounding to whole students
+  // read a 0.4-student pilot as 0, which then divided by 1.
   out.studentsPerTeacher = m.students_per_teacher
-    ? { value: Math.round(m.students_per_teacher), measured: true }
-    : { value: FALLBACK_STUDENTS_PER_TEACHER, measured: false };
+    ? { value: round1(m.students_per_teacher), source: "measured" }
+    : { value: FALLBACK_STUDENTS_PER_TEACHER, source: "assumed" };
   return out;
 }
 
-/** No submission rate was measured, so usage starts at 0 and the margin
- *  leaves out every per-submission cost — say so above the verdict. */
+/** Neither this scope nor the platform has a submission rate for the
+ *  window, so usage starts at 0 and the margin leaves out every
+ *  per-submission cost — say so above the verdict. */
 export function ratesUnmeasured(d: UnitEconomicsData): boolean {
-  return d.measured.window_too_short || d.measured.submissions_per_student_month === null;
+  return d.measured.window_too_short || (
+    d.measured.submissions_per_student_month === null
+    && d.measured.platform_submissions_per_student_month === null
+  );
+}
+
+/** A link that reproduces this scenario: every input pinned, so it reads
+ *  the same tomorrow when the measured defaults have moved. A bare page
+ *  URL carries only what was moved and keeps following the data. */
+export function snapshotParams(
+  base: URLSearchParams,
+  nums: Record<NumKey, number>,
+  models: ModelChoice,
+  rateCard: number[][],
+): URLSearchParams {
+  const out = new URLSearchParams(base);
+  for (const [k, v] of Object.entries(nums)) out.set(k, String(v));
+  for (const s of STAGES) {
+    const id = models[s];
+    if (id) out.set(`m_${s}`, id);
+  }
+  out.set("rates", JSON.stringify(rateCard));
+  return out;
+}
+
+/** Stages whose model (from a link) isn't one the catalog prices. */
+export function unknownModels(models: ModelChoice, catalog: CatalogModel[]): Stage[] {
+  const known = new Set(catalog.map((m) => m.id));
+  return STAGES.filter((s) => models[s] && !known.has(models[s]!));
 }
 
 /** The model each stage starts on: what ran, else what's configured now. */
