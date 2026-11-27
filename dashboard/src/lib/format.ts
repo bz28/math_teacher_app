@@ -179,3 +179,9 @@ export function fmtClockTime(dateStr: string): string {
   });
   return `${date} ${time}`;
 }
+
+/** A latency for a person: "850ms", "12.4s", "—" when there is none. */
+export function fmtLatency(ms: number | null): string {
+  if (ms === null) return "—";
+  return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`;
+}
