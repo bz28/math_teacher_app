@@ -138,5 +138,16 @@ async def test_teacher_undo_puts_back_exactly_what_the_resolve_replaced(
     assert restored["resolution"] == "contacted"
     assert datetime.fromisoformat(restored["resolved_at"]) == old_at
 
+    # A teacher's Undo only takes back their OWN latest resolve: if
+    # someone else resolved it since, there's nothing for them to undo.
+    await resolve("confirmed_concern")
+    async with get_session_factory()() as s:
+        check = (await s.execute(select(IntegrityCheckSubmission).where(
+            IntegrityCheckSubmission.submission_id == uuid.UUID(submission_id)))).scalar_one()
+        check.resolved_by = world["student_id"]  # stand-in for a co-teacher
+        await s.commit()
+    assert (await client.post(f"{url}/resolve/undo", headers=headers)).status_code == 409
+    assert (await detail())["resolution"] == "confirmed_concern"
+
     assert restored["disposition"] == before["disposition"]
     assert await grade_state() == grade_before

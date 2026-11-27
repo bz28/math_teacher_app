@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  ApiError,
   teacher,
   type IntegrityActivityReason,
   type IntegrityActivitySummary,
@@ -438,9 +439,9 @@ function formatResolvedAt(iso: string): string {
 /** How long the Undo toast after a resolve stays up (unhovered). */
 export const RESOLVE_UNDO_MS = 8000;
 
-// The live Undo toast per submission. The server undoes only the
-// LATEST resolve, so a newer resolve retires the older toast rather
-// than leave an Undo that would no longer do what it said.
+// The live Undo (or Retry-undo) toast per submission. The server undoes
+// only the LATEST resolve, so a newer resolve retires the older toast
+// rather than leave an Undo that would no longer do what it said.
 const undoToastBySubmission = new Map<string, number>();
 
 /** The teacher's "I handled this" control. Unresolved: the outcomes as
@@ -482,11 +483,27 @@ export function ResolveIntegrityControl({
     try {
       const { resolution: restored } = await teacher.undoResolveIntegrity(submissionId);
       latestOnResolved.current(restored);
-    } catch {
-      toast.error("Couldn't undo the review.", {
-        durationMs: RESOLVE_UNDO_MS,
-        action: { label: "Retry", onAction: () => void undo() },
-      });
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409) {
+        // Nothing (left) to undo here: an earlier undo already landed
+        // with its reply lost, or someone resolved it since. Retrying
+        // can't help — show what the server has now.
+        try {
+          const now = await teacher.integrityDetail(submissionId);
+          latestOnResolved.current(now.resolution);
+        } catch {
+          /* the card keeps its state; a reload shows the truth */
+        }
+        toast.info("Nothing to undo — showing the current review.");
+        return;
+      }
+      undoToastBySubmission.set(
+        submissionId,
+        toast.error("Couldn't undo the review.", {
+          durationMs: RESOLVE_UNDO_MS,
+          action: { label: "Retry", onAction: () => void undo() },
+        }),
+      );
     }
   }
 

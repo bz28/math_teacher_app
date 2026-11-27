@@ -18839,7 +18839,7 @@
     },
     "/v1/teacher/integrity/submissions/{submission_id}/resolve/undo": {
       "post": {
-        "description": "Undo the latest resolve: put back exactly what it replaced \u2014 the\noutcome and who/when, or unresolved with no resolver. One level:\na second undo (or an undo with no resolve to undo) is a 409. Never\ntouches the AI's disposition or a grade.",
+        "description": "Undo the latest resolve: put back exactly what it replaced \u2014 the\noutcome and who/when, or unresolved with no resolver. One level:\na second undo (or an undo with no resolve to undo) is a 409, and so\nis undoing a resolve someone else made since \u2014 a teacher's Undo\nonly ever takes back their own latest resolve. Never touches the\nAI's disposition or a grade.",
         "operationId": "teacher_undo_resolve_integrity_v1_teacher_integrity_submissions__submission_id__resolve_undo_post",
         "parameters": [
           {

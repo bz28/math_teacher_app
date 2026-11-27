@@ -76,10 +76,12 @@ async def teacher_undo_resolve_integrity(
 ) -> UndoResolveOut:
     """Undo the latest resolve: put back exactly what it replaced — the
     outcome and who/when, or unresolved with no resolver. One level:
-    a second undo (or an undo with no resolve to undo) is a 409. Never
-    touches the AI's disposition or a grade."""
+    a second undo (or an undo with no resolve to undo) is a 409, and so
+    is undoing a resolve someone else made since — a teacher's Undo
+    only ever takes back their own latest resolve. Never touches the
+    AI's disposition or a grade."""
     check = await _owned_check(db, submission_id, current_user)
-    if check.prev_resolution is None:
+    if check.prev_resolution is None or check.resolved_by != current_user.user_id:
         raise HTTPException(status_code=409, detail="Nothing to undo")
     check.resolution = check.prev_resolution
     check.resolved_by = check.prev_resolved_by
