@@ -70,7 +70,7 @@ class ModelPrice:
     long_context_input_per_token: float | None = None
     long_context_output_per_token: float | None = None
 
-    def rates_for(self, total_input_tokens: int) -> tuple[float, float]:
+    def rates_for(self, total_input_tokens: float) -> tuple[float, float]:
         """(input, output) rates for a call of this size.
 
         Flat for every model but Haiku 5.5, where a prompt over the
@@ -212,10 +212,10 @@ def price_for_billing(model: str) -> ModelPrice:
 
 def cost_usd(
     price: ModelPrice,
-    input_tokens: int,
-    output_tokens: int,
-    cache_read_tokens: int = 0,
-    cache_write_tokens: int = 0,
+    input_tokens: float,
+    output_tokens: float,
+    cache_read_tokens: float = 0,
+    cache_write_tokens: float = 0,
 ) -> float:
     """Price one call's measured token counts at one model's rates.
 
@@ -237,10 +237,10 @@ def cost_usd(
 def reprice(
     source: ModelPrice,
     target: ModelPrice,
-    input_tokens: int,
-    output_tokens: int,
-    cache_read_tokens: int = 0,
-    cache_write_tokens: int = 0,
+    input_tokens: float,
+    output_tokens: float,
+    cache_read_tokens: float = 0,
+    cache_write_tokens: float = 0,
 ) -> float:
     """What a call measured on `source` would have cost on `target`.
 
@@ -250,11 +250,15 @@ def reprice(
     docstring, and it always runs in the direction that flatters whichever
     model we are already paying for.
     """
+    # Deliberately NOT rounded to whole tokens. The caller passes a MEAN
+    # profile over many calls, which is fractional by nature, and rounding
+    # it breaks the identity reprice(m, m, ...) == cost_usd(m, ...) that
+    # the dashboard displays as its trust check.
     scale = target.tokenizer_factor / source.tokenizer_factor
     return cost_usd(
         target,
-        input_tokens=round(input_tokens * scale),
-        output_tokens=round(output_tokens * scale),
-        cache_read_tokens=round(cache_read_tokens * scale),
-        cache_write_tokens=round(cache_write_tokens * scale),
+        input_tokens=input_tokens * scale,
+        output_tokens=output_tokens * scale,
+        cache_read_tokens=cache_read_tokens * scale,
+        cache_write_tokens=cache_write_tokens * scale,
     )

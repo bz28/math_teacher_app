@@ -48,6 +48,22 @@ def _safe_metadata(metadata: dict[str, Any] | None) -> dict[str, Any] | None:
     return metadata
 
 
+def _with_generation_job(
+    metadata: dict[str, Any] | None, job_id: Any,
+) -> dict[str, Any] | None:
+    """Keep the generation job's id in the metadata too.
+
+    llm_calls.generation_job_id is SET NULL when the job is deleted (with
+    a discarded draft or course). The copy here survives, and is the only
+    trace that the call was a job's generation work rather than a
+    teacher's standalone regenerate — which the unit-economics page needs
+    to price a generated unit honestly.
+    """
+    if job_id is None:
+        return metadata
+    return {**(metadata or {}), "generation_job_id": str(job_id)}
+
+
 async def _payload_row_id(
     db: Any, function: str, kind: str, body: str | None,
 ) -> Any:
@@ -258,7 +274,9 @@ async def persist_llm_call(
                 retry_count=retry_count,
                 input_text=_truncate(input_text),
                 output_text=_truncate(output_text),
-                call_metadata=_safe_metadata(call_metadata),
+                call_metadata=_with_generation_job(
+                    _safe_metadata(call_metadata), generation_job_uuid,
+                ),
                 system_prompt_id=system_prompt_id,
                 tool_schema_id=tool_schema_id,
             )

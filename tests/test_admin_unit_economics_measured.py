@@ -1,0 +1,633 @@
+"""GET /v1/admin/unit-economics — the figures the margin simulator seeds
+itself from, and the calls whose submission was deleted.
+
+Split from test_admin_unit_economics.py (which is past the file-size
+rule); it reuses that file's seed.
+
+- A grading/reading call whose submission is gone is SUBMISSION cost. It
+  must raise what one submission costs, and never land in self-study,
+  where it would be charged to every active student as a monthly rate.
+- Usage rates (homeworks per student per month, students per teacher)
+  are measured over the window, so the simulator never defaults to a
+  guess six times what schools actually do.
+- A discarded generation job's calls are generation cost, rates read off
+  a short window are flagged, and a submission begun before the window
+  isn't counted as a cheap whole one.
+- Each stage's model picker defaults to the model that actually carried
+  that stage's spend in the window.
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import UTC, datetime, timedelta
+
+import pytest
+from httpx import AsyncClient
+from sqlalchemy import select, update
+
+from api.core.llm_logging import _with_generation_job
+from api.core.model_pricing import cost_usd
+from api.database import get_session_factory
+from api.models.assignment import Assignment, Submission
+from api.models.llm_call import LLMCall
+from api.models.question_bank import QuestionBankGenerationJob
+from api.models.section import Section
+from api.models.user import User
+from tests.test_admin_unit_economics import (
+    _OPUS,
+    _gen_job_cost,
+    _get,
+    _hw_cost,
+    _price,
+    _seed,
+    _unit,
+)
+
+_WHEN = datetime.now(UTC) - timedelta(days=2)
+
+
+def _deleted_call_cost() -> float:
+    return cost_usd(_price(_OPUS), 4200, 850, 1000, 0)
+
+
+async def _add_deleted_submission_calls(w, count: int) -> None:  # type: ignore[no-untyped-def]
+    """`count` reads whose submission was deleted (submission_id SET NULL)."""
+    async with get_session_factory()() as s:
+        for i in range(count):
+            s.add(
+                LLMCall(
+                    function="integrity_extract", model=_OPUS,
+                    input_tokens=4200, output_tokens=850,
+                    cache_read_tokens=1000, cache_write_tokens=0,
+                    latency_ms=10.0, cost_usd=_deleted_call_cost(), success=True,
+                    school_id=uuid.UUID(w.school_id),
+                    user_id=uuid.UUID(w.student_ids[i]),
+                    submission_id=None, created_at=_WHEN,
+                ),
+            )
+        await s.commit()
+
+
+async def test_deleted_submission_calls_are_never_self_study(
+    client: AsyncClient,
+) -> None:
+    w = await _seed(homework_submissions=6)
+    await _add_deleted_submission_calls(w, 3)
+
+    body = await _get(client, w.admin_id, days=30)
+
+    self_study = _unit(body, "residual:student")
+    assert self_study["n"] == 0
+    assert self_study["cost_total"] == 0.0
+    assert "residual:student" not in body["functions_by_unit"]
+
+
+async def test_deleted_submission_calls_raise_the_per_submission_cost(
+    client: AsyncClient,
+) -> None:
+    """3 deleted reads spread over the window's 6 surviving submissions."""
+    w = await _seed(homework_submissions=6, test_submissions=0)
+    await _add_deleted_submission_calls(w, 3)
+
+    body = await _get(client, w.admin_id, days=30)
+
+    overhead = 3 * _deleted_call_cost() / 6
+    hw = _unit(body, "submission:homework")
+    assert hw["n"] == 6
+    assert hw["cost_median"] == pytest.approx(_hw_cost() + overhead)
+    assert hw["cost_total"] == pytest.approx(6 * _hw_cost() + 3 * _deleted_call_cost())
+
+    # The per-function legs carry it too, so the simulator's sum still
+    # reconstructs the headline unit cost.
+    fns = body["functions_by_unit"]["submission:homework"]
+    assert sum(f["cost_per_unit"] for f in fns) == pytest.approx(hw["cost_mean"])
+    read = next(f for f in fns if f["function"] == "integrity_extract")
+    assert read["calls_per_unit"] == pytest.approx(1 + 3 / 6)
+
+    assert body["deleted_submissions"] == {
+        "calls": 3,
+        "cost_usd": pytest.approx(3 * _deleted_call_cost()),
+        "per_unit_usd": pytest.approx(overhead),
+        "spread_over": 6,
+    }
+
+
+async def test_deleted_overhead_is_shared_pro_rata_across_kinds(
+    client: AsyncClient,
+) -> None:
+    """Which kind a deleted submission was is unknowable; every surviving
+    submission carries the same share, whatever its kind."""
+    w = await _seed(homework_submissions=6, test_submissions=2)
+    # Every kind costs the same before the overhead, so equal shares show.
+    await _add_deleted_submission_calls(w, 4)
+
+    body = await _get(client, w.admin_id, days=30)
+
+    overhead = 4 * _deleted_call_cost() / 8
+    hw = _unit(body, "submission:homework")
+    test = _unit(body, "submission:test")
+    assert hw["cost_median"] == pytest.approx(_hw_cost() + overhead)
+    assert test["cost_median"] == pytest.approx(_hw_cost() + overhead)
+    total_cost = sum(
+        f["cost_per_unit"] * u["n"]
+        for u in (hw, test)
+        for f in body["functions_by_unit"][u["kind"]]
+    )
+    assert total_cost == pytest.approx(8 * _hw_cost() + 4 * _deleted_call_cost())
+
+
+# --------------------------------------------------------------------------
+# Measured usage rates — what the simulator defaults to
+# --------------------------------------------------------------------------
+
+async def _add_user(role: str, school_id: str | None) -> uuid.UUID:
+    async with get_session_factory()() as s:
+        u = User(
+            email=f"x_{uuid.uuid4().hex[:8]}@t.com", password_hash="x",
+            grade_level=10, role=role, name="X",
+            school_id=uuid.UUID(school_id) if school_id else None,
+        )
+        s.add(u)
+        await s.commit()
+        return u.id
+
+
+async def _add_homework_submission(w, student_id: str, when: datetime) -> None:  # type: ignore[no-untyped-def]
+    async with get_session_factory()() as s:
+        first = (await s.execute(
+            select(Assignment).where(Assignment.type == "homework").limit(1),
+        )).scalar_one()
+        # A fresh homework each time: one submission per student per
+        # assignment is a constraint.
+        hw = Assignment(
+            course_id=first.course_id, teacher_id=first.teacher_id,
+            title="another", type="homework", total_points=10,
+        )
+        s.add(hw)
+        await s.flush()
+        section = (await s.execute(select(Section).limit(1))).scalar_one()
+        s.add(Submission(
+            assignment_id=hw.id, student_id=uuid.UUID(student_id),
+            section_id=section.id, status="submitted", submitted_at=when,
+        ))
+        await s.commit()
+
+
+async def test_homeworks_per_student_month_is_measured(client: AsyncClient) -> None:
+    """7 homeworks by 6 students over a 30-day window = 7/6 a month —
+    the simulator's default, not a typed-in guess."""
+    w = await _seed(homework_submissions=6, test_submissions=0)
+    await _add_homework_submission(w, w.student_ids[0], _WHEN)
+
+    m = (await _get(client, w.admin_id, days=30))["measured"]
+
+    assert m["active_students"] == 6
+    assert m["submissions"]["homework"] == 7
+    assert m["submissions_per_student_month"]["homework"] == pytest.approx(7 / 6, rel=1e-3)
+    assert m["submissions_per_student_month"]["test"] == 0.0
+
+
+async def test_rate_is_per_month_whatever_the_window(client: AsyncClient) -> None:
+    """The same 6 homeworks read over 15 days is twice the monthly rate."""
+    w = await _seed(homework_submissions=6, test_submissions=0)
+    m = (await _get(client, w.admin_id, days=15))["measured"]
+    assert m["submissions_per_student_month"]["homework"] == pytest.approx(2.0, rel=1e-3)
+
+
+async def test_rates_leave_out_internal_users_and_old_submissions(
+    client: AsyncClient,
+) -> None:
+    w = await _seed(homework_submissions=6, test_submissions=0)
+    internal = await _add_user("student", None)
+    await _add_homework_submission(w, str(internal), _WHEN)
+    await _add_homework_submission(w, w.student_ids[0], _WHEN - timedelta(days=60))
+    await _add_user("teacher", None)
+
+    m = (await _get(client, w.admin_id, days=30))["measured"]
+
+    assert m["active_students"] == 6
+    assert m["submissions"]["homework"] == 6
+    assert m["teachers"] == 1
+    assert m["students"] == 6
+
+
+async def test_no_submissions_is_null_not_zero(client: AsyncClient) -> None:
+    """No one handed anything in: the rate is unknown, not 0 a month."""
+    w = await _seed(homework_submissions=6, test_submissions=0)
+    m = (await _get(client, w.admin_id, days=1))["measured"]
+    assert m["active_students"] == 0
+    assert m["submissions_per_student_month"] is None
+
+
+# --------------------------------------------------------------------------
+# The model each stage actually ran on — what the pickers default to
+# --------------------------------------------------------------------------
+
+async def test_models_in_use_is_what_ran_per_stage(client: AsyncClient) -> None:
+    """The seed reads on Opus and grades on Sonnet; the pickers must start
+    there, not on whatever the catalog lists first."""
+    w = await _seed(homework_submissions=6)
+    body = await _get(client, w.admin_id, days=30)
+
+    used = body["models_in_use"]
+    assert used["vision"]["catalog_id"] == "claude-opus-5-5"
+    assert used["grading"]["catalog_id"] == "claude-sonnet-4-6"
+    assert "other" not in used
+    # Every stage is listed, in picker order; one that didn't run has no model.
+    assert list(used) == ["vision", "grading", "integrity", "generation", "tutoring"]
+    assert used["tutoring"] == {
+        "label": "Tutor + chat", "model": None, "catalog_id": None, "cost_usd": 0.0,
+    }
+
+
+async def test_models_in_use_follows_spend_not_call_count(
+    client: AsyncClient,
+) -> None:
+    """Twenty tiny Haiku grading calls don't make Haiku the grader when
+    Sonnet carried the spend."""
+    w = await _seed(homework_submissions=6, test_submissions=0)
+    async with get_session_factory()() as s:
+        for _ in range(20):
+            s.add(LLMCall(
+                function="ai_grading", model="claude-haiku-4-5",
+                input_tokens=10, output_tokens=5, latency_ms=1.0,
+                cost_usd=0.00001, success=True,
+                school_id=uuid.UUID(w.school_id),
+                user_id=uuid.UUID(w.student_ids[0]), created_at=_WHEN,
+            ))
+        await s.commit()
+
+    used = (await _get(client, w.admin_id, days=30))["models_in_use"]
+    assert used["grading"]["catalog_id"] == "claude-sonnet-4-6"
+
+
+async def test_one_model_logged_two_ways_pools_its_spend(
+    client: AsyncClient,
+) -> None:
+    """$6 + $5 of grading on Haiku, half under its dated id, beats $8 on
+    Sonnet: it's one model."""
+    w = await _seed(homework_submissions=6, test_submissions=0)
+    async with get_session_factory()() as s:
+        await s.execute(update(LLMCall).where(LLMCall.function == "ai_grading").values(cost_usd=0.0))
+        for model, cost in (
+            ("claude-haiku-4-5", 6.0), ("claude-haiku-4-5-20251001", 5.0), ("claude-sonnet-4-6", 8.0),
+        ):
+            s.add(LLMCall(
+                function="ai_grading", model=model, input_tokens=10, output_tokens=5,
+                latency_ms=1.0, cost_usd=cost, success=True,
+                school_id=uuid.UUID(w.school_id), user_id=uuid.UUID(w.student_ids[0]),
+                created_at=_WHEN,
+            ))
+        await s.commit()
+    used = (await _get(client, w.admin_id, days=30))["models_in_use"]
+    assert used["grading"]["catalog_id"] == "claude-haiku-4-5"
+    assert used["grading"]["cost_usd"] == pytest.approx(11.0)
+
+
+async def test_models_in_use_ties_go_to_the_lowest_id_and_free_calls_still_ran(
+    client: AsyncClient,
+) -> None:
+    w = await _seed(homework_submissions=6, test_submissions=0)
+    async with get_session_factory()() as s:
+        await s.execute(update(LLMCall).where(LLMCall.function == "ai_grading").values(cost_usd=0.0))
+        for model, fn in (
+            ("claude-sonnet-4-6", "ai_grading"), ("claude-haiku-4-5", "ai_grading"),
+            ("claude-haiku-4-5", "step_chat"),
+        ):
+            s.add(LLMCall(
+                function=fn, model=model, input_tokens=10, output_tokens=5,
+                latency_ms=1.0, cost_usd=2.0 if fn == "ai_grading" else 0.0, success=True,
+                school_id=uuid.UUID(w.school_id), user_id=uuid.UUID(w.student_ids[0]),
+                created_at=_WHEN,
+            ))
+        await s.commit()
+    used = (await _get(client, w.admin_id, days=30))["models_in_use"]
+    # Equal $2 + the seed's zeroed grading: the lower id wins, every time.
+    assert used["grading"]["catalog_id"] == "claude-haiku-4-5"
+    # A stage whose only call cost nothing still ran on something.
+    assert used["tutoring"]["catalog_id"] == "claude-haiku-4-5"
+
+
+async def test_each_function_names_its_stage(client: AsyncClient) -> None:
+    """decompose writes a generated problem's solution inside a job and
+    tutors a student outside one — the stage comes from the server."""
+    w = await _seed(homework_submissions=6, generation_units=1)
+    async with get_session_factory()() as s:
+        job = (await s.execute(select(QuestionBankGenerationJob).limit(1))).scalar_one()
+        for in_job in (True, False):
+            s.add(LLMCall(
+                function="decompose", model="claude-sonnet-4-6",
+                input_tokens=100, output_tokens=50, latency_ms=1.0,
+                cost_usd=0.001, success=True,
+                school_id=uuid.UUID(w.school_id),
+                user_id=uuid.UUID(w.student_ids[0] if not in_job else w.teacher_id),
+                generation_job_id=job.id if in_job else None, created_at=_WHEN,
+            ))
+        await s.commit()
+
+    fns = (await _get(client, w.admin_id, days=30))["functions_by_unit"]
+
+    def family(unit: str, fn: str) -> str:
+        return next(f["family"] for f in fns[unit] if f["function"] == fn)
+
+    assert family("generation:unit", "decompose") == "generation"
+    assert family("residual:student", "decompose") == "tutoring"
+    assert family("submission:homework", "integrity_extract") == "vision"
+    assert family("submission:homework", "ai_grading") == "grading"
+
+
+# --------------------------------------------------------------------------
+# Review round 1 — pinned so they fail on revert
+# --------------------------------------------------------------------------
+
+async def test_a_discarded_jobs_calls_are_generation_cost_not_teacher_ai(
+    client: AsyncClient,
+) -> None:
+    """A teacher generates problems for a draft, then deletes the draft:
+    the job goes, generation_job_id is SET NULL, and only the id the logger
+    copied into call_metadata says it was generation work."""
+    w = await _seed(homework_submissions=6, generation_units=2)
+    async with get_session_factory()() as s:
+        s.add(LLMCall(
+            function="generate_questions", model="claude-sonnet-4-6",
+            input_tokens=5000, output_tokens=2000, latency_ms=1.0,
+            cost_usd=0.5, success=True, school_id=uuid.UUID(w.school_id),
+            user_id=uuid.UUID(w.teacher_id), generation_job_id=None,
+            call_metadata={"generation_job_id": str(uuid.uuid4())},
+            created_at=_WHEN,
+        ))
+        await s.commit()
+
+    body = await _get(client, w.admin_id, days=30)
+
+    teacher_ai = _unit(body, "residual:teacher")
+    assert teacher_ai["cost_total"] == 0.0
+    gen = _unit(body, "generation:unit")
+    assert gen["n"] == 2
+    assert gen["cost_median"] == pytest.approx(_gen_job_cost() + 0.5 / 2)
+    fns = body["functions_by_unit"]["generation:unit"]
+    assert sum(f["cost_per_unit"] for f in fns) == pytest.approx(gen["cost_mean"])
+    assert body["deleted_generation_jobs"]["cost_usd"] == pytest.approx(0.5)
+    assert body["deleted_generation_jobs"]["spread_over"] == 2
+
+
+async def test_a_standalone_regenerate_stays_teacher_side_ai(client: AsyncClient) -> None:
+    """No job ever, so no job id in the metadata: still a teacher's own AI."""
+    w = await _seed(homework_submissions=6)
+    async with get_session_factory()() as s:
+        s.add(LLMCall(
+            function="regenerate_bank_item", model="claude-sonnet-4-6",
+            input_tokens=100, output_tokens=50, latency_ms=1.0, cost_usd=0.2,
+            success=True, school_id=uuid.UUID(w.school_id),
+            user_id=uuid.UUID(w.teacher_id), call_metadata={"tier": "x"},
+            created_at=_WHEN,
+        ))
+        await s.commit()
+    body = await _get(client, w.admin_id, days=30)
+    assert _unit(body, "residual:teacher")["cost_total"] == pytest.approx(0.2)
+
+
+def test_the_logger_keeps_a_copy_of_the_job_id() -> None:
+    job = uuid.uuid4()
+    assert _with_generation_job({"tier": "fast"}, job) == {
+        "tier": "fast", "generation_job_id": str(job),
+    }
+    assert _with_generation_job(None, job) == {"generation_job_id": str(job)}
+    assert _with_generation_job({"tier": "fast"}, None) == {"tier": "fast"}
+
+
+async def test_measured_rates_from_a_short_window_are_flagged(
+    client: AsyncClient,
+) -> None:
+    w = await _seed(homework_submissions=6, test_submissions=0)
+    async with get_session_factory()() as s:
+        await s.execute(
+            update(Submission).values(submitted_at=datetime.now(UTC) - timedelta(hours=1)),
+        )
+        await s.commit()
+    short = (await _get(client, w.admin_id, days=1))["measured"]
+    assert short["submissions_per_student_month"]["homework"] == pytest.approx(30.0, rel=1e-3)
+    assert short["window_too_short"] is True
+    assert (await _get(client, w.admin_id, days=30))["measured"]["window_too_short"] is False
+
+
+async def test_a_submission_begun_before_the_window_is_not_a_cheap_phantom(
+    client: AsyncClient,
+) -> None:
+    """Handed in and read 10 days ago, regraded 2 days ago: in a 7-day
+    window it would be one whole submission carrying only its regrade."""
+    w = await _seed(homework_submissions=6, test_submissions=0)
+    ten_days_ago = datetime.now(UTC) - timedelta(days=10)
+    student = uuid.UUID(w.student_ids[0])
+    async with get_session_factory()() as s:
+        await s.execute(
+            update(LLMCall)
+            .where(LLMCall.function == "integrity_extract", LLMCall.user_id == student)
+            .values(created_at=ten_days_ago),
+        )
+        await s.execute(
+            update(Submission).where(Submission.student_id == student)
+            .values(submitted_at=ten_days_ago),
+        )
+        await s.commit()
+
+    hw = _unit(await _get(client, w.admin_id, days=7), "submission:homework")
+    assert hw["n"] == 5
+    assert hw["cost_median"] == pytest.approx(_hw_cost())
+
+
+async def test_an_old_submission_with_no_stamped_calls_is_still_left_out(
+    client: AsyncClient,
+) -> None:
+    """Before September the pipeline didn't stamp submission_id, so an old
+    submission's first read is invisible to a call-based test. Only its
+    regrade carries the id — the submission's own date catches it."""
+    w = await _seed(homework_submissions=6, test_submissions=0)
+    student = uuid.UUID(w.student_ids[0])
+    async with get_session_factory()() as s:
+        await s.execute(
+            update(LLMCall)
+            .where(LLMCall.function == "integrity_extract", LLMCall.user_id == student)
+            .values(submission_id=None, created_at=datetime(2026, 8, 20, tzinfo=UTC)),
+        )
+        await s.execute(
+            update(Submission).where(Submission.student_id == student)
+            .values(submitted_at=datetime(2026, 8, 20, tzinfo=UTC)),
+        )
+        await s.commit()
+
+    hw = _unit(await _get(client, w.admin_id, days=7), "submission:homework")
+    assert hw["n"] == 5
+
+
+async def test_a_unit_begun_before_the_window_is_not_a_cheap_phantom(
+    client: AsyncClient,
+) -> None:
+    """Unit 0 got its first job 10 days ago and another this week; in a
+    7-day window it is not one whole unit costing one job."""
+    w = await _seed(homework_submissions=6, generation_units=2)
+    async with get_session_factory()() as s:
+        first = (await s.execute(
+            select(QuestionBankGenerationJob)
+            .where(QuestionBankGenerationJob.unit_id == uuid.UUID(w.unit_ids[0])),
+        )).scalar_one()
+        s.add(QuestionBankGenerationJob(
+            course_id=first.course_id, unit_id=first.unit_id,
+            originating_assignment_id=first.originating_assignment_id,
+            created_by_id=first.created_by_id, mode="generate", status="done",
+            requested_count=5, created_at=datetime.now(UTC) - timedelta(days=10),
+        ))
+        await s.commit()
+
+    body = await _get(client, w.admin_id, days=7)
+    gen = _unit(body, "generation:unit")
+    assert gen["n"] == 1
+    fns = body["functions_by_unit"]["generation:unit"]
+    assert sum(f["cost_per_unit"] for f in fns) == pytest.approx(gen["cost_mean"])
+
+
+# --------------------------------------------------------------------------
+# Review round 3 — the orphan spread counts the same units the costs do
+# --------------------------------------------------------------------------
+
+async def test_deleted_calls_spread_only_over_submissions_begun_in_the_window(
+    client: AsyncClient,
+) -> None:
+    w = await _seed(homework_submissions=6, test_submissions=0)
+    student = uuid.UUID(w.student_ids[0])
+    async with get_session_factory()() as s:
+        await s.execute(
+            update(Submission).where(Submission.student_id == student)
+            .values(submitted_at=datetime.now(UTC) - timedelta(days=10)),
+        )
+        await s.commit()
+    await _add_deleted_submission_calls(w, 2)
+
+    body = await _get(client, w.admin_id, days=7)
+    assert body["deleted_submissions"]["spread_over"] == 5
+    hw = _unit(body, "submission:homework")
+    assert hw["cost_median"] == pytest.approx(_hw_cost() + 2 * _deleted_call_cost() / 5)
+
+
+async def test_discarded_job_calls_spread_only_over_units_begun_in_the_window(
+    client: AsyncClient,
+) -> None:
+    w = await _seed(homework_submissions=6, generation_units=2)
+    async with get_session_factory()() as s:
+        first = (await s.execute(
+            select(QuestionBankGenerationJob)
+            .where(QuestionBankGenerationJob.unit_id == uuid.UUID(w.unit_ids[0])),
+        )).scalar_one()
+        s.add(QuestionBankGenerationJob(
+            course_id=first.course_id, unit_id=first.unit_id,
+            originating_assignment_id=first.originating_assignment_id,
+            created_by_id=first.created_by_id, mode="generate", status="done",
+            requested_count=5, created_at=datetime.now(UTC) - timedelta(days=10),
+        ))
+        s.add(LLMCall(
+            function="generate_questions", model="claude-sonnet-4-6",
+            input_tokens=5000, output_tokens=2000, latency_ms=1.0,
+            cost_usd=0.5, success=True, school_id=uuid.UUID(w.school_id),
+            user_id=uuid.UUID(w.teacher_id), generation_job_id=None,
+            call_metadata={"generation_job_id": str(uuid.uuid4())},
+            created_at=_WHEN,
+        ))
+        await s.commit()
+
+    body = await _get(client, w.admin_id, days=7)
+    assert body["deleted_generation_jobs"]["spread_over"] == 1
+    assert _unit(body, "generation:unit")["cost_median"] == pytest.approx(_gen_job_cost() + 0.5)
+
+
+
+# --------------------------------------------------------------------------
+# Round 2 decisions — the platform rate, and per ACTIVE teacher
+# --------------------------------------------------------------------------
+
+async def _teacher_chat(teacher_id: str, school_id: str) -> None:
+    """A residual (teacher-side) call: what makes a teacher active."""
+    async with get_session_factory()() as s:
+        s.add(LLMCall(
+            function="bank_chat", model=_OPUS, input_tokens=10, output_tokens=5,
+            latency_ms=1.0, cost_usd=0.5, success=True,
+            school_id=uuid.UUID(school_id), user_id=uuid.UUID(teacher_id), created_at=_WHEN,
+        ))
+        await s.commit()
+
+
+async def test_students_per_teacher_divides_by_the_teachers_the_cost_is_per(
+    client: AsyncClient,
+) -> None:
+    """Teacher-side cost is per ACTIVE teacher, so the divisor is active
+    students per active teacher. Two idle rostered teachers would have
+    tripled it — and cut the per-student teacher cost to a third."""
+    w = await _seed(homework_submissions=6, test_submissions=0)
+    await _teacher_chat(w.teacher_id, w.school_id)
+    await _add_user("teacher", w.school_id)
+    await _add_user("teacher", w.school_id)
+    m = (await _get(client, w.admin_id, days=30))["measured"]
+    assert m["teachers"] == 3
+    assert m["active_teachers"] == 1
+    assert m["students_per_teacher"] == pytest.approx(6.0)
+
+
+async def test_no_active_teacher_is_unknown_not_a_ratio(client: AsyncClient) -> None:
+    w = await _seed(homework_submissions=6, test_submissions=0)
+    m = (await _get(client, w.admin_id, days=30))["measured"]
+    assert m["active_teachers"] == 0
+    assert m["students_per_teacher"] is None
+
+
+async def test_a_school_with_no_rate_gets_the_platform_rate_beside_it(
+    client: AsyncClient,
+) -> None:
+    """Scoped to a school no one submitted at: its own rate is unknown and
+    the platform's — every school, same window — rides alongside."""
+    from api.models.school import School
+
+    w = await _seed(homework_submissions=6, test_submissions=0)
+    async with get_session_factory()() as s:
+        quiet = School(name="Quiet High", contact_name="Q", contact_email="q@q.com")
+        s.add(quiet)
+        await s.commit()
+        quiet_id = str(quiet.id)
+    whole = (await _get(client, w.admin_id, days=30))["measured"]
+    scoped = (await _get(client, w.admin_id, days=30, school_id=quiet_id))["measured"]
+    assert scoped["submissions_per_student_month"] is None
+    assert scoped["platform_submissions_per_student_month"] == whole["submissions_per_student_month"]
+    assert whole["platform_submissions_per_student_month"] == whole["submissions_per_student_month"]
+
+
+async def test_the_exclude_box_leaves_out_preview_like_spend_does(
+    client: AsyncClient,
+) -> None:
+    """A teacher rehearsing as a preview student: their submission, its
+    grading call and the preview user itself are no school's usage."""
+    w = await _seed(homework_submissions=6, test_submissions=0)
+    preview = await _add_user("student", w.school_id)
+    async with get_session_factory()() as s:
+        await s.execute(update(User).where(User.id == preview).values(is_preview=True))
+        await s.commit()
+    await _add_homework_submission(w, str(preview), _WHEN)
+    async with get_session_factory()() as s:
+        sub = (await s.execute(
+            select(Submission).where(Submission.student_id == preview),
+        )).scalar_one()
+        s.add(LLMCall(
+            function="ai_grading", model=_OPUS, input_tokens=10, output_tokens=5,
+            latency_ms=1.0, cost_usd=99.0, success=True, school_id=uuid.UUID(w.school_id),
+            user_id=preview, submission_id=sub.id, created_at=_WHEN,
+        ))
+        await s.commit()
+
+    body = await _get(client, w.admin_id, days=30)
+    assert body["measured"]["active_students"] == 6
+    assert body["measured"]["students"] == 6
+    hw = _unit(body, "submission:homework")
+    assert hw["n"] == 6
+    assert hw["cost_total"] < 99.0
+
+    # Unticked, it's counted — the box is what removes it.
+    shown = await _get(client, w.admin_id, days=30, exclude_internal="false")
+    assert shown["measured"]["active_students"] == 7
