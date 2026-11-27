@@ -304,6 +304,11 @@ async def test_a_failed_call_retries_then_gives_up(client: AsyncClient, model: F
     problem = (await _insights(client, w))["problems"][0]
     assert problem["reasons"] == [] and not problem["reasons_pending"]
 
+    # Another approved grade is a new input the drain will try, so the
+    # page says reasons are coming again before that pass runs.
+    await _student(w, "Zed", _entry(w["pid"], "zero", "Never started"))
+    assert (await _insights(client, w))["problems"][0]["reasons_pending"]
+
 
 async def test_no_written_feedback_means_no_call(client: AsyncClient, model: FakeModel) -> None:
     w = await _world()
@@ -416,6 +421,9 @@ async def test_homework_past_the_active_window_is_left_alone(client: AsyncClient
         await s.commit()
     await rr.refresh_reteach_reasons(limit=1000)
     assert _mine(model, w) == [] and await _stored(w) is None
+    # Nothing will write them, so the page doesn't say they're coming.
+    flagged = [p for p in (await _insights(client, w))["problems"] if p["flagged"]]
+    assert flagged and all(p["reasons"] == [] and p["reasons_pending"] is False for p in flagged)
 
 
 # ── Practiced count and the drain ──────────────────────────────────

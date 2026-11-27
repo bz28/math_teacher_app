@@ -40,7 +40,7 @@ from api.core.audit_log import log_student_record_access
 from api.core.grading_queue import EXTRACTION_GRACE
 from api.core.insights_counting import FLAG_MIN_COUNTED, counted_breakdown, is_flagged, missed_full_credit, tally
 from api.core.integrity_ai import UNREADABLE_THRESHOLD
-from api.core.reteach_reasons import MAX_ATTEMPTS as REASON_MAX_ATTEMPTS
+from api.core.reteach_reasons import gave_up, in_active_window, reason_inputs
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
@@ -298,6 +298,7 @@ async def get_section_insights(
     now = datetime.now(UTC)
     # (assignment_id, student_id) → counted breakdown | None
     by_hw_student: dict[tuple[uuid.UUID, uuid.UUID], list[dict[str, Any]] | None] = {}
+    submission_of: dict[tuple[uuid.UUID, uuid.UUID], uuid.UUID] = {}
     coverage: dict[uuid.UUID, dict[str, int]] = {
         a: {
             "counted": 0, "to_approve": 0, "to_grade": 0, "grading": 0, "awaiting_student": 0,
@@ -306,6 +307,7 @@ async def get_section_insights(
     for r in sub_rows:
         counted = counted_breakdown(r)
         by_hw_student[(r.assignment_id, r.student_id)] = counted
+        submission_of[(r.assignment_id, r.student_id)] = r.id
         bucket = _coverage_bucket(r, counted, ai_grading_enabled=ai_enabled[r.assignment_id], now=now)
         coverage[r.assignment_id][bucket] += 1
 
@@ -326,7 +328,7 @@ async def get_section_insights(
         section=InsightsSection(id=section.id, name=section.name),
         homeworks=hw_out,
         selected_homework_id=selected.id if selected else None,
-        problems=await _problems_for(db, selected, section_id, by_hw_student) if selected else [],
+        problems=await _problems_for(db, selected, section_id, by_hw_student, submission_of) if selected else [],
         flag_min_counted=FLAG_MIN_COUNTED,
         practice=await _practice_for(db, selected, section_id, roster_ids) if selected else None,
     )
@@ -352,6 +354,7 @@ async def _problems_for(
     hw: Assignment,
     section_id: uuid.UUID,
     by_hw_student: dict[tuple[uuid.UUID, uuid.UUID], list[dict[str, Any]] | None],
+    submission_of: dict[tuple[uuid.UUID, uuid.UUID], uuid.UUID],
 ) -> list[InsightsProblem]:
     """Whole-class counts per problem for one homework, in homework order,
     with the stored reasons for the flagged ones."""
@@ -375,6 +378,18 @@ async def _problems_for(
             if (pid := str(e.get("problem_id"))) in missed_by and missed_full_credit(e):
                 missed_by[pid].add(sid)
     reasons = await _reasons_for({pid: stored.get(pid) for pid in flagged}, missed_by, section_id, db)
+    # Pending = the drain will still write it, which it decides by the
+    # problem's input; worked out the same way here.
+    pending: set[str] = set()
+    if in_active_window(hw):
+        by_submission = {
+            str(submission_of[k]): counted for k, counted in by_hw_student.items() if k[0] == hw.id
+        }
+        questions = {str(p.get("bank_item_id")): str(p.get("question") or "") for p in problem_list}
+        for pid in flagged:
+            key, _n = reason_inputs(questions[pid], pid, by_submission)
+            if _reasons_pending(stored.get(pid), key):
+                pending.add(pid)
 
     return [
         InsightsProblem(
@@ -385,19 +400,19 @@ async def _problems_for(
             missed=t[1],
             flagged=key in flagged,
             reasons=reasons.get(key, []),
-            reasons_pending=key in flagged and _reasons_pending(stored.get(key)),
+            reasons_pending=key in pending,
         )
         for idx, p in enumerate(problem_list, start=1)
         if (key := str(p.get("bank_item_id"))) in counts and (t := counts[key])
     ]
 
 
-def _reasons_pending(entry: Any) -> bool:
+def _reasons_pending(entry: Any, key: str) -> bool:
     """No reasons yet, and the drain will still try: never written, or
-    its calls failed fewer times than the writer gives up after."""
+    it hasn't given up on this input (`key`)."""
     if not isinstance(entry, dict):
         return True
-    return entry.get("reasons") is None and int(entry.get("attempts") or 0) < REASON_MAX_ATTEMPTS
+    return entry.get("reasons") is None and not gave_up(entry, key)
 
 
 async def _reasons_for(

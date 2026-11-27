@@ -44,7 +44,7 @@ import json
 import logging
 import uuid
 from collections import Counter
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import Text, func, or_, select
@@ -189,6 +189,29 @@ async def group_reasons(
 # ── Deciding what to write ─────────────────────────────────────────
 
 
+def reason_inputs(question: str, pid: str, counted: dict[str, list[dict[str, Any]] | None]) -> tuple[str, int]:
+    """The input key and item count for one problem, from each
+    submission's counted breakdown (keyed by submission id). Shared with
+    the Insights read, so it can tell whether the drain will still try."""
+    items = _items(pid, counted)
+    return _input_key(question, items), len(items)
+
+
+def _items(pid: str, counted: dict[str, list[dict[str, Any]] | None]) -> list[tuple[str, str]]:
+    return sorted(
+        (sid, f"{_score(e)} | {text}")
+        for sid, entries in counted.items()
+        for e in entries or ()
+        if str(e.get("problem_id")) == pid and missed_full_credit(e) and (text := feedback_text(e))
+    )
+
+
+def gave_up(entry: dict[str, Any], key: str) -> bool:
+    """The drain's calls for exactly this input failed too often to try
+    again. A new input (another grade approved or edited) tries again."""
+    return entry.get("failed_key") == key and int(entry.get("attempts") or 0) >= MAX_ATTEMPTS
+
+
 def needs_call(entry: dict[str, Any] | None, key: str, n_items: int, *, drafts_waiting: bool) -> bool:
     """Whether a flagged problem's stored entry should be (re)written for
     the input `key` of `n_items` students. See the module docstring."""
@@ -196,8 +219,8 @@ def needs_call(entry: dict[str, Any] | None, key: str, n_items: int, *, drafts_w
         return True
     if entry.get("input_key") == key and entry.get("reasons") is not None:
         return False  # already written for exactly this
-    if entry.get("failed_key") == key and int(entry.get("attempts") or 0) >= MAX_ATTEMPTS:
-        return False  # gave up on this input; a new one tries again
+    if gave_up(entry, key):
+        return False  # a new input tries again
     if entry.get("reasons") is None:
         return True  # no read yet
     had = int(entry.get("n_items") or 0)
@@ -213,6 +236,13 @@ def needs_call(entry: dict[str, Any] | None, key: str, n_items: int, *, drafts_w
 # date, created) within this window. Older homework keeps what it has, so
 # an idle pass never scans a whole term of grades.
 _ACTIVE_WINDOW = timedelta(days=180)
+
+
+def in_active_window(hw: Assignment) -> bool:
+    """Whether the drain still writes this homework's reasons. The
+    Insights read asks too, so it never shows a pending note for
+    homework the drain has stopped writing."""
+    return (hw.due_at or hw.created_at) > datetime.now(UTC) - _ACTIVE_WINDOW
 
 
 def _grade_scope() -> Any:
@@ -324,12 +354,7 @@ async def _refresh_pair(
     for pid, (n, missed) in tally(questions, counted.values()).items():
         if not is_flagged(n, missed):
             continue
-        items = sorted(
-            (sid, f"{_score(e)} | {text}")
-            for sid, entries in counted.items()
-            for e in entries or ()
-            if str(e.get("problem_id")) == pid and missed_full_credit(e) and (text := feedback_text(e))
-        )
+        items = _items(pid, counted)
         key = _input_key(questions[pid], items)
         entry = problems.get(pid)
         if not needs_call(entry, key, len(items), drafts_waiting=pid in waiting_on):
