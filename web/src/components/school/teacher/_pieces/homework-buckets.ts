@@ -58,6 +58,31 @@ export function missingCount(
   return Math.max(0, hw.total_students - hw.submitted - hw.extended);
 }
 
+/**
+ * How many published grades a Needs-grading homework owes only a
+ * republish for — every turned-in grade is out, some edited since. The
+ * students already have a grade, so the card reads as a calm amber
+ * "N to republish", not a red overdue alarm. 0 when any grade is still
+ * unreleased (that is real overdue grading work).
+ */
+export function republishOnlyCount(hw: TeacherAssignment): number {
+  return hw.published === hw.submitted ? hw.republish : 0;
+}
+
+/**
+ * Students on a Completed homework still inside their own extended due
+ * date — shown as "N extended" so its jump back to Needs grading when
+ * one turns in isn't a surprise. 0 before the class due date (nobody is
+ * "extended" yet) or for a draft.
+ */
+export function extendedCount(
+  hw: TeacherAssignment,
+  now: number = Date.now(),
+): number {
+  if (hw.status !== "published" || !hw.due_at) return 0;
+  return new Date(hw.due_at).getTime() < now ? hw.extended : 0;
+}
+
 export function bucketHomeworks(
   homeworks: TeacherAssignment[],
   now: number = Date.now(),

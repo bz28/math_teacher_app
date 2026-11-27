@@ -7,7 +7,7 @@ import {
   sectionTargetLabel,
   sectionToneClass,
 } from "@/lib/utils";
-import { missingCount } from "./homework-buckets";
+import { extendedCount, missingCount, republishOnlyCount } from "./homework-buckets";
 import { StatusPill } from "./status-pill";
 
 export type HomeworkBucket =
@@ -60,7 +60,11 @@ export function HomeworkCard({
     selectedNames: hw.section_names,
     status: hw.status,
   });
-  const overdueDays = bucket === "needsGrading" && hw.due_at ? daysOverdue(hw.due_at) : 0;
+  // Every grade is out and only edits wait on a republish: calm amber,
+  // not the red overdue alarm (that's for ungraded/unreviewed work).
+  const republishOnly = bucket === "needsGrading" ? republishOnlyCount(hw) : 0;
+  const overdueDays =
+    bucket === "needsGrading" && hw.due_at && republishOnly === 0 ? daysOverdue(hw.due_at) : 0;
   // Outstanding submissions = submitted but not yet graded. Headline
   // signal for the NEEDS GRADING bucket: surface as a pill on the
   // title row so a teacher can scan a stack of cards and pick the one
@@ -80,7 +84,7 @@ export function HomeworkCard({
       type="button"
       onClick={onOpen}
       className={`block w-full rounded-[--radius-lg] border bg-surface p-4 text-left transition-all hover:-translate-y-px hover:shadow-sm ${
-        bucket === "needsGrading"
+        bucket === "needsGrading" && republishOnly === 0
           ? "border-[color:var(--color-error-border)] hover:border-[color:var(--color-error)]"
           : bucket === "dueThisWeek"
             ? "border-[color:var(--color-info-border)] hover:border-[color:var(--color-info)]"
@@ -99,6 +103,9 @@ export function HomeworkCard({
             tone="amber"
             label={`${ungraded} to grade`}
           />
+        )}
+        {republishOnly > 0 && (
+          <StatusPill tone="amber" label={`${republishOnly} to republish`} />
         )}
         {overdueDays > 0 && (
           <StatusPill
@@ -147,8 +154,8 @@ export function HomeworkCard({
             with submitted-vs-enrolled so a partial HW never reads as
             class-complete:
               - published === submitted → some were edited since (a
-                fully released, unedited HW is Completed, not here):
-                "N to republish".
+                fully released, unedited HW is Completed, not here); the
+                title row's amber "N to republish" carries it.
               - to_review > 0 → submissions still awaiting the teacher's
                 review (reviewed_at IS NULL).
               - else → everything reviewed, ready for the teacher to
@@ -157,9 +164,9 @@ export function HomeworkCard({
           <span className="ml-1 font-semibold text-text-secondary">
             · {submittedLabel}
             {hw.published === hw.submitted ? (
-              // Released, but edited since: the students still see the
-              // old grade until the teacher republishes.
-              <> · {hw.republish} to republish</>
+              // Released, but edited since: the title row's amber
+              // "N to republish" says it.
+              null
             ) : hw.to_review > 0 ? (
               <> · {hw.to_review} to review</>
             ) : (
@@ -203,6 +210,7 @@ function CompletedRow({
   // aren't inside an extension of their own). Neutral: it's not work
   // the teacher owes, but it should still show.
   const missing = missingCount(hw);
+  const extended = extendedCount(hw);
 
   return (
     <button
@@ -219,6 +227,7 @@ function CompletedRow({
         </span>
       )}
       {missing > 0 && <StatusPill tone="muted" label={`${missing} missing`} />}
+      {extended > 0 && <StatusPill tone="muted" label={`${extended} extended`} />}
       <span className="shrink-0 text-[11px] text-text-muted">{dueLabel}</span>
       {hw.avg_score !== null && (
         <span className="shrink-0 text-[11px] font-semibold tabular-nums text-text-secondary">

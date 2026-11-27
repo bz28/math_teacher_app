@@ -4,7 +4,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { TeacherAssignment } from "@/lib/api";
-import { bucketHomeworks, isHomeworkCompleted, missingCount } from "./homework-buckets.ts";
+import {
+  bucketHomeworks,
+  extendedCount,
+  isHomeworkCompleted,
+  missingCount,
+  republishOnlyCount,
+} from "./homework-buckets.ts";
 
 const NOW = new Date("2026-06-22T12:00:00.000Z").getTime();
 const DAY = 86_400_000;
@@ -198,4 +204,20 @@ test("a grade still waiting on the teacher keeps it in Needs grading", () => {
     bucketOf({ due_at: at(-8 * DAY), total_students: 25, submitted: 23, published: 20 }),
     "needsGrading",
   );
+});
+
+test("only a republish owed → calm 'N to republish', not overdue; any unreleased grade → 0", () => {
+  const past = { due_at: at(-20 * DAY), total_students: 25, submitted: 25, published: 25 };
+  assert.equal(republishOnlyCount(hw({ ...past, republish: 1 })), 1);
+  // A grade not yet released is real grading work: overdue stays red.
+  assert.equal(republishOnlyCount(hw({ ...past, published: 24, republish: 1 })), 0);
+  assert.equal(republishOnlyCount(hw(past)), 0);
+});
+
+test("a Completed row counts students still inside their extension", () => {
+  const past = { due_at: at(-2 * DAY), total_students: 25, submitted: 23, published: 23, extended: 1 };
+  assert.equal(bucketOf(past), "completed");
+  assert.equal(extendedCount(hw(past), NOW), 1);
+  assert.equal(extendedCount(hw({ ...past, due_at: at(2 * DAY) }), NOW), 0);
+  assert.equal(extendedCount(hw({ ...past, status: "draft" }), NOW), 0);
 });
