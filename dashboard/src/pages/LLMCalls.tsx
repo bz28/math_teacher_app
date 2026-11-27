@@ -23,7 +23,8 @@ const COLORS = ["#14130f", "#4a6b3a", "#b8431a", "#3d5a78", "#a66b15", "#6b21a8"
 type CallRow = LLMCallsData["calls"][number];
 type Status = "" | "ok" | "failed";
 
-function fmtLatency(ms: number): string {
+function fmtLatency(ms: number | null): string {
+  if (ms === null) return "—";
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`;
 }
 
@@ -42,9 +43,12 @@ export default function LLMCalls() {
   const [fnFilter, setFnFilter] = useState("");
   const [search, setSearch] = useState("");
   // URL-driven scopes (deep-linkable, and the single source of truth so the
-  // shown value and the URL can never disagree): user, submission, session,
-  // status.
+  // shown value and the URL can never disagree): user, teacher, student,
+  // submission, session, status. `user` is "made the call"; `teacher` and
+  // `student` are the one whose-call rule the console's costs use.
   const userFilter = searchParams.get("user") ?? "";
+  const teacherFilter = searchParams.get("teacher") ?? "";
+  const studentFilter = searchParams.get("student") ?? "";
   const submissionFilter = searchParams.get("submission") ?? "";
   const sessionFilter = searchParams.get("session") ?? "";
   // The school comes from the rail's scope — except when the URL already
@@ -55,7 +59,9 @@ export default function LLMCalls() {
   // single-thing pages for the same reason, so the rail doesn't claim a
   // scope the request isn't using.
   const scope = useSchoolScope();
-  const entityFilter = Boolean(userFilter || submissionFilter || sessionFilter);
+  const entityFilter = Boolean(
+    userFilter || teacherFilter || studentFilter || submissionFilter || sessionFilter,
+  );
   const schoolFilter = entityFilter ? null : scope;
   const status: Status = ((): Status => {
     const s = searchParams.get("status");
@@ -80,6 +86,8 @@ export default function LLMCalls() {
       hours,
       function: fnFilter,
       user_id: userFilter,
+      teacher_id: teacherFilter,
+      student_id: studentFilter,
       submission_id: submissionFilter,
       session_id: sessionFilter,
       ...scopeParams(schoolFilter),
@@ -98,7 +106,7 @@ export default function LLMCalls() {
         setError(e instanceof Error ? e.message : "Failed to load LLM calls.");
       });
     return () => { cancelled = true; };
-  }, [hours, fnFilter, userFilter, submissionFilter, sessionFilter, schoolFilter, status, search, offset, reloadKey]);
+  }, [hours, fnFilter, userFilter, teacherFilter, studentFilter, submissionFilter, sessionFilter, schoolFilter, status, search, offset, reloadKey]);
 
   // Reset pagination whenever any non-offset filter changes so a deep link or
   // scope flip never lands past the end of a smaller result set. One effect
@@ -106,7 +114,7 @@ export default function LLMCalls() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setOffset(0);
-  }, [hours, fnFilter, userFilter, submissionFilter, sessionFilter, schoolFilter, status, search]);
+  }, [hours, fnFilter, userFilter, teacherFilter, studentFilter, submissionFilter, sessionFilter, schoolFilter, status, search]);
 
   const handleHoursChange = (v: string) => {
     setHours(v);
@@ -155,6 +163,7 @@ export default function LLMCalls() {
           <div style={{ color: "var(--ink)", fontWeight: 500 }}>{c.function}</div>
           <div className="llm-ctx">
             {c.submission_id && <span className="llm-ctx-tag" title={`submission ${c.submission_id}`}>▤ {shortId(c.submission_id)}</span>}
+            {c.deleted_submission && <span className="llm-ctx-tag" title="Its submission was deleted; the call stays with the student who made it">▤ deleted submission</span>}
             {c.session_id && <span className="llm-ctx-tag" title={`session ${c.session_id}`}>⧉ {shortId(c.session_id)}</span>}
           </div>
         </div>
@@ -183,8 +192,12 @@ export default function LLMCalls() {
   if (!data) return <p className="loading">Loading…</p>;
 
   const win = windowLabel(Number(hours));
-  const errTone = data.failure_rate >= 5 ? "danger" : data.failure_rate > 0 ? "warn" : "ok";
-  const fnOptions = [...new Set(data.by_function.map((r) => r.function))].sort();
+  const sum = data.summary;
+  const errTone = sum.failure_rate >= 5 ? "danger" : sum.failure_rate > 0 ? "warn" : "ok";
+  const fnOptions = data.functions;
+  // Every filter narrows the strip as well as the table, so say so when
+  // one is on — a filtered total must not read as the window's.
+  const narrowed = Boolean(fnFilter || status || search || entityFilter);
 
   return (
     <div>
@@ -202,6 +215,7 @@ export default function LLMCalls() {
           <option value="24">Last 24 hours</option>
           <option value="168">Last 7 days</option>
           <option value="720">Last 30 days</option>
+          <option value="2160">Last 90 days</option>
         </select>
         <select aria-label="Filter by user" value={userFilter} onChange={(e) => setParam("user", e.target.value)}>
           <option value="">All users</option>
@@ -217,6 +231,16 @@ export default function LLMCalls() {
           <option value="failed">Failed</option>
         </select>
         <SearchInput value={search} onChange={setSearch} placeholder="Search prompt + response…" />
+        {teacherFilter && (
+          <button className="filter-badge" onClick={() => setParam("teacher", "")} style={{ cursor: "pointer", border: "none" }} title="Their own calls plus calls on submissions to their homework">
+            Teacher: {shortId(teacherFilter)} ✕
+          </button>
+        )}
+        {studentFilter && (
+          <button className="filter-badge" onClick={() => setParam("student", "")} style={{ cursor: "pointer", border: "none" }} title="Calls they made plus calls on their submissions">
+            Student: {shortId(studentFilter)} ✕
+          </button>
+        )}
         {submissionFilter && (
           <button className="filter-badge" onClick={() => setParam("submission", "")} style={{ cursor: "pointer", border: "none" }} title={submissionFilter}>
             Submission: {shortId(submissionFilter)} ✕
@@ -231,13 +255,20 @@ export default function LLMCalls() {
 
       {/* ── ① Strip — the window's headline health + failing functions ── */}
       <div className="tile-grid">
-        <StatTile label="Total calls" value={data.total_count_window.toLocaleString()} sub={`in the last ${win}`} />
-        <StatTile label={`Cost (${win})`} value={fmtCost(data.total_cost_window)} sub="across all functions" />
         <StatTile
-          label="Failure rate" tone={errTone} value={`${data.failure_rate}%`}
-          sub={`${data.failure_count.toLocaleString()}/${data.total_count_window.toLocaleString()} calls`}
+          label="Calls" value={sum.calls.toLocaleString()}
+          sub={narrowed ? `filtered · last ${win}` : `in the last ${win}`}
         />
-        <StatTile label="p95 latency" value={fmtLatency(data.p95_latency_ms)} sub={`tail of ${win}`} />
+        <StatTile label="Spend" value={fmtCost(sum.spend)} sub={narrowed ? "of the filtered calls" : "across all functions"} />
+        <StatTile
+          label="Failed" tone={errTone} value={sum.failed.toLocaleString()}
+          sub={`${sum.failure_rate}% of ${sum.calls.toLocaleString()} calls`}
+        />
+        <StatTile label="p50 latency" value={fmtLatency(sum.latency_p50_ms)} sub="successful calls" />
+        <StatTile
+          label="p95 latency" value={fmtLatency(sum.latency_p95_ms)}
+          sub={`successful calls · n=${sum.latency_n.toLocaleString()}`}
+        />
       </div>
 
       {data.failures_by_function.length > 0 && (

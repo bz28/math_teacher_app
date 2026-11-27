@@ -111,6 +111,15 @@ function menuActionsFor(u: UserRow, selfId: string | null): MenuAction[] {
   return actions;
 }
 
+/** The calls behind a row's cost, over the same window the row's cost
+ *  covers. The row's cost is the one whose-call rule for every role, so
+ *  the link is too: an admin can set homework like a teacher, and the
+ *  calls on it are in their number. */
+function callsLink(u: { id: string; role: string }, hours: string): string {
+  const key = u.role === "student" ? "student" : "teacher";
+  return `/llm-calls?${key}=${u.id}&hours=${hours}`;
+}
+
 export default function Users() {
   const navigate = useNavigate();
   const confirm = useConfirm();
@@ -566,7 +575,7 @@ export default function Users() {
                 );
               case "view-calls":
                 return (
-                  <button key={action} onClick={() => { setOpenMenu(null); navigate(`/llm-calls?user=${openUser.id}`); }}>
+                  <button key={action} onClick={() => { setOpenMenu(null); navigate(callsLink(openUser, hours)); }}>
                     View calls
                   </button>
                 );

@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
 from api.core.email import send_email
+from api.core.llm_attribution import call_owners
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
 from api.models.activity_log import ActivityLog
@@ -27,7 +28,7 @@ from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.teacher_invite import TeacherInvite
 from api.models.user import User
-from api.routes.admin_helpers import activity_last_action_sq
+from api.routes.admin_helpers import activity_last_action_sq, last_days
 
 logger = logging.getLogger(__name__)
 
@@ -71,8 +72,8 @@ async def list_schools(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     now = datetime.now(UTC)
-    cost_30d_start = now - timedelta(days=30)
-    cost_60d_start = now - timedelta(days=60)
+    cost_window = last_days(30, now)
+    prev_window = cost_window.previous()
     submissions_7d_start = now - timedelta(days=7)
     failed_24h_start = now - timedelta(hours=24)
 
@@ -145,7 +146,7 @@ async def list_schools(
         )
         .where(
             LLMCall.school_id.isnot(None),
-            LLMCall.created_at >= cost_30d_start,
+            cost_window.covers(LLMCall.created_at),
         )
         .group_by(LLMCall.school_id)
         .subquery()
@@ -160,8 +161,7 @@ async def list_schools(
         )
         .where(
             LLMCall.school_id.isnot(None),
-            LLMCall.created_at >= cost_60d_start,
-            LLMCall.created_at < cost_30d_start,
+            prev_window.covers(LLMCall.created_at),
         )
         .group_by(LLMCall.school_id)
         .subquery()
@@ -295,16 +295,14 @@ async def get_school(
 
     The unit is teacher→class, not a flat school-wide roster. We return
     every teacher, their sections (class periods), and each section's
-    enrolled students — with cost rolled up to the level where it's
-    unambiguously attributable:
+    enrolled students — with cost at two levels:
 
-      * Per-submission AI (Vision extraction + integrity + AI grading,
-        and grading of assigned practice) is attributable via
-        LLMCall.submission_id → submission → section, so it rolls up to
-        the **section**.
-      * A teacher's authoring/generation spend has no submission, so it
-        can't be pinned to one section — it stays at the **teacher**
-        level (LLMCall.user_id = teacher, submission_id IS NULL).
+      * A **teacher's** cost follows the one whose-call rule
+        (api/core/llm_attribution.py): their own calls plus every call
+        on a submission to their homework — the same number their own
+        page and the Users list show.
+      * A **section's** cost is the calls on submissions handed in to
+        it (LLMCall.submission_id → submission → section).
 
     All aggregation is done with grouped subqueries assembled in Python
     (no per-teacher / per-section follow-up queries), so a large school
@@ -314,25 +312,21 @@ async def get_school(
     if not school:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="School not found")
 
-    since_30d = datetime.now(UTC) - timedelta(days=30)
+    window = last_days(30)
 
-    # ── Teachers + their generation (non-submission) spend ──────────
-    # Per-submission calls roll up to sections below (via submission_id),
-    # so a teacher's own bucket filters submission_id IS NULL to avoid
-    # double-counting a grading call that happens to carry the teacher's
-    # user_id. What's left is authoring/generation + misc tooling.
-    gen_stats_sq = (
+    # ── Teachers + their spend (the one whose-call rule) ────────────
+    owners = call_owners(
+        window.covers(LLMCall.created_at),
+        owners_in=select(User.id).where(User.school_id == school.id, User.role == "teacher"),
+    )
+    teacher_stats_sq = (
         select(
-            LLMCall.user_id.label("user_id"),
-            func.count().label("gen_calls"),
-            func.coalesce(func.sum(LLMCall.cost_usd), 0).label("gen_cost"),
+            owners.c.owner_id.label("user_id"),
+            func.count().label("calls"),
+            func.coalesce(func.sum(LLMCall.cost_usd), 0).label("cost"),
         )
-        .where(
-            LLMCall.created_at >= since_30d,
-            LLMCall.user_id.isnot(None),
-            LLMCall.submission_id.is_(None),
-        )
-        .group_by(LLMCall.user_id)
+        .join(LLMCall, LLMCall.id == owners.c.call_id)
+        .group_by(owners.c.owner_id)
         .subquery()
     )
     teacher_rows = (await db.execute(
@@ -342,10 +336,10 @@ async def get_school(
             User.email,
             User.created_at,
             User.is_active,
-            func.coalesce(gen_stats_sq.c.gen_calls, 0).label("gen_calls"),
-            func.coalesce(gen_stats_sq.c.gen_cost, 0).label("gen_cost"),
+            func.coalesce(teacher_stats_sq.c.calls, 0).label("calls"),
+            func.coalesce(teacher_stats_sq.c.cost, 0).label("cost"),
         )
-        .outerjoin(gen_stats_sq, gen_stats_sq.c.user_id == User.id)
+        .outerjoin(teacher_stats_sq, teacher_stats_sq.c.user_id == User.id)
         .where(User.school_id == school.id, User.role == "teacher")
         .order_by(User.name)
     )).all()
@@ -412,7 +406,7 @@ async def get_school(
         .join(Submission, Submission.id == LLMCall.submission_id)
         .join(Section, Section.id == Submission.section_id)
         .join(Course, Course.id == Section.course_id)
-        .where(Course.school_id == school.id, LLMCall.created_at >= since_30d)
+        .where(Course.school_id == school.id, window.covers(LLMCall.created_at))
         .group_by(Submission.section_id)
     )).all()
     section_cost = {r.section_id: float(r.cost) for r in cost_rows}
@@ -525,8 +519,8 @@ async def get_school(
             "email": t.email,
             "joined_at": t.created_at.isoformat(),
             "is_active": t.is_active,
-            "gen_cost_30d": round(float(t.gen_cost), 6),
-            "gen_call_count_30d": int(t.gen_calls),
+            "cost_30d": round(float(t.cost), 6),
+            "call_count_30d": int(t.calls),
             "sections": sections_by_teacher.get(t.id, []),
         }
         for t in teacher_rows

@@ -32,7 +32,10 @@ export function pageScope(pathname: string, search: string): PageScope {
   if (pathname === "/users" && params.get("role") === "admin") return "platform";
   // LLM calls filtered to one user / submission / session is about that
   // one thing, and the page drops the school scope for it (LLMCalls.tsx).
-  if (pathname === "/llm-calls" && ["user", "submission", "session"].some((k) => params.get(k))) {
+  if (
+    pathname === "/llm-calls" &&
+    ["user", "teacher", "student", "submission", "session"].some((k) => params.get(k))
+  ) {
     return null;
   }
   // Exact matches only: /reports/:id, /leads/:id and /schools/:id are

@@ -721,9 +721,9 @@ function TeacherBlock({
   onToggleActive: (userId: string, label: string, nextActive: boolean) => void;
 }) {
   // Teacher's last activity = the most recent submission across their
-  // classes. Section-rolled cost + gen cost gives their full footprint.
-  const sectionCost = teacher.sections.reduce((sum, s) => sum + s.cost_30d, 0);
-  const totalCost = sectionCost + teacher.gen_cost_30d;
+  // classes. Cost is the server's one whose-call rule (own calls + calls
+  // on submissions to their homework), the number their own page shows.
+  const totalCost = teacher.cost_30d;
   const lastAt = teacher.sections
     .map((s) => s.last_activity_at)
     .filter((d): d is string => !!d)
@@ -784,11 +784,11 @@ function TeacherBlock({
             {fmtCost(totalCost)}
             <span style={{ fontSize: 10.5, color: "var(--muted)", fontFamily: "var(--font-sans)", marginLeft: 5 }}>· 30d</span>
           </div>
-          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 3 }} title="Authoring/generation spend not tied to a submission">
-            {fmtCost(teacher.gen_cost_30d)} generation · {teacher.gen_call_count_30d.toLocaleString()} call{teacher.gen_call_count_30d === 1 ? "" : "s"}
+          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 3 }} title="Their own calls plus calls on submissions to their homework">
+            {teacher.call_count_30d.toLocaleString()} call{teacher.call_count_30d === 1 ? "" : "s"}
           </div>
           <Link
-            to={`/llm-calls?user=${teacher.id}&hours=720`}
+            to={`/llm-calls?teacher=${teacher.id}&hours=720`}
             className="link-btn"
             style={{ fontSize: 11.5, marginTop: 4, display: "inline-block" }}
           >

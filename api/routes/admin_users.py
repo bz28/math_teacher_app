@@ -25,6 +25,7 @@ from api.core.entitlements import (
     FREE_DAILY_SESSION_LIMIT,
     today_start,
 )
+from api.core.llm_attribution import call_owners, calls_of
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
 from api.models.activity_log import ActivityLog
@@ -38,7 +39,7 @@ from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.session import Session
 from api.models.user import RefreshToken, User
-from api.routes.admin_helpers import activity_last_action_sq, time_range
+from api.routes.admin_helpers import activity_last_action_sq, last_days, time_range
 from api.services.bank import problem_ids_in_content
 
 INVITE_TOKEN_EXPIRY_HOURS = 48
@@ -93,12 +94,21 @@ async def users(
         )
     )).scalar() or 0
 
-    # Total spend (scope-filtered, in period)
+    # Every call in the period, attributed to its owners by the one
+    # whose-call rule (api/core/llm_attribution.py): a student owns calls
+    # they made or that ran on their submissions, a teacher calls they
+    # made or that ran on submissions to their homework.
+    owners = call_owners(
+        LLMCall.created_at >= since, owners_in=select(scope_user_ids.c.id),
+    )
+
+    # Total spend (scope-filtered, in period). Each call once, however
+    # many in-scope people own it — a student and their teacher share
+    # every grading call.
     total_spend = (await db.execute(
         select(func.coalesce(func.sum(LLMCall.cost_usd), 0.0))
         .where(
-            LLMCall.created_at >= since,
-            LLMCall.user_id.in_(select(scope_user_ids.c.id)),
+            LLMCall.id.in_(select(owners.c.call_id)),
         )
     )).scalar() or 0.0
 
@@ -123,15 +133,15 @@ async def users(
         .order_by("day")
     )).all()
 
-    # Per-user cost subquery
+    # Per-user cost subquery (same owners as total_spend)
     user_cost = (
         select(
-            LLMCall.user_id,
+            owners.c.owner_id.label("user_id"),
             func.coalesce(func.sum(LLMCall.cost_usd), 0.0).label("total_cost"),
             func.count().label("llm_call_count"),
         )
-        .where(LLMCall.created_at >= since, LLMCall.user_id.isnot(None))
-        .group_by(LLMCall.user_id)
+        .join(LLMCall, LLMCall.id == owners.c.call_id)
+        .group_by(owners.c.owner_id)
         .subquery()
     )
 
@@ -1252,10 +1262,10 @@ async def teacher_students(
     # in the header and tells admins at a glance whether the teacher
     # is generating real usage. Coalesced so zero-activity teachers
     # show as 0 rather than NULL.
-    since_30d = datetime.now(UTC) - timedelta(days=30)
+    window = last_days(30)
 
     # Every call this teacher's CLASSROOM caused, not just the ones billed
-    # to her user id.
+    # to her user id — the one whose-call rule (api/core/llm_attribution.py).
     #
     # Grading and integrity calls are billed to the student whose request
     # they serve, so `user_id == teacher.id` sees only content generation —
@@ -1264,23 +1274,12 @@ async def teacher_students(
     # while the submissions table on the same screen shows 45. The page
     # contradicted itself in the one number that says whether the AI is
     # doing anything for her at all.
-    teacher_submission_ids = (
-        select(Submission.id)
-        .join(Assignment, Assignment.id == Submission.assignment_id)
-        .where(Assignment.teacher_id == teacher.id)
-    )
     llm_stats = (await db.execute(
         select(
             func.count().label("call_count"),
             func.coalesce(func.sum(LLMCall.cost_usd), 0).label("total_cost"),
         )
-        .where(
-            or_(
-                LLMCall.user_id == teacher.id,
-                LLMCall.submission_id.in_(teacher_submission_ids),
-            ),
-            LLMCall.created_at >= since_30d,
-        )
+        .where(calls_of(teacher.id), window.covers(LLMCall.created_at))
     )).one()
 
     # The generation half on its own, because the panel below the header
@@ -1288,7 +1287,7 @@ async def teacher_students(
     generated_calls = (await db.execute(
         select(func.count()).where(
             LLMCall.user_id == teacher.id,
-            LLMCall.created_at >= since_30d,
+            window.covers(LLMCall.created_at),
         )
     )).scalar() or 0
 
