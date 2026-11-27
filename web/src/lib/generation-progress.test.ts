@@ -6,6 +6,8 @@ import {
   generatingLabel,
   generationJobsKey,
   generationProgress,
+  idsToRemember,
+  expiredJobIds,
   oldestFirst,
   startJobUpdate,
   withStartedJob,
@@ -69,10 +71,21 @@ test("starting a job builds on the latest jobs, not the ones seen at click time"
   const j = (id: string, status: string, produced = 0) => ({
     id, status, requested_count: 5, produced_count: produced,
   });
-  const remembered: string[][] = [];
-  const update = startJobUpdate(j("b", "queued"), (ids) => remembered.push(ids));
+  const update = startJobUpdate(j("b", "queued"));
   // Clicked while "a" was running; a poll tick finished it before the start returned.
-  const latest = [j("a", "done", 5)];
-  assert.deepEqual(update(latest).map((x) => [x.id, x.status]), [["b", "queued"]]);
-  assert.deepEqual(remembered, [["b"]]);
+  assert.deepEqual(update([j("a", "done", 5)]).map((x) => [x.id, x.status]), [["b", "queued"]]);
+});
+
+test("only running jobs are remembered; none running means forget the key", () => {
+  const j = (id: string, status: string) => ({ id, status, requested_count: 5, produced_count: 0 });
+  assert.deepEqual(idsToRemember([j("a", "running"), j("b", "done"), j("c", "queued")]), ["a", "c"]);
+  assert.deepEqual(idsToRemember([j("a", "done"), j("b", "failed")]), []);
+});
+
+test("each job's poll ceiling runs from when it was first seen", () => {
+  const seen = new Map([["old", 0], ["new", 240_000]]);
+  // Five minutes after the old job started, the new one has had one.
+  assert.deepEqual(expiredJobIds(["old", "new"], seen, 300_001, 300_000), ["old"]);
+  assert.deepEqual(expiredJobIds(["old", "new"], seen, 540_001, 300_000), ["old", "new"]);
+  assert.deepEqual(expiredJobIds(["unseen"], seen, 999_999, 300_000), []);
 });

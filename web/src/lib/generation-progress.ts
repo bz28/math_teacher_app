@@ -61,18 +61,31 @@ export function withStartedJob<T extends ProgressJob & { id: string }>(jobs: T[]
   return [...jobs.filter((j) => running(j) && j.id !== job.id), job];
 }
 
-/** The state update for starting `job`: applied to the latest jobs (a poll
- *  tick may have moved them since the start was clicked), handing the ids
- *  now tracked to `remember` so they survive leaving the page. */
-export function startJobUpdate<T extends ProgressJob & { id: string }>(
-  job: T,
-  remember: (ids: string[]) => void,
-): (prev: T[]) => T[] {
-  return (prev) => {
-    const next = withStartedJob(prev, job);
-    remember(next.map((j) => j.id));
-    return next;
-  };
+/** The state update for starting `job`, applied to the latest jobs: the
+ *  modal calls it after awaiting the start, and a poll tick may have moved
+ *  them since the click. */
+export function startJobUpdate<T extends ProgressJob & { id: string }>(job: T): (prev: T[]) => T[] {
+  return (prev) => withStartedJob(prev, job);
+}
+
+/** The ids worth remembering across leaving the page: only the jobs still
+ *  running. Empty means forget the key, so a job that finished (or failed)
+ *  while the teacher watched doesn't come back as a notice or a stalled
+ *  banner on her next visit. */
+export function idsToRemember(jobs: (ProgressJob & { id: string })[]): string[] {
+  return jobs.filter(running).map((j) => j.id);
+}
+
+/** Running jobs whose own poll ceiling has passed. Each job is timed from
+ *  when it was first seen running, so one started later isn't failed on
+ *  an earlier job's clock. */
+export function expiredJobIds(
+  runningIds: string[],
+  firstSeen: ReadonlyMap<string, number>,
+  now: number,
+  limitMs: number,
+): string[] {
+  return runningIds.filter((id) => now - (firstSeen.get(id) ?? now) > limitMs);
 }
 
 /** Where the homework page keeps the ids of the jobs feeding it, so they

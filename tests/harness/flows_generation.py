@@ -82,4 +82,27 @@ async def generation_survives_leaving_flow(
             issues.append("after leaving and coming back, the running generation was forgotten")
         if await page.get_by_text("Let's add some problems").count():
             issues.append("the empty hero offers to generate again while a generation runs")
+        # The job fails while she watches: she sees the stalled banner once,
+        # and the page forgets the job, so the next visit doesn't repeat it.
+        job["status"] = "failed"
+        stalled = page.get_by_text(re.compile(r"Generation stalled"))
+        try:
+            await stalled.wait_for(timeout=_TIMEOUT_MS)
+        except PlaywrightTimeoutError:
+            issues.append("a failed generation did not show the stalled banner")
+            return FlowResult(name, title, False, issues)
+        remembered = await page.evaluate("k => sessionStorage.getItem(k)", f"hw-gen-{hw_id}")
+        if remembered is not None:
+            issues.append("the page still remembers a job that already failed")
+        await page.goto(
+            f"{web_base.rstrip('/')}/school/teacher/courses/{seed.course_id}?tab=homework",
+            wait_until="domcontentloaded", timeout=_TIMEOUT_MS,
+        )
+        await page.goto(hw_url, wait_until="domcontentloaded", timeout=_TIMEOUT_MS)
+        try:
+            await page.get_by_text("Let's add some problems").wait_for(timeout=_TIMEOUT_MS)
+        except PlaywrightTimeoutError:
+            issues.append("after the failure, the page did not settle on the empty homework")
+        if await stalled.count():
+            issues.append("the stalled banner came back on the next visit")
     return FlowResult(name, title, not issues, issues)
