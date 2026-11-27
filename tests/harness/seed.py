@@ -655,6 +655,7 @@ class IntegrityReviewSeed:
     submission_id: str
     flagged_student: str
     last_answer: str
+    pasted_answer: str  # an earlier answer the activity rollup marked as a paste
 
 
 async def seed_review_integrity(seed: Seed) -> IntegrityReviewSeed:
@@ -673,6 +674,7 @@ async def seed_review_integrity(seed: Seed) -> IntegrityReviewSeed:
     now = datetime.now(UTC)
     tag = uuid.uuid4().hex[:6]
     last_answer = "idk the same thing i guess"
+    pasted_answer = "Adding eliminates y because the coefficients are opposites."
     async with get_session_factory()() as s:
         section_id = (await s.execute(
             select(SectionEnrollment.section_id).where(
@@ -731,6 +733,12 @@ async def seed_review_integrity(seed: Seed) -> IntegrityReviewSeed:
             headline="Correct work but couldn't explain it",
             overall_summary="Restated the answer and couldn't solve a sign-flipped variant.",
             resolution="unresolved",
+            activity_summary={
+                "totals": {"tab_out_count": 0, "tab_out_total_ms": 0, "paste_count": 1,
+                           "paste_total_chars": len(pasted_answer),
+                           "paste_largest_chars": len(pasted_answer)},
+                "notable_turns": [{"ordinal": 1, "reasons": ["full_paste"]}],
+            },
         )
         s.add(check)
         await s.flush()
@@ -742,17 +750,22 @@ async def seed_review_integrity(seed: Seed) -> IntegrityReviewSeed:
         ))
         for o, (role, text) in enumerate((
             ("agent", "Why did you add the two equations?"),
-            ("student", "because thats how you do it"),
+            ("student", pasted_answer),
             ("agent", "If the second equation were x + 2y = 0, what would you do?"),
             ("student", last_answer),
         )):
             s.add(IntegrityConversationTurn(
                 integrity_check_submission_id=check.id, ordinal=o, role=role,
                 content=text, seconds_on_turn=None if role == "agent" else 12,
+                telemetry=None if o != 1 else {
+                    "focus_blur_events": [],
+                    "paste_events": [{"at": now.isoformat(), "byte_count": len(text)}],
+                    "typing_cadence": {"total_ms": 0, "pauses_over_3s": 0},
+                },
             ))
         await s.commit()
         return IntegrityReviewSeed(
             course_id=seed.course_id, assignment_id=str(hw.id),
             section_id=str(section_id), submission_id=str(sub.id),
-            flagged_student=name, last_answer=last_answer,
+            flagged_student=name, last_answer=last_answer, pasted_answer=pasted_answer,
         )

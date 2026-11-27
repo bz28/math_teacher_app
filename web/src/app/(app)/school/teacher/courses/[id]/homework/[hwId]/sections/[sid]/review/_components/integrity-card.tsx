@@ -21,14 +21,20 @@ import type {
 } from "@/lib/api";
 import type { IntegrityBannerKey } from "../_lib/types";
 import { NEUTRAL_STYLE, INTEGRITY_STYLE } from "../_lib/integrity-style";
-import { quotedAnswer, type QuotedAnswer } from "../_lib/quoted-answer";
+import {
+  flaggedTurns,
+  quotedAnswer,
+  type FlaggedTurn,
+  type QuotedAnswer,
+} from "../_lib/quoted-answer";
 
 /**
  * Compact integrity verdict card. Collapsed by default: verdict icon +
  * headline, the activity flags as chips, and a footer with the Details
  * toggle and "Conversation ↗". On an open check (flagged, inconclusive,
- * unreadable, unfinished) the card also quotes the student's most
- * telling answer and shows the resolution outcomes as chips, so one
+ * unreadable, unfinished) the card also quotes the student's last
+ * answer — with any paste/tab-out turns as collapsed evidence under the
+ * activity flags — and shows the resolution outcomes as chips, so one
  * click resolves it — the same call and outcomes "Mark reviewed" used,
  * and never a grade approval. Once resolved, a quiet "Reviewed" chip
  * with Change takes their place. Details holds the AI summary and the
@@ -149,10 +155,12 @@ export function IntegrityCard({
   // Reviewed chip (with Change) stays in the same spot.
   const showResolve =
     !!integrity && (resolved || integrityNeedsResolution(integrity));
-  const quote =
-    integrity && !resolved && integrityNeedsResolution(integrity)
-      ? quotedAnswer(integrity)
-      : null;
+  const openCheck =
+    !!integrity && !resolved && integrityNeedsResolution(integrity);
+  const quote = openCheck ? quotedAnswer(integrity) : null;
+  // Only when the activity flag is about a paste or tab-out: the turns
+  // behind it, collapsed, so the teacher can judge without digging.
+  const evidence = openCheck ? flaggedTurns(integrity) : [];
   const inProgressCount = key === "in_progress" && overviewFallback;
   const hasDetails =
     !!shownSummary ||
@@ -205,6 +213,7 @@ export function IntegrityCard({
               No tab-outs or pastes
             </p>
           ))}
+        {evidence.length > 0 && <FlaggedTurnsEvidence turns={evidence} />}
 
         {detailsOpen && hasDetails && (
           <div id={detailsId} className="mt-3 space-y-2.5">
@@ -302,14 +311,37 @@ export function IntegrityCard({
   );
 }
 
+function FlaggedTurnsEvidence({ turns }: { turns: FlaggedTurn[] }) {
+  return (
+    <details className="group mt-2">
+      <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-[--radius-sm] text-[11px] font-semibold text-text-secondary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary [&::-webkit-details-marker]:hidden">
+        What they sent on {turns.length === 1 ? "that turn" : `those ${turns.length} turns`}
+        <span aria-hidden className="transition-transform group-open:rotate-180">▾</span>
+      </summary>
+      <ul className="mt-1.5 space-y-2">
+        {turns.map(({ turn, reasons }) => (
+          <li
+            key={turn.ordinal}
+            className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-2"
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-[0.06em] text-text-muted">
+              {reasons.map((r) => activityReasonText(r, turn)).join(" · ")}
+            </p>
+            <div className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap border-l-2 border-text-muted/40 pl-2.5 text-xs leading-snug text-text-primary">
+              <MathText text={turn.content} />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
 function QuotedAnswerExcerpt({ quote }: { quote: QuotedAnswer }) {
-  const note = quote.reason
-    ? activityReasonText(quote.reason, quote.turn)
-    : null;
   return (
     <figure className="mt-3 rounded-[--radius-md] border border-border-light bg-surface px-3 py-2.5">
       <figcaption className="text-[10px] font-semibold uppercase tracking-[0.06em] text-text-muted">
-        {note ? <>Their answer · {note}</> : "Their last answer"}
+        Their last answer
       </figcaption>
       {quote.question && (
         <p className="mt-1.5 line-clamp-2 text-[11px] leading-snug text-text-muted">

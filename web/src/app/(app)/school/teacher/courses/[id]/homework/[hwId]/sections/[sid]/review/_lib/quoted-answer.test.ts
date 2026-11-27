@@ -1,10 +1,12 @@
-// Which student answer the integrity card quotes. Run:
+// What the integrity card quotes, and which answers it shows as
+// paste/tab-out evidence. Run:
 //   node --experimental-strip-types <this file>   (pnpm test runs it too)
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { quotedAnswer } from "./quoted-answer.ts";
+import { flaggedTurns, quotedAnswer } from "./quoted-answer.ts";
 
 type Turn = Parameters<typeof quotedAnswer>[0]["transcript"][number];
+type Summary = Parameters<typeof quotedAnswer>[0]["activity_summary"];
 const telemetry = {
   focus_blur_events: [],
   paste_events: [{ at: "2026-11-26T00:00:00Z", byte_count: 412 }],
@@ -27,38 +29,38 @@ const transcript = [
   turn(5, "student", "   "),
 ];
 
-test("no notable turn: quotes the last non-empty answer and the AI question before it", () => {
+function summary(notable: { ordinal: number; reasons: string[] }[]): Summary {
+  return {
+    totals: { tab_out_count: 0, tab_out_total_ms: 0, paste_count: 1, paste_total_chars: 412, paste_largest_chars: 412 },
+    notable_turns: notable,
+  } as Summary;
+}
+
+test("quotes the last non-empty answer and the AI question before it", () => {
   const q = quotedAnswer({ transcript, activity_summary: null });
   assert.equal(q?.turn.content, "idk the same thing");
   assert.equal(q?.question, "What if the sign flipped?");
-  assert.equal(q?.reason, null);
 });
 
-test("a notable turn wins over the last answer, with its reason", () => {
-  const q = quotedAnswer({
-    transcript,
-    activity_summary: {
-      totals: { tab_out_count: 0, tab_out_total_ms: 0, paste_count: 1, paste_total_chars: 412, paste_largest_chars: 412 },
-      notable_turns: [{ ordinal: 1, reasons: ["large_paste"] }],
-    },
-  });
-  assert.equal(q?.turn.content, "to cancel y");
-  assert.equal(q?.question, "Why add the equations?");
-  assert.equal(q?.reason, "large_paste");
-});
-
-test("a notable ordinal without telemetry falls back to the last answer", () => {
-  const q = quotedAnswer({
-    transcript,
-    activity_summary: {
-      totals: { tab_out_count: 1, tab_out_total_ms: 9000, paste_count: 0, paste_total_chars: 0, paste_largest_chars: 0 },
-      notable_turns: [{ ordinal: 4, reasons: ["long_tab_out"] }],
-    },
-  });
+test("a paste-marked earlier answer does NOT replace the last answer as the quote", () => {
+  const q = quotedAnswer({ transcript, activity_summary: summary([{ ordinal: 1, reasons: ["large_paste"] }]) });
   assert.equal(q?.turn.content, "idk the same thing");
-  assert.equal(q?.reason, null);
 });
 
 test("no student answer (only the AI opener): nothing to quote", () => {
   assert.equal(quotedAnswer({ transcript: [turn(0, "agent", "Hi")], activity_summary: null }), null);
+});
+
+test("flaggedTurns: the marked answers with their reasons, in order", () => {
+  const f = flaggedTurns({ transcript, activity_summary: summary([{ ordinal: 1, reasons: ["large_paste", "long_tab_out"] }]) });
+  assert.deepEqual(f.map((x) => [x.turn.content, x.reasons]), [["to cancel y", ["large_paste", "long_tab_out"]]]);
+});
+
+test("flaggedTurns: none without an activity summary or notable turns", () => {
+  assert.deepEqual(flaggedTurns({ transcript, activity_summary: null }), []);
+  assert.deepEqual(flaggedTurns({ transcript, activity_summary: summary([]) }), []);
+});
+
+test("flaggedTurns: a marked ordinal without telemetry is skipped", () => {
+  assert.deepEqual(flaggedTurns({ transcript, activity_summary: summary([{ ordinal: 4, reasons: ["long_tab_out"] }]) }), []);
 });

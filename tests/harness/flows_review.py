@@ -217,6 +217,21 @@ async def review_integrity_flow(
         await step("the card does not quote the student's last answer",
                    page.get_by_text(rs.last_answer).locator("visible=true").first
                    .wait_for(timeout=_TIMEOUT_MS))
+        # The paste is evidence under the activity flag, collapsed — not
+        # the quote, which stays the last answer.
+        evidence = page.locator("details:visible", has_text="What they sent on")
+        if await step("the card has no collapsed evidence for the pasted turn",
+                      evidence.first.wait_for(timeout=_TIMEOUT_MS)):
+            if await page.get_by_text(rs.pasted_answer).locator("visible=true").count():
+                issues.append("the pasted answer shows before the teacher opens the evidence "
+                              "(it replaced the last-answer quote, or the evidence isn't collapsed)")
+            if await evidence.first.get_attribute("open") is not None:
+                issues.append("the paste evidence is open by default (should be collapsed)")
+            await evidence.first.locator("summary").click(timeout=_TIMEOUT_MS)
+            await step("opening the evidence did not show the pasted answer",
+                       evidence.first.get_by_text(rs.pasted_answer)
+                       .wait_for(timeout=_TIMEOUT_MS))
+            await shot("01b-evidence-open")
         # The card's live region is the verdict line only — the quote
         # inside it would be read out on every student switch.
         if await page.locator("[role=status]:visible", has_text=rs.last_answer).count():
