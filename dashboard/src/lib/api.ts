@@ -563,29 +563,6 @@ export const api = {
   report: (id: string) => request<TeacherReportData>(`/admin/reports/${id}`),
   updateReport: (id: string, patch: { status: ReportStatus; resolution_note?: string | null }) =>
     mutate<TeacherReportData>(`/admin/reports/${id}`, "PATCH", patch),
-  // Leads
-  leads: () => request<{ leads: ContactLeadData[] }>("/admin/leads"),
-  lead: (id: string) => request<LeadDetail>(`/admin/leads/${id}`),
-  createLead: (body: CreateLeadBody) =>
-    mutate<{ id: string; status: string }>("/admin/leads", "POST", body),
-  updateLead: (leadId: string, patch: UpdateLeadBody) =>
-    mutate<{ status: string }>(`/admin/leads/${leadId}`, "PATCH", patch),
-  deleteLead: (leadId: string) =>
-    mutate<{ status: string }>(`/admin/leads/${leadId}`, "DELETE"),
-  // Lead meetings
-  createLeadMeeting: (leadId: string, body: CreateMeetingBody) =>
-    mutate<{ id: string; status: string }>(`/admin/leads/${leadId}/meetings`, "POST", body),
-  updateLeadMeeting: (leadId: string, meetingId: string, body: UpdateMeetingBody) =>
-    mutate<{ status: string }>(`/admin/leads/${leadId}/meetings/${meetingId}`, "PATCH", body),
-  deleteLeadMeeting: (leadId: string, meetingId: string) =>
-    mutate<{ status: string }>(`/admin/leads/${leadId}/meetings/${meetingId}`, "DELETE"),
-  // Lead notes
-  createLeadNote: (leadId: string, body: string) =>
-    mutate<{ id: string; status: string }>(`/admin/leads/${leadId}/notes`, "POST", { body }),
-  updateLeadNote: (leadId: string, noteId: string, body: string) =>
-    mutate<{ status: string }>(`/admin/leads/${leadId}/notes/${noteId}`, "PATCH", { body }),
-  deleteLeadNote: (leadId: string, noteId: string) =>
-    mutate<{ status: string }>(`/admin/leads/${leadId}/notes/${noteId}`, "DELETE"),
   // Schools
   schools: () => request<{ schools: SchoolListItem[] }>("/admin/schools"),
   school: (id: string) => request<SchoolDetail>(`/admin/schools/${id}`),
@@ -837,29 +814,6 @@ export interface GradingOverridesData {
   truncated: boolean;
 }
 
-// Lead types
-export type LeadSource = "inbound_form" | "warm_intro" | "outbound" | "event";
-export type LeadStatus =
-  | "new"
-  | "contacted"
-  | "engaged"
-  | "demo_held"
-  | "converted"
-  | "declined";
-export type MeetingType =
-  // Scheduled meetings
-  | "demo"
-  | "follow_up"
-  | "onboarding"
-  | "other"
-  // Contact touchpoints — logged after-the-fact, usually with
-  // alreadyHappened=true as the natural default.
-  | "email"
-  | "call"
-  | "dm"
-  | "text"
-  | "linkedin";
-
 export type ReportStatus = "open" | "resolved";
 export type ReportKind =
   | "wrong_grade"
@@ -901,93 +855,6 @@ export interface TeacherReportData {
   teacher_grade: { score_status: string | null; percent: number | null } | null;
   resolution_note: string | null;
   resolved_at: string | null;
-}
-
-export interface ContactLeadData {
-  id: string;
-  school_name: string;
-  contact_name: string;
-  contact_email: string;
-  role: string;
-  approx_students: number | null;
-  message: string | null;
-  status: LeadStatus;
-  source: LeadSource;
-  referred_by: string | null;
-  next_meeting_at: string | null;
-  next_meeting_type: MeetingType | null;
-  last_touch_at: string;
-  last_touch_kind: "created" | "meeting" | "note";
-  created_at: string;
-  updated_at: string | null;
-  updated_by: string | null;
-  school_id: string | null;
-}
-
-export interface LeadMeeting {
-  id: string;
-  type: MeetingType;
-  scheduled_at: string;
-  held_at: string | null;
-  cancelled_at: string | null;
-  agenda: string | null;
-  outcome: string | null;
-  created_at: string;
-  created_by: string | null;
-  updated_at: string | null;
-  updated_by: string | null;
-}
-
-export interface LeadNote {
-  id: string;
-  body: string;
-  created_at: string;
-  created_by: string | null;
-  updated_at: string | null;
-}
-
-export interface LeadDetail extends ContactLeadData {
-  meetings: LeadMeeting[];
-  notes: LeadNote[];
-}
-
-export interface CreateLeadBody {
-  school_name: string;
-  contact_name: string;
-  contact_email: string;
-  role?: string;
-  source: LeadSource;
-  referred_by?: string | null;
-  approx_students?: number | null;
-  initial_note?: string | null;
-}
-
-export interface UpdateLeadBody {
-  status?: LeadStatus;
-  source?: LeadSource;
-  referred_by?: string | null;
-  school_id?: string;
-  approx_students?: number | null;
-  school_name?: string;
-  contact_name?: string;
-  contact_email?: string;
-}
-
-export interface CreateMeetingBody {
-  type: MeetingType;
-  scheduled_at: string;
-  agenda?: string | null;
-  held_at?: string | null;
-  outcome?: string | null;
-}
-
-export interface UpdateMeetingBody {
-  type?: MeetingType;
-  scheduled_at?: string;
-  agenda?: string | null;
-  held_at?: string | null;
-  outcome?: string | null;
-  cancelled_at?: string | null;
 }
 
 // School types

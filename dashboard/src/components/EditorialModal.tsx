@@ -9,7 +9,7 @@ import { overlay } from "../lib/styles";
  * - Top accent bar in --accent (the burnt-sienna mark that signals
  *   "this is an intake surface").
  * - Eyebrow label / serif h2 title / italic-serif subtitle stack —
- *   the editorial pattern established by the Add Lead intake card.
+ *   the console's editorial pattern.
  * - Close button in the top-right corner.
  * - role="dialog" + aria-modal + aria-labelledby wired to the title.
  * - Focus returns to whatever was focused at mount time when the
@@ -32,9 +32,8 @@ export function EditorialModal({
 }: {
   eyebrow?: string;
   title: string;
-  /** Title font-size in px. The Add Lead intake card uses 32px for
-   *  hero emphasis; smaller modals (Schedule, Note, Convert) use
-   *  the 26px default which sits closer to body type. */
+  /** Title font-size in px. 32px for hero emphasis; the 26px default
+   *  sits closer to body type. */
   titleSize?: number;
   subtitle?: string;
   onClose: () => void;

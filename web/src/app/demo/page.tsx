@@ -52,8 +52,8 @@ export default function DemoPage() {
     try {
       // Parse approx_students leniently — empty stays undefined,
       // non-numeric drops to undefined, decimals get rounded to the
-      // nearest integer (backend column is INT). Backend column
-      // accepts NULL so omitting it is fine.
+      // nearest integer — the API takes a non-negative int or nothing
+      // (ContactFormRequest.approx_students).
       const trimmed = form.approx_students.trim();
       const parsed = trimmed ? Number(trimmed) : NaN;
       const students =

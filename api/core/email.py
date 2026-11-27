@@ -20,9 +20,15 @@ def _configure() -> bool:
 
 async def send_email(*, to: list[str], subject: str, html: str) -> None:
     """Send an email via Resend. Logs and swallows errors so callers never crash."""
+    await deliver_email(to=to, subject=subject, html=html)
+
+
+async def deliver_email(*, to: list[str], subject: str, html: str) -> bool:
+    """``send_email`` for a caller that has to know: True once Resend took
+    the message, False when it was skipped (no key) or failed (logged)."""
     if not _configure():
         logger.warning("RESEND_API_KEY not set — skipping email to %s", to)
-        return
+        return False
 
     try:
         await asyncio.to_thread(
@@ -35,5 +41,7 @@ async def send_email(*, to: list[str], subject: str, html: str) -> None:
             },
         )
         logger.info("Email sent to %s — subject: %s", to, subject)
+        return True
     except Exception:
         logger.exception("Failed to send email to %s — subject: %s", to, subject)
+        return False

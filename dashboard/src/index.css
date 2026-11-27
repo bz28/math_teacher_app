@@ -428,15 +428,6 @@ h3 {
    optional sub. No box chrome. Hairlines below.
    ────────────────────────────────────────────────────────────────── */
 
-.stat-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 0;
-  margin-bottom: 28px;
-  border-top: 1px solid var(--rule);
-  border-bottom: 1px solid var(--rule);
-}
-
 .stat-card {
   padding: 18px 22px 18px 0;
   position: relative;
@@ -1230,7 +1221,6 @@ tr.clickable:hover { background: var(--paper-2); }
 .dot-warn     { color: var(--warn); }
 .dot-danger   { color: var(--danger); }
 .dot-muted    { color: var(--muted-2); }
-.dot-accent   { color: var(--accent); }
 
 /* ──────────────────────────────────────────────────────────────────
    Filters bar
@@ -1652,7 +1642,7 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
 }
 
 /* ──────────────────────────────────────────────────────────────────
-   List rows — used by Schools, Leads
+   List rows — used by Schools
    for the "no table chrome, just hairlines" presentation.
    ────────────────────────────────────────────────────────────────── */
 

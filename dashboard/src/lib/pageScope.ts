@@ -5,8 +5,8 @@
  *                (Teacher reports, LLM calls, Users, Audit log,
  *                Accuracy, Costs).
  *   "platform" — its data belongs to no school, so the scope does not
- *                apply: the Schools directory and Leads (the business
- *                side) and the Admins preset of Users (admins have no school).
+ *                apply: the Schools directory and the Admins preset of
+ *                Users (admins have no school).
  *   null       — a page about ONE thing: a school, a teacher, a
  *                submission. Its subject is fixed by the URL.
  *
@@ -25,7 +25,7 @@ const SCHOOL_SCOPED = [
   "/costs",
 ];
 
-const PLATFORM = ["/schools", "/leads"];
+const PLATFORM = ["/schools"];
 
 export function pageScope(pathname: string, search: string): PageScope {
   const params = new URLSearchParams(search);
@@ -38,11 +38,10 @@ export function pageScope(pathname: string, search: string): PageScope {
   ) {
     return null;
   }
-  // Exact matches only: /reports/:id, /leads/:id and /schools/:id are
+  // Exact matches only: /reports/:id and /schools/:id are
   // single-thing pages, not the lists.
   if (SCHOOL_SCOPED.includes(pathname)) return "school";
   if (PLATFORM.includes(pathname)) return "platform";
-  if (pathname.startsWith("/leads/")) return "platform";
   return null;
 }
 

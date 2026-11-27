@@ -5,9 +5,9 @@ import { api, type SchoolListItem } from "./api";
  * Which school the console is scoped to — or `null` for All schools.
  *
  * This is the console's scope. Every page whose data belongs to schools
- * (the accuracy pages, Teacher reports, LLM calls, Users,
+ * (Accuracy, Teacher reports, LLM calls, Users,
  * Audit log) reads it and sends it as `school_id`; the backend filters on
- * it. Pages whose data belongs to no school (Schools directory, Leads)
+ * it. Pages whose data belongs to no school (the Schools directory)
  * ignore it, and the rail's scope line says so.
  *
  * `null` means All schools: the endpoints are called with no `school_id`,
@@ -125,8 +125,8 @@ export function useSelectedSchool(): SelectedSchool {
   // successful, non-empty load — a failed fetch proves nothing.
   //
   // "Proves" means a list fetched AFTER the id was chosen. The list is
-  // loaded once per session, so a school created since (Add school, or
-  // converting a lead) is missing from it while being perfectly real —
+  // loaded once per session, so a school created since (Add school) is
+  // missing from it while being perfectly real —
   // opening it would otherwise be undone straight away. So a missing id
   // first refetches the list, and only a miss in a list fetched after that
   // id was chosen resets.
