@@ -36,7 +36,6 @@ behind that logged drill-in.
 """
 
 import uuid
-from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -44,6 +43,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.audit_log import log_student_record_access
+from api.core.llm_attribution import calls_of
 from api.core.submission_stage import (
     STAGE_ORDER,
     has_content_expr,
@@ -63,6 +63,7 @@ from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.session import Session
 from api.models.user import User
+from api.routes.admin_helpers import last_days
 
 router = APIRouter()
 
@@ -255,13 +256,14 @@ async def student_detail(
     for r in stage_rows:
         funnel[_stage_of(r)] += 1
 
-    since_30d = datetime.now(UTC) - timedelta(days=30)
+    # The one whose-call rule (api/core/llm_attribution.py): calls the
+    # student made plus every call on their submissions, whoever ran it.
     llm_stats = (await db.execute(
         select(
             func.count().label("call_count"),
             func.coalesce(func.sum(LLMCall.cost_usd), 0).label("total_cost"),
         )
-        .where(LLMCall.user_id == student_id, LLMCall.created_at >= since_30d)
+        .where(calls_of(student_id), last_days(30).covers(LLMCall.created_at))
     )).one()
 
     last_submitted = (await db.execute(
