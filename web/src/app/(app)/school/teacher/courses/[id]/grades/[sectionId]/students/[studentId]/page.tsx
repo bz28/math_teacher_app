@@ -271,19 +271,22 @@ function PublishedHwRow({
       </div>
       {hw.final_score === null && hw.draft_state !== null && hw.draft_score !== null ? (
         <span className="flex shrink-0 items-center gap-2">
-          <span className="text-[11px] tabular-nums text-text-muted">
-            {hw.draft_state === "awaiting_review" ? "AI " : ""}
-            {Math.round(hw.draft_score)}%
-          </span>
-          {hw.draft_state === "awaiting_review" ? (
-            <span className="rounded-[--radius-pill] border border-primary/30 bg-primary-bg px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">
-              Awaiting your review
-            </span>
-          ) : (
-            <span className="rounded-[--radius-pill] border border-border-light bg-[color:var(--color-surface-alt-2)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
-              Graded, not published
+          {/* A partly graded score is of some problems only, so it isn't shown. */}
+          {hw.draft_state !== "partly_graded" && (
+            <span className="text-[11px] tabular-nums text-text-muted">
+              {hw.draft_state === "awaiting_review" ? "AI " : ""}
+              {Math.round(hw.draft_score)}%
             </span>
           )}
+          <span
+            className={`rounded-[--radius-pill] border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${
+              hw.draft_state === "awaiting_review"
+                ? "border-primary/30 bg-primary-bg text-primary"
+                : "border-border-light bg-[color:var(--color-surface-alt-2)] text-[color:var(--color-text-secondary)]"
+            }`}
+          >
+            {DRAFT_LABEL[hw.draft_state]}
+          </span>
         </span>
       ) : hw.final_score === null ? (
         <span className="shrink-0 rounded-[--radius-pill] border border-border-light bg-[color:var(--color-surface-alt-2)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
@@ -295,6 +298,13 @@ function PublishedHwRow({
     </Link>
   );
 }
+
+// Worded as the review page's own markers for the same states.
+const DRAFT_LABEL = {
+  awaiting_review: "Awaiting your review",
+  graded_unpublished: "Graded, not published",
+  partly_graded: "Partly graded",
+} as const;
 
 function MissingHwRow({ hw }: { hw: StudentGradesResponse["missing_hws"][number] }) {
   return (

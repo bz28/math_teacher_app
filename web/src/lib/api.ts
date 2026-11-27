@@ -1497,10 +1497,10 @@ export interface StudentGradePublishedHw {
   final_score: number | null;
   teacher_notes: string | null;
   /** A grade that exists but isn't published, so the row doesn't read
-   *  "Not graded yet": an AI grade awaiting the teacher's approval, or a
-   *  finished one awaiting only Publish. Null once published or when
-   *  there's no grade. */
-  draft_state: "awaiting_review" | "graded_unpublished" | null;
+   *  "Not graded yet": an AI grade awaiting the teacher's approval, a
+   *  finished one awaiting only Publish, or a hand grade covering only
+   *  some problems. Null once published or when there's no grade. */
+  draft_state: "awaiting_review" | "graded_unpublished" | "partly_graded" | null;
   /** The draft score that would publish (late penalty and edits in). */
   draft_score: number | null;
   /** Included so the detail page can link into the review page. */

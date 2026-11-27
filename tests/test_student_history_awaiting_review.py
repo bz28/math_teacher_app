@@ -103,6 +103,14 @@ async def test_hand_grade_is_graded_not_published(client: AsyncClient, world: di
     assert (row["draft_state"], row["draft_score"]) == ("graded_unpublished", 90.0)
 
 
+async def test_partial_hand_grade_is_partly_graded(client: AsyncClient, world: dict[str, Any]) -> None:
+    """A hand grade covering only some problems is left unstamped (Publish
+    only reviewed won't release it): it isn't "Graded, not published"."""
+    course_id, section_id = await _grade(world, final_score=50.0)
+    row = await _row(client, world, course_id, section_id)
+    assert row["draft_state"] == "partly_graded"
+
+
 async def test_approval_is_reviewed_at_even_without_reviewer(client: AsyncClient, world: dict[str, Any]) -> None:
     """reviewed_by goes NULL when the approving teacher's account is deleted;
     reviewed_at still says it was approved."""
