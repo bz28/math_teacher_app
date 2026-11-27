@@ -89,6 +89,19 @@ class ProblemDelta:
     final_percent: float
     delta: float  # final - ai; + = teacher raised (AI too harsh)
     is_override: bool
+    # The problem's 1-based position on the assignment — what the case
+    # file's `#pN` anchor names. The AI snapshot records it; an entry that
+    # lacks it falls back to its place in the (order-preserving) list.
+    position: int
+
+
+def _position(recorded: Any, index: int) -> int:
+    """The AI's recorded ``problem_position`` when it is a usable int,
+    else the entry's 1-based place in the list (``bool`` is an ``int``
+    subclass, so it is refused explicitly)."""
+    if isinstance(recorded, int) and not isinstance(recorded, bool) and recorded >= 1:
+        return recorded
+    return index + 1
 
 
 def compare_grade(
@@ -118,7 +131,7 @@ def compare_grade(
         return None
 
     deltas: list[ProblemDelta] = []
-    for ai_g, final_g in zip(ai_grades, breakdown, strict=True):
+    for index, (ai_g, final_g) in enumerate(zip(ai_grades, breakdown, strict=True)):
         ai_status = ai_g.get("score_status")
         final_status = final_g.get("score_status")
         ai_pct = normalize_percent(ai_status, ai_g.get("percent"))
@@ -142,6 +155,7 @@ def compare_grade(
                 final_percent=final_pct,
                 delta=delta,
                 is_override=is_override,
+                position=_position(ai_g.get("problem_position"), index),
             )
         )
     return deltas or None

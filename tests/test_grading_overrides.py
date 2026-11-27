@@ -88,6 +88,32 @@ def test_status_change_is_an_override() -> None:
     assert d.delta == 50.0  # teacher raised
 
 
+def test_position_is_the_ais_recorded_problem_position() -> None:
+    # The case file anchors on `#p{problem_position}`; a drill-in link
+    # must land on the problem the AI recorded, not its list index.
+    deltas = compare_grade(
+        _ai(
+            {**_g("zero", 0), "problem_position": 3},
+            {**_g("full", 100), "problem_position": 7},
+        ),
+        [_g("full", 100), _g("full", 100)],
+    )
+    assert deltas is not None
+    assert [d.position for d in deltas] == [3, 7]
+
+
+def test_position_falls_back_to_list_place_when_unrecorded() -> None:
+    # Missing, null, non-int, bool and non-positive positions all fall
+    # back to the entry's 1-based place in the order-preserving list.
+    bad = [None, "2", True, 0]
+    deltas = compare_grade(
+        _ai(_g("zero", 0), *({**_g("zero", 0), "problem_position": b} for b in bad)),
+        [_g("full", 100)] * 5,
+    )
+    assert deltas is not None
+    assert [d.position for d in deltas] == [1, 2, 3, 4, 5]
+
+
 def test_sub_tolerance_percent_nudge_is_not_an_override() -> None:
     deltas = compare_grade(
         _ai(_g("partial", 60)),
@@ -201,8 +227,8 @@ def test_no_overrides_is_unmeasured_not_balanced() -> None:
     """
     # Two problems, both graded, neither overridden.
     agreed = [
-        ProblemDelta("full", "full", 100.0, 100.0, 0.0, False),
-        ProblemDelta("partial", "partial", 60.0, 60.0, 0.0, False),
+        ProblemDelta("full", "full", 100.0, 100.0, 0.0, False, 1),
+        ProblemDelta("partial", "partial", 60.0, 60.0, 0.0, False, 1),
     ]
     out = summarize(agreed)
     assert out["overridden_problems"] == 0
@@ -215,8 +241,8 @@ def test_real_agreement_is_still_balanced() -> None:
     out ARE evidence of calibration — a teacher raised one problem and
     lowered another by the same amount, and the AI came out even."""
     cancelling = [
-        ProblemDelta("partial", "partial", 50.0, 60.0, 10.0, True),
-        ProblemDelta("partial", "partial", 60.0, 50.0, -10.0, True),
+        ProblemDelta("partial", "partial", 50.0, 60.0, 10.0, True, 1),
+        ProblemDelta("partial", "partial", 60.0, 50.0, -10.0, True, 1),
     ]
     out = summarize(cancelling)
     assert out["overridden_problems"] == 2
