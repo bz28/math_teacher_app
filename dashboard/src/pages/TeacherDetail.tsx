@@ -2,11 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api, type TeacherRosterStudent, type TeacherStudentsData } from "../lib/api";
 import { formatRelativeDate } from "../lib/format";
-import { activityPill, activityStatus, costWindowLabel } from "../lib/definitions";
+import { activityPill, activityStatus } from "../lib/definitions";
 import StatTile from "../components/StatTile";
 import StatusPill from "../components/StatusPill";
 import DataTable, { type Column } from "../components/DataTable";
 import TeacherActivitySection from "../components/TeacherActivitySection";
+import CallsPanel from "../components/CallsPanel";
 import TeacherLLMCalls from "../components/TeacherLLMCalls";
 import TeacherAssignments from "../components/TeacherAssignments";
 import TeacherSubmissions from "../components/TeacherSubmissions";
@@ -143,14 +144,6 @@ export default function TeacherDetail() {
             the calls it describes; the calls panel header carries it now. */}
         <div style={{ display: "flex", gap: 28, alignItems: "flex-start", flexWrap: "wrap" }}>
           <HeadlineStat label="Students" value={data.total_students.toLocaleString()} />
-          {/* The classroom total, not the calls billed to her user id.
-              The generation split lives on the panel below. */}
-          <HeadlineStat
-            label="Model calls"
-            value={t.call_count_30d.toLocaleString()}
-            muted={t.call_count_30d === 0}
-            sub={costWindowLabel(30)}
-          />
           <HeadlineStat label="Generations" value={u.generations.toLocaleString()} />
         </div>
       </div>
@@ -205,6 +198,9 @@ export default function TeacherDetail() {
           <>This teacher hasn't created any assignments yet.</>
         )}
       </p>
+
+      {/* Her calls: her own plus every call on her homework. */}
+      <CallsPanel key={t.id} scope={{ kind: "teacher", id: t.id }} />
 
       {/* ── ③ AI generations + activity timeline (richest surface) ── */}
       <TeacherActivitySection teacherId={t.id} />

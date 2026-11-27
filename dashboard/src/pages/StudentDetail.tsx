@@ -7,11 +7,12 @@ import {
   type SubmissionStage,
 } from "../lib/api";
 import {
-  fmtAge, fmtCost, fmtClockTime, formatRelativeDate,
+  fmtAge, fmtClockTime, formatRelativeDate,
 } from "../lib/format";
 import { activityPill, activityStatus } from "../lib/definitions";
 import { STAGE_META, STAGE_ORDER, isStalled } from "../lib/stages";
 import DataTable, { type Column } from "../components/DataTable";
+import CallsPanel from "../components/CallsPanel";
 import StatTile from "../components/StatTile";
 import StatusPill from "../components/StatusPill";
 import { useScopeToSchool } from "../lib/useSelectedSchool";
@@ -409,12 +410,10 @@ export default function StudentDetail() {
               : "no activity on record"
           }
         />
-        <StatTile
-          label="AI cost · 30d"
-          value={fmtCost(s.total_cost_30d)}
-          sub={`${s.call_count_30d.toLocaleString()} calls`}
-        />
       </div>
+
+      {/* Their calls: ones they made plus ones on their submissions. */}
+      <CallsPanel key={s.id} scope={{ kind: "student", id: s.id }} />
 
       {/* ── The funnel. Position encodes the sequence, so no numbering;
           the underbar carries the shape and the number stays legible at
