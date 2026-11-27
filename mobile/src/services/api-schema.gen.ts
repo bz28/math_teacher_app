@@ -2245,7 +2245,7 @@ export interface paths {
          *     photos were the problem — sideways, blurry, a page missing. Allowed
          *     once, under `_retake_block`'s rules, while the homework still takes
          *     turn-ins. The new photos go through exactly submit's validation
-         *     (`_validated_upload_files`), and the reading is spawned the same way.
+         *     (`validated_upload_files`), and the reading is spawned the same way.
          *     The submission then walks the normal path again: the student checks
          *     the new reading, confirms or flags it.
          *
