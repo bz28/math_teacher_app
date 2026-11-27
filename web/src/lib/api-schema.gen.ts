@@ -372,6 +372,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/llm-calls/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Llm Calls Summary
+         * @description The calls panel: `call_summary` for any scope the filters name.
+         */
+        get: operations["llm_calls_summary_v1_admin_llm_calls_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/llm-calls/{call_id}/debug": {
         parameters: {
             query?: never;
@@ -494,16 +514,14 @@ export interface paths {
          *
          *     The unit is teacher→class, not a flat school-wide roster. We return
          *     every teacher, their sections (class periods), and each section's
-         *     enrolled students — with cost rolled up to the level where it's
-         *     unambiguously attributable:
+         *     enrolled students — with cost at two levels:
          *
-         *       * Per-submission AI (Vision extraction + integrity + AI grading,
-         *         and grading of assigned practice) is attributable via
-         *         LLMCall.submission_id → submission → section, so it rolls up to
-         *         the **section**.
-         *       * A teacher's authoring/generation spend has no submission, so it
-         *         can't be pinned to one section — it stays at the **teacher**
-         *         level (LLMCall.user_id = teacher, submission_id IS NULL).
+         *       * A **teacher's** cost follows the one whose-call rule
+         *         (api/core/llm_attribution.py): their own calls plus every call
+         *         on a submission to their homework — the same number their own
+         *         page and the Users list show.
+         *       * A **section's** cost is the calls on submissions handed in to
+         *         it (LLMCall.submission_id → submission → section).
          *
          *     All aggregation is done with grouped subqueries assembled in Python
          *     (no per-teacher / per-section follow-up queries), so a large school
@@ -7764,16 +7782,66 @@ export interface operations {
     llm_calls_v1_admin_llm_calls_get: {
         parameters: {
             query?: {
+                limit?: number;
+                offset?: number;
                 hours?: number;
+                from?: string | null;
+                to?: string | null;
                 function?: string | null;
+                model?: string | null;
                 user_id?: string | null;
+                teacher_id?: string | null;
+                student_id?: string | null;
                 submission_id?: string | null;
                 session_id?: string | null;
                 school_id?: string | null;
                 success?: boolean | null;
                 search?: string | null;
-                limit?: number;
-                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    llm_calls_summary_v1_admin_llm_calls_summary_get: {
+        parameters: {
+            query?: {
+                hours?: number;
+                from?: string | null;
+                to?: string | null;
+                function?: string | null;
+                model?: string | null;
+                user_id?: string | null;
+                teacher_id?: string | null;
+                student_id?: string | null;
+                submission_id?: string | null;
+                session_id?: string | null;
+                school_id?: string | null;
+                success?: boolean | null;
+                search?: string | null;
             };
             header?: never;
             path?: never;
