@@ -3,7 +3,7 @@
 Covers the redesign's new server-side capabilities: the free-text search over
 prompt in / response out, the function selector, the success/failure toggle, the
 session scope (the "session link"), the failing-functions rollup, and the
-window-level p95 latency + totals that feed the top strip.
+summary (totals + success-only p95) that feeds the top strip.
 """
 
 from __future__ import annotations
@@ -71,10 +71,12 @@ async def test_strip_totals_and_p95(client: AsyncClient) -> None:
     ])
     token = create_access_token(admin_id, "admin")
     body = await _get(client, token, hours="24")
-    assert body["total_count_window"] == 10
-    assert abs(body["total_cost_window"] - 0.10) < 1e-6
-    assert body["p95_latency_ms"] >= 90        # tail latency, not the mean (~55)
-    assert body["failure_count"] == 0 and body["failure_rate"] == 0.0
+    summary = body["summary"]
+    assert summary["calls"] == 10
+    assert abs(summary["spend"] - 0.10) < 1e-6
+    assert summary["latency_p95_ms"] >= 90        # tail latency, not the mean (~55)
+    assert summary["latency_n"] == 10
+    assert summary["failed"] == 0 and summary["failure_rate"] == 0.0
 
 
 async def test_search_over_input_and_output(client: AsyncClient) -> None:
@@ -132,14 +134,14 @@ async def test_failures_by_function_rollup(client: AsyncClient) -> None:
     body = await _get(client, token, hours="24")
     rollup = {r["function"]: r["count"] for r in body["failures_by_function"]}
     assert rollup == {"solve": 2, "grade": 1}
-    assert body["failure_count"] == 3
+    assert body["summary"]["failed"] == 3
     # Regression: avg() of the integer retry_count returns a Decimal; without a
     # float() cast it JSON-encodes as a string ("2.0") and breaks the dashboard's
     # numeric .toFixed(). Every strip/rollup number must be a real JSON number.
     for r in body["failures_by_function"]:
         assert isinstance(r["avg_retries"], (int, float))
-    for key in ("p95_latency_ms", "total_cost_window", "failure_rate"):
-        assert isinstance(body[key], (int, float)), key
+    for key in ("latency_p95_ms", "spend", "failure_rate"):
+        assert isinstance(body["summary"][key], (int, float)), key
 
 
 async def test_session_scope(client: AsyncClient) -> None:

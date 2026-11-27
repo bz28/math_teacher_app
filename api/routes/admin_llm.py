@@ -1,7 +1,7 @@
 """Admin LLM call analytics endpoint."""
 
 import uuid as uuid_lib
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 import httpx
@@ -10,6 +10,7 @@ from sqlalchemy import Date, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
+from api.core.llm_attribution import calls_of, is_deleted_submission_call, school_calls
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
 from api.models.assignment import Assignment, Submission, SubmissionGrade
@@ -18,7 +19,7 @@ from api.models.llm_call import LLMCall
 from api.models.llm_payload import LLMPayload
 from api.models.school import School
 from api.models.user import User
-from api.routes.admin_helpers import INTERNAL_SCHOOL_SENTINEL, time_range
+from api.routes.admin_helpers import INTERNAL_SCHOOL_SENTINEL, resolve_window
 
 router = APIRouter()
 
@@ -34,74 +35,199 @@ def _escape_like(term: str) -> str:
     return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
+class CallFilters:
+    """Every filter the calls views take. All of them narrow the
+    aggregates AND the list, so the strip above the table always
+    describes exactly the rows below it.
+
+    `hours` is the preset window; `from`/`to` (whole UTC days, inclusive)
+    override it with a custom range. `user_id` is "made the call";
+    `teacher_id` / `student_id` use the one whose-call rule
+    (api/core/llm_attribution.py) — the same rule every per-level cost
+    on the console reads.
+    """
+
+    def __init__(
+        self,
+        hours: int = Query(default=168, ge=1, le=8760),
+        date_from: date | None = Query(default=None, alias="from"),
+        date_to: date | None = Query(default=None, alias="to"),
+        function: str | None = Query(default=None),
+        model: str | None = Query(default=None),
+        user_id: str | None = Query(default=None),
+        teacher_id: str | None = Query(default=None),
+        student_id: str | None = Query(default=None),
+        submission_id: str | None = Query(default=None),
+        session_id: str | None = Query(default=None),
+        school_id: str | None = Query(default=None),
+        success: bool | None = Query(default=None),
+        search: str | None = Query(default=None),
+    ) -> None:
+        # Reject malformed UUIDs up front so a typo in the URL surfaces
+        # as a clean 400 rather than asyncpg's invalid-text-representation
+        # bubbling out as a 500.
+        for label, value in (
+            ("user_id", user_id),
+            ("teacher_id", teacher_id),
+            ("student_id", student_id),
+            ("submission_id", submission_id),
+            ("session_id", session_id),
+            ("school_id", None if school_id == INTERNAL_SCHOOL_SENTINEL else school_id),
+        ):
+            if value:
+                try:
+                    uuid_lib.UUID(value)
+                except ValueError as e:
+                    raise HTTPException(status_code=400, detail=f"invalid {label}") from e
+
+        self.window = resolve_window(hours, date_from, date_to)
+        in_window = self.window.covers(LLMCall.created_at)
+
+        # WHERE the calls come from: the window and the school.
+        place: list[Any] = [in_window]
+        if school_id:
+            # "internal" = calls stamped with no school (admin/system calls
+            # and legacy pre-backfill rows).
+            place.append(school_calls(
+                None if school_id == INTERNAL_SCHOOL_SENTINEL else school_id,
+            ))
+
+        # WHOSE calls they are.
+        who: list[Any] = []
+        if user_id:
+            who.append(LLMCall.user_id == user_id)
+        for person in (teacher_id, student_id):
+            if person:
+                who.append(calls_of(person))
+        if submission_id:
+            # Per-submission flight recorder: every Vision, integrity and
+            # grading call for one homework.
+            who.append(LLMCall.submission_id == submission_id)
+        if session_id:
+            # Every call sharing one conversational session.
+            who.append(LLMCall.session_id == session_id)
+
+        # WHICH of those calls: the narrowing filters.
+        which: list[Any] = []
+        if function:
+            which.append(LLMCall.function == function)
+        if model:
+            which.append(LLMCall.model == model)
+        if success is not None:
+            which.append(LLMCall.success.is_(success))
+        if search:
+            # Free-text search over the exact prompt in / response out.
+            # %/_ are escaped so a search term reads as a literal.
+            like = f"%{_escape_like(search)}%"
+            which.append(or_(
+                LLMCall.input_text.ilike(like, escape="\\"),
+                LLMCall.output_text.ilike(like, escape="\\"),
+            ))
+
+        self.conditions = [*place, *who, *which]
+        # Dropdown options must not shrink to the current choice: the user
+        # list spans the window and school, the function and model lists
+        # everything but the narrowing filters.
+        self.user_options = place
+        self.option_scope = [*place, *who]
+        self.submission_id = submission_id
+
+
+async def call_summary(db: AsyncSession, conds: list[Any]) -> dict[str, Any]:
+    """The compact picture of a set of calls, for the calls panel at every
+    level (school, teacher, student, submission) and the Calls page strip.
+
+    Latency percentiles are over SUCCESSFUL calls only, with their sample
+    size: a failed call's latency is a timeout or an instant refusal, and
+    mixing those in moves p95 for reasons that aren't speed.
+    """
+    totals = (await db.execute(
+        select(
+            func.count().label("calls"),
+            func.coalesce(func.sum(LLMCall.cost_usd), 0.0).label("spend"),
+            func.count().filter(LLMCall.success.is_(False)).label("failed"),
+        ).where(*conds)
+    )).one()
+    latency = (await db.execute(
+        select(
+            func.percentile_cont(0.5).within_group(LLMCall.latency_ms.asc()).label("p50"),
+            func.percentile_cont(0.95).within_group(LLMCall.latency_ms.asc()).label("p95"),
+            func.count().label("n"),
+        ).where(*conds, LLMCall.success.is_(True))
+    )).one()
+    by_function = (await db.execute(
+        select(
+            LLMCall.function,
+            func.count().label("calls"),
+            func.coalesce(func.sum(LLMCall.cost_usd), 0.0).label("spend"),
+        )
+        .where(*conds)
+        .group_by(LLMCall.function)
+        .order_by(func.sum(LLMCall.cost_usd).desc(), LLMCall.function)
+    )).all()
+    failures = (await db.execute(
+        select(
+            LLMCall.id, LLMCall.function, LLMCall.model, LLMCall.created_at,
+            LLMCall.latency_ms, LLMCall.retry_count, LLMCall.submission_id,
+            LLMCall.output_text,
+        )
+        .where(*conds, LLMCall.success.is_(False))
+        .order_by(LLMCall.created_at.desc(), LLMCall.id)
+        .limit(5)
+    )).all()
+    calls = int(totals.calls)
+    failed = int(totals.failed)
+    return {
+        "calls": calls,
+        "spend": round(float(totals.spend), 4),
+        "failed": failed,
+        "failure_rate": round(failed / calls * 100, 1) if calls else 0.0,
+        "latency_p50_ms": round(float(latency.p50), 1) if latency.p50 is not None else None,
+        "latency_p95_ms": round(float(latency.p95), 1) if latency.p95 is not None else None,
+        "latency_n": int(latency.n),
+        "spend_by_function": [
+            {"function": r.function, "calls": int(r.calls), "spend": round(float(r.spend), 4)}
+            for r in by_function
+        ],
+        "latest_failures": [
+            {
+                "id": str(f.id),
+                "function": f.function,
+                "model": f.model,
+                "created_at": f.created_at.isoformat(),
+                "latency_ms": round(f.latency_ms, 1),
+                "retry_count": f.retry_count,
+                "submission_id": str(f.submission_id) if f.submission_id else None,
+                "deleted_submission": is_deleted_submission_call(f.function, f.submission_id),
+                # Failed calls store the error in output_text.
+                "error": (f.output_text or "")[:300] or None,
+            }
+            for f in failures
+        ],
+    }
+
+
+@router.get("/llm-calls/summary")
+async def llm_calls_summary(
+    filters: CallFilters = Depends(),
+    current_user: CurrentUser = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """The calls panel: `call_summary` for any scope the filters name."""
+    return await call_summary(db, filters.conditions)
+
+
 @router.get("/llm-calls")
 async def llm_calls(
-    hours: int = Query(default=168, ge=1, le=8760),
-    function: str | None = Query(default=None),
-    user_id: str | None = Query(default=None),
-    submission_id: str | None = Query(default=None),
-    session_id: str | None = Query(default=None),
-    school_id: str | None = Query(default=None),
-    success: bool | None = Query(default=None),
-    search: str | None = Query(default=None),
+    filters: CallFilters = Depends(),
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    since = time_range(hours)
-
-    # Reject malformed UUIDs up front so a typo in the URL surfaces
-    # as a clean 400 rather than asyncpg's invalid-text-representation
-    # bubbling out as a 500. Same defensive pattern admin_school_overview
-    # uses on its own school_id path segment.
-    for label, value in (
-        ("user_id", user_id),
-        ("submission_id", submission_id),
-        ("session_id", session_id),
-    ):
-        if value:
-            try:
-                uuid_lib.UUID(value)
-            except ValueError as e:
-                raise HTTPException(
-                    status_code=400, detail=f"invalid {label}",
-                ) from e
-    if school_id and school_id != INTERNAL_SCHOOL_SENTINEL:
-        try:
-            uuid_lib.UUID(school_id)
-        except ValueError as e:
-            raise HTTPException(
-                status_code=400, detail="invalid school_id",
-            ) from e
-
-    # Build base filter conditions
-    base_filters = [LLMCall.created_at >= since]
-    if user_id:
-        base_filters.append(LLMCall.user_id == user_id)
-    if submission_id:
-        # Per-submission flight-recorder filter — pulls every Vision +
-        # equivalence + agent + grading call for one homework so the
-        # admin dashboard can render the full pipeline trace in one
-        # place. Indexed on submission_id, instant.
-        base_filters.append(LLMCall.submission_id == submission_id)
-    if session_id:
-        # Session scope — pulls every call sharing one conversational
-        # session (understanding-check turns, tutoring, learn/practice/
-        # integrity chat) across submissions. Powers both the "session
-        # link" in a row's detail and the "view the whole session" jump
-        # from the submission trace. Indexed on session_id, instant.
-        base_filters.append(LLMCall.session_id == session_id)
-    if school_id == INTERNAL_SCHOOL_SENTINEL:
-        # The "Internal" pseudo-school — LLMCall rows with school_id
-        # IS NULL. Post-bp1000059 that's admin/system calls plus
-        # legacy pre-backfill rows (LLMCall.school_id snapshots the
-        # user's school at write time and isn't rewritten when an
-        # indie teacher is later linked to their individual school).
-        base_filters.append(LLMCall.school_id.is_(None))
-    elif school_id:
-        # Scope to a specific school. Indexed; instant.
-        base_filters.append(LLMCall.school_id == school_id)
+    base_filters = filters.conditions
+    submission_id = filters.submission_id
+    summary = await call_summary(db, base_filters)
 
     # Aggregated stats
     stats_query = (
@@ -116,15 +242,6 @@ async def llm_calls(
         .order_by(func.sum(LLMCall.cost_usd).desc())
     )
     stats = (await db.execute(stats_query)).all()
-
-    # Window-level latency percentile. p95 is the operator's tail-latency
-    # signal — a mean hides the slow calls that actually hurt. Over every
-    # call in the window (not just successes) so a stalled/retried call
-    # still counts. None on an empty window → 0.0.
-    p95_latency = (await db.execute(
-        select(func.percentile_cont(0.95).within_group(LLMCall.latency_ms.asc()))
-        .where(*base_filters)
-    )).scalar()
 
     # By model
     model_stats = (await db.execute(
@@ -156,29 +273,8 @@ async def llm_calls(
         .outerjoin(User, User.id == LLMCall.user_id)
         .where(*base_filters)
     )
-    # Filters that scope only the paginated call list (not the window
-    # aggregates in the strip): the function selector, the success/
-    # failure toggle, and the free-text search over prompt + response.
-    row_filters = []
-    if function:
-        row_filters.append(LLMCall.function == function)
-    if success is not None:
-        # Powers the dashboard success/failure toggle: scopes the paginated
-        # list (and total_count below) so the filter + pagination happen
-        # server-side instead of on one page.
-        row_filters.append(LLMCall.success.is_(success))
-    if search:
-        # Free-text search over the exact prompt in / response out — the
-        # operator's primary "find that one call" tool. %/_ are escaped so
-        # a search term reads as a literal, not a wildcard.
-        like = f"%{_escape_like(search)}%"
-        row_filters.append(or_(
-            LLMCall.input_text.ilike(like, escape="\\"),
-            LLMCall.output_text.ilike(like, escape="\\"),
-        ))
-
     calls_query = (
-        calls_query.where(*row_filters)
+        calls_query
         # `id` breaks ties: created_at defaults to now(), the TRANSACTION
         # timestamp, so calls logged in one transaction share a value and
         # OFFSET paging over an unstable order repeats and skips rows.
@@ -187,10 +283,6 @@ async def llm_calls(
         .limit(limit)
     )
     calls = (await db.execute(calls_query)).all()
-
-    total_count = (await db.execute(
-        select(func.count()).select_from(LLMCall).where(*base_filters, *row_filters)
-    )).scalar() or 0
 
     # Submission case-file identity + outcome. Only materialized when the
     # caller scopes to a single submission (the SubmissionTrace drill-in) —
@@ -260,17 +352,6 @@ async def llm_calls(
 
     # Failure analysis
     failure_filters = [*base_filters, LLMCall.success.is_(False)]
-
-    failure_count = (await db.execute(
-        select(func.count()).select_from(LLMCall).where(*failure_filters)
-    )).scalar() or 0
-
-    total_calls_count = (await db.execute(
-        select(func.count()).select_from(LLMCall).where(*base_filters)
-    )).scalar() or 0
-
-    failure_rate = round(failure_count / total_calls_count * 100, 1) if total_calls_count else 0.0
-
     failures_by_function = (await db.execute(
         select(
             LLMCall.function,
@@ -286,33 +367,34 @@ async def llm_calls(
     # Honors the school scope so the dropdown only lists users whose
     # calls are visible under the current filter — otherwise picking
     # a school would still surface every founder/test account.
-    user_dropdown_filters = [
-        LLMCall.created_at >= since,
-        LLMCall.user_id.isnot(None),
-    ]
-    if school_id == INTERNAL_SCHOOL_SENTINEL:
-        user_dropdown_filters.append(LLMCall.school_id.is_(None))
-    elif school_id:
-        user_dropdown_filters.append(LLMCall.school_id == school_id)
     user_rows = (await db.execute(
         select(User.id, User.email)
         .where(
             User.id.in_(
                 select(func.distinct(LLMCall.user_id))
-                .where(*user_dropdown_filters)
+                .where(*filters.user_options, LLMCall.user_id.isnot(None))
             )
         )
         .order_by(User.email)
     )).all()
 
+    # The function and model choices for the filter dropdowns. The
+    # aggregates follow every filter now, so they can't double as the
+    # option list (picking a function would leave a list of one).
+    function_options = (await db.execute(
+        select(LLMCall.function).where(*filters.option_scope)
+        .distinct().order_by(LLMCall.function)
+    )).scalars().all()
+    model_options = (await db.execute(
+        select(LLMCall.model).where(*filters.option_scope)
+        .distinct().order_by(LLMCall.model)
+    )).scalars().all()
+
     return {
-        "total_count_window": total_calls_count,
-        "total_cost_window": round(
-            sum(float(r.total_cost or 0) for r in stats), 4,
-        ),
-        "p95_latency_ms": round(float(p95_latency or 0), 1),
-        "failure_count": failure_count,
-        "failure_rate": failure_rate,
+        "functions": list(function_options),
+        "models": list(model_options),
+        # Every filter narrows these too: the strip describes the rows.
+        "summary": summary,
         "failures_by_function": [
             {
                 "function": r.function,
@@ -371,6 +453,9 @@ async def llm_calls(
                 "user_name": user_name or user_email or "Deleted User",
                 "school_id": str(c.school_id) if c.school_id else None,
                 "submission_id": str(c.submission_id) if c.submission_id else None,
+                # A submission-pipeline call whose submission was deleted.
+                # Still the student's (user_id) — labelled, never re-homed.
+                "deleted_submission": is_deleted_submission_call(c.function, c.submission_id),
                 "metadata": c.call_metadata,
                 # The ID of the system prompt this call sent, not its
                 # text: prompts run to ~18KB and dedupe heavily, so
@@ -390,7 +475,7 @@ async def llm_calls(
             }
             for c, user_email, user_name in calls
         ],
-        "total_count": total_count,
+        "total_count": summary["calls"],
         # Case-file identity for the single-submission trace view. Null on the
         # general list. See submission_summary above.
         "submission": submission_summary,
