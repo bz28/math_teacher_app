@@ -229,7 +229,7 @@ async def test_refuses_a_foreign_section_a_naive_date_and_practice(
     assert r.status_code == 400
     r = await _due_dates(client, world, {
         "clear_due_at": True,
-        "section_due_dates": {str((await _setup_section(world))): HW_DUE.isoformat()},
+        "section_due_dates": {str(await _setup_section(world)): HW_DUE.isoformat()},
     })
     assert r.status_code == 400  # no homework date, so no date per section
     async with get_session_factory()() as s:
