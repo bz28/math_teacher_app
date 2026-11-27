@@ -7,8 +7,8 @@ import { api, type SchoolListItem } from "./api";
  * This is the console's scope. Every page whose data belongs to schools
  * (the accuracy pages, Teacher reports, LLM calls, Users,
  * Audit log) reads it and sends it as `school_id`; the backend filters on
- * it. Pages whose data belongs to no school (Schools directory, Leads,
- * Evals, Harness) ignore it, and the rail's scope line says so.
+ * it. Pages whose data belongs to no school (Schools directory, Leads)
+ * ignore it, and the rail's scope line says so.
  *
  * `null` means All schools: the endpoints are called with no `school_id`,
  * so they answer exactly as they did before the switcher scoped anything

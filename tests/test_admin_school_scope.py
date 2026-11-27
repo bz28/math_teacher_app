@@ -31,8 +31,6 @@ from api.database import get_session_factory
 from api.models.assignment import Assignment, Submission, SubmissionGrade
 from api.models.course import Course
 from api.models.llm_call import LLMCall
-from api.models.question_bank import QuestionBankItem
-from api.models.question_edit import EDIT_MANUAL, FIELD_SOLUTION, TRACKING_SINCE, QuestionEdit
 from api.models.school import SCHOOL_KIND_INSTITUTIONAL, School
 from api.models.section import Section
 from api.models.session import Session
@@ -54,12 +52,11 @@ def _user(role: str, name: str, school_id: uuid.UUID | None, **kw: Any) -> User:
 
 async def _school(
     s: Any, name: str, *, students: int, reports: int, cost: float,
-    questions: int, with_preview: bool = False,
+    with_preview: bool = False,
 ) -> dict[str, Any]:
     """One school with `students` real students, each of whom submitted
     one handwriting-confirmed, teacher-reviewed homework and ran one
-    tutoring session; `questions` approved generated questions (the
-    first has its solution repaired); `reports` open teacher reports;
+    tutoring session; `reports` open teacher reports;
     and one LLM call costing `cost`.
 
     `with_preview` adds a preview (shadow) student who did all the same
@@ -113,22 +110,6 @@ async def _school(
         ))
         s.add(Session(user_id=kid.id, problem="p", problem_type="algebra"))
 
-    after = TRACKING_SINCE + timedelta(days=1)
-    items = [
-        QuestionBankItem(
-            course_id=course.id, unit_id=unit.id, originating_assignment_id=asg.id,
-            title=f"{name} Q{i}", question="q", solution_steps=[], final_answer="x",
-            source="generated", status="approved", created_at=after,
-        )
-        for i in range(questions)
-    ]
-    s.add_all(items)
-    await s.flush()
-    s.add(QuestionEdit(
-        bank_item_id=items[0].id, school_id=school.id, edited_by_id=teacher.id,
-        kind=EDIT_MANUAL, field=FIELD_SOLUTION, before="a", after="b",
-    ))
-
     for i in range(reports):
         s.add(TeacherReport(
             teacher_id=teacher.id, teacher_name=teacher.name,
@@ -147,7 +128,7 @@ async def _school(
 async def world() -> dict[str, Any]:
     async with get_session_factory()() as s:
         await s.execute(text(
-            "TRUNCATE TABLE teacher_reports, question_edits, question_bank_items, "
+            "TRUNCATE TABLE teacher_reports, "
             "llm_calls, sessions, submission_grades, submissions, assignments, "
             "section_enrollments, sections, units, course_teachers, courses, "
             "teacher_invites, schools, users RESTART IDENTITY CASCADE"
@@ -155,9 +136,8 @@ async def world() -> dict[str, Any]:
         admin = _user("admin", "Admin", None)
         s.add(admin)
         await s.flush()
-        a = await _school(s, "Alpha", students=1, reports=1, cost=1.0,
-                          questions=2, with_preview=True)
-        b = await _school(s, "Beta", students=2, reports=2, cost=2.0, questions=1)
+        a = await _school(s, "Alpha", students=1, reports=1, cost=1.0, with_preview=True)
+        b = await _school(s, "Beta", students=2, reports=2, cost=2.0)
         # An admin/system call: belongs to no school, so it must appear in
         # "All schools" and in no school's scope.
         s.add(LLMCall(

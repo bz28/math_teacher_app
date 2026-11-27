@@ -8,8 +8,6 @@ import { pageScope, schoolLabel } from "../lib/pageScope";
 interface NavItem {
   to: string;
   label: string;
-  /** Match the path exactly, not as a prefix. */
-  end?: boolean;
 }
 
 // The rail is the console's two jobs, in order of how often they're done.
@@ -25,7 +23,9 @@ interface NavItem {
 
 const DEBUG: NavItem[] = [
   { to: "/llm-calls", label: "Calls" },
-  { to: "/schools", label: "Schools", end: true },
+  // Prefix match on purpose: a school's own page (/schools/:id) is the
+  // first step of the drill and should still light up Schools.
+  { to: "/schools", label: "Schools" },
   { to: "/reports", label: "Teacher reports" },
   // Accuracy is extraction quality until the merged page lands.
   { to: "/extraction-quality", label: "Accuracy" },
@@ -159,7 +159,6 @@ export default function Layout() {
             <NavLink
               key={n.to}
               to={n.to}
-              end={n.end}
               className={({ isActive }) =>
                 `nav-link nav-link-primary ${isActive ? "active" : ""}`
               }
