@@ -3,13 +3,7 @@
 import Link from "next/link";
 import type { SubmissionsInboxRow } from "@/lib/api";
 import { StatusPill } from "@/components/school/teacher/_pieces/status-pill";
-
-/** Grades in this section waiting on the teacher before students see
- *  them: graded and never published, or published and edited since —
- *  the section's share of the review page's "Publish N grades". */
-export function toApproveCount(r: SubmissionsInboxRow): number {
-  return r.to_grade + r.dirty;
-}
+import { sectionCounts } from "../_lib/section-counts";
 
 /** Show the band once any section has turned-in work; before that the
  *  slim "waiting for first submission" strip says all there is to say. */
@@ -35,7 +29,7 @@ export function SectionReviewBand({
   );
   // The first section with something waiting gets the primary button —
   // that's where her next decision is.
-  const leadId = sorted.find((r) => toApproveCount(r) + r.flagged > 0)?.section_id;
+  const leadId = sorted.find((r) => r.submitted > 0 && !sectionCounts(r).allOut)?.section_id;
 
   return (
     <section
@@ -47,9 +41,9 @@ export function SectionReviewBand({
       </h2>
       <ul>
         {sorted.map((r, i) => {
-          const toApprove = toApproveCount(r);
-          const waiting = toApprove + r.flagged > 0;
+          const { toApprove, toPublish, notGraded, allOut } = sectionCounts(r);
           const lead = r.section_id === leadId;
+          const students = `${r.total_students} ${r.total_students === 1 ? "student" : "students"}`;
           return (
             <li
               key={r.section_id}
@@ -61,9 +55,10 @@ export function SectionReviewBand({
                 <p className="text-[15px] font-bold text-text-primary">{r.section_name}</p>
                 <p className="mt-0.5 text-[12px] text-text-muted">
                   {r.submitted === 0
-                    ? `Nothing turned in yet · ${r.total_students} students`
+                    ? `Nothing turned in yet · ${students}`
                     : `${r.submitted} of ${r.total_students} turned in`}
-                  {r.submitted > 0 && !waiting && " · all grades published"}
+                  {allOut && " · all grades published"}
+                  {notGraded > 0 && ` · ${notGraded} not graded yet`}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-1.5">
@@ -71,6 +66,7 @@ export function SectionReviewBand({
                   <StatusPill tone="red" icon="⚑" label={`${r.flagged} flagged`} />
                 )}
                 {toApprove > 0 && <StatusPill tone="amber" label={`${toApprove} to approve`} />}
+                {toPublish > 0 && <StatusPill tone="info" label={`${toPublish} to publish`} />}
               </div>
               <Link
                 href={`/school/teacher/courses/${courseId}/homework/${assignmentId}/sections/${r.section_id}/review`}
@@ -81,7 +77,7 @@ export function SectionReviewBand({
                     : "border border-border bg-surface text-text-primary hover:border-primary/40 hover:text-primary"
                 }`}
               >
-                {waiting || r.submitted === 0 ? "Review" : "Open"}
+                {allOut ? "Open" : "Review"}
                 <span aria-hidden>→</span>
               </Link>
             </li>

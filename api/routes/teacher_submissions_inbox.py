@@ -42,7 +42,7 @@ async def submissions_inbox(
     Row shape:
       { assignment_id, assignment_title, section_id, section_name,
         due_at, total_students, submitted, flagged, to_grade, dirty,
-        published }
+        published, to_publish }
 
     Sort + client-side: the frontend orders by urgency or due date and
     renders pills per count.
@@ -107,26 +107,32 @@ async def submissions_inbox(
     # (not timestamp-based) so flipping a grade back to its original
     # value doesn't wrongly mark it dirty. `breakdown` is JSON, so
     # cast to jsonb to get structural equality.
-    dirty_expr = func.sum(
+    is_dirty = (SubmissionGrade.grade_published_at.is_not(None)) & (
+        SubmissionGrade.final_score.is_distinct_from(
+            SubmissionGrade.published_final_score,
+        )
+        | SubmissionGrade.teacher_notes.is_distinct_from(
+            SubmissionGrade.published_teacher_notes,
+        )
+        | SubmissionGrade.breakdown.cast(JSONB).is_distinct_from(
+            SubmissionGrade.published_breakdown.cast(JSONB),
+        )
+    )
+    dirty_expr = func.sum(case((is_dirty, 1), else_=0)).cast(Integer).label("dirty")
+    # Of the grades waiting to go out, the ones already approved — a hand
+    # grade, an Approve ✓, or an approved grade edited since — so only
+    # Publish is left. The rest still want Approve ✓.
+    to_publish_expr = func.sum(
         case(
             (
-                (SubmissionGrade.grade_published_at.is_not(None))
-                & (
-                    SubmissionGrade.final_score.is_distinct_from(
-                        SubmissionGrade.published_final_score,
-                    )
-                    | SubmissionGrade.teacher_notes.is_distinct_from(
-                        SubmissionGrade.published_teacher_notes,
-                    )
-                    | SubmissionGrade.breakdown.cast(JSONB).is_distinct_from(
-                        SubmissionGrade.published_breakdown.cast(JSONB),
-                    )
-                ),
+                SubmissionGrade.final_score.is_not(None)
+                & SubmissionGrade.reviewed_at.is_not(None)
+                & (SubmissionGrade.grade_published_at.is_(None) | is_dirty),
                 1,
             ),
             else_=0,
         ),
-    ).cast(Integer).label("dirty")
+    ).cast(Integer).label("to_publish")
     published_expr = func.sum(
         case(
             (SubmissionGrade.grade_published_at.is_not(None), 1),
@@ -155,6 +161,7 @@ async def submissions_inbox(
             dirty_expr,
             published_expr,
             flagged_expr,
+            to_publish_expr,
         )
         .select_from(Submission)
         .outerjoin(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
@@ -183,6 +190,7 @@ async def submissions_inbox(
             "dirty": int(r.dirty or 0),
             "published": int(r.published or 0),
             "flagged": int(r.flagged or 0),
+            "to_publish": int(r.to_publish or 0),
         }
         for r in agg_rows
     }
@@ -202,5 +210,6 @@ async def submissions_inbox(
             "to_grade": counts.get("to_grade", 0),
             "dirty": counts.get("dirty", 0),
             "published": counts.get("published", 0),
+            "to_publish": counts.get("to_publish", 0),
         })
     return {"rows": rows}
