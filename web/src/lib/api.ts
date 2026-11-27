@@ -11,6 +11,7 @@
 // for follow-up batches.
 import type { components } from "./api-schema.gen";
 import { stablePhotoUrls } from "./submission-photos.ts";
+import type { DraftState } from "./student-history.ts";
 
 type Schemas = components["schemas"];
 
@@ -1496,6 +1497,13 @@ export interface StudentGradePublishedHw {
    *  "Not graded yet" instead of a score. */
   final_score: number | null;
   teacher_notes: string | null;
+  /** A grade that exists but isn't published, so the row doesn't read
+   *  "Not graded yet": an AI grade awaiting the teacher's approval, a
+   *  finished one awaiting only Publish, or a hand grade covering only
+   *  some problems. Null once published or when there's no grade. */
+  draft_state: DraftState | null;
+  /** The draft score that would publish (late penalty and edits in). */
+  draft_score: number | null;
   /** Included so the detail page can link into the review page. */
   section_id: string;
 }

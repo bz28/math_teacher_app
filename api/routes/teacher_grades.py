@@ -495,6 +495,35 @@ async def get_student_grades(
         )
     )).all()
     published_by_aid = {r.assignment_id: r for r in published_rows}
+    # A grade that exists but isn't out yet, so the row doesn't read "Not
+    # graded yet" for it, in the states the review page marks:
+    # approved (reviewed_at) or a complete hand grade is waiting only on
+    # Publish ("graded_unpublished"); an AI grade nobody has approved is the
+    # teacher's to-do ("awaiting_review"); a hand grade covering only some
+    # problems is never stamped and is "partly_graded". The score is the
+    # draft that would publish, late penalty and edits included. A cleared
+    # grade keeps its ai_score but has no final_score, so it is none of these.
+    draft_by_aid = {
+        r.assignment_id: (
+            "graded_unpublished" if r.reviewed_at is not None
+            else "awaiting_review" if r.ai_score is not None
+            else "partly_graded",
+            r.final_score,
+        )
+        for r in (await db.execute(
+            select(
+                Submission.assignment_id, SubmissionGrade.ai_score,
+                SubmissionGrade.final_score, SubmissionGrade.reviewed_at,
+            )
+            .join(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
+            .where(
+                Submission.student_id == student_id,
+                Submission.assignment_id.in_(assigned_aids),
+                SubmissionGrade.final_score.is_not(None),
+                SubmissionGrade.grade_published_at.is_(None),
+            )
+        )).all()
+    }
     submitted_aids = {r.assignment_id for r in (await db.execute(
         select(Submission.assignment_id)
         .where(
@@ -523,6 +552,10 @@ async def get_student_grades(
             "graded_at": grade.graded_at.isoformat() if grade and grade.graded_at else None,
             "final_score": round(grade.final_score, 1) if grade else None,
             "teacher_notes": grade.teacher_notes if grade else None,
+            "draft_state": draft_by_aid[aid][0] if not grade and aid in draft_by_aid else None,
+            "draft_score": (
+                round(draft_by_aid[aid][1], 1) if not grade and aid in draft_by_aid else None
+            ),
             "section_id": str(section_id),
         })
     published_hws.sort(key=lambda h: h["due_at"] or "", reverse=True)

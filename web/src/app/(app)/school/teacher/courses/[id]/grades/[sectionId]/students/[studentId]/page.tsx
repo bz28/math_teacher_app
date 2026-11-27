@@ -4,6 +4,8 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { teacher, type StudentGradesResponse } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
+import { studentReviewHref } from "@/lib/review-deep-link";
+import { DRAFT_LABEL, draftScoreText } from "@/lib/student-history";
 import { PercentBadge } from "@/components/school/shared/percent-badge";
 import { PracticeEngagement } from "@/components/school/teacher/practice-engagement";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -96,6 +98,7 @@ export default function StudentGradesPage({
                 hw={hw}
                 courseId={courseId}
                 sectionId={sectionId}
+                studentId={studentId}
               />
             ))}
           </div>
@@ -239,21 +242,24 @@ function PublishedHwRow({
   hw,
   courseId,
   sectionId,
+  studentId,
 }: {
   hw: StudentGradesResponse["published_hws"][number];
   courseId: string;
   sectionId: string;
+  studentId: string;
 }) {
-  // Link into the existing per-HW review page — the teacher can
-  // see the full breakdown there. sectionId in the HW link matches
-  // the section we're viewing on this page.
-  const href = `/school/teacher/courses/${courseId}/homework/${hw.assignment_id}/sections/${sectionId}/review`;
+  // Into the per-HW review page, opened on this student — without
+  // ?student= it opens on whoever it picks first.
+  const href = studentReviewHref(courseId, hw.assignment_id, sectionId, studentId);
   return (
     <Link
       href={href}
-      className="flex items-center justify-between gap-4 rounded-[--radius-md] border border-border-light bg-surface px-4 py-3 transition-all hover:-translate-y-px hover:border-primary/40 hover:shadow-sm"
+      // On a phone the status sits under the title: beside it, the long
+      // labels ("Graded, not published") left the title a few letters.
+      className="flex flex-col items-start gap-2 rounded-[--radius-md] border border-border-light bg-surface px-4 py-3 transition-all hover:-translate-y-px hover:border-primary/40 hover:shadow-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4"
     >
-      <div className="min-w-0 flex-1">
+      <div className="w-full min-w-0 flex-1">
         <div className="truncate text-sm font-bold text-text-primary">{hw.title}</div>
         {hw.due_at && (
           <div className="mt-0.5 text-[11px] text-text-muted">
@@ -266,7 +272,24 @@ function PublishedHwRow({
           </div>
         )}
       </div>
-      {hw.final_score === null ? (
+      {hw.final_score === null && hw.draft_state !== null && hw.draft_score !== null ? (
+        <span className="flex shrink-0 items-center gap-2">
+          {draftScoreText(hw.draft_state, hw.draft_score) && (
+            <span className="text-[11px] tabular-nums text-text-muted">
+              {draftScoreText(hw.draft_state, hw.draft_score)}
+            </span>
+          )}
+          <span
+            className={`rounded-[--radius-pill] border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] ${
+              hw.draft_state === "awaiting_review"
+                ? "border-primary/30 bg-primary-bg text-primary"
+                : "border-border-light bg-[color:var(--color-surface-alt-2)] text-[color:var(--color-text-secondary)]"
+            }`}
+          >
+            {DRAFT_LABEL[hw.draft_state]}
+          </span>
+        </span>
+      ) : hw.final_score === null ? (
         <span className="shrink-0 rounded-[--radius-pill] border border-border-light bg-[color:var(--color-surface-alt-2)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
           Not graded yet
         </span>

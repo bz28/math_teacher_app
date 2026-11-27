@@ -2,6 +2,19 @@
 // ?student=<id> picks the student, ?problem=<n> opens a problem on them.
 // A report's page_url is built from it, so these must stay exact.
 
+/** A section's review page opened on one student. Every link into the
+ *  review page from somewhere that is about one student (their history,
+ *  a gradebook cell) must name them, or the page opens on whoever it
+ *  picks first and the teacher is looking at the wrong child. */
+export function studentReviewHref(
+  courseId: string,
+  assignmentId: string,
+  sectionId: string,
+  studentId: string,
+): string {
+  return `/school/teacher/courses/${courseId}/homework/${assignmentId}/sections/${sectionId}/review?student=${encodeURIComponent(studentId)}`;
+}
+
 /** The ?problem= focus a review URL asks for, or null. Only meaningful
  *  alongside a ?student= — a problem number alone names nothing. */
 export function parseProblemFocus(
