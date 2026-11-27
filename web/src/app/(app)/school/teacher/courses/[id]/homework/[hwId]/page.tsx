@@ -305,8 +305,6 @@ export default function HomeworkDetailPage({
         <DueDatesDialog
           assignmentId={assignmentId}
           title={hw.title}
-          dueAt={hw.due_at}
-          sections={hw.section_due_dates}
           onSaved={reload}
           onClose={() => setShowDueDates(false)}
         />

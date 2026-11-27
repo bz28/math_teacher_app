@@ -121,9 +121,13 @@ export function useInlineConfig({
   // A date or sections change moves the section rows on the server (and
   // the homework's own date with them): re-read both, so the due-date
   // dialog never starts from dates that are no longer there.
+  // One sequence for both fields: a date save and a sections save each
+  // write the same two values, so only the newest re-read of either lands.
+  const dueReadRef = useRef(0);
   const refreshDueDates = async (stillNewest: () => boolean) => {
+    const seq = ++dueReadRef.current;
     const fresh = await teacher.assignment(assignmentId);
-    if (!stillNewest()) return;
+    if (!stillNewest() || seq !== dueReadRef.current) return;
     setHw((h) =>
       h ? { ...h, due_at: fresh.due_at, section_due_dates: fresh.section_due_dates } : h,
     );
@@ -132,10 +136,22 @@ export function useInlineConfig({
   const onChangeDueAt = (next: string | null) => {
     if (!hw) return;
     const prev = hw.due_at;
+    const prevSections = hw.section_due_dates;
     void patchField(
       "dueAt",
-      () => setHw((h) => (h ? { ...h, due_at: next } : h)),
-      () => setHw((h) => (h ? { ...h, due_at: prev } : h)),
+      // Exact, not a guess: this picker only shows while every section
+      // shares the one date, and the server moves them all to it.
+      () =>
+        setHw((h) =>
+          h
+            ? {
+                ...h,
+                due_at: next,
+                section_due_dates: h.section_due_dates.map((d) => ({ ...d, due_at: next })),
+              }
+            : h,
+        ),
+      () => setHw((h) => (h ? { ...h, due_at: prev, section_due_dates: prevSections } : h)),
       () =>
         teacher
           .updateAssignment(

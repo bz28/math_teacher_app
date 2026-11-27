@@ -22,8 +22,48 @@ type Preview =
  * the change does to work already turned in: how many turn-ins change
  * lateness, and how many published grades will show as changed until she
  * republishes. Nothing a student sees changes until she does.
+ *
+ * It starts from the server's dates, read as it opens, not the page's
+ * copy: an edit elsewhere on the page may not have landed there yet, and
+ * a per-section save writes back every section it shows.
  */
-export function DueDatesDialog({
+export function DueDatesDialog(props: {
+  assignmentId: string;
+  title: string;
+  onSaved: () => void | Promise<void>;
+  onClose: () => void;
+}) {
+  const [current, setCurrent] = useState<
+    { dueAt: string | null; sections: SectionDate[] } | "loading" | "error"
+  >("loading");
+  const titleId = useId();
+  const { assignmentId } = props;
+  useEffect(() => {
+    let cancelled = false;
+    teacher
+      .assignment(assignmentId)
+      .then((a) => !cancelled && setCurrent({ dueAt: a.due_at, sections: a.section_due_dates }))
+      .catch(() => !cancelled && setCurrent("error"));
+    return () => {
+      cancelled = true;
+    };
+  }, [assignmentId]);
+  if (current === "loading" || current === "error") {
+    return (
+      <Modal open onClose={props.onClose} labelledById={titleId} className="max-w-xl">
+        <h2 id={titleId} className="font-serif text-xl leading-tight text-text-primary">
+          Due date
+        </h2>
+        <p className="mt-3 text-sm text-text-muted" aria-live="polite">
+          {current === "loading" ? "Loading the due dates…" : "Couldn’t load the due dates. Close and try again."}
+        </p>
+      </Modal>
+    );
+  }
+  return <DueDatesForm {...props} dueAt={current.dueAt} sections={current.sections} />;
+}
+
+function DueDatesForm({
   assignmentId,
   title,
   dueAt,

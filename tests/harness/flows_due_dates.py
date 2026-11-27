@@ -118,7 +118,6 @@ async def inline_due_then_dialog_flow(
             s.add(AssignmentSection(assignment_id=hw.id, section_id=sec.id, due_at=old))
         await s.commit()
         hw_id, names = hw.id, [sec.name for sec in sections]
-    new_local = (datetime.now() + timedelta(days=6)).strftime("%Y-%m-%dT23:59")
     first_local = (datetime.now() + timedelta(days=5)).strftime("%Y-%m-%dT23:59")
     fail_next_read = {"on": False}
 
@@ -148,24 +147,18 @@ async def inline_due_then_dialog_flow(
         except PlaywrightTimeoutError:
             issues.append("the Configuration date picker did not save a new date")
             return FlowResult(name, title, False, issues)
-        await page.wait_for_timeout(1500)  # the failing re-read has come back
         if await page.get_by_text("Save failed").count() or await picker.input_value() != first_local:
             issues.append("a failed re-read after the save undid a date the server kept")
-        await picker.fill(new_local, timeout=_TIMEOUT_MS)
-        await page.wait_for_timeout(1500)
         dialog = page.get_by_role("dialog", name="Due date")
         try:
             await page.get_by_role("button", name="Change", exact=True).first.click(timeout=_TIMEOUT_MS)
             await dialog.get_by_role("radio", name="Different per section").click(timeout=_TIMEOUT_MS)
+            # Straight away, with the page's own re-read failed: the dialog
+            # must still start from the date just saved.
             values = [await dialog.get_by_label(n).input_value(timeout=_TIMEOUT_MS) for n in names]
-            for _ in range(20):  # the re-read lands just after "Saved"
-                if values == [new_local, new_local]:
-                    break
-                await page.wait_for_timeout(250)
-                values = [await dialog.get_by_label(n).input_value(timeout=_TIMEOUT_MS) for n in names]
         except PlaywrightTimeoutError:
             issues.append("the due-date dialog did not list both sections")
             return FlowResult(name, title, False, issues)
-        if values != [new_local, new_local]:
+        if values != [first_local, first_local]:
             issues.append(f"the dialog started the sections at {values}, not the date just saved")
     return FlowResult(name, title, not issues, issues)
