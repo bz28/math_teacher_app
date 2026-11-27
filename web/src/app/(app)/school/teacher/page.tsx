@@ -186,16 +186,12 @@ export default function SchoolTeacherDashboard() {
           }}
           onCreated={(courseId) => {
             setShowNewCourse(false);
-            // During the first-run tour, creating a course advances past
-            // step one and carries the (layout-level) tour into the new
-            // course workspace, where it resumes at "Create a section".
-            // Outside the tour, just refresh the list in place.
-            if (tour.isActive) {
-              tour.next();
-              router.push(`/school/teacher/courses/${courseId}`);
-            } else {
-              reload();
-            }
+            // A new course opens on its setup checklist. During the
+            // first-run tour, creating it also advances past step one,
+            // and the (layout-level) tour resumes in the course at
+            // "Create a section".
+            if (tour.isActive) tour.next();
+            router.push(`/school/teacher/courses/${courseId}`);
           }}
         />
       )}

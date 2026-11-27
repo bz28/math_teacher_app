@@ -1,18 +1,13 @@
 /**
  * Field Guide tour definitions, one per persona.
  *
- * The teacher tour ships first and replaces the old setup checklist. It
- * is one comprehensive from-zero journey for a brand-new teacher who has
- * nothing: step 1 creates their first course (on the courses list), the
- * tour carries across the navigation into that course, then it walks
- * EVERY workspace tab left-to-right — section → invite → materials →
- * homework → practice → submissions → grades. Student Insights is
- * skipped while that tab is gated behind its coming-soon panel; there's
- * nothing to teach until it's rebuilt. The later tabs
- * (practice/submissions/grades) are empty for a
- * fresh teacher, so each step spotlights a stable anchor that exists in
- * the from-zero state (a header or a primary control, never a data row)
- * and the copy EXPLAINS what the tab is for and what will fill it in.
+ * The teacher tour is a from-zero journey for a brand-new teacher in
+ * the four steps that do something: create a course (on the courses
+ * list), carry into it and create a section, share the join codes, and
+ * end on New homework. The other tabs explain themselves when there's
+ * something in them; a tour step that only says "this tab will fill up
+ * later" was clicks without progress. The course page's setup checklist
+ * lists the same three in-course steps for a teacher who skipped it.
  *
  * This single tour replaced the old per-feature first-use coachmarks
  * (hw-create / review-flow / integrity / insights), which fired once,
@@ -29,8 +24,8 @@ const TEACHER_TOUR: TourDefinition = {
   cover: {
     eyebrow: "Welcome to Veradic",
     title: "Your classroom, *quietly* intelligent.",
-    subtitle: "A short walk through every tab that gets a class running — starting from scratch.",
-    footnote: "~2 min · we'll create your first course together",
+    subtitle: "Four steps from an empty account to your first homework.",
+    footnote: "~1 min · we'll create your first course together",
     cta: "Take the tour",
     skip: "Skip for now",
   },
@@ -96,62 +91,19 @@ const TEACHER_TOUR: TourDefinition = {
       onEnter: TOUR_ACTIONS.expandFirstSection,
     },
     {
-      id: "materials",
-      target: TOUR_IDS.teacherMaterials,
-      eyebrow: "Your materials",
-      title: "Add course materials",
-      body: "Drop in your textbook pages — generated homework matches their style and level.",
-      // Target is the New-Unit control (left edge of the actions row);
-      // pin the card's left edge to it so the cut-out reads as a tight
-      // pill, not a full-width banner.
-      placement: "bottom-start",
-      onEnter: TOUR_ACTIONS.gotoMaterials,
-    },
-    {
       id: "homework",
       target: TOUR_IDS.teacherNewHomework,
       eyebrow: "Homework",
       title: "Create homework",
-      body: "Generate problems from your materials in seconds, then review before assigning.",
+      body: "Generate problems or upload your own. You approve each one before it\u2019s assigned.",
       // New-homework button is top-right — tuck the card beside it.
       placement: "left",
       onEnter: TOUR_ACTIONS.gotoHomework,
     },
-    {
-      id: "practice",
-      target: TOUR_IDS.teacherPractice,
-      eyebrow: "Practice",
-      title: "Low-stakes reps",
-      body: "Spin up ungraded practice sets so students can drill a concept until it clicks — no grade on the line. Clone one from any homework or start fresh.",
-      // New-practice button is top-right — tuck the card beside it. Always
-      // mounted, so it anchors cleanly even with zero practice sets yet.
-      placement: "left",
-      onEnter: TOUR_ACTIONS.gotoPractice,
-    },
-    {
-      id: "grade",
-      target: TOUR_IDS.teacherSubmissions,
-      eyebrow: "Submissions",
-      title: "Where the real work pays off",
-      body: "As students turn work in it lands here, AI pre-graded — and the AI can quietly interview a student to confirm the work is their own. You stay the judge: review, adjust, and publish when it's right.",
-      placement: "bottom",
-      onEnter: TOUR_ACTIONS.gotoSubmissions,
-    },
-    {
-      id: "grades",
-      target: TOUR_IDS.teacherGrades,
-      eyebrow: "Grades",
-      title: "Your gradebook of record",
-      body: "Published grades collect here, by section — your at-a-glance read on who's strong and who's slipping, exportable to your SIS in a click. It populates as you publish.",
-      // The Grades tab early-returns an empty state with no header for a
-      // fresh class, so anchor the always-mounted tab button itself.
-      placement: "bottom",
-      onEnter: TOUR_ACTIONS.gotoGrades,
-    },
   ],
   finish: {
     title: "You're set.",
-    body: "No checklist to babysit. Revisit this tour anytime from the menu.",
+    body: "Your course keeps a short setup checklist until sections, codes and the first homework are done. Replay this tour anytime from the menu.",
   },
 };
 

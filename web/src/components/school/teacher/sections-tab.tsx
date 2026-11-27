@@ -137,6 +137,10 @@ export function SectionsTab({
             reload();
             onChanged();
           }}
+          onAdded={() => {
+            reload();
+            onChanged();
+          }}
         />
       )}
     </div>

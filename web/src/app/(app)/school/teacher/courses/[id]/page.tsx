@@ -4,7 +4,7 @@ import { Suspense, use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { teacher, type BankJob, type TeacherCourse } from "@/lib/api";
+import { teacher, type BankJob, type CourseSetupStatus, type TeacherCourse } from "@/lib/api";
 import { useTeacherCourses } from "@/components/school/teacher/teacher-courses";
 import { landingTab } from "./_lib/landing-tab";
 import {
@@ -13,7 +13,7 @@ import {
   BANK_JOB_TOAST_AUTO_CLEAR_MS,
 } from "@/lib/constants";
 import { formatDueRelative } from "@/lib/utils";
-import { TOUR_ACTIONS, TOUR_IDS, useTour, useTourAction } from "@/components/tour";
+import { TOUR_ACTIONS, useTour, useTourAction } from "@/components/tour";
 import { StatusPill } from "@/components/school/teacher/_pieces/status-pill";
 import { SectionsTab } from "@/components/school/teacher/sections-tab";
 import { MaterialsTab } from "@/components/school/teacher/materials-tab";
@@ -23,6 +23,7 @@ import { SubmissionsTab } from "@/components/school/teacher/submissions-tab";
 import { GradesTab } from "@/components/school/teacher/grades-tab";
 import { StudentInsightsTab } from "@/components/school/teacher/student-insights-tab";
 import { SettingsTab } from "@/components/school/teacher/settings-tab";
+import { SetupChecklist } from "@/components/school/teacher/setup/setup-checklist";
 import { ErrorBoundary } from "@/components/ui";
 import { PencilIcon } from "@/components/ui/icons";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -211,6 +212,7 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
     try {
       setCourse(await teacher.course(id));
       setError(null);
+      setSetupRead((n) => n + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load course");
     } finally {
@@ -223,11 +225,31 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  // The setup checklist's milestones. Read again whenever the course is
+  // (a section added or removed) and on every tab change, so a step the
+  // teacher just did on a tab is ticked when they look back up.
+  const [setup, setSetup] = useState<{ id: string; status: CourseSetupStatus } | null>(null);
+  const [setupRead, setSetupRead] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    teacher
+      .courseSetupStatus(id)
+      .then((status) => {
+        if (!cancelled) setSetup({ id, status });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [id, tab, setupRead]);
+  const setupStatus = setup?.id === id ? setup.status : null;
+
   // ── Onboarding tour wiring ──
-  // The Field Guide tour (components/tour) replaces the old setup
-  // checklist. This page registers the imperative handoffs each step
-  // needs (tab switches + the live New-section dialog) and owns the
-  // section modal so the tour can open it. It does NOT auto-start: the
+  // The Field Guide tour (components/tour) walks a first-run teacher
+  // through the same three steps the setup checklist lists. This page
+  // registers the imperative handoffs each step needs (tab switches +
+  // the live New-section dialog) and owns the section modal so the tour
+  // and the checklist can open it. It does NOT auto-start: the
   // from-zero tour begins on the courses list (a brand-new teacher has
   // no course) and carries across the navigation into this workspace,
   // resuming at "Create a section". Auto-starting here too would
@@ -244,6 +266,20 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
   // the invite control mounts. SectionsTab consumes it once a section is
   // present and clears it via onExpandFirstRosterConsumed.
   const [expandFirstRoster, setExpandFirstRoster] = useState(false);
+  // One-shot request from the checklist: open New homework on its tab.
+  const [openNewHomework, setOpenNewHomework] = useState(false);
+  const onSetupAction = (step: "sections" | "codes" | "homework") => {
+    if (step === "sections") {
+      setTab("sections");
+      setSectionModalOpen(true);
+    } else if (step === "codes") {
+      setTab("sections");
+      setExpandFirstRoster(true);
+    } else {
+      setTab("homework");
+      setOpenNewHomework(true);
+    }
+  };
 
   useTourAction(TOUR_ACTIONS.gotoSections, () => {
     setTab("sections");
@@ -258,11 +294,7 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
     setTab("sections");
     setExpandFirstRoster(true);
   });
-  useTourAction(TOUR_ACTIONS.gotoMaterials, () => setTab("materials"));
   useTourAction(TOUR_ACTIONS.gotoHomework, () => setTab("homework"));
-  useTourAction(TOUR_ACTIONS.gotoPractice, () => setTab("practice"));
-  useTourAction(TOUR_ACTIONS.gotoSubmissions, () => setTab("submissions"));
-  useTourAction(TOUR_ACTIONS.gotoGrades, () => setTab("grades"));
 
   // While the course itself loads, only the header waits on it: the
   // tab bar and the open tab render as soon as the tab is known (at once
@@ -312,6 +344,9 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
               "what's pressing in this course right now" without
               clicking into the Submissions tab. */}
           <CourseStatusRow course={course} />
+          {setupStatus && (
+            <SetupChecklist courseName={course.name} status={setupStatus} onAction={onSetupAction} />
+          )}
         </motion.div>
       ) : (
         <CourseHeaderSkeleton />
@@ -324,17 +359,6 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
           <button
             key={t.key}
             type="button"
-            // Submissions and Grades anchor the onboarding tour on their
-            // tab buttons — both tabs render an empty state (no stable
-            // header/control) for a from-zero teacher, so the always-
-            // mounted tab button is the only reliable spotlight target.
-            data-tour-id={
-              t.key === "submissions"
-                ? TOUR_IDS.teacherSubmissions
-                : t.key === "grades"
-                  ? TOUR_IDS.teacherGrades
-                  : undefined
-            }
             onClick={() => setTab(t.key)}
             aria-current={tab === t.key ? "page" : undefined}
             className={`relative shrink-0 py-3 text-sm font-medium transition-colors ${
@@ -416,6 +440,8 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
           <HomeworkTab
             courseId={id}
             onGoToMaterials={() => setTab("materials")}
+            openNew={openNewHomework}
+            onOpenNewConsumed={() => setOpenNewHomework(false)}
           />
         )}
         {tab === "practice" && <PracticeTab courseId={id} />}
