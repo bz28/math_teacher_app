@@ -2813,6 +2813,36 @@
         "title": "NoteRequest",
         "type": "object"
       },
+      "OtherCourse": {
+        "properties": {
+          "course_id": {
+            "format": "uuid",
+            "title": "Course Id",
+            "type": "string"
+          },
+          "course_name": {
+            "title": "Course Name",
+            "type": "string"
+          },
+          "section_id": {
+            "format": "uuid",
+            "title": "Section Id",
+            "type": "string"
+          },
+          "section_name": {
+            "title": "Section Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "course_id",
+          "course_name",
+          "section_id",
+          "section_name"
+        ],
+        "title": "OtherCourse",
+        "type": "object"
+      },
       "PageOrientationRequest": {
         "properties": {
           "image": {
@@ -3939,6 +3969,30 @@
           "course_subject"
         ],
         "title": "StudentClassSummary",
+        "type": "object"
+      },
+      "StudentContext": {
+        "properties": {
+          "other_courses": {
+            "items": {
+              "$ref": "#/components/schemas/OtherCourse"
+            },
+            "title": "Other Courses",
+            "type": "array"
+          },
+          "understanding_checks": {
+            "items": {
+              "$ref": "#/components/schemas/UnderstandingCheck"
+            },
+            "title": "Understanding Checks",
+            "type": "array"
+          }
+        },
+        "required": [
+          "other_courses",
+          "understanding_checks"
+        ],
+        "title": "StudentContext",
         "type": "object"
       },
       "StudentDashboardResponse": {
@@ -6210,6 +6264,36 @@
           "edits"
         ],
         "title": "TypingCadence",
+        "type": "object"
+      },
+      "UnderstandingCheck": {
+        "properties": {
+          "assignment_id": {
+            "format": "uuid",
+            "title": "Assignment Id",
+            "type": "string"
+          },
+          "assignment_title": {
+            "title": "Assignment Title",
+            "type": "string"
+          },
+          "submitted_at": {
+            "format": "date-time",
+            "title": "Submitted At",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "assignment_id",
+          "assignment_title",
+          "summary",
+          "submitted_at"
+        ],
+        "title": "UnderstandingCheck",
         "type": "object"
       },
       "UpdateAssignmentRequest": {
@@ -18008,6 +18092,74 @@
           }
         ],
         "summary": "Remove Student",
+        "tags": [
+          "teacher"
+        ]
+      }
+    },
+    "/v1/teacher/courses/{course_id}/sections/{section_id}/students/{student_id}/context": {
+      "get": {
+        "operationId": "get_student_context_v1_teacher_courses__course_id__sections__section_id__students__student_id__context_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "course_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Course Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "section_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Section Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "student_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Student Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StudentContext"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Student Context",
         "tags": [
           "teacher"
         ]

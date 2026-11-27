@@ -13,6 +13,7 @@ import type { components } from "./api-schema.gen";
 import { stablePhotoUrls } from "./submission-photos.ts";
 
 type Schemas = components["schemas"];
+export type StudentContext = Schemas["StudentContext"];
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/v1";
 const DEFAULT_TIMEOUT = 15_000;
@@ -1929,6 +1930,13 @@ export const teacher = {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+  },
+  /** Beside a student's grades: their other courses with this teacher,
+   *  and the understanding checks they finished here (summary only). */
+  studentContext(courseId: string, sectionId: string, studentId: string) {
+    return apiFetch<Schemas["StudentContext"]>(
+      `/teacher/courses/${courseId}/sections/${sectionId}/students/${studentId}/context`,
+    );
   },
   /** Full published-grade record for one student in one section. */
   studentGrades(courseId: string, sectionId: string, studentId: string) {

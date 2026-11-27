@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { studentHistoryHref } from "@/lib/student-history-href";
 import { READING_TRUST_COPY, needsReadingCheck } from "@/components/school/teacher/reading-trust";
 import {
   ReportProblemTrigger,
@@ -235,6 +237,7 @@ export function SubmissionDetailPanel({
   // open, with each problem offered in its picker — so a report sent from
   // there arrives with the work attached, not just a URL.
   const { submission_id, assignment_id, course_id, section_id, student_id } = reportBase;
+  const historyHref = course_id && section_id ? studentHistoryHref(course_id, section_id, detail.student_id) : null;
   const sidebarReport = useMemo<ReportProblemContext>(
     () => ({
       submission_id,
@@ -800,9 +803,13 @@ export function SubmissionDetailPanel({
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-[--radius-md] border border-border-light bg-surface px-4 py-2.5 shadow-sm">
         <div className="min-w-0">
           <p className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm">
-            <span className="font-bold text-text-primary">
-              {detail.student_name}
-            </span>
+            {historyHref ? (
+              <Link href={historyHref} title="Open their history" className="font-bold text-text-primary underline-offset-[3px] hover:text-primary hover:underline">
+                {detail.student_name}
+              </Link>
+            ) : (
+              <span className="font-bold text-text-primary">{detail.student_name}</span>
+            )}
             <span className="text-xs text-text-muted">{detail.student_email}</span>
             {detail.final_score !== null && homeworkPoints > 0 && !fullyGraded && (
               <span className="text-xs text-text-muted">

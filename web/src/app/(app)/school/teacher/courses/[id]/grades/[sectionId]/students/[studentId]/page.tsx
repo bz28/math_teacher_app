@@ -2,7 +2,8 @@
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { teacher, type StudentGradesResponse } from "@/lib/api";
+import { teacher, type StudentContext, type StudentGradesResponse } from "@/lib/api";
+import { OtherCourses, UnderstandingChecks } from "@/components/school/teacher/student-context";
 import { Breadcrumbs } from "@/components/school/teacher/breadcrumbs";
 import { useCourseName } from "@/components/school/teacher/teacher-courses";
 import { formatDate } from "@/lib/utils";
@@ -42,25 +43,41 @@ export default function StudentGradesPage({
     />
   );
 
-  const [data, setData] = useState<StudentGradesResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Each read is kept with the student it's for: following an "Also in"
+  // link reuses this page, and the last student's record must not show
+  // under the next one's name while theirs loads.
+  const key = `${courseId}/${sectionId}/${studentId}`;
+  const [loaded, setLoaded] = useState<{ key: string; data: StudentGradesResponse } | null>(null);
+  const [failed, setFailed] = useState<{ key: string; error: string } | null>(null);
+  const [context, setContext] = useState<{ key: string; data: StudentContext } | null>(null);
+  const data = loaded?.key === key ? loaded.data : null;
+  const error = failed?.key === key ? failed.error : null;
+  const ctx = context?.key === key ? context.data : null;
 
   useEffect(() => {
     let cancelled = false;
     teacher
       .studentGrades(courseId, sectionId, studentId)
       .then((res) => {
-        if (!cancelled) setData(res);
+        if (!cancelled) setLoaded({ key, data: res });
       })
       .catch((e) => {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Failed to load grades");
+          setFailed({ key, error: e instanceof Error ? e.message : "Failed to load grades" });
         }
       });
+    // Beside the grades, not part of them: if it fails the page still
+    // shows the record, just without other courses and checks.
+    teacher
+      .studentContext(courseId, sectionId, studentId)
+      .then((res) => {
+        if (!cancelled) setContext({ key, data: res });
+      })
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
-  }, [courseId, sectionId, studentId]);
+  }, [courseId, sectionId, studentId, key]);
 
   if (error) {
     return (
@@ -87,6 +104,7 @@ export default function StudentGradesPage({
       <header className="mt-3">
         <h1 className="font-serif text-[34px] leading-tight tracking-[-0.015em] text-text-primary">{data.student.name}</h1>
         <p className="mt-1 font-serif italic text-[15px] text-text-muted">{data.student.section_name}</p>
+        {ctx && <OtherCourses studentId={studentId} courses={ctx.other_courses} />}
       </header>
 
       <SummaryBar data={data} />
@@ -124,6 +142,10 @@ export default function StudentGradesPage({
             ))}
           </div>
         </section>
+      )}
+
+      {ctx && (
+        <UnderstandingChecks courseId={courseId} sectionId={sectionId} studentId={studentId} checks={ctx.understanding_checks} />
       )}
 
       {/* Ungraded practice/learn engagement — sits below the graded

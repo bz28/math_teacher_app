@@ -1,10 +1,15 @@
+import Link from "next/link";
 import type { TeacherSectionDetail } from "@/lib/api";
+import { studentHistoryHref } from "@/lib/student-history-href";
 
 /** A section's roster under Manage: its students (each removable, with
- *  an inline confirm) and its pending email invites (resend / revoke).
+ *  an inline confirm, each name a link to their history) and its pending
+ *  email invites (resend / revoke).
  *  The confirms' state lives in the section card, which drops them when
  *  the panel closes. */
 export function SectionRoster({
+  courseId,
+  sectionId,
   sectionName,
   students,
   invites,
@@ -17,6 +22,8 @@ export function SectionRoster({
   onResend,
   onRevoke,
 }: {
+  courseId: string;
+  sectionId: string;
   sectionName: string;
   students: TeacherSectionDetail["students"];
   invites: TeacherSectionDetail["pending_invites"];
@@ -77,7 +84,12 @@ export function SectionRoster({
               className="flex items-center justify-between rounded-[--radius-sm] bg-[color:var(--color-surface-alt-2)] px-3 py-2 text-sm"
             >
               <div>
-                <div className="font-semibold text-text-primary">{s.name}</div>
+                <Link
+                  href={studentHistoryHref(courseId, sectionId, s.id)}
+                  className="font-semibold text-text-primary underline-offset-[3px] hover:text-primary hover:underline"
+                >
+                  {s.name}
+                </Link>
                 <div className="text-xs text-text-muted">{s.email}</div>
               </div>
               <button
