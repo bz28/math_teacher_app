@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from api.config import settings
+from api.core.llm_families import family_for
 from api.core.model_pricing import (
     CACHE_WRITE_MULT,
     MODEL_CATALOG,
@@ -79,6 +80,7 @@ def profile_rows(
         out.setdefault(kind, []).append(
             {
                 "function": function,
+                "family": family_for(function, kind.startswith("generation:")),
                 "models": sorted({r.model for r in group}),
                 "measured_model": dominant.model,
                 # The catalog entry that model id resolves to. A logged id

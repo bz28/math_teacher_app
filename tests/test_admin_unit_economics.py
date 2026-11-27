@@ -429,7 +429,7 @@ async def test_explicit_days_overrides_the_cutover(client: AsyncClient) -> None:
 
 async def test_teacher_student_ratio_is_measured(client: AsyncClient) -> None:
     w = await _seed(homework_submissions=6)
-    ratio = (await _get(client, w.admin_id, days=30))["teacher_student_ratio"]
+    ratio = (await _get(client, w.admin_id, days=30))["measured"]
     assert ratio["teachers"] == 1
     assert ratio["students"] == len(w.student_ids)
     assert ratio["students_per_teacher"] == pytest.approx(float(len(w.student_ids)))

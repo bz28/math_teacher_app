@@ -40,6 +40,7 @@ from api.core.llm_attribution import (
     deleted_submission_calls,
     school_calls,
 )
+from api.core.llm_families import FAMILY_LABELS, family_for
 from api.core.model_pricing import cost_usd, price_for
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
@@ -48,6 +49,7 @@ from api.models.llm_call import LLMCall
 from api.models.question_bank import QuestionBankGenerationJob
 from api.models.user import User
 from api.routes.admin_helpers import INTERNAL_SCHOOL_SENTINEL, Window
+from api.routes.admin_unit_economics_measured import SUBMISSION_KINDS, measured_rates
 from api.routes.admin_unit_economics_profiles import as_float, catalog, profile_rows
 
 router = APIRouter()
@@ -58,8 +60,6 @@ _DAYS_PER_MONTH = 30.0
 # including them would price our own test runs into a school's bill.
 _EXCLUDED_FUNCTIONS = ("judge",)
 
-# Assignment.type values, in the order the dashboard lists them.
-_SUBMISSION_KINDS = ("homework", "quiz", "test", "practice")
 
 # Below this many observations a unit cost is noise. The dashboard greys
 # it out rather than rendering a number — a thin bucket that reads as
@@ -295,7 +295,7 @@ async def _submission_units(
     by_kind = {r.kind: r for r in rows}
     extra = deleted.per_submission
     out: list[dict[str, Any]] = []
-    for kind in _SUBMISSION_KINDS:
+    for kind in SUBMISSION_KINDS:
         r = by_kind.get(kind)
         out.append(
             {
@@ -684,25 +684,40 @@ async def _reconciliation(db: AsyncSession, scope: _Scope) -> dict[str, Any]:
     }
 
 
-async def _teacher_student_ratio(
-    db: AsyncSession, school_id: str | None,
-) -> dict[str, Any]:
-    """Measured, not assumed — it divides every teacher-side cost."""
-    stmt = select(User.role, func.count().label("n")).where(
-        User.role.in_(("teacher", "student")),
-    )
-    if school_id and school_id != INTERNAL_SCHOOL_SENTINEL:
-        stmt = stmt.where(User.school_id == school_id)
-    rows = (await db.execute(stmt.group_by(User.role))).all()
-    counts = {r.role: int(r.n) for r in rows}
-    teachers = counts.get("teacher", 0)
-    students = counts.get("student", 0)
-    return {
-        "teachers": teachers,
-        "students": students,
-        "students_per_teacher": (students / teachers) if teachers else None,
-    }
-
+async def _models_in_use(db: AsyncSession, scope: _Scope) -> dict[str, Any]:
+    """The model each stage actually ran on in the window — the one that
+    took the most spend — so every model picker defaults to reality."""
+    rows = (
+        await db.execute(
+            scope.apply(
+                select(
+                    LLMCall.function,
+                    LLMCall.model,
+                    LLMCall.generation_job_id.isnot(None).label("in_generation"),
+                    func.sum(LLMCall.cost_usd).label("cost"),
+                ),
+            ).group_by(LLMCall.function, LLMCall.model, "in_generation"),
+        )
+    ).all()
+    spend: dict[tuple[str, str], float] = {}
+    for r in rows:
+        family = family_for(r.function, bool(r.in_generation))
+        if family != "other":
+            key = (family, r.model)
+            spend[key] = spend.get(key, 0.0) + as_float(r.cost)
+    out: dict[str, Any] = {}
+    # Ties broken on model id so identical requests answer identically.
+    for (family, model), cost in sorted(spend.items()):
+        best = out.get(family)
+        if best is None or cost > best["cost_usd"]:
+            price = price_for(model)
+            out[family] = {
+                "label": FAMILY_LABELS[family],
+                "model": model,
+                "catalog_id": price.id if price else None,
+                "cost_usd": cost,
+            }
+    return out
 
 
 @router.get("/unit-economics")
@@ -747,7 +762,8 @@ async def unit_economics(
         "functions_by_unit": await _unit_functions(db, scope, deleted),
         "deleted_submissions": deleted.summary(),
         "reconciliation": await _reconciliation(db, scope),
-        "teacher_student_ratio": await _teacher_student_ratio(db, school_id),
+        "measured": await measured_rates(db, window, school_id, exclude_internal),
+        "models_in_use": await _models_in_use(db, scope),
         "model_catalog": catalog(),
         "min_sample": min_sample,
     }
