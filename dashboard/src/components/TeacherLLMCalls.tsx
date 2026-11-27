@@ -28,9 +28,9 @@ import StatusPill from "./StatusPill";
  *      quiet for eight days rendered "No model calls yet" directly under
  *      a non-zero cost. Now explicitly `WINDOW_HOURS`, matching the page.
  *   2. It took the first 25 rows with no total, no pager and no filters,
- *      while the response already carried `total_count_window`,
- *      `failure_count` and `by_function`. All three are read now, and the
- *      header states the bounds instead of leaving them to be inferred.
+ *      while the response already carried a total, the failures and the
+ *      functions. All are read now, and the header states the bounds
+ *      instead of leaving them to be inferred.
  */
 
 const WINDOW_HOURS = 720; // 30d — matches the cost window on this page.
@@ -123,38 +123,24 @@ export default function TeacherLLMCalls({ teacherId }: { teacherId: string }) {
     );
   }
 
-  const functions = data?.by_function ?? [];
-  const failures = data?.failure_count ?? 0;
+  const functions = data?.functions ?? [];
 
   return (
     <>
       {data && (
         <div className="panel-bar">
-          {/* The bounds, stated. `total_count_window` is the count for the
-              whole window; `calls.length` is what's on this page. */}
+          {/* The bounds, stated: the summary follows the active filter, so
+              the facts and the table describe the same set of calls. */}
           <div className="panel-bar-facts">
-            {/* `total_count` respects the active filter; the `_window`
-                figures do not. Showing the filtered count keeps the strip
-                and the table describing the same set — the cost and
-                failure totals stay window-wide and are labelled as such
-                only when nothing is filtering them out. */}
             <span>
-              <strong>{data.total_count.toLocaleString()}</strong> call
-              {data.total_count === 1 ? "" : "s"}
+              <strong>{data.summary.calls.toLocaleString()}</strong> call
+              {data.summary.calls === 1 ? "" : "s"}
             </span>
-            {!filtering && (
-              <>
-                <span className={failures > 0 ? "bad" : undefined}>
-                  <strong>{failures.toLocaleString()}</strong> failed
-                </span>
-                <span className="muted">{fmtCost(data.total_cost_window)}</span>
-              </>
-            )}
-            <span className="muted">
-              {filtering
-                ? `of ${data.total_count_window.toLocaleString()} in the last 30 days`
-                : "last 30 days"}
+            <span className={data.summary.failed > 0 ? "bad" : undefined}>
+              <strong>{data.summary.failed.toLocaleString()}</strong> failed
             </span>
+            <span className="muted">{fmtCost(data.summary.spend)}</span>
+            <span className="muted">{filtering ? "filtered · last 30 days" : "last 30 days"}</span>
           </div>
           <div className="panel-bar-controls">
             {functions.length > 1 && (
@@ -166,16 +152,14 @@ export default function TeacherLLMCalls({ teacherId }: { teacherId: string }) {
               >
                 <option value="">All functions</option>
                 {functions.map((f) => (
-                  <option key={f.function} value={f.function}>
-                    {f.function} ({f.count})
-                  </option>
+                  <option key={f} value={f}>{f}</option>
                 ))}
               </select>
             )}
             {/* Only offered when there is something to isolate — a
                 failures-only toggle on a teacher with zero failures is a
                 control that can only ever empty the table. */}
-            {(failures > 0 || failuresOnly) && (
+            {(data.summary.failed > 0 || failuresOnly) && (
               <label className="mini-check">
                 <input
                   type="checkbox"
