@@ -18,7 +18,9 @@ by a stand-in that groups the notes by their wording, so the stored rows
 are the writer's own. Set WRITE_REASONS=0 against a stack on code that
 predates the table.
 
-SHOTS is a comma list of: insights (the tab, Period 1). Shots land in
+SHOTS is a comma list of: insights (the tab, Period 1), reason (the
+first reason opened to its students), live (the older homework, whose
+set is live, for the tray's practiced count). Shots land in
 docs/design/insights-reteach-<shot>-<OUT>.png.
 """
 
@@ -249,6 +251,18 @@ async def main() -> int:
                 await page.mouse.move(1, 1)
                 await page.wait_for_timeout(800)
                 await page.screenshot(path=str(OUT_DIR / f"insights-reteach-insights-{OUT}.png"), full_page=True)
+            if "reason" in SHOTS:
+                await page.get_by_role("button", name="Found x = 4").click()
+                await page.get_by_role("link", name="Maya Chen").wait_for(timeout=10000)
+                await page.mouse.move(1, 1)
+                await page.wait_for_timeout(400)
+                await page.screenshot(path=str(OUT_DIR / f"insights-reteach-reason-{OUT}.png"), full_page=True)
+            if "live" in SHOTS:
+                await page.select_option("#insights-homework", label="Solving by Substitution")
+                await page.get_by_text("[Practice] Solving by Substitution").first.wait_for(timeout=30000)
+                await page.mouse.move(1, 1)
+                await page.wait_for_timeout(600)
+                await page.screenshot(path=str(OUT_DIR / f"insights-reteach-live-{OUT}.png"), full_page=True)
             print(f"  page errors: {len(errors)}")
             for e in errors[:10]:
                 print(f"    ! {e}")

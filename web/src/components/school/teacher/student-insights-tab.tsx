@@ -21,6 +21,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { PageErrorState } from "@/components/ui/page-error-state";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
+import { ReteachReasons } from "./_pieces/reteach-reasons";
 
 /**
  * Student Insights — "which problems should I reteach?"
@@ -28,8 +29,10 @@ import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
  * Reads GET /teacher/.../sections/{sid}/insights: whole-class counts
  * from grades the teacher approved or published (an AI draft never
  * counts), one homework at a time. Problems at least half the period
- * didn't get full credit on lead, already in a practice basket; the
- * rest sit behind "Other problems" and can be added too. The tray at
+ * didn't get full credit on lead, already in a practice basket, each
+ * with the common reasons points came off (from her approved feedback,
+ * each reason opening the students behind it); the rest sit behind
+ * "Other problems" and can be added too. The tray at
  * the bottom turns the basket into one practice set per homework per
  * period, or adds to the set that already exists.
  */
@@ -222,6 +225,7 @@ function Body({
 
   const rowProps = (p: InsightsProblem) => ({
     problem: p,
+    reviewHref: `/school/teacher/courses/${courseId}/homework/${hw.id}/sections/${data.section.id}/review`,
     inPractice: covered.has(p.bank_item_id),
     added: basket.has(p.bank_item_id),
     onToggle: () => toggle(p.bank_item_id),
@@ -355,12 +359,14 @@ function coverageSentence(h: InsightsHomework): string {
 
 function ProblemRow({
   problem: p,
+  reviewHref,
   inPractice,
   added,
   onToggle,
   quiet = false,
 }: {
   problem: InsightsProblem;
+  reviewHref: string;
   inPractice: boolean;
   added: boolean;
   onToggle: () => void;
@@ -406,6 +412,7 @@ function ProblemRow({
           </button>
         )}
       </span>
+      {p.flagged && <ReteachReasons problem={p} reviewHref={reviewHref} />}
     </li>
   );
 }
@@ -483,9 +490,14 @@ function problemList(problems: InsightsProblem[]): string {
 }
 
 function practiceStatus(p: InsightsPractice): string {
-  const parts = [p.status === "published" ? "Live for students" : "Draft"];
-  if (p.approved) parts.push(`${p.approved} approved`);
-  if (p.to_review) parts.push(`${p.to_review} to review`);
+  const live = p.status === "published";
+  const parts = [live ? "Live" : "Draft"];
+  if (live) parts.push(`${p.practiced} of ${p.students} practiced`);
+  else if (p.approved) parts.push(`${p.approved} approved`);
+  if (p.to_review)
+    parts.push(
+      p.to_review === 1 ? "1 version to review" : `${p.to_review} versions to review`,
+    );
   if (p.writing)
     parts.push(
       p.writing === 1 ? "writing 1 problem" : `writing ${p.writing} problems`,
@@ -524,6 +536,9 @@ function PracticeTray({
   const { showUpgrade, UpgradeModal } = useUpgradePrompt();
   const setHref = (id: string) =>
     `/school/teacher/courses/${courseId}/homework/${id}`;
+  // Reviewing is the next step once versions are written, so it's a
+  // button here instead of a count she has to go find.
+  const reviewCount = practice?.to_review ?? 0;
 
   const submit = () =>
     run(async () => {
@@ -586,6 +601,14 @@ function PracticeTray({
               </p>
             )}
           </div>
+          {practice && reviewCount > 0 && (
+            <Link
+              href={`${setHref(practice.id)}/review`}
+              className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-[--radius-md] bg-primary px-3.5 text-sm font-semibold text-white hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2"
+            >
+              Review {reviewCount} <span aria-hidden>&rarr;</span>
+            </Link>
+          )}
           {basketed.length > 0 && (
             <div className="flex flex-wrap items-center gap-3">
               <div
