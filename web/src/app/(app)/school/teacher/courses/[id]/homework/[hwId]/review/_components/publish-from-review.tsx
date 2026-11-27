@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { teacher } from "@/lib/api";
@@ -10,6 +10,8 @@ import {
   publishWarning,
   type PublishWarnings,
 } from "../../_lib/publish-readiness";
+
+const CHECKLIST_LOOK_AGAIN_MS = 8_000;
 
 type Assignment = Awaited<ReturnType<typeof teacher.assignment>>;
 
@@ -43,11 +45,22 @@ type State =
 export function PublishFromReview({
   assignmentId,
   homeworkHref,
+  generating,
 }: {
   assignmentId: string;
   homeworkHref: string;
+  /** Problems are still being written for this homework. */
+  generating: boolean;
 }) {
   const router = useRouter();
+  // The homework page looks for background-written graph checklists
+  // once more after 8 s before calling a missing one failed rather than
+  // still being written; a click this long after the last approval is
+  // past that point too.
+  const shownAt = useRef(0);
+  useEffect(() => {
+    shownAt.current = Date.now();
+  }, []);
   const [state, setState] = useState<State>({ kind: "checking" });
   const [error, setError] = useState<string | null>(null);
 
@@ -103,7 +116,7 @@ export function PublishFromReview({
             noDueDate: checks.noDueDate,
             uncheckedChecklists: checks.uncheckedChecklists.length,
             missingChecklists: checks.missingChecklists.length,
-            checklistsLookedAgain: false,
+            checklistsLookedAgain: Date.now() - shownAt.current > CHECKLIST_LOOK_AGAIN_MS,
           },
         });
       }
@@ -115,6 +128,17 @@ export function PublishFromReview({
   };
 
   if (state.kind === "checking" || state.kind === "gone") return null;
+
+  if (generating) {
+    return (
+      <div className="mt-6 border-t border-green-200 pt-5 dark:border-green-500/30">
+        <p className="text-sm text-text-secondary">
+          More problems are still being written for this homework — they&rsquo;ll
+          land here to review before you publish.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="mt-6 border-t border-green-200 pt-5 dark:border-green-500/30">
