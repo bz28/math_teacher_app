@@ -11,6 +11,7 @@ import {
 import { pointsRange } from "@/lib/points";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { GenerateQuestionsModal } from "@/components/school/teacher/question-bank/generate-questions-modal";
+import { AddFromBankDialog } from "@/components/school/teacher/question-bank/add-from-bank-dialog";
 import { WorkshopModal } from "@/components/school/teacher/workshop-modal";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { AssignmentProblem, HomeworkDetail } from "./_lib/types";
@@ -95,6 +96,7 @@ export default function HomeworkDetailPage({
   );
 
   const [showGenerate, setShowGenerate] = useState(false);
+  const [showBank, setShowBank] = useState(false);
   // Click-to-edit on an approved problem opens the workshop (single
   // mode) so the teacher can edit the question / chat with AI /
   // regenerate / make similar variations — all the affordances the
@@ -296,6 +298,18 @@ export default function HomeworkDetailPage({
         }}
       />
     )}
+    {showBank && hw && (
+      <AddFromBankDialog
+        courseId={courseId}
+        homeworkUnitIds={hw.unit_ids ?? []}
+        existingIds={problems.map((p) => p.bank_item_id)}
+        onAdd={async (ids) => {
+          await teacher.updateAssignment(assignmentId, { bank_item_ids: ids });
+          await reload();
+        }}
+        onClose={() => setShowBank(false)}
+      />
+    )}
     {showGenerate && (
       <GenerateQuestionsModal
         courseId={courseId}
@@ -438,6 +452,7 @@ export default function HomeworkDetailPage({
             onChangeProblemPoints={onChangeProblemPoints}
             onChangeRubric={onChangeRubric}
             onGenerate={() => setShowGenerate(true)}
+            onAddFromBank={() => setShowBank(true)}
             onRemoveProblems={() => {
               // Drop any in-flight publish soft-confirm so the
               // teacher doesn't return from removal mode to a

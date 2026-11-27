@@ -32,6 +32,7 @@ export function ProblemsSection({
   onChangeProblemPoints,
   onChangeRubric,
   onGenerate,
+  onAddFromBank,
   onRemoveProblems,
   onEditProblem,
   checklistsLookedAgain,
@@ -53,6 +54,8 @@ export function ProblemsSection({
   onChangeProblemPoints: (problemId: string, n: number) => void;
   onChangeRubric: (patch: Partial<TeacherRubric>) => void;
   onGenerate: () => void;
+  /** Put the course's approved questions on this homework. */
+  onAddFromBank: () => void;
   onRemoveProblems: () => void;
   onEditProblem: (bankItemId: string) => void;
   checklistsLookedAgain: boolean;
@@ -67,6 +70,15 @@ export function ProblemsSection({
           {graded ? "Problems & grading" : "Problems"} · {problems.length}
         </h2>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onAddFromBank}
+            disabled={isPublished}
+            title={isPublished ? "Unpublish to add problems" : "Add questions you already approved"}
+            className="rounded-[--radius-md] border border-primary/40 bg-primary-bg/30 px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary-bg/60 disabled:opacity-50"
+          >
+            Add from bank
+          </button>
           <button
             type="button"
             onClick={onGenerate}
