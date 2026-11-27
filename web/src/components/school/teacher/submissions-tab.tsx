@@ -7,6 +7,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { teacher, type SubmissionsInboxRow } from "@/lib/api";
 import { FlagPills } from "./_pieces/flag-pills";
 import { flagWords } from "./_pieces/flag-words";
+import { inboxCta } from "./_pieces/inbox-cta";
 import { formatDueShort } from "@/lib/utils";
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { Select } from "@/components/ui";
@@ -419,18 +420,7 @@ function InboxRow({
   const hasOutstanding = toReview + row.flagged > 0;
   const isAwaiting = row.submitted === 0;
 
-  // CTA copy escalates with what's actually pending: flagged rows
-  // are the highest-leverage click, ungraded next, then plain Review.
-  // Lets a teacher with 8 HWs in their inbox land on the most-urgent
-  // one without scanning the row body.
-  const ctaLabel =
-    row.flagged > 0
-      ? `Review ${flagWords(row)[0] ?? row.flagged} →`
-      : toReview > 0
-        ? `Grade ${toReview} →`
-        : row.dirty > 0
-          ? "Republish →"
-          : "Review →";
+  const ctaLabel = inboxCta(row);
 
   // Body content is identical between the link and waiting variants —
   // only the right-side CTA differs. Pulling it out keeps the two

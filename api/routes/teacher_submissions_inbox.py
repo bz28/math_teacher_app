@@ -131,7 +131,7 @@ async def submissions_inbox(
             else_=0,
         ),
     ).cast(Integer).label("published")
-    # "Flagged" = the one shared definition (teacher_courses.flagged_case),
+    # "Flagged" = the one shared definition (api.core.flagged.flagged_case),
     # so this inbox, the courses dashboard, the needs-attention queue and
     # the review page's Flagged filter all count the same rows.
     flagged_expr = func.sum(flagged_case()).cast(Integer).label("flagged")

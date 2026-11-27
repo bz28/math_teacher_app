@@ -1,5 +1,5 @@
 """What puts a submission in front of the teacher outside grading — the
-"flagged" count — and which of two kinds it is.
+"flagged" count — and which kind it is.
 
 Different things used to share one red "Flagged":
 
@@ -12,8 +12,8 @@ Different things used to share one red "Flagged":
   too_long the homework was too long for the AI grader to finish in one
            pass. The photo is fine; the teacher grades it by hand.
 
-A blurry photo must never read as an integrity concern, so the home
-queue shows the two apart. `flagged_case` (any kind) stays the one count
+A blurry photo must never read as an integrity concern, so the portal
+shows the kinds apart. `flagged_case` (any kind) stays the one count
 the dashboard, the queue, the inbox and the review page's Flagged filter
 agree on.
 """
@@ -91,7 +91,7 @@ def flag_kind_case() -> Any:
 
 
 def flagged_case() -> Any:
-    """1 if the submission is flagged (either kind), else 0 — the one
+    """1 if the submission is flagged (any kind), else 0 — the one
     "flagged" count. The review page's Flagged filter (`isFlagged` in the
     roster) mirrors it row for row, so the count a teacher clicks and
     the list she lands on agree."""
