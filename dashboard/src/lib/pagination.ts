@@ -33,7 +33,7 @@
  *                   label, which reads as data rather than as a failure.
  *                   Two sanctioned ways — pass `error`/`onRetry` to the
  *                   table unconditionally (most boards), or render a stale
- *                   banner above it (Quality, GenerationQuality). Prefer
+ *                   banner above it. Prefer
  *                   the banner for a new board: the stat tiles above a
  *                   table go stale on the same failure, and only the banner
  *                   says so. What isn't allowed is neither.

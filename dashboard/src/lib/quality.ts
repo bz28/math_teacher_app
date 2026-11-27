@@ -1,7 +1,7 @@
 /**
- * Shared labels + accent colors for a session's subject and mode. Used
- * by the Solution-quality tab, its breakdown tables, and the drill-in so
- * a subject/mode reads identically everywhere it appears.
+ * Shared labels + accent colors for a session's subject and mode, read
+ * by MetaChip and the Accuracy (extraction quality) page so a
+ * subject/mode reads identically everywhere it appears.
  */
 
 export const SUBJECT_LABEL: Record<string, string> = {

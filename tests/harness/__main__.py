@@ -20,9 +20,6 @@ _DEFAULT_WEB = "http://localhost:3000"
 # history-fallback for its deep client-side routes) on :4173 by default.
 _DEFAULT_DEMO = "http://localhost:4173"
 _DEFAULT_DB = "postgresql+asyncpg://mathapp:mathapp@localhost:5432/mathapp_harness"
-# Run summaries land in the MAIN app DB (what the admin dashboard reads),
-# separate from the harness test DB above.
-_DEFAULT_SUMMARY_DB = "postgresql+asyncpg://mathapp:mathapp@localhost:5432/mathapp"
 
 
 def _parse(argv: list[str]) -> argparse.Namespace:
@@ -37,10 +34,6 @@ def _parse(argv: list[str]) -> argparse.Namespace:
     run.add_argument("--count", type=int, default=6)
     run.add_argument("--judge-sample", type=int, default=3)
     run.add_argument("--out", default="tests/harness/_reports/report.html")
-    run.add_argument(
-        "--summary-db",
-        default=os.environ.get("HARNESS_SUMMARY_DB", _DEFAULT_SUMMARY_DB),
-    )
 
     exp = sub.add_parser(
         "explore",
@@ -58,10 +51,6 @@ def _parse(argv: list[str]) -> argparse.Namespace:
     exp.add_argument("--db", default=os.environ.get("HARNESS_DATABASE_URL", _DEFAULT_DB))
     exp.add_argument("--count", type=int, default=3)
     exp.add_argument("--out", default="tests/harness/_reports/explore.html")
-    exp.add_argument(
-        "--summary-db",
-        default=os.environ.get("HARNESS_SUMMARY_DB", _DEFAULT_SUMMARY_DB),
-    )
 
     fd = sub.add_parser(
         "for-diff",
@@ -75,10 +64,6 @@ def _parse(argv: list[str]) -> argparse.Namespace:
     fd.add_argument("--web-base", default=os.environ.get("HARNESS_WEB_BASE", _DEFAULT_WEB))
     fd.add_argument("--db", default=os.environ.get("HARNESS_DATABASE_URL", _DEFAULT_DB))
     fd.add_argument("--out", default="tests/harness/_reports/for-diff.html")
-    fd.add_argument(
-        "--summary-db",
-        default=os.environ.get("HARNESS_SUMMARY_DB", _DEFAULT_SUMMARY_DB),
-    )
 
     fl = sub.add_parser(
         "flows",
@@ -127,7 +112,7 @@ def _run_for_diff(args: argparse.Namespace) -> int:
     any matched probe didn't fully pass."""
     from tests.harness.probes import PROBES
     from tests.harness.report import write_report
-    from tests.harness.runner import RunConfig, persist_run_summary, run_probe
+    from tests.harness.runner import RunConfig, run_probe
 
     changed = _changed_files(args.base)
     matched = []
@@ -157,7 +142,6 @@ def _run_for_diff(args: argparse.Namespace) -> int:
             result = await run_probe(probe, cfg)
             out_path = Path(args.out.replace(".html", f".{name}.html"))
             write_report(result, out_path)
-            await persist_run_summary(result, out_path.read_text(), args.summary_db)
             det = sum(1 for it in result.items if it.passed)
             ok = len(result.items) > 0 and det == len(result.items)
             failed = failed or not ok
@@ -219,13 +203,10 @@ def _run_flows(args: argparse.Namespace) -> int:
 def _run_explore(args: argparse.Namespace) -> int:
     from datetime import UTC, datetime
 
-    from api.core.llm_client import MODEL_REASON
     from tests.harness.explorer import (
         explore,
         generate_scenarios,
         load_corpus,
-        persist_explore_summary,
-        persist_golden_cases,
         promote_failures,
         write_explore_report,
     )
@@ -233,7 +214,7 @@ def _run_explore(args: argparse.Namespace) -> int:
 
     probe = _build_probe(args.probe, args.count)
 
-    async def _exec() -> tuple[Any, Path, float | None, bool]:
+    async def _exec() -> tuple[Any, Path, float | None]:
         started = datetime.now(UTC)
         if args.from_corpus:
             scenarios = load_corpus(probe.name)
@@ -241,22 +222,11 @@ def _run_explore(args: argparse.Namespace) -> int:
             scenarios = await generate_scenarios(probe, args.scenarios)
         result = await explore(probe, scenarios, args.api_base, args.web_base)
         corpus = promote_failures(result)
-        report_html = write_explore_report(result, Path(args.out))
+        write_explore_report(result, Path(args.out))
         cost = await run_cost(args.mode, started)
-        run_id = await persist_explore_summary(
-            result, report_html, cost, args.mode, args.summary_db,
-        )
-        # Refresh the live golden-set health view (best-effort) — but ONLY for a
-        # corpus run. The golden set IS the stable regression corpus; a generate
-        # run invents fresh, run-to-run-varying scenario names that would pile up
-        # as ephemeral rows. Generated failures reach the golden set the honest
-        # way: promote_failures writes them to the corpus, and the next
-        # --from-corpus run upserts them.
-        if args.from_corpus:
-            await persist_golden_cases(result, run_id, MODEL_REASON, args.summary_db)
-        return result, corpus, cost, bool(run_id)
+        return result, corpus, cost
 
-    result, corpus, cost, ok = asyncio.run(_exec())
+    result, corpus, cost = asyncio.run(_exec())
     total = len(result.results)
     passed = result.passed
     print(
@@ -266,7 +236,6 @@ def _run_explore(args: argparse.Namespace) -> int:
     )
     print(f"report: {args.out}")
     print(f"corpus: {corpus}")
-    print(f"admin summary: {'written to main DB' if ok else 'SKIPPED'}")
     return 0
 
 
@@ -275,8 +244,7 @@ _PROTECTED_DBS = {"mathapp"}  # the main app DB — never seed/generate into it
 
 def _safe_db(url: str) -> str:
     """The harness SEEDS fake users and GENERATES content, so it must target a
-    dedicated DB — never the main app DB (run summaries go to --summary-db
-    separately). Refuse the main DB outright."""
+    dedicated DB — never the main app DB. Refuse the main DB outright."""
     name = url.rstrip("/").rsplit("/", 1)[-1].split("?")[0]
     if name in _PROTECTED_DBS:
         raise SystemExit(
@@ -311,7 +279,7 @@ def main(argv: list[str]) -> int:
         return _run_flows(args)
 
     from tests.harness.report import write_report
-    from tests.harness.runner import RunConfig, persist_run_summary, run_probe
+    from tests.harness.runner import RunConfig, run_probe
 
     probe = _build_probe(args.probe, args.count)
     cfg = RunConfig(
@@ -319,14 +287,11 @@ def main(argv: list[str]) -> int:
         mode=args.mode, judge_sample=args.judge_sample,
     )
 
-    async def _execute() -> tuple[Any, Path, bool]:
+    async def _execute() -> tuple[Any, Path]:
         result = await run_probe(probe, cfg)
-        out_path = write_report(result, Path(args.out))
-        report_html = out_path.read_text()
-        summary_ok = await persist_run_summary(result, report_html, args.summary_db)
-        return result, out_path, summary_ok
+        return result, write_report(result, Path(args.out))
 
-    result, out, summary_ok = asyncio.run(_execute())
+    result, out = asyncio.run(_execute())
 
     det_passed = sum(1 for it in result.items if it.passed)
     print(
@@ -336,7 +301,6 @@ def main(argv: list[str]) -> int:
         f"cost={'$0 (replay)' if result.cost_usd == 0 else result.cost_usd}",
     )
     print(f"report: {out}")
-    print(f"admin summary: {'written to main DB' if summary_ok else 'SKIPPED (see --summary-db)'}")
     return 0
 
 

@@ -51,30 +51,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/audit-logs/student-access": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Student Access Log
-         * @description Paginated FERPA student-record access log.
-         *
-         *     The (target_student_id, accessed_at) composite index makes the
-         *     canonical "all access to one student" query a fast indexed range
-         *     scan even at scale.
-         */
-        get: operations["student_access_log_v1_admin_audit_logs_student_access_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/admin/audit-logs/timeline": {
         parameters: {
             query?: never;
@@ -186,99 +162,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/generation-quality/board": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Generation Board
-         * @description Every generated question and what became of it.
-         *
-         *     The denominator this page never had. See the module docstring for why
-         *     it is scoped to items created since tracking began, and why the three
-         *     failure modes are counted separately rather than summed.
-         */
-        get: operations["generation_board_v1_admin_generation_quality_board_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/generation-quality/questions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Edited Questions
-         * @description Generated questions ranked by how much repair a teacher had to do.
-         *
-         *     `min_edits` defaults to 1 rather than 0 on purpose: a question
-         *     nobody touched is not evidence about the prompt, and including the
-         *     whole bank would bury the eleven rows that matter under thousands
-         *     that don't.
-         */
-        get: operations["edited_questions_v1_admin_generation_quality_questions_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/generation-quality/questions/{item_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Question Edit History
-         * @description One question's full repair history, oldest first.
-         *
-         *     The diffs are the payload. A count tells you WHICH question to look
-         *     at; only the before/after tells you what the prompt got wrong — and
-         *     that is the thing you can actually act on.
-         */
-        get: operations["question_edit_history_v1_admin_generation_quality_questions__item_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/generation-quality/summary": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Generation Quality Summary
-         * @description Headline counters for the page's stat row.
-         */
-        get: operations["generation_quality_summary_v1_admin_generation_quality_summary_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/admin/generation/jobs": {
         parameters: {
             query?: never;
@@ -321,73 +204,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/admin/golden-set": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Golden Set
-         * @description Every golden case + the health tiles the console leads with.
-         */
-        get: operations["golden_set_v1_admin_golden_set_get"];
-        put?: never;
-        /**
-         * Add Golden Case
-         * @description Add a golden case. It starts `pending` until the next corpus run evaluates it.
-         */
-        post: operations["add_golden_case_v1_admin_golden_set_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/golden-set/rerun": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Rerun Golden Eval
-         * @description Flag cases for a fresh eval. The autonomous harness picks these up on its
-         *     next corpus run (it re-runs the whole corpus and upserts fresh results,
-         *     clearing the flag) — this records the operator's intent without wiping the
-         *     currently-shown verdict.
-         */
-        post: operations["rerun_golden_eval_v1_admin_golden_set_rerun_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/golden-set/{case_id}/retire": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /**
-         * Retire Golden Case
-         * @description Retire (or restore) a case — keeps its history, drops it from the tiles.
-         */
-        patch: operations["retire_golden_case_v1_admin_golden_set__case_id__retire_patch"];
-        trace?: never;
-    };
     "/v1/admin/grading-quality": {
         parameters: {
             query?: never;
@@ -424,44 +240,6 @@ export interface paths {
          *     size (biggest misgrades first) and capped at ``_DRILL_LIMIT``.
          */
         get: operations["grading_quality_overrides_v1_admin_grading_quality_overrides_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/harness-runs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Harness Runs */
-        get: operations["harness_runs_v1_admin_harness_runs_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/harness-runs/{run_id}/report": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Harness Run Report
-         * @description Return one run's self-contained HTML report so the dashboard can
-         *     render it in-app (auth-gated; not a public file).
-         */
-        get: operations["harness_run_report_v1_admin_harness_runs__run_id__report_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -642,66 +420,6 @@ export interface paths {
          *     and silently killed the cache hit for every submission after it.
          */
         get: operations["llm_payload_v1_admin_llm_payloads__payload_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/overview": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Overview */
-        get: operations["overview_v1_admin_overview_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/quality": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Solution Quality
-         * @description Every approved generated question, and whether its solution held.
-         */
-        get: operations["solution_quality_v1_admin_quality_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/admin/quality/{item_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Solution Repair History
-         * @description One question's solution repairs, oldest first.
-         *
-         *     The diffs are the payload. A count tells you WHICH solution to look
-         *     at; only the before/after tells you what the solve prompt got wrong.
-         */
-        get: operations["solution_repair_history_v1_admin_quality__item_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5251,24 +4969,6 @@ export interface components {
              */
             problem_type: "mixed" | "word" | "computation" | "multi_step" | "proof";
         };
-        /** GoldenCaseCreate */
-        GoldenCaseCreate: {
-            /**
-             * Adversarial
-             * @default false
-             */
-            adversarial: boolean;
-            /** Constraint */
-            constraint: string;
-            /** Expected Shapes */
-            expected_shapes?: string[];
-            /** Name */
-            name: string;
-            /** Probe */
-            probe: string;
-            /** Rationale */
-            rationale?: string | null;
-        };
         /** GradeRequest */
         GradeRequest: {
             /** Breakdown */
@@ -5906,11 +5606,6 @@ export interface components {
             /** Score Status */
             score_status?: string | null;
         };
-        /** RerunPayload */
-        RerunPayload: {
-            /** Ids */
-            ids?: string[];
-        };
         /**
          * ResolveRequest
          * @description Teacher's session-level resolution of an integrity check. The
@@ -5937,14 +5632,6 @@ export interface components {
              * @default
              */
             student_response: string;
-        };
-        /** RetirePayload */
-        RetirePayload: {
-            /**
-             * Retired
-             * @default true
-             */
-            retired: boolean;
         };
         /** SectionInsightsResponse */
         SectionInsightsResponse: {
@@ -7357,44 +7044,6 @@ export interface operations {
             };
         };
     };
-    student_access_log_v1_admin_audit_logs_student_access_get: {
-        parameters: {
-            query?: {
-                target_student_id?: string | null;
-                accessor_user_id?: string | null;
-                record_type?: string | null;
-                school_id?: string | null;
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     audit_timeline_v1_admin_audit_logs_timeline_get: {
         parameters: {
             query?: {
@@ -7590,150 +7239,6 @@ export interface operations {
             };
         };
     };
-    generation_board_v1_admin_generation_quality_board_get: {
-        parameters: {
-            query?: {
-                /** @description Include practice variations (generate-similar output) */
-                include_variations?: boolean;
-                /** @description clean | repaired | redone | rejected */
-                outcome?: string | null;
-                limit?: number;
-                offset?: number;
-                school_id?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    edited_questions_v1_admin_generation_quality_questions_get: {
-        parameters: {
-            query?: {
-                teacher_id?: string | null;
-                school_id?: string | null;
-                /** @description edit_manual | edit_workshop */
-                kind?: string | null;
-                min_edits?: number;
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    question_edit_history_v1_admin_generation_quality_questions__item_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                item_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    generation_quality_summary_v1_admin_generation_quality_summary_get: {
-        parameters: {
-            query?: {
-                school_id?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     generation_jobs_v1_admin_generation_jobs_get: {
         parameters: {
             query?: {
@@ -7805,135 +7310,6 @@ export interface operations {
             };
         };
     };
-    golden_set_v1_admin_golden_set_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-    };
-    add_golden_case_v1_admin_golden_set_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["GoldenCaseCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    rerun_golden_eval_v1_admin_golden_set_rerun_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RerunPayload"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: number;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    retire_golden_case_v1_admin_golden_set__case_id__retire_patch: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                case_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RetirePayload"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     grading_quality_v1_admin_grading_quality_get: {
         parameters: {
             query?: {
@@ -7981,75 +7357,6 @@ export interface operations {
             };
             header?: never;
             path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    harness_runs_v1_admin_harness_runs_get: {
-        parameters: {
-            query?: {
-                probe?: string | null;
-                failed_only?: boolean;
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    harness_run_report_v1_admin_harness_runs__run_id__report_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                run_id: string;
-            };
             cookie?: never;
         };
         requestBody?: never;
@@ -8535,112 +7842,6 @@ export interface operations {
             header?: never;
             path: {
                 payload_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    overview_v1_admin_overview_get: {
-        parameters: {
-            query?: {
-                hours?: number;
-                grade?: number | null;
-                school_id?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    solution_quality_v1_admin_quality_get: {
-        parameters: {
-            query?: {
-                include_variations?: boolean;
-                /** @description clean | repaired */
-                outcome?: string | null;
-                limit?: number;
-                offset?: number;
-                school_id?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    solution_repair_history_v1_admin_quality__item_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                item_id: string;
             };
             cookie?: never;
         };

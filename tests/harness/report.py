@@ -131,9 +131,7 @@ def _view(c: CaptureResult) -> str:
 
 def _prompt_versions() -> str:
     """Every live prompt version (api/core/prompts). The probe drives the app
-    from this same checkout, so this is the set its LLM calls ran with; the
-    report HTML is stored on the run's HarnessRun row, which golden cases'
-    last_run_id points at."""
+    from this same checkout, so this is the set its LLM calls ran with."""
     return ", ".join(prompt_version(n) for n in sorted(PROMPT_VERSIONS))
 
 

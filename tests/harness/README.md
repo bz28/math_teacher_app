@@ -8,8 +8,7 @@ For a probe (a feature under test) it: seeds a teacher/course/assignment in a
 separate DB → calls the **real** generation endpoint → checks the output
 deterministically (renders, consistent, well-formed) → drives a real browser
 to screenshot the rendered question **and** its worked solution → has a cheap
-**Haiku judge** score the screenshots → writes an HTML report and a row in the
-admin **Harness Runs** tab.
+**Haiku judge** score the screenshots → writes an HTML report to disk.
 
 ## Cost control (cassettes)
 Every Claude call is recorded once and replayed for **$0** thereafter
@@ -71,11 +70,9 @@ probed problem's id per case so replay reproduces the recorded verdict.
 - API on `:8000` pointed at the harness DB, web on `:3000`, Postgres up.
 - `mathapp_harness` DB migrated (`alembic upgrade head`).
 - The API process needs `HARNESS_LLM_MODE` set to use cassettes.
-- Run summaries are written to the **main** DB (`--summary-db`) so the admin
-  dashboard "Harness Runs" tab can show them.
 
 ## Adding a probe
 Implement `tests/harness/probe.Probe` (name, `relevant_paths`, `capability_spec`,
 `generate`, `deterministic_checks`, `capture_cards`, `judge_rubric`) and register
 it in `tests/harness/probes/__init__.py`. Everything else (cassettes, browser,
-judge, report, explorer, admin tracking) is shared.
+judge, report, explorer) is shared.

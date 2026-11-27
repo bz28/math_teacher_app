@@ -106,13 +106,12 @@ async def test_admin_audit_endpoint_surfaces_the_row(
 
     admin_token = create_access_token(str(grade_world["admin_id"]), "admin")
     r = await client.get(
-        "/v1/admin/audit-logs/student-access",
-        params={"target_student_id": str(grade_world["student_id"])},
+        "/v1/admin/audit-logs/timeline",
+        params={"target_id": str(grade_world["student_id"]), "facet": "access"},
         headers=auth_headers(admin_token),
     )
     assert r.status_code == 200, r.text
     data = r.json()
-    assert data["total"] >= 1
     assert any(item["record_type"] == "grades" for item in data["entries"])
 
 
@@ -122,7 +121,7 @@ async def test_audit_endpoint_is_admin_only(
 ) -> None:
     teacher_token = create_access_token(str(grade_world["teacher_id"]), "teacher")
     r = await client.get(
-        "/v1/admin/audit-logs/student-access",
+        "/v1/admin/audit-logs/timeline",
         headers=auth_headers(teacher_token),
     )
     assert r.status_code == 403

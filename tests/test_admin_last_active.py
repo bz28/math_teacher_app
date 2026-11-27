@@ -1,9 +1,6 @@
-"""Two founder-approved admin data corrections.
+"""A founder-approved admin data correction.
 
-A) `/admin/overview` now returns a real `p95_latency_ms` (Postgres
-   percentile_cont over successful-call latency), not just the mean
-   that hides the slow tail.
-B) `/admin/users` and `/admin/schools` return a unified
+`/admin/users` and `/admin/schools` return a unified
    `last_active_at` that folds in `ActivityLog.performed_at`, so an
    actor whose only recent activity is a logged action (a teacher who
    graded/published, with NO session/submission) no longer reads as
@@ -20,7 +17,6 @@ from sqlalchemy import text
 from api.core.auth import create_access_token, hash_password
 from api.database import get_session_factory
 from api.models.activity_log import ActivityLog
-from api.models.llm_call import LLMCall
 from api.models.school import SCHOOL_KIND_INSTITUTIONAL, School
 from api.models.user import User
 
@@ -121,48 +117,3 @@ async def test_school_last_active_at_reflects_activity_without_submission(
     assert row["last_active_at"] is not None
     delta = abs((datetime.fromisoformat(row["last_active_at"]) - action_at).total_seconds())
     assert delta < 2, row["last_active_at"]
-
-
-# ── A) real p95 latency ──────────────────────────────────────────────
-
-
-@pytest.mark.asyncio
-async def test_overview_p95_latency_computed_and_at_least_median(
-    client: AsyncClient,
-) -> None:
-    """p95 is a real percentile over the successful-call population and
-    sits at or above the median — a skewed body-plus-tail distribution
-    proves the average would understate it."""
-    # 95 fast calls + 5 slow: median ~100ms, but the tail drags p95 up.
-    latencies = [100.0] * 95 + [5000.0] * 5
-    async with get_session_factory()() as s:
-        admin = User(email=f"admin_{uuid.uuid4().hex[:6]}@t.com",
-                     password_hash=hash_password("x"), grade_level=12,
-                     role="admin", name="Admin")
-        s.add(admin)
-        await s.flush()
-        for lat in latencies:
-            s.add(LLMCall(function="decompose", model="claude", input_tokens=1,
-                          output_tokens=1, latency_ms=lat, cost_usd=0.0, success=True))
-        # A failed call with an extreme latency must NOT enter the
-        # percentile population (successful calls only).
-        s.add(LLMCall(function="decompose", model="claude", input_tokens=1,
-                      output_tokens=1, latency_ms=99999.0, cost_usd=0.0, success=False))
-        await s.commit()
-        admin_token = create_access_token(str(admin.id), "admin")
-
-    resp = await client.get("/v1/admin/overview", headers=auth_headers(admin_token))
-    assert resp.status_code == 200, resp.text
-    body = resp.json()
-
-    assert "p95_latency_ms" in body
-    p95 = body["p95_latency_ms"]
-    median = 100.0  # median of the successful population
-    assert p95 >= median
-    # The tail pulls p95 above the 100ms body — proof it's not just the mode.
-    assert p95 > median
-    # The failed 99999ms call must be excluded. With 95×100 + 5×5000
-    # successful calls, percentile_cont(0.95) ≈ 345ms; if the filter
-    # were dropped the failed call would drag p95 up to ≈5000ms. A
-    # tight bound below that gap is what actually guards the exclusion.
-    assert p95 < 1000.0

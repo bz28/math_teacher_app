@@ -5,14 +5,9 @@ import { ConfirmProvider } from "./components/ConfirmProvider";
 import { ToastProvider } from "./components/ToastProvider";
 import ServiceStatusBanner from "./components/ServiceStatusBanner";
 import Login from "./pages/Login";
-import Overview from "./pages/Overview";
 import LLMCalls from "./pages/LLMCalls";
-import HarnessRuns from "./pages/HarnessRuns";
-import Quality from "./pages/Quality";
-import GenerationQuality from "./pages/GenerationQuality";
 import GradingQuality from "./pages/GradingQuality";
 import ExtractionQuality from "./pages/ExtractionQuality";
-import GoldenSet from "./pages/GoldenSet";
 import Users from "./pages/Users";
 import LeadDetail from "./pages/LeadDetail";
 import Leads from "./pages/Leads";
@@ -23,7 +18,6 @@ import SchoolDetail from "./pages/SchoolDetail";
 import StudentDetail from "./pages/StudentDetail";
 import TeacherDetail from "./pages/TeacherDetail";
 import AuditLogs from "./pages/AuditLogs";
-import AIQuality from "./pages/AIQuality";
 import AssignmentDetail from "./pages/AssignmentDetail";
 import SubmissionTrace from "./pages/SubmissionTrace";
 
@@ -48,8 +42,8 @@ export default function App() {
             </ProtectedRoute>
           }
         >
-          {/* Landing = the "what's broken" home. Monitor first. */}
-          <Route path="/" element={<Navigate to="/overview" replace />} />
+          {/* Landing = LLM calls, the debugging home. */}
+          <Route path="/" element={<Navigate to="/llm-calls" replace />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/reports/:reportId" element={<ReportDetail />} />
           <Route path="/leads" element={<Leads />} />
@@ -66,28 +60,17 @@ export default function App() {
           {/* Diagnostics. */}
           <Route path="/audit-logs" element={<AuditLogs />} />
           <Route path="/llm-calls" element={<LLMCalls />} />
-          <Route path="/harness-runs" element={<HarnessRuns />} />
-          {/* One front door for the five AI-quality pages. Each still
-              renders at its original route below, so existing links and
-              bookmarks keep working. */}
-          <Route path="/ai-quality" element={<AIQuality />} />
-          <Route path="/quality" element={<Quality />} />
           <Route path="/grading-quality" element={<GradingQuality />} />
           <Route path="/extraction-quality" element={<ExtractionQuality />} />
-          <Route path="/generation-quality" element={<GenerationQuality />} />
-          <Route path="/golden-set" element={<GoldenSet />} />
           <Route path="/assignments/:id" element={<AssignmentDetail />} />
           <Route
             path="/submissions/:submissionId/trace"
             element={<SubmissionTrace />}
           />
 
-          {/* Overview — the operator home, first item in MONITOR. */}
-          <Route path="/overview" element={<Overview />} />
-          {/* Users — now surfaced under SYSTEM in the rail. */}
           <Route path="/users" element={<Users />} />
 
-          <Route path="*" element={<Navigate to="/overview" replace />} />
+          <Route path="*" element={<Navigate to="/llm-calls" replace />} />
         </Route>
       </Routes>
       </ToastProvider>

@@ -1,7 +1,7 @@
 """The admin rail's school switcher must actually scope every page.
 
 The switcher used to select only which school "Teachers & classes"
-opened; Overview, the AI-quality tabs and the Teacher-reports inbox
+opened; the AI-quality tabs and the Teacher-reports inbox
 ignored it and always answered for the whole platform. Each of those
 endpoints now takes `school_id`, and this file pins, per endpoint:
 
@@ -31,8 +31,6 @@ from api.database import get_session_factory
 from api.models.assignment import Assignment, Submission, SubmissionGrade
 from api.models.course import Course
 from api.models.llm_call import LLMCall
-from api.models.question_bank import QuestionBankItem
-from api.models.question_edit import EDIT_MANUAL, FIELD_SOLUTION, TRACKING_SINCE, QuestionEdit
 from api.models.school import SCHOOL_KIND_INSTITUTIONAL, School
 from api.models.section import Section
 from api.models.session import Session
@@ -54,12 +52,11 @@ def _user(role: str, name: str, school_id: uuid.UUID | None, **kw: Any) -> User:
 
 async def _school(
     s: Any, name: str, *, students: int, reports: int, cost: float,
-    questions: int, with_preview: bool = False,
+    with_preview: bool = False,
 ) -> dict[str, Any]:
     """One school with `students` real students, each of whom submitted
     one handwriting-confirmed, teacher-reviewed homework and ran one
-    tutoring session; `questions` approved generated questions (the
-    first has its solution repaired); `reports` open teacher reports;
+    tutoring session; `reports` open teacher reports;
     and one LLM call costing `cost`.
 
     `with_preview` adds a preview (shadow) student who did all the same
@@ -113,22 +110,6 @@ async def _school(
         ))
         s.add(Session(user_id=kid.id, problem="p", problem_type="algebra"))
 
-    after = TRACKING_SINCE + timedelta(days=1)
-    items = [
-        QuestionBankItem(
-            course_id=course.id, unit_id=unit.id, originating_assignment_id=asg.id,
-            title=f"{name} Q{i}", question="q", solution_steps=[], final_answer="x",
-            source="generated", status="approved", created_at=after,
-        )
-        for i in range(questions)
-    ]
-    s.add_all(items)
-    await s.flush()
-    s.add(QuestionEdit(
-        bank_item_id=items[0].id, school_id=school.id, edited_by_id=teacher.id,
-        kind=EDIT_MANUAL, field=FIELD_SOLUTION, before="a", after="b",
-    ))
-
     for i in range(reports):
         s.add(TeacherReport(
             teacher_id=teacher.id, teacher_name=teacher.name,
@@ -147,7 +128,7 @@ async def _school(
 async def world() -> dict[str, Any]:
     async with get_session_factory()() as s:
         await s.execute(text(
-            "TRUNCATE TABLE teacher_reports, question_edits, question_bank_items, "
+            "TRUNCATE TABLE teacher_reports, "
             "llm_calls, sessions, submission_grades, submissions, assignments, "
             "section_enrollments, sections, units, course_teachers, courses, "
             "teacher_invites, schools, users RESTART IDENTITY CASCADE"
@@ -155,9 +136,8 @@ async def world() -> dict[str, Any]:
         admin = _user("admin", "Admin", None)
         s.add(admin)
         await s.flush()
-        a = await _school(s, "Alpha", students=1, reports=1, cost=1.0,
-                          questions=2, with_preview=True)
-        b = await _school(s, "Beta", students=2, reports=2, cost=2.0, questions=1)
+        a = await _school(s, "Alpha", students=1, reports=1, cost=1.0, with_preview=True)
+        b = await _school(s, "Beta", students=2, reports=2, cost=2.0)
         # An admin/system call: belongs to no school, so it must appear in
         # "All schools" and in no school's scope.
         s.add(LLMCall(
@@ -175,30 +155,6 @@ async def _get(client: AsyncClient, world: dict[str, Any], url: str,
     assert res.status_code == 200, res.text
     body: dict[str, Any] = res.json()
     return body
-
-
-async def test_overview_is_scoped(client: AsyncClient, world: dict[str, Any]) -> None:
-    url = "/v1/admin/overview?hours=24"
-    a = await _get(client, world, url, "a")
-    b = await _get(client, world, url, "b")
-    every = await _get(client, world, url, None)
-
-    # Cost and calls follow the call's own school; the NULL-school call
-    # is in neither school.
-    assert (a["total_cost"], a["total_calls"]) == (1.0, 1)
-    assert (b["total_cost"], b["total_calls"]) == (2.0, 1)
-    assert (every["total_cost"], every["total_calls"]) == (7.0, 3)
-    # Sessions follow their user. Alpha's preview student ran one too,
-    # and it is excluded in every scope, so A + B == All.
-    assert a["total_sessions"] == 1
-    assert b["total_sessions"] == 2
-    assert every["total_sessions"] == 3
-    # Users: teacher + real students, never the preview account.
-    assert a["total_users"] == 2
-    assert b["total_users"] == 3
-    # 5 school users + the admin.
-    assert every["total_users"] == 6
-    assert [s["name"] for s in a["top_spenders"]] == ["Alpha Teacher"]
 
 
 async def test_reports_inbox_is_scoped(client: AsyncClient, world: dict[str, Any]) -> None:
@@ -255,41 +211,6 @@ async def test_extraction_quality_is_scoped(client: AsyncClient, world: dict[str
     assert every["summary"]["settled"] == 3
     assert {c["course"] for c in a["cases"]} == {world["a"]["course"]}
     assert a["total_count"] == 1
-
-
-async def test_solution_quality_is_scoped(client: AsyncClient, world: dict[str, Any]) -> None:
-    url = "/v1/admin/quality"
-    a = await _get(client, world, url, "a")
-    b = await _get(client, world, url, "b")
-    every = await _get(client, world, url, None)
-
-    assert (a["summary"]["judged"], a["summary"]["repaired"]) == (2, 1)
-    assert (b["summary"]["judged"], b["summary"]["repaired"]) == (1, 1)
-    assert every["summary"]["judged"] == 3
-    assert {q["title"] for q in a["questions"]} == {"Alpha Q0", "Alpha Q1"}
-    assert a["total_count"] == 2
-
-
-async def test_generation_board_is_scoped(client: AsyncClient, world: dict[str, Any]) -> None:
-    url = "/v1/admin/generation-quality/board"
-    a = await _get(client, world, url, "a")
-    b = await _get(client, world, url, "b")
-    every = await _get(client, world, url, None)
-
-    assert a["summary"]["settled"] == 2
-    assert b["summary"]["settled"] == 1
-    assert every["summary"]["settled"] == 3
-    assert {q["title"] for q in a["questions"]} == {"Alpha Q0", "Alpha Q1"}
-
-
-async def test_generation_board_rejects_a_bad_school_id(
-    client: AsyncClient, world: dict[str, Any],
-) -> None:
-    res = await client.get(
-        "/v1/admin/generation-quality/board", params={"school_id": "nope"},
-        headers=auth_headers(world["token"]),
-    )
-    assert res.status_code == 400
 
 
 async def test_llm_calls_and_users_are_scoped(

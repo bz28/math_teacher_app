@@ -1,8 +1,7 @@
 """Admin view of a single assignment — what a teacher actually assigned.
 
-The activity log records that a teacher published something, and
-`GenerationQuality` shows which generated questions teachers had to fix.
-Neither shows the artifact: the problems a teacher *kept* and put in
+The activity log records that a teacher published something. It
+doesn't show the artifact: the problems a teacher *kept* and put in
 front of a class. A teacher generates twelve questions, approves four,
 edits one, writes one by hand and publishes six — and the gap between
 what we produced and what she was willing to assign is the signal this
@@ -161,8 +160,7 @@ async def get_assignment(
             ).scalars().all()
             items_by_id = {str(i.id): i for i in items}
             # One query for "has this item ever been edited", not one per
-            # problem. `QuestionEdit` is the same table GenerationQuality
-            # reads, so "edited" means the same thing on both pages.
+            # problem, read off the `QuestionEdit` repair history.
             edited_ids = {
                 str(bid)
                 for (bid,) in (

@@ -2,12 +2,11 @@
  * Does the page at this URL follow the rail's school scope?
  *
  *   "school"   — its data belongs to schools and it sends `school_id`
- *                (Overview, AI quality, Teacher reports, LLM calls,
- *                Users, Audit log).
+ *                (Teacher reports, LLM calls, Users, Audit log, the
+ *                accuracy pages).
  *   "platform" — its data belongs to no school, so the scope does not
  *                apply: the Schools directory and Leads (the business
- *                side), Evals and Harness (curated/synthetic test runs),
- *                and the Admins preset of Users (admins have no school).
+ *                side) and the Admins preset of Users (admins have no school).
  *   null       — a page about ONE thing: a school, a teacher, a
  *                submission. Its subject is fixed by the URL.
  *
@@ -18,28 +17,18 @@
 export type PageScope = "school" | "platform" | null;
 
 const SCHOOL_SCOPED = [
-  "/overview",
   "/reports",
   "/llm-calls",
   "/users",
   "/audit-logs",
-  "/quality",
   "/grading-quality",
   "/extraction-quality",
-  "/generation-quality",
-  "/ai-quality",
 ];
 
-const PLATFORM = ["/schools", "/leads", "/golden-set", "/harness-runs"];
-
-/** AI-quality tabs whose data isn't school data. */
-const PLATFORM_AI_TABS = new Set(["evals", "harness"]);
+const PLATFORM = ["/schools", "/leads"];
 
 export function pageScope(pathname: string, search: string): PageScope {
   const params = new URLSearchParams(search);
-  if (pathname === "/ai-quality" && PLATFORM_AI_TABS.has(params.get("tab") ?? "")) {
-    return "platform";
-  }
   if (pathname === "/users" && params.get("role") === "admin") return "platform";
   // LLM calls filtered to one user / submission / session is about that
   // one thing, and the page drops the school scope for it (LLMCalls.tsx).

@@ -1,10 +1,10 @@
 """Question-bank mutations leave an activity-log trace.
 
-The bug this guards: the generation-quality board reads REJECTED
-straight off `question_bank_items.status`, but only /approve and
+The bug this guards: the bank reads REJECTED straight off
+`question_bank_items.status`, but only /approve and
 /reject logged a status change. /revert restores the pre-edit snapshot
 INCLUDING `previous_status`, so Undo could move an item back to
-rejected with nothing on the timeline — the board and the timeline
+rejected with nothing on the timeline — the item and the timeline
 would then contradict each other about the same item, with no row
 anywhere explaining which one was stale.
 
@@ -63,7 +63,7 @@ async def test_revert_records_the_status_it_restored(
 ) -> None:
     """The headline case. A rejected item is edited, then approved, then
     undone — Undo silently puts it back to `rejected`, which is what the
-    quality board reads. Without a row here the board says REJECTED while
+    bank shows. Without a row here the bank says REJECTED while
     the timeline's last status event says approve."""
     await _setup(world)
     item_id = world["pending_sibling_id"]
