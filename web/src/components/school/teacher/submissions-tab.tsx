@@ -249,8 +249,15 @@ function BatchActionBar({
       dirtyBatch.assignmentIds.map((id) => teacher.publishGrades(id)),
     );
     const failed = results.filter((r) => r.status === "rejected").length;
+    const sent = results.reduce(
+      (n, r) => n + (r.status === "fulfilled" ? r.value.published_count : 0),
+      0,
+    );
     setRepublishing(false);
-    if (failed > 0) {
+    if (failed === 0 && sent === 0) {
+      // Every edit is waiting on her Approve: nothing could go out.
+      setRepublishError("None of these edits are approved yet — approve them, then republish.");
+    } else if (failed > 0) {
       setRepublishError(
         failed === dirtyBatch.assignmentIds.length
           ? "Couldn’t republish — please try again."
@@ -302,12 +309,10 @@ function BatchActionBar({
                 className="flex flex-wrap items-center gap-2"
               >
                 <span className="text-[11px] text-text-secondary">
-                  Send {dirtyBatch.dirtyCount} updated{" "}
-                  {dirtyBatch.dirtyCount === 1 ? "grade" : "grades"} to students
-                  across {dirtyBatch.assignmentIds.length} homeworks
-                  ?{" "}
+                  Send every approved grade on these{" "}
+                  {dirtyBatch.assignmentIds.length} homeworks to students?{" "}
                   <span className="text-text-muted">
-                    Only grades you’ve approved go out.
+                    Grades you haven’t approved stay hidden.
                   </span>
                 </span>
                 <button
@@ -342,7 +347,7 @@ function BatchActionBar({
                 className="inline-flex items-center gap-1.5 rounded-[--radius-md] border border-[color:var(--color-warning)]/40 bg-[color:var(--color-warning-bg)] px-4 py-2 text-xs font-bold text-[color:var(--color-warning-dark)] transition-colors hover:border-[color:var(--color-warning)]/70 dark:bg-[color:var(--color-warning)]/10"
               >
                 <span aria-hidden>↻</span>
-                Republish all ({dirtyBatch.dirtyCount}) →
+                Republish {dirtyBatch.assignmentIds.length} homeworks →
               </motion.button>
             )}
           </AnimatePresence>
@@ -607,22 +612,14 @@ function pickGradeNext(rows: SubmissionsInboxRow[]): GradeNextTarget | null {
 type DirtyBatch = {
   /** Distinct homework ids with edited-but-unreleased grades. The
    *  publish-grades endpoint is HW-wide, so we fan out over these, not
-   *  over rows (a HW can span several section rows). */
+   *  over rows (a HW can span several section rows). No grade count:
+   *  the fan-out sends every approved grade on them, new or edited, and
+   *  holds back unapproved edits, so `dirty` isn't what goes out. */
   assignmentIds: string[];
-  /** Total dirty grades across those homeworks — the "(N)" count. */
-  dirtyCount: number;
 };
 
 function collectDirtyBatch(rows: SubmissionsInboxRow[]): DirtyBatch {
   const ids = new Set<string>();
-  let dirtyCount = 0;
-  // First pass: which homeworks have any dirty grade, and the total
-  // dirty count.
-  for (const r of rows) {
-    if (r.dirty > 0) {
-      ids.add(r.assignment_id);
-      dirtyCount += r.dirty;
-    }
-  }
-  return { assignmentIds: Array.from(ids), dirtyCount };
+  for (const r of rows) if (r.dirty > 0) ids.add(r.assignment_id);
+  return { assignmentIds: Array.from(ids) };
 }

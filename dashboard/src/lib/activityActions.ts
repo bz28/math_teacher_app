@@ -180,6 +180,7 @@ export const ACTIVITY_ACTIONS: Record<ActivityFamily, ActivityAction[]> = {
       label: "Published grades",
       detail: (m) =>
         `Published ${plural(num(m, "published_count"), "grade")}` +
+        (m.submission_id ? " (one student)" : m.section_id ? " (one section)" : "") +
         (m.reviewed_only ? " (reviewed only)" : ""),
     },
   ],

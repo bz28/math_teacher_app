@@ -1168,6 +1168,9 @@ function HomeworkSectionReview({
       flaggedToPublishInSection === 0 &&
       graphToPublishInSection === 0 &&
       reviewedToPublishTotal === reviewedToPublishInSection;
+    // A failed student publish shares the error slot; it belongs on
+    // that student's panel, never in this confirm.
+    setPublishError(null);
     if (!quiet) {
       setPublishConfirmOpen(true);
       return;
@@ -1182,6 +1185,7 @@ function HomeworkSectionReview({
     graphToPublishInSection,
     reviewedToPublishTotal,
     publish,
+    setPublishError,
     setPublishConfirmOpen,
   ]);
 
