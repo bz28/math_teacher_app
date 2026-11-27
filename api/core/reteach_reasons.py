@@ -51,6 +51,7 @@ from sqlalchemy import Text, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.cost_tracker import PlatformStopError
 from api.core.insights_counting import counted_breakdown, is_flagged, missed_full_credit, tally
 from api.core.llm_client import MODEL_HAIKU, LLMMode, call_claude_json
 from api.core.llm_schemas import ToolSchema
@@ -348,6 +349,23 @@ async def _refresh_pair(
         for e in g.breakdown
         if isinstance(e, dict)
     }
+    # A paper turned in but not graded yet (common when she grades by
+    # hand) could land on any problem, so every problem waits on it —
+    # else each hand grade, which approves itself, would buy a new read.
+    ungraded = any(
+        g.reviewed_at is None and g.grade_published_at is None and not g.breakdown for g in grades
+    ) or (await db.execute(
+        select(Submission.id)
+        .join(User, User.id == Submission.student_id)
+        .outerjoin(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
+        .where(
+            Submission.assignment_id == assignment_id,
+            Submission.section_id == section_id,
+            User.is_preview.is_(False),
+            SubmissionGrade.id.is_(None),
+        )
+        .limit(1)
+    )).first() is not None
 
     problems: dict[str, Any] = dict(row.problems or {})
     settled = True
@@ -357,7 +375,7 @@ async def _refresh_pair(
         items = _items(pid, counted)
         key = _input_key(questions[pid], items)
         entry = problems.get(pid)
-        if not needs_call(entry, key, len(items), drafts_waiting=pid in waiting_on):
+        if not needs_call(entry, key, len(items), drafts_waiting=ungraded or pid in waiting_on):
             continue
         written = {"input_key": key, "n_items": len(items), "prompt_version": prompt_version(_PROMPT)}
         if not items:
@@ -367,6 +385,14 @@ async def _refresh_pair(
             reasons = await group_reasons(
                 questions[pid], items, user_id=str(hw.teacher_id) if hw and hw.teacher_id else None,
             )
+        except PlatformStopError:
+            # The daily spend cap or the circuit breaker: every call fails
+            # the same way until it lifts, so this isn't the input's fault.
+            # Charge nothing, keep the pair stale, and stop the pass.
+            logger.warning("reteach reasons paused by a platform stop")
+            settled = False
+            tally_out["stopped"] += 1
+            break
         except Exception:  # noqa: BLE001 — a missing reason is never worth failing the drain over
             logger.exception("reteach reasons failed assignment=%s section=%s problem=%s",
                              assignment_id, section_id, pid)
@@ -397,4 +423,6 @@ async def refresh_reteach_reasons(limit: int = PAIRS_PER_PASS) -> dict[str, int]
     for assignment_id, section_id, signature in pairs:
         async with get_session_factory()() as db:
             out.update(await _refresh_pair(db, assignment_id, section_id, signature))
+        if out["stopped"]:
+            break
     return {"pairs": out["pairs"], "written": out["written"], "failed": out["failed"]}

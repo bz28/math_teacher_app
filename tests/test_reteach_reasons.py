@@ -26,6 +26,7 @@ from sqlalchemy import select
 
 from api.core import reteach_reasons as rr
 from api.core.auth import create_access_token, hash_password
+from api.core.cost_tracker import PlatformStopError
 from api.database import get_session_factory
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
 from api.models.course import Course, CourseTeacher
@@ -110,11 +111,13 @@ class FakeModel:
 
     def __init__(self) -> None:
         self.messages: list[str] = []
-        self.fail = False
+        self.fail: bool | Exception = False
 
     async def __call__(self, system: str, user_message: str, mode: str, **kw: Any) -> dict[str, Any]:
         assert kw["model"] == rr.MODEL_HAIKU and kw["prompt_ids"] == ("reteach_reasons",)
         self.messages.append(user_message)
+        if isinstance(self.fail, Exception):
+            raise self.fail
         if self.fail:
             raise RuntimeError("model down")
         n = user_message.count("\n[")
@@ -286,6 +289,28 @@ async def test_rewrites_only_once_the_period_is_approved(client: AsyncClient, mo
     assert len(sent) == 2 and "Jo-note" in sent[1] and "Kit-note" in sent[1]
 
 
+async def test_hand_grading_rewrites_once_the_papers_are_graded(client: AsyncClient, model: FakeModel) -> None:
+    """Hand grades approve themselves, so papers not graded yet are what
+    she's still working through: the read waits for them too."""
+    w = await _world()
+    await _flagged_period(w)
+    await _student(w, "Lou", None)  # turned in, not graded yet
+    await rr.refresh_reteach_reasons(limit=1000)
+    assert len(_mine(model, w)) == 1
+
+    await _student(w, "Jo", _entry(w["pid"], "partial", "Jo-note"))
+    await rr.refresh_reteach_reasons(limit=1000)
+    assert len(_mine(model, w)) == 1
+
+    async with get_session_factory()() as s:
+        s.add(SubmissionGrade(submission_id=w["subs"]["Lou"], graded_at=NOW, reviewed_at=datetime.now(UTC),
+                              breakdown=[_entry(w["pid"], "zero", "Lou-note")]))
+        await s.commit()
+    await rr.refresh_reteach_reasons(limit=1000)
+    sent = _mine(model, w)
+    assert len(sent) == 2 and "Jo-note" in sent[1] and "Lou-note" in sent[1]
+
+
 async def test_a_failed_call_retries_then_gives_up(client: AsyncClient, model: FakeModel) -> None:
     w = await _world()
     await _flagged_period(w)
@@ -308,6 +333,24 @@ async def test_a_failed_call_retries_then_gives_up(client: AsyncClient, model: F
     # page says reasons are coming again before that pass runs.
     await _student(w, "Zed", _entry(w["pid"], "zero", "Never started"))
     assert (await _insights(client, w))["problems"][0]["reasons_pending"]
+
+
+async def test_a_platform_stop_never_uses_up_the_retries(client: AsyncClient, model: FakeModel) -> None:
+    """The daily spend cap or an open circuit breaker says "later", not
+    "this input is bad": no attempt is charged and the pair stays due."""
+    w = await _world()
+    await _flagged_period(w)
+    model.fail = PlatformStopError("Daily cost limit reached")
+    for _ in range(rr.MAX_ATTEMPTS + 1):
+        await rr.refresh_reteach_reasons(limit=1000)
+    row = await _stored(w)
+    assert row is not None and row.grades_signature is None
+    assert "attempts" not in (row.problems.get(w["pid"]) or {})
+    assert (await _insights(client, w))["problems"][0]["reasons_pending"]
+
+    model.fail = False
+    await rr.refresh_reteach_reasons(limit=1000)
+    assert (await _insights(client, w))["problems"][0]["reasons"]
 
 
 async def test_no_written_feedback_means_no_call(client: AsyncClient, model: FakeModel) -> None:

@@ -124,7 +124,7 @@ export function StudentInsightsTab({ courseId }: { courseId: string }) {
           Student Insights
         </h2>
         <p className="mt-1 text-sm text-text-muted">
-          Problems most of the class didn&rsquo;t get full credit on, ready to
+          Problems half or more of the class didn&rsquo;t get full credit on, ready to
           turn into practice. Counts only grades you&rsquo;ve approved or
           published.
         </p>
@@ -330,10 +330,10 @@ function Lead({
       {tooFew
         ? `Too few grades counted on ${homework.title} to flag problems yet. It takes ${minCounted}.`
         : flagged === 0
-          ? `Most of ${sectionName} got full credit on every problem in ${homework.title}.`
+          ? `No problem in ${homework.title} was missed by half of ${sectionName} or more.`
           : flagged === 1
-            ? `Most of ${sectionName} lost points on 1 problem in ${homework.title}.`
-            : `Most of ${sectionName} lost points on ${flagged} problems in ${homework.title}.`}
+            ? `Half or more of ${sectionName} lost points on 1 problem in ${homework.title}.`
+            : `Half or more of ${sectionName} lost points on ${flagged} problems in ${homework.title}.`}
     </p>
   );
 }
