@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { studentReviewHref } from "@/lib/review-deep-link";
 import { studentHistoryHref } from "@/lib/student-history-href";
 import {
   useCallback,
@@ -36,6 +35,7 @@ import {
   type SortKey,
 } from "@/lib/gradebook";
 import { earnedPoints, formatPoints } from "@/lib/points";
+import { studentReviewHref } from "@/lib/review-deep-link";
 
 /**
  * The section gradebook: students down the side, homework across the
