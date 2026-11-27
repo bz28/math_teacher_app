@@ -2,7 +2,13 @@
 //   node --experimental-strip-types --test src/lib/generation-progress.test.ts
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { generatingLabel, generationProgress, oldestFirst } from "./generation-progress.ts";
+import {
+  generatingLabel,
+  generationJobsKey,
+  generationProgress,
+  oldestFirst,
+  withStartedJob,
+} from "./generation-progress.ts";
 
 const job = (status: string, mode: string, requested: number, produced: number) => ({
   status,
@@ -46,4 +52,14 @@ test("review walks pending problems oldest first, one millisecond apart", () => 
   }));
   assert.deepEqual(oldestFirst(newestFirst).map((i) => i.n), [1, 2, 3, 4, 5, 6]);
   assert.equal(newestFirst[0].n, 6, "the input is left alone");
+});
+
+test("a started job is tracked with only the jobs still running", () => {
+  const j = (id: string, status: string) => ({ id, status, requested_count: 5, produced_count: 0 });
+  const next = withStartedJob([j("a", "done"), j("b", "failed"), j("c", "running"), j("d", "queued")], j("e", "queued"));
+  assert.deepEqual(next.map((x) => x.id), ["c", "d", "e"]);
+  // Starting the same job twice doesn't track it twice.
+  assert.deepEqual(withStartedJob(next, j("e", "running")).map((x) => x.id), ["c", "d", "e"]);
+  // The page restores from the key the wizard writes.
+  assert.equal(generationJobsKey("hw1"), "hw-gen-hw1");
 });

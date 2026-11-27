@@ -50,8 +50,8 @@ export function ProblemsAwaitingNote() {
 
 // ────────────────────────────────────────────────────────────────────
 // Generation banner — the one place the page talks about a running job:
-// what's being made, an honest wait (the real median for AI generation
-// is about 90 s; an upload has no estimate), progress, and Review once
+// what's being made, an honest wait (prod generate jobs: p50 101 s,
+// p80 141 s; an upload has no estimate), progress, and Review once
 // anything is ready. Replaces the pending banner while a job runs.
 // ────────────────────────────────────────────────────────────────────
 export function GenerationBanner({

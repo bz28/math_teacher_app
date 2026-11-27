@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { teacher, type BankJob } from "@/lib/api";
 import { jobNotices } from "@/lib/job-notice";
-import { generationProgress } from "@/lib/generation-progress";
+import { generationJobsKey, generationProgress, withStartedJob } from "@/lib/generation-progress";
 import {
   BANK_JOB_POLL_INTERVAL_MS,
   BANK_JOB_POLL_LIMIT_MS,
@@ -12,7 +12,7 @@ import {
 /**
  * The generation jobs writing problems for one homework: the ones the
  * wizard handed over in sessionStorage, plus any "Generate more" the
- * page starts (`setActiveJobs`). Polls them while they run and calls
+ * page starts (`startJob`). Polls them while they run and calls
  * `onProgress` whenever a job produced something, so the pending
  * banner shows up as the first problem lands.
  */
@@ -40,7 +40,7 @@ export function useGenerationJobs(
   // The key survives navigation away and back; we clear it once
   // every job has reached a terminal state.
   useEffect(() => {
-    const key = `hw-gen-${assignmentId}`;
+    const key = generationJobsKey(assignmentId);
     const raw = sessionStorage.getItem(key);
     if (!raw) return;
     // Validate before fetching — a malformed/legacy value would
@@ -143,6 +143,20 @@ export function useGenerationJobs(
     return () => clearInterval(interval);
   }, [activeJobs, courseId]);
 
+  // A job started on this page (Generate more). Its id goes where the
+  // wizard's do, so the banner comes back if the teacher leaves and
+  // returns while it runs, instead of an empty page inviting a second
+  // (paid) generation.
+  const startJob = (job: BankJob) => {
+    const next = withStartedJob(activeJobs, job);
+    setActiveJobs(next);
+    try {
+      sessionStorage.setItem(generationJobsKey(assignmentId), JSON.stringify(next.map((j) => j.id)));
+    } catch {
+      // Storage full or blocked: the banner just won't survive a reload.
+    }
+  };
+
   const activeGenerating = activeJobs.some(
     (j) => j.status !== "done" && j.status !== "failed",
   );
@@ -176,7 +190,7 @@ export function useGenerationJobs(
 
   return {
     activeJobs,
-    setActiveJobs,
+    startJob,
     activeGenerating,
     aggregateRequested,
     aggregateProduced,

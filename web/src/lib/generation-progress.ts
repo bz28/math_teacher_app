@@ -53,3 +53,17 @@ export function generatingLabel(count: number, reading: boolean, more?: "more"):
 export function oldestFirst<T extends { created_at: string }>(items: T[]): T[] {
   return [...items].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
 }
+
+/** The jobs to track after one more starts: the new job plus those still
+ *  running (a finished one would keep inflating the counts, and an old
+ *  failure would come back as a stalled banner). */
+export function withStartedJob<T extends ProgressJob & { id: string }>(jobs: T[], job: T): T[] {
+  return [...jobs.filter((j) => running(j) && j.id !== job.id), job];
+}
+
+/** Where the homework page keeps the ids of the jobs feeding it, so they
+ *  are picked up again after the teacher leaves and comes back (the
+ *  wizard writes the same key). */
+export function generationJobsKey(assignmentId: string): string {
+  return `hw-gen-${assignmentId}`;
+}

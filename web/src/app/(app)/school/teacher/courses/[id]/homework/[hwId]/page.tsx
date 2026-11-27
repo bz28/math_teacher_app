@@ -79,7 +79,7 @@ export default function HomeworkDetailPage({
   const inboxRows = useHomeworkInbox(hw?.status, courseId, assignmentId);
   const courseSections = useCourseSections(courseId);
   const {
-    setActiveJobs,
+    startJob,
     activeGenerating,
     aggregateRequested,
     aggregateProduced,
@@ -302,15 +302,9 @@ export default function HomeworkDetailPage({
         assignmentId={assignmentId}
         onClose={() => setShowGenerate(false)}
         onStarted={(job) => {
-          // Append rather than replace — a teacher could in
-          // principle queue multiple "Generate more" calls, and we
-          // already track multi-job for clone-as-practice. Drop
-          // any prior terminal jobs so they don't keep inflating
-          // the aggregate count after they finished.
-          setActiveJobs((prev) => [
-            ...prev.filter((j) => j.status !== "done" && j.status !== "failed"),
-            job,
-          ]);
+          // Tracked beside any still running (clone-as-practice fans out
+          // several) and remembered across leaving the page.
+          startJob(job);
           setShowGenerate(false);
         }}
       />
