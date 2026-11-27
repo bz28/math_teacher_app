@@ -5370,8 +5370,12 @@ export interface components {
              * Format: uuid
              */
             id: string;
+            /** Practiced */
+            practiced: number;
             /** Status */
             status: string;
+            /** Students */
+            students: number;
             /** Title */
             title: string;
             /** To Review */
@@ -5390,12 +5394,43 @@ export interface components {
             counted: number;
             /** Flagged */
             flagged: boolean;
+            /** Missed */
+            missed: number;
             /** Position */
             position: number;
             /** Question */
             question: string;
-            /** Wrong */
-            wrong: number;
+            /** Reasons */
+            reasons: components["schemas"]["InsightsReason"][];
+            /** Reasons Pending */
+            reasons_pending: boolean;
+        };
+        /**
+         * InsightsReason
+         * @description One common reason points came off, from the teacher's feedback.
+         */
+        InsightsReason: {
+            /** Count */
+            count: number;
+            /** Label */
+            label: string;
+            /** Students */
+            students: components["schemas"]["InsightsReasonStudent"][];
+        };
+        /** InsightsReasonStudent */
+        InsightsReasonStudent: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Submission Id
+             * Format: uuid
+             */
+            submission_id: string;
         };
         /** InsightsSection */
         InsightsSection: {

@@ -28,6 +28,7 @@ from fastapi import APIRouter, Header, HTTPException, status
 from api.config import settings
 from api.core.grading_queue import DEFAULT_DRAIN_LIMIT, drain
 from api.core.integrity_pipeline import finalize_abandoned_checks
+from api.core.reteach_reasons import refresh_reteach_reasons
 from api.database import get_session_factory
 
 logger = logging.getLogger(__name__)
@@ -68,6 +69,12 @@ async def drain_grading_queue(
     for someone to open a page. It runs first — one indexed query, where
     the drain can spend minutes on LLM calls — and a failure in it never
     blocks grading.
+
+    After grading, the same pass writes the reasons Student Insights shows
+    under a flagged problem (`reteach_reasons`) for any homework × period
+    whose approved grades moved — so they're stored before a teacher
+    opens the page, and a page view never calls a model. It runs last
+    (grading is what a deadline waits on) and never fails the pass.
     """
     token = settings.grading_drain_token
     if not token:
@@ -93,4 +100,15 @@ async def drain_grading_queue(
     # Bounded so one pass can't run past a platform request timeout and
     # get killed halfway. Anything unclaimed stays queued for next time.
     result = await drain(limit=max(1, min(limit, DEFAULT_DRAIN_LIMIT)))
-    return {**result, "abandoned_checks": abandoned}
+    reasons = {"pairs": 0, "written": 0, "failed": 0}
+    try:
+        reasons = await refresh_reteach_reasons()
+    except Exception:
+        logger.exception("reteach-reasons pass failed; grading drain result stands")
+    return {
+        **result,
+        "abandoned_checks": abandoned,
+        "reasons_pairs": reasons["pairs"],
+        "reasons_written": reasons["written"],
+        "reasons_failed": reasons["failed"],
+    }

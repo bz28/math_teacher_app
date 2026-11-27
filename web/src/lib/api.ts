@@ -1942,8 +1942,9 @@ export const teacher = {
     );
   },
   /** Student Insights for one section: homework coverage, the selected
-   *  homework's whole-class counts per problem (flagged when most of the
-   *  class got it wrong), and the practice set made from it.
+   *  homework's whole-class counts per problem (flagged when at least half
+   *  the class didn't get full credit, with the common reasons why), and
+   *  the practice set made from it.
    *  Omit `assignmentId` to get the newest homework with counted grades. */
   sectionInsights(courseId: string, sectionId: string, assignmentId?: string) {
     const q = assignmentId ? `?assignment_id=${encodeURIComponent(assignmentId)}` : "";

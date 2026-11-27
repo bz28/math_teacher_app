@@ -2284,9 +2284,17 @@
             "title": "Id",
             "type": "string"
           },
+          "practiced": {
+            "title": "Practiced",
+            "type": "integer"
+          },
           "status": {
             "title": "Status",
             "type": "string"
+          },
+          "students": {
+            "title": "Students",
+            "type": "integer"
           },
           "title": {
             "title": "Title",
@@ -2309,7 +2317,9 @@
           "to_review",
           "writing",
           "failed",
-          "covered_item_ids"
+          "covered_item_ids",
+          "practiced",
+          "students"
         ],
         "title": "InsightsPractice",
         "type": "object"
@@ -2329,6 +2339,10 @@
             "title": "Flagged",
             "type": "boolean"
           },
+          "missed": {
+            "title": "Missed",
+            "type": "integer"
+          },
           "position": {
             "title": "Position",
             "type": "integer"
@@ -2337,9 +2351,16 @@
             "title": "Question",
             "type": "string"
           },
-          "wrong": {
-            "title": "Wrong",
-            "type": "integer"
+          "reasons": {
+            "items": {
+              "$ref": "#/components/schemas/InsightsReason"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "reasons_pending": {
+            "title": "Reasons Pending",
+            "type": "boolean"
           }
         },
         "required": [
@@ -2347,10 +2368,64 @@
           "position",
           "question",
           "counted",
-          "wrong",
-          "flagged"
+          "missed",
+          "flagged",
+          "reasons",
+          "reasons_pending"
         ],
         "title": "InsightsProblem",
+        "type": "object"
+      },
+      "InsightsReason": {
+        "description": "One common reason points came off, from the teacher's feedback.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "students": {
+            "items": {
+              "$ref": "#/components/schemas/InsightsReasonStudent"
+            },
+            "title": "Students",
+            "type": "array"
+          }
+        },
+        "required": [
+          "label",
+          "count",
+          "students"
+        ],
+        "title": "InsightsReason",
+        "type": "object"
+      },
+      "InsightsReasonStudent": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "submission_id": {
+            "format": "uuid",
+            "title": "Submission Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "submission_id"
+        ],
+        "title": "InsightsReasonStudent",
         "type": "object"
       },
       "InsightsSection": {

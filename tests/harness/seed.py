@@ -15,6 +15,7 @@ from sqlalchemy import select
 
 from api.core import photo_store
 from api.core.auth import create_access_token, create_refresh_token, hash_password
+from api.core.insights_counting import FLAG_MIN_COUNTED
 from api.database import get_session_factory
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
 from api.models.course import Course, CourseTeacher
@@ -24,7 +25,6 @@ from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.unit import Unit
 from api.models.user import User
-from api.routes.teacher_insights import _FLAG_MIN_COUNTED
 
 
 @dataclass
@@ -450,7 +450,7 @@ async def seed_insights_homework(seed: Seed) -> None:
         s.add(AssignmentSection(assignment_id=hw.id, section_id=section_id, published_at=now))
         # Insights flags a problem only once enough grades count, so seed
         # exactly that many approved zero-credit grades.
-        for i in range(_FLAG_MIN_COUNTED):
+        for i in range(FLAG_MIN_COUNTED):
             student = User(
                 email=f"harness_insights_{uuid.uuid4().hex[:6]}@t.com",
                 password_hash=hash_password("x"), grade_level=8, role="student",

@@ -58,6 +58,7 @@ CONSTANTS: list[tuple[str, str]] = [
     ("question_bank_generation", "_EXTRACT_WORKSHEET_TEMPLATE"),
     ("question_bank_generation", "_REGENERATE_SYSTEM_TEMPLATE"),
     ("question_bank_generation", "_REPLACEMENT_RULE"),
+    ("reteach_reasons", "_SYSTEM"),
     ("step_decomposition", "_CONSTRUCTION_STEP_FIGURES"),
     ("step_decomposition", "_SHAPE_STEP_FIGURES"),
     ("step_decomposition", "_SYSTEM_PROMPT_TEMPLATE"),

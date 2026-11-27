@@ -58,6 +58,7 @@ PROMPT_VERSIONS: dict[str, int] = {
     "practice_distractors": 1,
     "practice_generate": 1,
     "practice_single_answer_rule": 1,
+    "reteach_reasons": 1,
     "safety_preamble": 1,
     "step_construction_figures": 1,
     "step_decomposition_system": 1,

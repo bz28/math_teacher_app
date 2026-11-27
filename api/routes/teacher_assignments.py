@@ -55,6 +55,7 @@ from api.core.late_policy import (
     submission_penalty_percent,
 )
 from api.core.question_bank_generation import schedule_generation_job
+from api.core.reteach_reasons import schedule_refresh as schedule_reasons_refresh
 from api.database import get_db
 from api.middleware.auth import CurrentUser, get_current_user_full, require_teacher
 from api.middleware.rate_limit import limiter
@@ -1983,6 +1984,10 @@ async def grade_submission(
         {"assignment_id": str(sub.assignment_id), "final_score": grade.final_score},
     )
     await db.commit()
+    if body.breakdown is not None and grade.reviewed_at is not None:
+        # An approved grade changed (a hand grade approves itself once
+        # complete): its period's reasons follow now, not at the drain.
+        schedule_reasons_refresh(sub.assignment_id, sub.section_id)
     return {
         "status": "ok",
         "final_score": grade.final_score,
@@ -2051,6 +2056,7 @@ async def mark_submission_reviewed(
         {"assignment_id": str(sub.assignment_id), "final_score": grade.final_score},
     )
     await db.commit()
+    schedule_reasons_refresh(sub.assignment_id, sub.section_id)
     return {"status": "ok", "reviewed_at": now.isoformat()}
 
 
