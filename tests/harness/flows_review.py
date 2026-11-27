@@ -374,19 +374,32 @@ async def review_integrity_flow(
         await page.route("**/resolve/undo", slow_fail)
         if await re_resolve("Contacted student"):
             await undo.click(timeout=_TIMEOUT_MS)
+            size = page.viewport_size
             try:
                 if await change.first.is_enabled():
                     issues.append("Change stayed enabled while an Undo was in flight "
                                   "(a resolve then races the undo)")
+                # Cross the xl breakpoint mid-undo: the card's other copy
+                # (it mounts in the grade column below xl and in the rail
+                # at xl+) must hold still too, and come back once the
+                # undo settles — it must not stay stuck disabled.
+                await page.set_viewport_size({"width": 1440, "height": size["height"]})
+                if await change.first.is_enabled():
+                    issues.append("the card's other copy (xl rail) left Change "
+                                  "enabled while an Undo was in flight")
             finally:
                 release.set()
-            await step("a failed Undo with no newer resolve offered no Retry",
-                       retry.wait_for(timeout=_TIMEOUT_MS))
-            await step("Change did not come back after the failed Undo settled",
-                       page.wait_for_function(
-                           "() => [...document.querySelectorAll('button')].some("
-                           "b => b.textContent.trim() === 'Change' && !b.disabled"
-                           " && b.offsetParent)", timeout=_TIMEOUT_MS))
+            try:
+                await step("a failed Undo with no newer resolve offered no Retry",
+                           retry.wait_for(timeout=_TIMEOUT_MS))
+                await step("Change stayed disabled after the failed Undo settled "
+                           "(the control is stuck)",
+                           page.wait_for_function(
+                               "() => [...document.querySelectorAll('button')].some("
+                               "b => b.textContent.trim() === 'Change' && !b.disabled"
+                               " && b.offsetParent)", timeout=_TIMEOUT_MS))
+            finally:
+                await page.set_viewport_size(size)
         await page.unroute("**/resolve/undo")
         # Leave the check as the final DB check expects.
         await re_resolve("Cleared — no concern")

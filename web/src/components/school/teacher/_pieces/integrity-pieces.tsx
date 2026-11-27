@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   ApiError,
   teacher,
@@ -445,8 +445,22 @@ export const RESOLVE_UNDO_MS = 8000;
 const undoToastBySubmission = new Map<string, number>();
 // Submissions with an Undo request in flight. Resolving meanwhile would
 // race it (the server undoes whichever resolve is latest), so the
-// control holds still until the undo settles.
+// control holds still until the undo settles. A tiny external store:
+// every mounted control for that student (the card mounts in two places,
+// and can remount mid-undo) re-reads it when an undo starts or settles.
 const undoInFlight = new Set<string>();
+const undoListeners = new Set<() => void>();
+function setUndoInFlight(submissionId: string, inFlight: boolean) {
+  if (inFlight) undoInFlight.add(submissionId);
+  else undoInFlight.delete(submissionId);
+  undoListeners.forEach((l) => l());
+}
+function subscribeUndoInFlight(listener: () => void) {
+  undoListeners.add(listener);
+  return () => {
+    undoListeners.delete(listener);
+  };
+}
 
 /** The teacher's "I handled this" control. Unresolved: the outcomes as
  *  chips, so one click resolves. Resolved: a quiet Reviewed chip whose
@@ -481,13 +495,16 @@ export function ResolveIntegrityControl({
   const [submitting, setSubmitting] =
     useState<IntegrityResolutionOutcome | null>(null);
   const [error, setError] = useState(false);
-  const [undoing, setUndoing] = useState(() => undoInFlight.has(submissionId));
+  const undoing = useSyncExternalStore(
+    subscribeUndoInFlight,
+    () => undoInFlight.has(submissionId),
+    () => false,
+  );
 
   async function undo() {
     if (undoInFlight.has(submissionId)) return;
     undoToastBySubmission.delete(submissionId);
-    undoInFlight.add(submissionId);
-    setUndoing(true);
+    setUndoInFlight(submissionId, true);
     try {
       const { resolution: restored } = await teacher.undoResolveIntegrity(submissionId);
       latestOnResolved.current(restored);
@@ -519,8 +536,7 @@ export function ResolveIntegrityControl({
         }),
       );
     } finally {
-      undoInFlight.delete(submissionId);
-      setUndoing(false);
+      setUndoInFlight(submissionId, false);
     }
   }
 
