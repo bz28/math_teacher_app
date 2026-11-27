@@ -203,3 +203,75 @@ async def test_a_preview_does_not_reschedule_queued_grading(
     r = await client.post(url, json=body, headers=_auth(world["teacher_token"]))
     assert r.status_code == 200, r.text
     assert calls == [w["aid"]]
+
+
+async def _published_grade(world: dict[str, Any], w: dict[str, Any]) -> uuid.UUID:
+    from api.models.assignment import SubmissionGrade
+    async with get_session_factory()() as s:
+        sub = Submission(assignment_id=w["aid"], student_id=world["student_id"], section_id=w["section"],
+                         status="submitted", submitted_at=w["now"], is_late=False)
+        s.add(sub)
+        await s.flush()
+        s.add(SubmissionGrade(submission_id=sub.id, final_score=90.0, late_penalty=0.0,
+                              graded_at=w["now"], grade_published_at=w["now"],
+                              published_final_score=90.0, published_late_penalty=0.0))
+        await s.commit()
+        return sub.id
+
+
+async def test_section_views_date_each_homework_by_that_section(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """The Submissions inbox row, the section gradebook, the student's
+    grade detail and the section's CSV all show this section's date."""
+    w = await _setup(world)
+    await _published_grade(world, w)
+    h = _auth(world["teacher_token"])
+    base = f"/v1/teacher/courses/{w['course_id']}"
+
+    r = await client.get(f"{base}/submissions-inbox", headers=h)
+    assert r.status_code == 200, r.text
+    row = next(x for x in r.json()["rows"]
+               if x["assignment_id"] == str(w["aid"]) and x["section_id"] == str(w["section"]))
+    assert datetime.fromisoformat(row["due_at"]) == w["late"]
+    other = next(x for x in r.json()["rows"]
+                 if x["assignment_id"] == str(w["aid"]) and x["section_id"] == str(w["other"]))
+    assert datetime.fromisoformat(other["due_at"]) == w["early"]
+
+    r = await client.get(f"{base}/sections/{w['section']}/gradebook", headers=h)
+    assert r.status_code == 200, r.text
+    col = next(a for a in r.json()["assignments"] if a["id"] == str(w["aid"]))
+    assert datetime.fromisoformat(col["due_at"]) == w["late"]
+
+    r = await client.get(f"{base}/sections/{w['section']}/students/{world['student_id']}/grades", headers=h)
+    assert r.status_code == 200, r.text
+    hw = next(x for x in r.json()["published_hws"] if x["assignment_id"] == str(w["aid"]))
+    assert datetime.fromisoformat(hw["due_at"]) == w["late"]
+
+    r = await client.get(f"{base}/grades/export.csv", params={"section_id": str(w["section"])}, headers=h)
+    assert r.status_code == 200, r.text
+    assert f"({w['late'].date().isoformat()})" in r.text.splitlines()[0]
+
+
+async def test_removing_the_earliest_section_reprices_work_already_in(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """Dropping Period 3 moves the homework's date to the student's
+    section date, so work that read as late against the old date isn't."""
+    w = await _setup(world)
+    async with get_session_factory()() as s:
+        a = await s.get(Assignment, w["aid"])
+        assert a is not None
+        a.status = "draft"
+        # As the student's work was priced before per-section dates: late.
+        sub = Submission(assignment_id=w["aid"], student_id=world["student_id"], section_id=w["section"],
+                         status="submitted", submitted_at=w["now"], is_late=True)
+        s.add(sub)
+        await s.commit()
+        sub_id = sub.id
+    r = await client.post(f"/v1/teacher/assignments/{w['aid']}/sections",
+                          json={"section_ids": [str(w["section"])]}, headers=_auth(world["teacher_token"]))
+    assert r.status_code == 200, r.text
+    async with get_session_factory()() as s:
+        sub_after = await s.get(Submission, sub_id)
+        assert sub_after is not None and not sub_after.is_late

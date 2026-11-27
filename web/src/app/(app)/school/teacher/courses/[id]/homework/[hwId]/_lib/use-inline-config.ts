@@ -112,6 +112,16 @@ export function useInlineConfig({
     );
   };
 
+  // A date or sections change moves the section rows on the server (and
+  // the homework's own date with them): re-read both, so the due-date
+  // dialog never starts from dates that are no longer there.
+  const refreshDueDates = async () => {
+    const fresh = await teacher.assignment(assignmentId);
+    setHw((h) =>
+      h ? { ...h, due_at: fresh.due_at, section_due_dates: fresh.section_due_dates } : h,
+    );
+  };
+
   const onChangeDueAt = (next: string | null) => {
     if (!hw) return;
     const prev = hw.due_at;
@@ -125,7 +135,7 @@ export function useInlineConfig({
             assignmentId,
             next === null ? { clear_due_at: true } : { due_at: next },
           )
-          .then(() => undefined),
+          .then(refreshDueDates),
     );
   };
 
@@ -165,7 +175,7 @@ export function useInlineConfig({
         setHw((h) =>
           h ? { ...h, section_ids: prev, section_names: prevNames } : h,
         ),
-      () => teacher.assignToSections(assignmentId, next).then(() => undefined),
+      () => teacher.assignToSections(assignmentId, next).then(refreshDueDates),
     );
   };
 

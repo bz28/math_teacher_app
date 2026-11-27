@@ -20,7 +20,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from sqlalchemy import func, select
+from sqlalchemy import Select, and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.audit_log import log_student_record_access
@@ -66,6 +66,17 @@ async def _extended_open(
         )
     )
     return {(aid, sid) for aid, sid in rows.all()}
+
+
+def _in_section(query: Select[Any], section_id: uuid.UUID) -> Select[Any]:
+    """Join each homework's row for this section, for section_due_column."""
+    return query.outerjoin(
+        AssignmentSection,
+        and_(
+            AssignmentSection.assignment_id == Assignment.id,
+            AssignmentSection.section_id == section_id,
+        ),
+    )
 
 
 async def _published_and_past_due(
@@ -285,12 +296,12 @@ async def get_section_gradebook(
     past_due = past_due_by_section.get(section_id, set())
 
     assignments = (await db.execute(
-        select(
-            Assignment.id, Assignment.title, Assignment.due_at,
+        _in_section(select(
+            Assignment.id, Assignment.title, section_due_column().label("due_at"),
             Assignment.total_points, Assignment.problem_points, Assignment.content,
-        )
+        ), section_id)
         .where(Assignment.id.in_(assigned))
-        .order_by(Assignment.due_at.desc().nulls_last(), Assignment.title)
+        .order_by(section_due_column().desc().nulls_last(), Assignment.title)
     )).all() if assigned else []
 
     students = (await db.execute(
@@ -476,7 +487,9 @@ async def get_student_grades(
         }
 
     assignments = (await db.execute(
-        select(Assignment.id, Assignment.title, Assignment.due_at)
+        _in_section(
+            select(Assignment.id, Assignment.title, section_due_column().label("due_at")), section_id,
+        )
         .where(Assignment.id.in_(assigned_aids))
     )).all()
     assignment_meta = {a.id: a for a in assignments}
@@ -668,10 +681,16 @@ async def export_course_grades_csv(
     # Pull assignment metadata for column headers, ordered by due_at
     # (oldest first). due_at NULLs land last so dateless HWs trail
     # the dated ones rather than splitting them.
+    # A section's export dates its columns by that section's dates; the
+    # whole-course one by each homework's own.
+    due_col = section_due_column() if section_id is not None else Assignment.due_at
+    query = select(Assignment.id, Assignment.title, due_col.label("due_at"))
+    if section_id is not None:
+        query = _in_section(query, section_id)
     assignments = (await db.execute(
-        select(Assignment.id, Assignment.title, Assignment.due_at)
+        query
         .where(Assignment.id.in_(all_assigned_aids))
-        .order_by(Assignment.due_at.asc().nulls_last(), Assignment.title)
+        .order_by(due_col.asc().nulls_last(), Assignment.title)
     )).all() if all_assigned_aids else []
 
     # Per-(student, assignment) published score map for O(1) cell

@@ -98,12 +98,11 @@ async def apply_due_dates(
     await db.flush()
     await sync_homework_due(db, assignment)
 
-    if not dry_run:
+    if dry_run:
         # Queued grading doesn't change the counts a preview reports.
-        from api.core.grading_queue import reschedule_assignment
-
-        await reschedule_assignment(db, assignment)
-    await refresh_lateness(db, assignment)
+        await refresh_lateness(db, assignment)
+    else:
+        await follow_due_date(db, assignment)
     await db.flush()
 
     after = await _snapshot(db, assignment.id)
@@ -119,13 +118,13 @@ async def apply_due_dates(
     return DueDateChange(lateness, grades, published)
 
 
-async def sync_homework_due(db: AsyncSession, a: Assignment) -> None:
+async def sync_homework_due(db: AsyncSession, a: Assignment) -> bool:
     """Keep the homework's own date on its earliest section's date, so
     anything that shows one date for it shows the first one due. A row
     with no date reads as the homework's. No sections, or no date: left
-    as it is."""
+    as it is. True when the homework's date moved."""
     if a.due_at is None:
-        return
+        return False
     # A row with no date reads as the homework's: pin it first, so moving
     # the homework's date doesn't move that section too.
     await db.execute(
@@ -136,8 +135,21 @@ async def sync_homework_due(db: AsyncSession, a: Assignment) -> None:
     dates = (await db.execute(
         select(AssignmentSection.due_at).where(AssignmentSection.assignment_id == a.id)
     )).scalars().all()
-    if dates:
-        a.due_at = min(at for at in dates if at is not None)
+    if not dates:
+        return False
+    earliest = min(at for at in dates if at is not None)
+    moved = earliest != a.due_at
+    a.due_at = earliest
+    return moved
+
+
+async def follow_due_date(db: AsyncSession, a: Assignment) -> None:
+    """After a date moved: queued grading waits for each student's new
+    date, and lateness and penalties of work already in follow it."""
+    from api.core.grading_queue import reschedule_assignment
+
+    await reschedule_assignment(db, a)
+    await refresh_lateness(db, a)
 
 
 async def section_due_dates(db: AsyncSession, a: Assignment) -> list[dict[str, Any]]:

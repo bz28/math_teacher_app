@@ -51,6 +51,7 @@ from api.core.late_policy import (
     refresh_lateness,
     score_before_penalty,
     section_due_at,
+    section_due_column,
     set_final_score,
     submission_penalty_percent,
 )
@@ -84,7 +85,12 @@ from api.services.bank import (
     rehome_shared_bank_items,
     snapshot_bank_items,
 )
-from api.services.due_dates import apply_due_dates, section_due_dates, sync_homework_due
+from api.services.due_dates import (
+    apply_due_dates,
+    follow_due_date,
+    section_due_dates,
+    sync_homework_due,
+)
 
 router = APIRouter()
 
@@ -1139,7 +1145,8 @@ async def assign_to_sections(
     await db.flush()
     # Dropping the earliest section leaves the homework's date on a day
     # no section has.
-    await sync_homework_due(db, a)
+    if await sync_homework_due(db, a):
+        await follow_due_date(db, a)
 
     await db.commit()
     return {"status": "ok"}
@@ -1228,7 +1235,8 @@ async def submissions_inbox(
         select(
             Assignment.id,
             Assignment.title,
-            Assignment.due_at,
+            # Each row is one section: its own date.
+            section_due_column(),
             Section.id,
             Section.name,
         )
@@ -1240,7 +1248,7 @@ async def submissions_inbox(
             Assignment.type == "homework",
             Assignment.status == "published",
         )
-        .order_by(Assignment.due_at.asc().nullslast(), Assignment.created_at.desc())
+        .order_by(section_due_column().asc().nullslast(), Assignment.created_at.desc())
     )).all()
     if not pairs:
         return {"rows": []}

@@ -37,7 +37,7 @@ def test_flow_names_cover_all_journeys() -> None:
         "workshop_steps", "student_insights", "confirm_reading", "retake_photos",
         "reopen_resubmit", "create_homework", "add_from_bank", "duplicate_homework",
         "generation_survives_leaving",
-        "add_from_bank_on_homework", "change_section_due_date",
+        "add_from_bank_on_homework", "change_section_due_date", "inline_due_then_dialog",
     } <= set(names)
     assert len(names) == len(set(names))  # no dup selectors
 

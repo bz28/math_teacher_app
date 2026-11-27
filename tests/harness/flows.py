@@ -42,7 +42,7 @@ from PIL import Image
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from tests.harness.browser import HarnessBrowser
-from tests.harness.flows_due_dates import change_section_due_date_flow
+from tests.harness.flows_due_dates import change_section_due_date_flow, inline_due_then_dialog_flow
 from tests.harness.flows_generation import generation_survives_leaving_flow
 from tests.harness.flows_homework import (
     add_from_bank_flow,
@@ -738,7 +738,7 @@ _FLOWS = (
     _join_class_flow, _submit_homework_flow, _grade_publish_flow,
     _workshop_steps_flow, _review_page_flow, create_homework_flow, add_from_bank_flow,
     generation_survives_leaving_flow, add_from_bank_on_homework_flow, duplicate_homework_flow,
-    change_section_due_date_flow,
+    change_section_due_date_flow, inline_due_then_dialog_flow,
 )
 
 
