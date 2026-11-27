@@ -76,7 +76,7 @@ export function AddFromBankDialog({
           type="button"
           onClick={add}
           disabled={busy || n === 0}
-          className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60"
+          className="shrink-0 whitespace-nowrap rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-60"
         >
           {busy ? "Adding…" : `Add ${n} problem${n === 1 ? "" : "s"}`}
         </button>

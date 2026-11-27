@@ -176,3 +176,48 @@ async def add_from_bank_flow(
     if got != [lines_id, tickets_id]:
         issues.append(f"the homework holds {len(got)} problems, not the 2 picked in pick order")
     return FlowResult(name, title, not issues, issues)
+
+
+async def add_from_bank_on_homework_flow(
+    browser: HarnessBrowser, web_base: str, api_base: str, seed: Seed,
+) -> FlowResult:
+    """A draft homework holding one bank question -> Add from bank leaves
+    that one out, offers the other approved one, and Add 1 problem puts it
+    after the first."""
+    name, title = "add_from_bank_on_homework", "Teacher adds bank questions to a homework"
+    issues: list[str] = []
+    tickets_id, lines_id = await _seed_bank(seed)
+    async with get_session_factory()() as s:
+        hw = await s.get(Assignment, uuid.UUID(seed.assignment_id))
+        assert hw is not None
+        hw.status = "draft"
+        hw.content = {"problem_ids": [tickets_id]}
+        hw.problem_points = None
+        await s.commit()
+    async with browser.authed_page(seed.teacher_token, seed.teacher_refresh) as page:
+        await page.goto(
+            f"{web_base.rstrip('/')}/school/teacher/courses/{seed.course_id}/homework/{seed.assignment_id}",
+            wait_until="domcontentloaded", timeout=_TIMEOUT_MS,
+        )
+        dialog = page.get_by_role("dialog", name="Add from question bank")
+        try:
+            await page.get_by_role("button", name="Add from bank").click(timeout=_TIMEOUT_MS)
+            await dialog.get_by_text(_BANK_TITLES[1]).wait_for(timeout=_TIMEOUT_MS)
+        except PlaywrightTimeoutError:
+            issues.append("Add from bank did not list the course's approved questions")
+            return FlowResult(name, title, False, issues)
+        if await dialog.get_by_text(_BANK_TITLES[0]).count():
+            issues.append("the picker offered a question already on the homework")
+        try:
+            await dialog.get_by_role("checkbox", name=re.compile(_BANK_TITLES[1])).check()
+            await dialog.get_by_role("button", name="Add 1 problem").click(timeout=_TIMEOUT_MS)
+            await dialog.wait_for(state="detached", timeout=_TIMEOUT_MS)
+        except PlaywrightTimeoutError:
+            issues.append("Add 1 problem did not add it and close")
+            return FlowResult(name, title, False, issues)
+    async with get_session_factory()() as s:
+        after = await s.get(Assignment, uuid.UUID(seed.assignment_id))
+        got = problem_ids_in_content(after.content if after else None)
+    if got != [tickets_id, lines_id]:
+        issues.append(f"the homework holds {len(got)} problems, not the old one then the added one")
+    return FlowResult(name, title, not issues, issues)
