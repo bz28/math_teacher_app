@@ -27,6 +27,12 @@ import { ProblemsSection } from "./_components/problems-section";
 import { RemoveProblemsView } from "./_components/remove-problems-view";
 import { SubmissionStrip } from "./_components/submission-strip";
 import { SectionReviewBand, hasTurnedInWork } from "./_components/section-review-band";
+import {
+  missingForPublishOf,
+  publishChecks,
+  publishWarning,
+  type PublishWarnings,
+} from "./_lib/publish-readiness";
 
 /**
  * Full-page detail for a single homework. Handles all lifecycle
@@ -224,25 +230,14 @@ export default function HomeworkDetailPage({
   // soft confirm — both are usually mistakes, but publishing anyway IS
   // a valid choice. Practice has no due date and no checklists, so it
   // publishes directly.
-  const noDueDate = !!hw && hw.type !== "practice" && hw.due_at === null;
-  const uncheckedChecklists = problems.filter((p) => {
-    const c = hw?.graph_checklists?.[p.bank_item_id]?.checklist;
-    return !!c && c.asks_for_drawing && !c.checked;
-  });
-  // Graph problems that can have a checklist but don't yet: being
-  // written in the background right after Approve, or that write failed.
-  const missingChecklists = problems.filter((p) => {
-    const e = hw?.graph_checklists?.[p.bank_item_id];
-    return !!e && !e.checklist && e.can_write;
-  });
-  const publishWarnings = {
+  const { noDueDate, uncheckedChecklists, missingChecklists, anyPublishWarning } =
+    publishChecks(hw, problems);
+  const publishWarnings: PublishWarnings = {
     noDueDate,
     uncheckedChecklists: uncheckedChecklists.length,
     missingChecklists: missingChecklists.length,
     checklistsLookedAgain,
   };
-  const anyPublishWarning =
-    noDueDate || uncheckedChecklists.length > 0 || missingChecklists.length > 0;
   // The confirm reads the warnings live; once the teacher has dealt with
   // every one (checked the last checklist from the open bar), close it
   // rather than fall through to a warning that doesn't apply.
@@ -266,11 +261,7 @@ export default function HomeworkDetailPage({
   // in the course when the teacher publishes with an empty list. The
   // picker is for exclusions ("Period 5 doesn't get this yet"), not
   // the happy path.
-  const missingForPublish: string[] = [];
-  if (hw) {
-    if (problems.length === 0) missingForPublish.push("at least one problem");
-    if (hw.unit_ids.length === 0) missingForPublish.push("a unit");
-  }
+  const missingForPublish = missingForPublishOf(hw, problems);
   const canPublish = !isPublished && missingForPublish.length === 0;
 
   return (
@@ -544,33 +535,4 @@ export default function HomeworkDetailPage({
     )}
     </>
   );
-}
-
-type PublishWarnings = {
-  noDueDate: boolean;
-  uncheckedChecklists: number;
-  /** Graph problems whose checklist isn't written yet. */
-  missingChecklists: number;
-  /** The page has looked again for checklists being written; one still
-   *  missing has failed to write, not just not landed yet. */
-  checklistsLookedAgain: boolean;
-};
-
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-
-/** The publish soft-confirm's warning. The no-due-date wording alone is
- *  unchanged from before checklists were checked. */
-function publishWarning(w: PublishWarnings) {
-  const parts = [
-    w.uncheckedChecklists > 0 &&
-      `${plural(w.uncheckedChecklists, "graph checklist hasn\u2019t", "graph checklists haven\u2019t")} been checked`,
-    w.missingChecklists > 0 &&
-      (w.checklistsLookedAgain
-        ? `${plural(w.missingChecklists, "graph problem has", "graph problems have")} no checklist yet`
-        : `${plural(w.missingChecklists, "graph checklist is", "graph checklists are")} still being written`),
-  ].filter((p): p is string => !!p);
-  if (parts.length === 0) return "Publish without a due date? Students will see \u201cno due date\u201d.";
-  if (w.noDueDate) parts.push("there\u2019s no due date");
-  const sentence = parts.length > 1 ? `${parts.slice(0, -1).join(", ")}, and ${parts.at(-1)}` : parts[0];
-  return `${sentence}. Publish anyway?`;
 }
