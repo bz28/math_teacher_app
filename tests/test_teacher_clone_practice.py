@@ -51,7 +51,7 @@ async def test_clone_creates_draft_practice_with_source_link(
     await _link_teacher_to_course(world["teacher_id"], course_id)
 
     with patch(
-        "api.routes.teacher_assignments.schedule_generation_job",
+        "api.routes.teacher_assignment_copies.schedule_generation_job",
     ) as sched:
         r = await client.post(
             f"/v1/teacher/courses/{course_id}/assignments/"
@@ -251,7 +251,7 @@ async def test_clone_chosen_problems_for_one_period(client: AsyncClient) -> None
 
     w = await _hw_world()
     q1, _q2, q3 = w["items"]
-    with patch("api.routes.teacher_assignments.schedule_generation_job") as sched:
+    with patch("api.routes.teacher_assignment_copies.schedule_generation_job") as sched:
         r = await client.post(
             f"/v1/teacher/courses/{w['course']}/assignments/{w['hw']}/clone-as-practice",
             json={"item_ids": [str(q3), str(q1)], "count": 3, "section_ids": [str(w["p3"])]},
@@ -275,7 +275,7 @@ async def test_clone_rejects_problems_or_periods_off_the_homework(client: AsyncC
     w = await _hw_world()
     url = f"/v1/teacher/courses/{w['course']}/assignments/{w['hw']}/clone-as-practice"
     h = _auth(w["token"])
-    with patch("api.routes.teacher_assignments.schedule_generation_job"):
+    with patch("api.routes.teacher_assignment_copies.schedule_generation_job"):
         for payload in (
             {"item_ids": [str(uuid.uuid4())]},
             {"item_ids": []},
@@ -290,7 +290,7 @@ async def test_add_problems_to_an_existing_set(client: AsyncClient) -> None:
     w = await _hw_world()
     q1, q2, _q3 = w["items"]
     h = _auth(w["token"])
-    with patch("api.routes.teacher_assignments.schedule_generation_job") as sched:
+    with patch("api.routes.teacher_assignment_copies.schedule_generation_job") as sched:
         created = (await client.post(
             f"/v1/teacher/courses/{w['course']}/assignments/{w['hw']}/clone-as-practice",
             json={"item_ids": [str(q1)], "count": 3}, headers=h,
@@ -353,7 +353,7 @@ async def test_add_problems_is_owner_and_course_scoped(client: AsyncClient) -> N
     w = await _hw_world()
     other = await _hw_world()
     q1 = w["items"][0]
-    with patch("api.routes.teacher_assignments.schedule_generation_job"):
+    with patch("api.routes.teacher_assignment_copies.schedule_generation_job"):
         created = (await client.post(
             f"/v1/teacher/courses/{w['course']}/assignments/{w['hw']}/clone-as-practice",
             json={"item_ids": [str(q1)]}, headers=_auth(w["token"]),
