@@ -188,7 +188,10 @@ async def seeded() -> dict[str, Any]:
         # school, as every school user's call is in prod.
         s.add_all([
             _llm_call(user_id=stu1.id, submission_id=sub1.id, cost=0.50, created_at=recent, school_id=school.id),
-            _llm_call(user_id=stu1.id, submission_id=sub1.id, cost=0.50, created_at=recent, function="image_extract", school_id=school.id),
+            _llm_call(
+                user_id=stu1.id, submission_id=sub1.id, cost=0.50, created_at=recent,
+                function="image_extract", school_id=school.id,
+            ),
             _llm_call(user_id=stu2.id, submission_id=sub2.id, cost=0.30, created_at=recent, school_id=school.id),
             _llm_call(user_id=stu2.id, submission_id=sub3.id, cost=0.20, created_at=recent, school_id=school.id),
         ])

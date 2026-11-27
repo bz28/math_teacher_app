@@ -559,10 +559,14 @@ export interface paths {
          *
          *       * A **teacher's** cost follows the one whose-call rule
          *         (api/core/llm_attribution.py): their own calls plus every call
-         *         on a submission to their homework — the same number their own
-         *         page and the Users list show.
+         *         on a submission to their homework — counting only calls stamped
+         *         with THIS school and leaving out preview work, the rule Costs
+         *         scoped to the school applies. The Users list counts a teacher's
+         *         calls wherever they were stamped, so for a teacher with unstamped
+         *         calls (admin contexts, pre-backfill rows) the two can differ.
          *       * A **section's** cost is the calls on submissions handed in to
-         *         it (LLMCall.submission_id → submission → section).
+         *         it (LLMCall.submission_id → submission → section), by the same
+         *         school and preview rule.
          *
          *     All aggregation is done with grouped subqueries assembled in Python
          *     (no per-teacher / per-section follow-up queries), so a large school
