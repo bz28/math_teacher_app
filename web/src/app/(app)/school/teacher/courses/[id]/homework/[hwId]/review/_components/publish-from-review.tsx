@@ -26,6 +26,7 @@ function problemsOf(a: Assignment): { bank_item_id: string }[] {
 type State =
   | { kind: "checking" }
   | { kind: "missing"; missing: string[] }
+  | { kind: "moreToReview"; count: number }
   | { kind: "ready" }
   | { kind: "confirming"; warnings: PublishWarnings }
   | { kind: "publishing" }
@@ -43,10 +44,12 @@ type State =
  * homework page, so "Back to homework" is the way to fix one.
  */
 export function PublishFromReview({
+  courseId,
   assignmentId,
   homeworkHref,
   generating,
 }: {
+  courseId: string;
   assignmentId: string;
   homeworkHref: string;
   /** Problems are still being written for this homework. */
@@ -103,8 +106,16 @@ export function PublishFromReview({
     setError(null);
     setState({ kind: "publishing" });
     try {
-      const a = await teacher.assignment(assignmentId);
+      const [a, pending] = await Promise.all([
+        teacher.assignment(assignmentId),
+        teacher.bank(courseId, { status: "pending", assignment_id: assignmentId }),
+      ]);
       if (a.status !== "draft") return router.push(homeworkHref);
+      // Problems that landed since this screen appeared (a job finishing,
+      // or one started elsewhere) aren't on the homework until they're
+      // approved — publishing now would leave them out.
+      const more = pending.items.filter((i) => i.parent_question_id === null).length;
+      if (more > 0) return setState({ kind: "moreToReview", count: more });
       const problems = problemsOf(a);
       const missing = missingForPublishOf(a, problems);
       if (missing.length > 0) return setState({ kind: "missing", missing });
@@ -142,7 +153,12 @@ export function PublishFromReview({
 
   return (
     <div className="mt-6 border-t border-green-200 pt-5 dark:border-green-500/30">
-      {state.kind === "missing" ? (
+      {state.kind === "moreToReview" ? (
+        <p className="text-sm text-text-secondary">
+          {state.count === 1 ? "1 more problem" : `${state.count} more problems`} just
+          arrived for this homework — review {state.count === 1 ? "it" : "them"} before you publish.
+        </p>
+      ) : state.kind === "missing" ? (
         <p className="text-sm text-text-secondary">
           To publish, this homework still needs {state.missing.join(" and ")}.{" "}
           <Link href={homeworkHref} className="font-semibold text-primary hover:underline">

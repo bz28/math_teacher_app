@@ -180,9 +180,11 @@ export default function HomeworkReviewPage({
           }
           return p;
         });
-        // After the last items are in the queue, so a job's final
-        // problems take the teacher off "All caught up" before Publish
-        // can show there.
+        // Batched with the queue update above; the workshop appends the
+        // new items an effect later, so Publish can show for a frame
+        // before they take the teacher off "All caught up". The click
+        // re-checks for pending problems, so that frame can't publish
+        // without them.
         setGenerating(stillRunning);
         if (!stillRunning) {
           window.clearInterval(interval);
@@ -257,6 +259,7 @@ export default function HomeworkReviewPage({
             completionNext={(counts) =>
               assignmentType === "homework" && counts.skipped === 0 ? (
                 <PublishFromReview
+                  courseId={courseId}
                   assignmentId={assignmentId}
                   homeworkHref={backHref}
                   generating={generating}
