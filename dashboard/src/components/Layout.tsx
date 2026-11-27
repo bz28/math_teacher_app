@@ -4,6 +4,7 @@ import { apiHealth, getToken, setToken } from "../lib/api";
 import SchoolSwitcher from "./SchoolSwitcher";
 import { setSchoolScope, useSelectedSchool, type SelectedSchool } from "../lib/useSelectedSchool";
 import { pageScope, schoolLabel, isInternalOnly } from "../lib/pageScope";
+import { urlSchoolParam } from "../lib/urlScope";
 
 interface NavItem {
   to: string;
@@ -112,14 +113,6 @@ function ScopeLine({ school }: { school: SelectedSchool }) {
   );
 }
 
-/** A school named in a scoped page's URL — `?school=` (LLM calls' old
- *  deep links) or `?school_id=` (Audit log's) — or null. UUIDs only, so
- *  a mangled link can't scope every page to nothing. */
-function urlSchoolParam(params: URLSearchParams): string | null {
-  const v = params.get("school") ?? params.get("school_id");
-  return v && UUID_RE.test(v) ? v : null;
-}
-
 export default function Layout() {
   // Mirror the global API-health flag onto a rail-foot status dot so the
   // operator always sees at a glance whether the backend is reachable.
@@ -150,7 +143,7 @@ export default function Layout() {
     const params = new URLSearchParams(search);
     const fromUrl = urlSchoolParam(params);
     if (!fromUrl || pageScope(pathname, search) !== "school") return;
-    setSchoolScope(fromUrl);
+    setSchoolScope(fromUrl.school);
     params.delete("school");
     params.delete("school_id");
     navigate({ pathname, search: params.toString() }, { replace: true });
