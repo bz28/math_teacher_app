@@ -3215,6 +3215,62 @@
         "title": "PracticeProblemsRequest",
         "type": "object"
       },
+      "PracticedSection": {
+        "properties": {
+          "not_yet": {
+            "items": {
+              "$ref": "#/components/schemas/PracticedStudent"
+            },
+            "title": "Not Yet",
+            "type": "array"
+          },
+          "practiced": {
+            "title": "Practiced",
+            "type": "integer"
+          },
+          "section_id": {
+            "format": "uuid",
+            "title": "Section Id",
+            "type": "string"
+          },
+          "section_name": {
+            "title": "Section Name",
+            "type": "string"
+          },
+          "students": {
+            "title": "Students",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "section_id",
+          "section_name",
+          "students",
+          "practiced",
+          "not_yet"
+        ],
+        "title": "PracticedSection",
+        "type": "object"
+      },
+      "PracticedStudent": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "PracticedStudent",
+        "type": "object"
+      },
       "PreviewSeat": {
         "properties": {
           "current": {
@@ -3878,6 +3934,30 @@
           "password"
         ],
         "title": "SetPasswordRequest",
+        "type": "object"
+      },
+      "SetPracticed": {
+        "properties": {
+          "problems": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Problems",
+            "type": "object"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/PracticedSection"
+            },
+            "title": "Sections",
+            "type": "array"
+          }
+        },
+        "required": [
+          "sections",
+          "problems"
+        ],
+        "title": "SetPracticed",
         "type": "object"
       },
       "StepChatRequest": {
@@ -15429,6 +15509,55 @@
           }
         ],
         "summary": "Grade Pending Submissions",
+        "tags": [
+          "teacher"
+        ]
+      }
+    },
+    "/v1/teacher/assignments/{assignment_id}/practiced": {
+      "get": {
+        "description": "Who in each of the set's periods has practiced it, and how many\nanswered each problem. Ungraded: no scores, no outcomes. Counts\nenrolled, non-preview students only.",
+        "operationId": "get_set_practiced_v1_teacher_assignments__assignment_id__practiced_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assignment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Assignment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetPracticed"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Set Practiced",
         "tags": [
           "teacher"
         ]
