@@ -16,9 +16,12 @@ Two entry points, because rejections happen in two places:
 - `note_transport_rejection` — the middleware path. The request-size
   limit rejects an oversized body BEFORE any handler runs, so nothing
   downstream knows it happened. The middleware hands us the ASGI scope;
-  we recognise the turn-in and retake routes by path and read the bearer token to
-  name the student. The token is decoded only on this cold path, never
-  per request, so attribution costs nothing on the hot path.
+  we recognise the turn-in and retake routes by path and read the bearer
+  token to name the student. Only a verified student token is recorded:
+  the route would refuse anyone else anyway, so an anonymous refusal is
+  never a blocked student — and recording one would let anyone write
+  rows (and hold a database connection) with a bare oversized header.
+  The token is decoded only on this cold path, never per request.
 
 Both write through their own session and never raise: a logging
 failure must not change what the student is told.
@@ -83,8 +86,8 @@ def reason_for_file_error(message: str) -> str:
 
 async def record_submission_rejection(
     *,
-    actor_user_id: uuid.UUID | None,
-    assignment_id: uuid.UUID | None,
+    actor_user_id: uuid.UUID,
+    assignment_id: uuid.UUID,
     reason: str,
     request_bytes: int | None,
     decoded_bytes: int | None = None,
@@ -95,9 +98,7 @@ async def record_submission_rejection(
     ``"submission.rejected"``, targeting the assignment the student was
     trying to turn in.
 
-    `actor_user_id` is null when the rejection happened before
-    authentication AND the bearer token could not be read — the row
-    still counts, marked unattributed on the dashboard. `request_bytes`
+    `request_bytes`
     is the transport size (base64 JSON, what the cap measured);
     `decoded_bytes` is the sum of the decoded files when the handler got
     far enough to know it.
@@ -107,28 +108,25 @@ async def record_submission_rejection(
     """
     try:
         async with get_session_factory()() as db:
-            school_id: uuid.UUID | None = None
-            if assignment_id is not None:
-                school_id = (await db.execute(
-                    select(Course.school_id)
-                    .join(Assignment, Assignment.course_id == Course.id)
-                    .where(Assignment.id == assignment_id)
-                )).scalar_one_or_none()
+            school_id = (await db.execute(
+                select(Course.school_id)
+                .join(Assignment, Assignment.course_id == Course.id)
+                .where(Assignment.id == assignment_id)
+            )).scalar_one_or_none()
 
+            # A teacher rehearsing as a preview student can be blocked
+            # too; the row is kept but flagged so it never counts as a
+            # child who couldn't turn in homework.
+            is_preview = (await db.execute(
+                select(User.is_preview).where(User.id == actor_user_id)
+            )).scalar_one_or_none()
             metadata: dict[str, Any] = {
                 "reason": reason,
                 "request_bytes": request_bytes,
                 "decoded_bytes": decoded_bytes,
                 "detail": (detail or "")[:200] or None,
+                "is_preview": bool(is_preview),
             }
-            if actor_user_id is not None:
-                # A teacher rehearsing as a preview student can be
-                # blocked too; the row is kept but flagged so it never
-                # counts as a child who couldn't turn in homework.
-                is_preview = (await db.execute(
-                    select(User.is_preview).where(User.id == actor_user_id)
-                )).scalar_one_or_none()
-                metadata["is_preview"] = bool(is_preview)
 
             db.add(ActivityLog(
                 actor_user_id=actor_user_id,
@@ -145,17 +143,15 @@ async def record_submission_rejection(
         logger.exception("Failed to record submission rejection")
 
 
-def _actor_from_bearer(request: Request) -> uuid.UUID | None:
-    """The student behind a request no handler has authenticated, if the
-    bearer token is present and valid. The size limit refuses an invalid
-    token with a 401 before it would record anything, so in practice
-    this is None only when no token was sent: the rejection is recorded
-    unattributed."""
+def _student_from_bearer(request: Request) -> uuid.UUID | None:
+    """The student behind a request no handler has authenticated: the
+    bearer token's user, when the token verifies and is a student's.
+    None otherwise — and then nothing is recorded."""
     scheme, _, token = (request.headers.get("authorization") or "").partition(" ")
     if scheme.lower() != "bearer":
         return None
     payload = decode_access_token(token.strip())
-    if not payload:
+    if not payload or payload.get("role") != "student":
         return None
     try:
         return uuid.UUID(str(payload.get("sub")))
@@ -163,10 +159,16 @@ def _actor_from_bearer(request: Request) -> uuid.UUID | None:
         return None
 
 
-async def _assignment_of_submission(submission_id: uuid.UUID) -> uuid.UUID | None:
+async def _assignment_of_submission(
+    submission_id: uuid.UUID, student_id: uuid.UUID,
+) -> uuid.UUID | None:
+    """The homework a retake is for — only when the submission is the
+    student's own, as the route itself requires."""
     async with get_session_factory()() as db:
         return (await db.execute(
-            select(Submission.assignment_id).where(Submission.id == submission_id)
+            select(Submission.assignment_id).where(
+                Submission.id == submission_id, Submission.student_id == student_id,
+            )
         )).scalar_one_or_none()
 
 
@@ -174,26 +176,37 @@ async def note_transport_rejection(scope: MutableMapping[str, Any], request_byte
     """Called by the request-size middleware after it refuses a body as
     too large.
 
-    Ignores every route but the turn-in and the retake — an oversized
-    request anywhere else is not a student blocked from turning in work.
+    Records only a signed-in student on the turn-in or the retake route
+    (see the module docstring) — an oversized request anywhere else, or
+    from anyone else, is not a student blocked from turning in work.
     """
     if scope.get("method") != "POST":
         return
     path = scope.get("path") or ""
-    assignment_id: uuid.UUID | None
-    if (m := _SUBMIT_PATH.match(path)) is not None:
-        assignment_id = uuid.UUID(m.group("assignment_id"))
-    elif (m := _RETAKE_PATH.match(path)) is not None:
-        try:
-            assignment_id = await _assignment_of_submission(uuid.UUID(m.group("submission_id")))
-        except Exception:
-            logger.exception("Couldn't resolve the retaken submission's assignment")
-            assignment_id = None
-    else:
+    submit = _SUBMIT_PATH.match(path)
+    retake = _RETAKE_PATH.match(path) if submit is None else None
+    if submit is None and retake is None:
         return
     request = Request(scope)
+    student_id = _student_from_bearer(request)
+    if student_id is None:
+        return
+    assignment_id: uuid.UUID | None
+    if submit is not None:
+        assignment_id = uuid.UUID(submit.group("assignment_id"))
+    else:
+        assert retake is not None
+        try:
+            assignment_id = await _assignment_of_submission(
+                uuid.UUID(retake.group("submission_id")), student_id,
+            )
+        except Exception:
+            logger.exception("Couldn't resolve the retaken submission's assignment")
+            return
+    if assignment_id is None:
+        return
     await record_submission_rejection(
-        actor_user_id=_actor_from_bearer(request),
+        actor_user_id=student_id,
         assignment_id=assignment_id,
         reason=REASON_UPLOAD_TOO_LARGE,
         request_bytes=request_bytes,

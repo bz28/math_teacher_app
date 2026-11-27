@@ -207,20 +207,39 @@ async def test_transport_rejection_names_the_student_from_the_bearer(
     assert meta["is_preview"] is False
 
 
-async def test_transport_rejection_without_a_usable_token_is_unattributed(
+async def test_transport_rejection_records_only_a_signed_in_student(
     world: dict[str, Any],
 ) -> None:
+    """Anyone can send a bare oversized header: with no student token
+    the route would refuse them anyway, so nothing is written — a refusal
+    must not let an anonymous caller fill the log (or a school's blocked
+    list) and hold a database connection per request."""
     path = f"/v1/school/student/homework/{world['assignment_id']}/submit"
     before = len(await _rejections())
     await note_transport_rejection(_scope(path), 12_000_000)
     await note_transport_rejection(_scope(path, token="not-a-jwt"), 12_000_000)
-    rows = (await _rejections())[before:]
-    assert len(rows) == 2
-    assert all(r.actor_user_id is None for r in rows)
-    assert all(r.target_id == world["assignment_id"] for r in rows)
-    # No actor means no preview lookup — the key is absent, not false,
-    # so a reader can't mistake "unknown" for "a real child".
-    assert all("is_preview" not in (r.action_metadata or {}) for r in rows)
+    await note_transport_rejection(_scope(path, token=world["teacher_token"]), 12_000_000)
+    assert len(await _rejections()) == before
+
+
+async def test_a_retake_of_someone_elses_submission_is_not_recorded(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=auth_headers(world["student_token"]),
+        json={"files": [PAGE_PNG]},
+    )
+    sid = r.json()["submission_id"]
+    before = len(await _rejections())
+    await note_transport_rejection(
+        _scope(
+            f"/v1/school/student/submissions/{sid}/retake",
+            token=create_access_token(str(world["outsider_id"]), "student"),
+        ),
+        90_000_000,
+    )
+    assert len(await _rejections()) == before
 
 
 async def test_transport_rejection_ignores_every_other_route(
