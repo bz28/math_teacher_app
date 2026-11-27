@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { TeacherAssignment } from "@/lib/api";
-import { bucketHomeworks, isHomeworkCompleted, missingOnlyCount } from "./homework-buckets.ts";
+import { bucketHomeworks, isHomeworkCompleted, missingCount } from "./homework-buckets.ts";
 
 const NOW = new Date("2026-06-22T12:00:00.000Z").getTime();
 const DAY = 86_400_000;
@@ -34,6 +34,8 @@ function hw(overrides: Partial<TeacherAssignment>): TeacherAssignment {
     graded: 0,
     to_review: 0,
     published: 0,
+    republish: 0,
+    extended: 0,
     pending_review: 0,
     avg_score: null,
     created_at: at(-30 * DAY),
@@ -76,21 +78,6 @@ test("past due, all graded but NONE published → needsGrading (the fix)", () =>
 test("past due, fully submitted, only some published → needsGrading", () => {
   assert.equal(
     bucketOf({ due_at: at(-1 * DAY), total_students: 10, submitted: 10, published: 6 }),
-    "needsGrading",
-  );
-});
-
-test("past due with missing submissions, all present grades published → needsGrading", () => {
-  // Everyone who submitted is published, but the class isn't fully in.
-  assert.equal(
-    bucketOf({ due_at: at(-1 * DAY), total_students: 10, submitted: 7, published: 7 }),
-    "needsGrading",
-  );
-});
-
-test("past due with zero submissions → needsGrading (overdue, missing work)", () => {
-  assert.equal(
-    bucketOf({ due_at: at(-1 * DAY), total_students: 10, submitted: 0, published: 0 }),
     "needsGrading",
   );
 });
@@ -177,40 +164,38 @@ test("every published HW lands in exactly one bucket", () => {
   assert.equal(total, items.length);
 });
 
-test("missingOnlyCount: past due, every turned-in grade published → the students who never turned it in", () => {
-  const past = { due_at: at(-8 * DAY), total_students: 25, submitted: 23 };
-  assert.equal(missingOnlyCount(hw({ ...past, published: 23 }), NOW), 2);
-  // Still in NEEDS GRADING — the class didn't all submit, so it isn't completed.
-  assert.equal(bucketOf({ ...past, published: 23 }), "needsGrading");
+test("past due, every turned-in grade published, some never turned in → Completed, with them as missing", () => {
+  // Nothing left for the teacher to grade; the row says "2 missing".
+  const past = { due_at: at(-8 * DAY), total_students: 25, submitted: 23, published: 23 };
+  assert.equal(bucketOf(past), "completed");
+  assert.equal(missingCount(hw(past), NOW), 2);
+  // Nobody turned it in: nothing to grade either.
+  assert.equal(bucketOf({ due_at: at(-3 * DAY), total_students: 25, submitted: 0, published: 0 }), "completed");
+  assert.equal(missingCount(hw({ due_at: at(-3 * DAY), total_students: 25 }), NOW), 25);
 });
 
-test("missingOnlyCount: 0 while a grade still waits on the teacher, before the due date, or nobody's missing", () => {
-  assert.equal(
-    missingOnlyCount(hw({ due_at: at(-8 * DAY), total_students: 25, submitted: 23, published: 20 }), NOW),
-    0,
-  );
-  assert.equal(
-    missingOnlyCount(hw({ due_at: at(2 * DAY), total_students: 25, submitted: 23, published: 23 }), NOW),
-    0,
-  );
-  assert.equal(
-    missingOnlyCount(hw({ due_at: at(-1 * DAY), total_students: 10, submitted: 10, published: 10 }), NOW),
-    0,
-  );
-  assert.equal(missingOnlyCount(hw({ due_at: null, total_students: 10, submitted: 3, published: 3 }), NOW), 0);
-  assert.equal(
-    missingOnlyCount(hw({ status: "draft", due_at: at(-1 * DAY), submitted: 0, published: 0 }), NOW),
-    0,
-  );
+test("a published grade edited since is a republish still owed → Needs grading, never 'missing only'", () => {
+  const past = { due_at: at(-8 * DAY), total_students: 25, submitted: 23, published: 23 };
+  assert.equal(bucketOf({ ...past, republish: 1 }), "needsGrading");
+  assert.equal(isHomeworkCompleted(hw({ ...past, republish: 1 }), NOW), false);
 });
 
-test("missingOnlyCount: nobody turned it in → the whole class is missing; an empty class → 0", () => {
+test("a student inside their own extended due date isn't missing", () => {
+  const past = { due_at: at(-2 * DAY), total_students: 25, submitted: 23, published: 23 };
+  assert.equal(missingCount(hw({ ...past, extended: 1 }), NOW), 1);
+  assert.equal(missingCount(hw({ ...past, extended: 2 }), NOW), 0);
+});
+
+test("missingCount: 0 before the due date, with no due date, for a draft, or an empty class", () => {
+  assert.equal(missingCount(hw({ due_at: at(2 * DAY), total_students: 25, submitted: 23 }), NOW), 0);
+  assert.equal(missingCount(hw({ due_at: null, total_students: 10, submitted: 3 }), NOW), 0);
+  assert.equal(missingCount(hw({ status: "draft", due_at: at(-1 * DAY) }), NOW), 0);
+  assert.equal(missingCount(hw({ due_at: at(-3 * DAY), total_students: 0 }), NOW), 0);
+});
+
+test("a grade still waiting on the teacher keeps it in Needs grading", () => {
   assert.equal(
-    missingOnlyCount(hw({ due_at: at(-3 * DAY), total_students: 25, submitted: 0, published: 0 }), NOW),
-    25,
-  );
-  assert.equal(
-    missingOnlyCount(hw({ due_at: at(-3 * DAY), total_students: 0, submitted: 0, published: 0 }), NOW),
-    0,
+    bucketOf({ due_at: at(-8 * DAY), total_students: 25, submitted: 23, published: 20 }),
+    "needsGrading",
   );
 });

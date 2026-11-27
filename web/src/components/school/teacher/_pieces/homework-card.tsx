@@ -7,7 +7,7 @@ import {
   sectionTargetLabel,
   sectionToneClass,
 } from "@/lib/utils";
-import { missingOnlyCount } from "./homework-buckets";
+import { missingCount } from "./homework-buckets";
 import { StatusPill } from "./status-pill";
 
 export type HomeworkBucket =
@@ -60,12 +60,7 @@ export function HomeworkCard({
     selectedNames: hw.section_names,
     status: hw.status,
   });
-  // Past due with every turned-in grade published: the only thing left is
-  // students who never turned it in. That's not grading the teacher owes,
-  // so it reads as a neutral "N missing", not a red overdue alarm.
-  const missingOnly = bucket === "needsGrading" ? missingOnlyCount(hw) : 0;
-  const overdueDays =
-    bucket === "needsGrading" && hw.due_at && missingOnly === 0 ? daysOverdue(hw.due_at) : 0;
+  const overdueDays = bucket === "needsGrading" && hw.due_at ? daysOverdue(hw.due_at) : 0;
   // Outstanding submissions = submitted but not yet graded. Headline
   // signal for the NEEDS GRADING bucket: surface as a pill on the
   // title row so a teacher can scan a stack of cards and pick the one
@@ -86,7 +81,7 @@ export function HomeworkCard({
       type="button"
       onClick={onOpen}
       className={`block w-full rounded-[--radius-lg] border bg-surface p-4 text-left transition-all hover:-translate-y-px hover:shadow-sm ${
-        bucket === "needsGrading" && missingOnly === 0
+        bucket === "needsGrading"
           ? "border-[color:var(--color-error-border)] hover:border-[color:var(--color-error)]"
           : bucket === "dueThisWeek"
             ? "border-[color:var(--color-info-border)] hover:border-[color:var(--color-info)]"
@@ -106,7 +101,6 @@ export function HomeworkCard({
             label={`${ungraded} to grade`}
           />
         )}
-        {missingOnly > 0 && <StatusPill tone="muted" label={`${missingOnly} missing`} />}
         {overdueDays > 0 && (
           <StatusPill
             tone="red"
@@ -153,6 +147,8 @@ export function HomeworkCard({
             SubmissionGrade lifecycle flags instead. Every branch leads
             with submitted-vs-enrolled so a partial HW never reads as
             class-complete:
+              - published === submitted, some edited since → "N to
+                republish".
               - published === submitted → all grades released to students
                 ("Grades published" pill).
               - to_review > 0 → submissions still awaiting the teacher's
@@ -162,7 +158,11 @@ export function HomeworkCard({
         {bucket === "needsGrading" && hw.submitted > 0 && (
           <span className="ml-1 font-semibold text-text-secondary">
             · {submittedLabel}
-            {hw.published === hw.submitted ? (
+            {hw.published === hw.submitted && hw.republish > 0 ? (
+              // Released, but edited since: the students still see the
+              // old grade until the teacher republishes.
+              <> · {hw.republish} to republish</>
+            ) : hw.published === hw.submitted ? (
               <span className="ml-1.5 align-middle">
                 <StatusPill tone="green" label="Grades published" />
               </span>
@@ -205,6 +205,10 @@ function CompletedRow({
   onOpen: () => void;
 }) {
   const dueLabel = hw.due_at ? (formatDate(hw.due_at) ?? "—") : "—";
+  // Nothing left to grade, but some students never turned it in (and
+  // aren't inside an extension of their own). Neutral: it's not work
+  // the teacher owes, but it should still show.
+  const missing = missingCount(hw);
 
   return (
     <button
@@ -220,6 +224,7 @@ function CompletedRow({
           {unitLabel}
         </span>
       )}
+      {missing > 0 && <StatusPill tone="muted" label={`${missing} missing`} />}
       <span className="shrink-0 text-[11px] text-text-muted">{dueLabel}</span>
       {hw.avg_score !== null && (
         <span className="shrink-0 text-[11px] font-semibold tabular-nums text-text-secondary">

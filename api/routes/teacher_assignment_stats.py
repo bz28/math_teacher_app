@@ -10,10 +10,11 @@ from typing import Any
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.models.assignment import AssignmentSection, Submission, SubmissionGrade
+from api.models.assignment import AssignmentSection, StudentDueDate, Submission, SubmissionGrade
 from api.models.question_bank import QuestionBankItem
 from api.models.section_enrollment import SectionEnrollment
 from api.models.user import User
+from api.routes.teacher_courses import _dirty_case
 
 EMPTY_STATS: dict[str, Any] = {
     "total_students": 0,
@@ -21,6 +22,8 @@ EMPTY_STATS: dict[str, Any] = {
     "graded": 0,
     "to_review": 0,
     "published": 0,
+    "republish": 0,
+    "extended": 0,
     "pending_review": 0,
     "approved_count": 0,
     "avg_score": None,
@@ -169,6 +172,60 @@ async def bulk_assignment_stats(
     )).all()
     published = {r.assignment_id: r.c for r in published_rows}
 
+    # 3d. Republish counts — published grades the teacher has edited
+    # since (`_dirty_case`, the same rule the review page's Publish uses).
+    # The student still sees the old grade, so the homework still owes
+    # the teacher a republish even when `published == submitted`.
+    republish_rows = (await db.execute(
+        select(Submission.assignment_id, func.count().label("c"))
+        .join(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
+        .join(User, User.id == Submission.student_id)
+        .join(
+            SectionEnrollment,
+            and_(
+                SectionEnrollment.student_id == Submission.student_id,
+                SectionEnrollment.section_id == Submission.section_id,
+            ),
+        )
+        .where(
+            Submission.assignment_id.in_(assignment_ids),
+            _dirty_case() == 1,
+            User.is_preview.is_(False),
+        )
+        .group_by(Submission.assignment_id)
+    )).all()
+    republish = {r.assignment_id: r.c for r in republish_rows}
+
+    # 3e. Extended — enrolled students who haven't turned it in and whose
+    # own due date (a StudentDueDate the teacher set) is still ahead.
+    # They aren't missing yet, whatever the class due date says.
+    extended_rows = (await db.execute(
+        select(
+            AssignmentSection.assignment_id,
+            func.count(SectionEnrollment.student_id.distinct()).label("c"),
+        )
+        .join(SectionEnrollment, SectionEnrollment.section_id == AssignmentSection.section_id)
+        .join(User, User.id == SectionEnrollment.student_id)
+        .join(
+            StudentDueDate,
+            and_(
+                StudentDueDate.assignment_id == AssignmentSection.assignment_id,
+                StudentDueDate.student_id == SectionEnrollment.student_id,
+            ),
+        )
+        .where(
+            AssignmentSection.assignment_id.in_(assignment_ids),
+            User.is_preview.is_(False),
+            StudentDueDate.due_at > func.now(),
+            ~select(Submission.id).where(
+                Submission.assignment_id == AssignmentSection.assignment_id,
+                Submission.student_id == SectionEnrollment.student_id,
+            ).exists(),
+        )
+        .group_by(AssignmentSection.assignment_id)
+    )).all()
+    extended = {r.assignment_id: r.c for r in extended_rows}
+
     # 4. Pending-review bank-item count per assignment. These are
     # AI-generated problems originated by this HW that still need the
     # teacher's approval before they can join the problem list — same
@@ -240,6 +297,8 @@ async def bulk_assignment_stats(
             "graded": graded.get(aid, 0),
             "to_review": to_review.get(aid, 0),
             "published": published.get(aid, 0),
+            "republish": republish.get(aid, 0),
+            "extended": extended.get(aid, 0),
             "pending_review": pending.get(aid, 0),
             "approved_count": approved.get(aid, 0),
             "avg_score": round(avgs[aid], 1) if aid in avgs and avgs[aid] is not None else None,

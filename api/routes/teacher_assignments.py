@@ -390,6 +390,8 @@ def assignment_to_dict(
         "graded": stats["graded"],
         "to_review": stats["to_review"],
         "published": stats["published"],
+        "republish": stats["republish"],
+        "extended": stats["extended"],
         "pending_review": stats["pending_review"],
         "avg_score": stats["avg_score"],
         "created_at": a.created_at.isoformat(),
