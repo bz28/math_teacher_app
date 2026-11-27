@@ -6,7 +6,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, Protocol
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 from sqlalchemy import Integer, and_, case, func, or_, select
 from sqlalchemy import delete as sql_delete
@@ -20,7 +20,6 @@ from api.core.answer_units import units_not_in_work
 from api.core.audit_log import record_activity
 from api.core.class_rubric import MAX_CLASS_RULES
 from api.core.constants import DEFAULT_HOMEWORK_INSTRUCTIONS, MAX_RUBRIC_FIELD_CHARS
-from api.core.entitlements import Entitlement, check_entitlement
 from api.core.extraction_edits import apply_extraction_edits
 from api.core.graph_checklist import homework_checklists
 from api.core.graph_grading import VerdictError, note_hand_edits, open_item_count, open_items, set_teacher_verdict
@@ -54,10 +53,8 @@ from api.core.late_policy import (
     set_final_score,
     submission_penalty_percent,
 )
-from api.core.question_bank_generation import schedule_generation_job
 from api.database import get_db
-from api.middleware.auth import CurrentUser, get_current_user_full, require_teacher
-from api.middleware.rate_limit import limiter
+from api.middleware.auth import CurrentUser, require_teacher
 from api.models.assignment import (
     Assignment,
     AssignmentSection,
@@ -72,7 +69,7 @@ from api.models.integrity_check import (
     IntegrityCheckProblem,
     IntegrityCheckSubmission,
 )
-from api.models.question_bank import QuestionBankGenerationJob, QuestionBankItem
+from api.models.question_bank import QuestionBankItem
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.unit import Unit
@@ -705,219 +702,6 @@ async def create_assignment(
     await db.commit()
     await db.refresh(assignment)
     return {"id": str(assignment.id), "title": assignment.title, "status": assignment.status}
-
-
-class PracticeProblemsRequest(BaseModel):
-    """Which homework problems a practice set covers, and how many new
-    versions of each to write. `item_ids` = None means every problem."""
-    item_ids: list[uuid.UUID] | None = None
-    count: int = Field(default=1, ge=1, le=5)
-
-
-class ClonePracticeRequest(PracticeProblemsRequest):
-    # None → every period the homework is assigned to.
-    section_ids: list[uuid.UUID] | None = None
-
-
-async def _practice_parents(
-    db: AsyncSession, course_id: uuid.UUID, source: Assignment, item_ids: list[uuid.UUID] | None,
-) -> list[QuestionBankItem]:
-    """The homework's bank items to write versions of, in homework order.
-    A requested id that isn't on the homework is a 400, never a silent skip."""
-    on_hw: list[uuid.UUID] = []
-    for raw in problem_ids_in_content(source.content):
-        try:
-            on_hw.append(uuid.UUID(raw))
-        except (ValueError, TypeError):
-            continue  # corrupted content: skip rather than 500
-    if item_ids is not None:
-        unknown = set(item_ids) - set(on_hw)
-        if unknown or not item_ids:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Pick problems from this homework",
-            )
-        on_hw = [i for i in on_hw if i in set(item_ids)]
-    if not on_hw:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Source homework has no problems to clone",
-        )
-    # The course filter is defense in depth against rows that escaped
-    # snapshot_bank_items' approved+primary+course invariant.
-    items = (await db.execute(
-        select(QuestionBankItem).where(
-            QuestionBankItem.id.in_(on_hw),
-            QuestionBankItem.course_id == course_id,
-        )
-    )).scalars().all()
-    by_id = {i.id: i for i in items}
-    # An item deleted since the content snapshot is skipped; the teacher
-    # can add it again later.
-    return [by_id[i] for i in on_hw if i in by_id]
-
-
-def _queue_variation_jobs(
-    db: AsyncSession, practice: Assignment, parents: list[QuestionBankItem], count: int, teacher_id: uuid.UUID,
-) -> list[uuid.UUID]:
-    """One generation job per parent writing `count` versions of it into
-    `practice` via the `parent_question_id` path. Items land pending in
-    the teacher's review queue. The id is set at construction: the
-    model default only fires on flush, and `schedule_generation_job(None)`
-    once silently ran nothing."""
-    job_ids: list[uuid.UUID] = []
-    for parent in parents:
-        job_id = uuid.uuid4()
-        db.add(QuestionBankGenerationJob(
-            id=job_id,
-            course_id=practice.course_id,
-            unit_id=parent.unit_id,
-            originating_assignment_id=practice.id,
-            created_by_id=teacher_id,
-            status="queued",
-            requested_count=count,
-            difficulty=parent.difficulty,
-            source_doc_ids=parent.source_doc_ids,
-            parent_question_id=parent.id,
-        ))
-        job_ids.append(job_id)
-    return job_ids
-
-
-@router.post(
-    "/courses/{course_id}/assignments/{hw_id}/clone-as-practice",
-    status_code=status.HTTP_201_CREATED,
-)
-@limiter.limit("3/minute")
-async def clone_homework_as_practice(
-    request: Request,
-    course_id: uuid.UUID, hw_id: uuid.UUID,
-    body: ClonePracticeRequest | None = None,
-    current_user: CurrentUser = Depends(require_teacher),
-    user: User = Depends(get_current_user_full),
-    db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
-    """Make a draft practice set from a homework: `count` new versions of
-    each chosen problem, for the chosen periods. The teacher approves
-    each version in the review queue, then publishes."""
-    body = body or ClonePracticeRequest()
-    # Ownership/existence checks first so a teacher poking at someone
-    # else's homework gets 404, not a misleading 'limit reached' that
-    # would confirm the resource exists.
-    await get_teacher_course(db, course_id, current_user.user_id)
-    source = await get_teacher_assignment(db, hw_id, current_user.user_id)
-    # Cross-course clone would leak one course's content into another.
-    if source.course_id != course_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Assignment not found in this course",
-        )
-    if source.type != "homework":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only homeworks can be cloned as practice",
-        )
-    parents = await _practice_parents(db, course_id, source, body.item_ids)
-
-    hw_sections = (await db.execute(
-        select(Section.id, Section.name)
-        .join(AssignmentSection, AssignmentSection.section_id == Section.id)
-        .where(AssignmentSection.assignment_id == source.id)
-        .order_by(Section.name)
-    )).all()
-    sections = hw_sections
-    if body.section_ids is not None:
-        sections = [s for s in hw_sections if s.id in set(body.section_ids)]
-        if not body.section_ids or len(sections) != len(set(body.section_ids)):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Pick periods this homework is assigned to",
-            )
-
-    # Each problem fires its own generation call, so gate behind the
-    # same cap as direct generation. Runs AFTER the ownership and content
-    # checks so 'limit reached' never leaks resources the teacher
-    # couldn't have touched.
-    await check_entitlement(db, user, Entitlement.GENERATE_PROBLEM)
-
-    # "[Practice]" keeps cross-type surfaces (search, activity log) from
-    # confusing the set with its homework; a set for some of the
-    # homework's periods names them so two periods' sets read apart.
-    # Just part of the title — the teacher can edit it freely.
-    title = f"[Practice] {source.title}"
-    if len(sections) < len(hw_sections):
-        title += " · " + ", ".join(s.name for s in sections)
-    practice = Assignment(
-        course_id=course_id,
-        teacher_id=current_user.user_id,
-        title=title,
-        type="practice",
-        unit_ids=list(source.unit_ids or []),
-        source_homework_id=source.id,
-        # Teacher publishes explicitly after reviewing.
-        status="draft",
-    )
-    db.add(practice)
-    await db.flush()
-    for s in sections:
-        db.add(AssignmentSection(assignment_id=practice.id, section_id=s.id))
-
-    job_ids = _queue_variation_jobs(db, practice, parents, body.count, current_user.user_id)
-    await db.commit()
-    # Fire after commit so rows are durable before any background task
-    # attempts to read them.
-    for jid in job_ids:
-        schedule_generation_job(jid)
-
-    return {
-        "id": str(practice.id),
-        "title": practice.title,
-        "status": practice.status,
-        "source_homework_id": str(practice.source_homework_id) if practice.source_homework_id else None,
-        "job_ids": [str(j) for j in job_ids],
-    }
-
-
-@router.post(
-    "/courses/{course_id}/assignments/{practice_id}/practice-problems",
-    status_code=status.HTTP_201_CREATED,
-)
-@limiter.limit("3/minute")
-async def add_practice_problems(
-    request: Request,
-    course_id: uuid.UUID, practice_id: uuid.UUID,
-    body: PracticeProblemsRequest,
-    current_user: CurrentUser = Depends(require_teacher),
-    user: User = Depends(get_current_user_full),
-    db: AsyncSession = Depends(get_db),
-) -> dict[str, Any]:
-    """Write versions of more homework problems into an existing practice
-    set made from that homework. Drafts and published sets alike: each
-    new version still waits for the teacher's approval."""
-    await get_teacher_course(db, course_id, current_user.user_id)
-    practice = await get_teacher_assignment(db, practice_id, current_user.user_id)
-    if practice.course_id != course_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Assignment not found in this course",
-        )
-    source = (
-        await db.get(Assignment, practice.source_homework_id)
-        if practice.type == "practice" and practice.source_homework_id else None
-    )
-    if source is None or source.course_id != course_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only practice made from a homework can take its problems",
-        )
-    parents = await _practice_parents(db, course_id, source, body.item_ids)
-    await check_entitlement(db, user, Entitlement.GENERATE_PROBLEM)
-
-    job_ids = _queue_variation_jobs(db, practice, parents, body.count, current_user.user_id)
-    await db.commit()
-    for jid in job_ids:
-        schedule_generation_job(jid)
-    return {"id": str(practice.id), "job_ids": [str(j) for j in job_ids]}
 
 
 async def _serialize_assignment_list(

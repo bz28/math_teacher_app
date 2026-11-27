@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter
 
+from api.routes.teacher_assignment_copies import router as assignment_copies_router
 from api.routes.teacher_assignments import router as assignments_router
 from api.routes.teacher_courses import router as courses_router
 from api.routes.teacher_documents import router as documents_router
@@ -22,6 +23,7 @@ router.include_router(sections_router)
 router.include_router(documents_router)
 router.include_router(units_router)
 router.include_router(assignments_router)
+router.include_router(assignment_copies_router)
 router.include_router(visibility_router)
 router.include_router(question_bank_router)
 router.include_router(reports_router)
