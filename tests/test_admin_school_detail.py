@@ -55,9 +55,11 @@ def _llm_call(
     cost: float,
     created_at: datetime,
     function: str = "ai_grading",
+    school_id: uuid.UUID | None = None,
 ) -> LLMCall:
     return LLMCall(
         user_id=user_id,
+        school_id=school_id,
         submission_id=submission_id,
         function=function,
         model="claude-sonnet-test",
@@ -182,17 +184,18 @@ async def seeded() -> dict[str, Any]:
             SubmissionGrade(submission_id=sub3.id, final_score=60.0, graded_at=recent),
         ])
 
-        # Per-submission spend → rolls up to the section.
+        # Per-submission spend → rolls up to the section. Stamped with the
+        # school, as every school user's call is in prod.
         s.add_all([
-            _llm_call(user_id=stu1.id, submission_id=sub1.id, cost=0.50, created_at=recent),
-            _llm_call(user_id=stu1.id, submission_id=sub1.id, cost=0.50, created_at=recent, function="image_extract"),
-            _llm_call(user_id=stu2.id, submission_id=sub2.id, cost=0.30, created_at=recent),
-            _llm_call(user_id=stu2.id, submission_id=sub3.id, cost=0.20, created_at=recent),
+            _llm_call(user_id=stu1.id, submission_id=sub1.id, cost=0.50, created_at=recent, school_id=school.id),
+            _llm_call(user_id=stu1.id, submission_id=sub1.id, cost=0.50, created_at=recent, function="image_extract", school_id=school.id),
+            _llm_call(user_id=stu2.id, submission_id=sub2.id, cost=0.30, created_at=recent, school_id=school.id),
+            _llm_call(user_id=stu2.id, submission_id=sub3.id, cost=0.20, created_at=recent, school_id=school.id),
         ])
         # Anna's authoring/generation spend — no submission → teacher level.
         s.add(_llm_call(
             user_id=anna.id, submission_id=None, cost=2.00,
-            created_at=recent, function="generate_questions",
+            created_at=recent, function="generate_questions", school_id=school.id,
         ))
 
         await s.commit()
