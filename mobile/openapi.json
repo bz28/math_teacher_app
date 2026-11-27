@@ -11548,6 +11548,152 @@
         ]
       }
     },
+    "/v1/admin/spend": {
+      "get": {
+        "operationId": "spend_v1_admin_spend_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "group_by",
+            "required": false,
+            "schema": {
+              "default": "function",
+              "enum": [
+                "school",
+                "teacher",
+                "student",
+                "function",
+                "model"
+              ],
+              "title": "Group By",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "bucket",
+            "required": false,
+            "schema": {
+              "default": "week",
+              "enum": [
+                "day",
+                "week",
+                "month"
+              ],
+              "title": "Bucket",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hours",
+            "required": false,
+            "schema": {
+              "default": 720,
+              "maximum": 8760,
+              "minimum": 1,
+              "title": "Hours",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "school_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "School Id"
+            }
+          },
+          {
+            "description": "Include internal calls (no school) and teachers' preview-as-student work. Off by default: neither is customer usage.",
+            "in": "query",
+            "name": "include_internal",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Include internal calls (no school) and teachers' preview-as-student work. Off by default: neither is customer usage.",
+              "title": "Include Internal",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Spend V1 Admin Spend Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Spend",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
     "/v1/admin/students/{student_id}": {
       "get": {
         "description": "Who this student is, whose classes they are in, and the funnel.\n\nThe funnel is the point of the page. Counting submissions tells you\na student is participating; counting how many of them reached a\npublished grade tells you whether the product worked for them, and\nthe shortfall is itemised by the hop it died on.",
