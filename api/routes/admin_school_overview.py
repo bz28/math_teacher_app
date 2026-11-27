@@ -35,7 +35,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.llm_attribution import school_calls
+from api.core.llm_attribution import not_preview, school_calls
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
 from api.models.activity_log import ActivityLog
@@ -45,7 +45,7 @@ from api.models.llm_call import LLMCall
 from api.models.school import School
 from api.models.section import Section
 from api.routes.admin_helpers import INTERNAL_SCHOOL_SENTINEL
-from api.routes.admin_spend import not_preview, spend_headline, spend_series
+from api.routes.admin_spend import spend_headline, spend_series
 
 router = APIRouter()
 
