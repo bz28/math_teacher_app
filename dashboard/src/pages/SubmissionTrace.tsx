@@ -18,7 +18,10 @@ import {
 import { LLM_MODES, PIPELINE_BUCKETS, bucketFor } from "../lib/llm_modes";
 import MetadataChips from "../components/MetadataChips";
 import StatusPill, { type PillTone } from "../components/StatusPill";
-import ExtractionReadout from "../components/ExtractionReadout";
+import StudentWork from "../components/StudentWork";
+import CaseFile from "../components/CaseFile";
+import { useSubmissionCase } from "../lib/useSubmissionCase";
+import CaseTimeline from "../components/CaseTimeline";
 import { STAGE_META, isStalled, noCallsDiagnosis } from "../lib/stages";
 import { useConfirm } from "../lib/confirm";
 import { useScopeToSchool } from "../lib/useSelectedSchool";
@@ -155,8 +158,15 @@ export default function SubmissionTrace() {
     data?.submission?.school_kind === "institutional" ? data.submission.school_id : null,
   );
 
+  const caseFile = useSubmissionCase(submissionId);
   const targetProblem = useProblemHash();
-  useScrollToProblem(targetProblem, workLoaded && data !== null, "student-work");
+  // The case table owns `#p{n}` when it loaded; otherwise the photo
+  // readout's rows still do.
+  useScrollToProblem(
+    targetProblem,
+    workLoaded && data !== null && caseFile.loaded,
+    caseFile.data ? "case-problems" : "student-work",
+  );
 
   const handleDebug = async (callId: string) => {
     const ok = await confirm({
@@ -207,6 +217,7 @@ export default function SubmissionTrace() {
           runPassed failures={0} work={work} hasCalls={false}
         />
         <Lifecycle work={work} summary={summary} firstReadAt={null} />
+        {caseFile.data && <CaseTimeline data={caseFile.data} />}
         {!workLoaded && <p className="loading">Loading the submission…</p>}
         {why && (
           <div className="cf-why">
@@ -214,7 +225,8 @@ export default function SubmissionTrace() {
             <p className="cf-why-body">{why.detail}</p>
           </div>
         )}
-        <StudentWork work={work} targetProblem={targetProblem} />
+        <CaseFile data={caseFile.data} targetProblem={targetProblem} />
+        <StudentWork work={work} targetProblem={targetProblem} caseLoaded={caseFile.data !== null} />
       </div>
     );
   }
@@ -290,8 +302,10 @@ export default function SubmissionTrace() {
         firstReadAt={firstRead?.created_at ?? null}
         readFailed={readFailed}
       />
+      {caseFile.data && <CaseTimeline data={caseFile.data} />}
 
-      <StudentWork work={work} targetProblem={targetProblem} />
+      <CaseFile data={caseFile.data} targetProblem={targetProblem} />
+      <StudentWork work={work} targetProblem={targetProblem} caseLoaded={caseFile.data !== null} />
 
       {truncated && (
         <p style={{ color: "var(--warn)", fontSize: 12, marginTop: -8, marginBottom: 16 }}>
@@ -822,51 +836,6 @@ function Lifecycle({
         );
       })}
     </ol>
-  );
-}
-
-// ── The student's own work, beside what the reader made of it ────────
-
-function StudentWork({
-  work,
-  targetProblem,
-}: {
-  work: ExtractionDetail | null;
-  targetProblem: number | null;
-}) {
-  if (!work) return null;
-  const corrected = work.rows.filter((r) => r.changed).length;
-  const meta = STAGE_META[work.stage];
-  // A `#p{n}` link with nothing read for that problem still has to say
-  // so — otherwise the page just sits at the section and looks broken.
-  const targetMissing =
-    targetProblem !== null && !work.rows.some((r) => r.problem_position === targetProblem);
-  return (
-    <section className="cf-work" id="student-work">
-      <h3 className="cf-work-head">
-        Student work
-        <span className="cf-work-sub">
-          {work.files_count === 1 ? "1 page" : `${work.files_count} pages`}
-          {work.rows.length > 0 && (
-            <>
-              {" · "}
-              {corrected === 0
-                ? `${work.rows.length} rows read, none corrected`
-                : `${corrected} of ${work.rows.length} rows corrected by the student`}
-            </>
-          )}
-          {targetMissing && (
-            <span className="cf-work-target-missing">
-              {' · '}nothing was read for Problem {targetProblem}
-            </span>
-          )}
-        </span>
-        <span className="cf-work-stage">
-          <StatusPill tone={meta.tone} label={meta.label} title={meta.blurb} />
-        </span>
-      </h3>
-      <ExtractionReadout detail={work} targetProblem={targetProblem} />
-    </section>
   );
 }
 

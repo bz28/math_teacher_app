@@ -57,6 +57,7 @@ from api.models.assignment import Assignment, Submission, SubmissionGrade
 from api.models.course import Course
 from api.models.integrity_check import IntegrityCheckProblem
 from api.models.user import User
+from api.routes.admin_case_timeline import CaseGradingJob, CaseTimelineEvent, case_timeline
 from api.routes.admin_helpers import last_days
 from api.routes.integrity_check import (
     IntegrityActivitySummary,
@@ -300,6 +301,10 @@ class CaseProblem(BaseModel):
     answer_key: str | None
     # Null when the reader never ran on this submission.
     reading: CaseReading | None
+    # The AI's call on this problem as a percent: `grade`'s, or the zero
+    # the grader stamps on a problem it returned no grade for (which has
+    # no `grade`). Null when the AI never graded it.
+    ai_call: float | None
     grade: CaseGrade | None
     final: CaseFinal | None
     integrity: CaseIntegrityProblem | None
@@ -375,6 +380,9 @@ class SubmissionCase(BaseModel):
     problems: list[CaseProblem]
     grade: CaseGradeSummary | None
     integrity: CaseIntegrity | None
+    # Who did what to the grade, oldest first (admin_case_timeline).
+    timeline: list[CaseTimelineEvent]
+    grading_job: CaseGradingJob | None
 
 
 def _integrity_kind(p: IntegrityCheckProblem, incomplete_reason: str | None) -> str:
@@ -625,6 +633,7 @@ async def submission_case(
                 final, float(ai_call), graph_checks.get(item["bank_item_id"]),
             )
         problems_out.append(CaseProblem(
+            ai_call=float(ai_call) if isinstance(ai_call, (int, float)) else None,
             position=position,
             bank_item_id=item["bank_item_id"],
             question=item["question"],
@@ -668,6 +677,7 @@ async def submission_case(
             ) if ip else None,
         ))
 
+    timeline, grading_job = await case_timeline(db, sub, grade)
     payload = SubmissionCase(
         submission_id=str(sub.id),
         student_id=str(sub.student_id),
@@ -687,6 +697,8 @@ async def submission_case(
             teacher_notes=grade.teacher_notes,
         ) if grade else None,
         integrity=integrity_out,
+        timeline=timeline,
+        grading_job=grading_job,
     )
 
     # FERPA: an admin just read one named student's grades and the

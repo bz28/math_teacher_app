@@ -518,6 +518,88 @@
         "title": "CaseGradeSummary",
         "type": "object"
       },
+      "CaseGradingJob": {
+        "description": "The submission's grading job as it stands \u2014 the queue keeps one\nrow per submission (a reopen resets it; a regrade doesn't touch it),\nso this is its most recent run only.",
+        "properties": {
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "last_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Error"
+          },
+          "requested_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested By Name"
+          },
+          "scheduled_for": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scheduled For"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "scheduled_for",
+          "requested_by_name",
+          "attempts",
+          "last_error",
+          "started_at",
+          "finished_at"
+        ],
+        "title": "CaseGradingJob",
+        "type": "object"
+      },
       "CaseIntegrity": {
         "properties": {
           "activity_summary": {
@@ -788,6 +870,17 @@
       },
       "CaseProblem": {
         "properties": {
+          "ai_call": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Call"
+          },
           "answer_key": {
             "anyOf": [
               {
@@ -858,6 +951,7 @@
           "question",
           "answer_key",
           "reading",
+          "ai_call",
           "grade",
           "final",
           "integrity"
@@ -914,6 +1008,51 @@
           "plain"
         ],
         "title": "CaseReadingLine",
+        "type": "object"
+      },
+      "CaseTimelineEvent": {
+        "description": "One thing that happened to this grade. `action` is an activity\naction (`grade.save`, ...) or a derived `grading.*` event;\n`metadata` is the activity row's, as written.",
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "actor_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Name"
+          },
+          "at": {
+            "format": "date-time",
+            "title": "At",
+            "type": "string"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
+          }
+        },
+        "required": [
+          "at",
+          "action",
+          "actor_name",
+          "metadata"
+        ],
+        "title": "CaseTimelineEvent",
         "type": "object"
       },
       "CaseTurn": {
@@ -5540,6 +5679,16 @@
               }
             ]
           },
+          "grading_job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CaseGradingJob"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "integrity": {
             "anyOf": [
               {
@@ -5576,6 +5725,13 @@
             "title": "Submission Id",
             "type": "string"
           },
+          "timeline": {
+            "items": {
+              "$ref": "#/components/schemas/CaseTimelineEvent"
+            },
+            "title": "Timeline",
+            "type": "array"
+          },
           "unplaced_reading": {
             "items": {
               "$ref": "#/components/schemas/CaseReadingLine"
@@ -5594,7 +5750,9 @@
           "unplaced_reading",
           "problems",
           "grade",
-          "integrity"
+          "integrity",
+          "timeline",
+          "grading_job"
         ],
         "title": "SubmissionCase",
         "type": "object"

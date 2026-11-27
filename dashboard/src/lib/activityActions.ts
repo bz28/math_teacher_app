@@ -92,6 +92,17 @@ export const ACTIVITY_FAMILIES: {
   // surface does render student events.
 ];
 
+/** Why a homework upload was refused — `submission.rejected`'s
+ *  `reason` (api/core/submission_rejections.py). */
+export const UPLOAD_REJECTION_REASONS: Record<string, string> = {
+  upload_too_large: "Upload too large to send",
+  file_too_large: "A file was over its size cap",
+  file_invalid: "A file wasn't a readable image or PDF",
+  submission_too_large: "Submission over the total size cap",
+  page_too_small: "A page was too small to read",
+  pdfs_too_large: "PDFs over the per-turn-in PDF cap",
+};
+
 export const ACTIVITY_ACTIONS: Record<ActivityFamily, ActivityAction[]> = {
   assignment: [
     {
@@ -174,6 +185,25 @@ export const ACTIVITY_ACTIONS: Record<ActivityFamily, ActivityAction[]> = {
       action: "grade.unmark_reviewed",
       label: "Reopened",
       detail: () => "Reopened for review",
+    },
+    {
+      // "Grade all": AI-grade every never-graded submission now.
+      action: "grade.ai_batch",
+      label: "Grade all (AI)",
+      detail: (m) => `Sent ${plural(num(m, "queued"), "submission")} to AI grading`,
+    },
+    {
+      // "Grade with AI" on one student's submission.
+      action: "grade.ai_single",
+      label: "Grade with AI",
+      detail: () => "Sent one submission to AI grading",
+    },
+    {
+      // Regrade on the review page: the AI grades again against the
+      // current rubric and replaces the live grade.
+      action: "grade.regrade",
+      label: "Regraded with AI",
+      detail: () => "Replaced the grade with a fresh AI pass",
     },
     {
       action: "grade.publish",
@@ -324,15 +354,7 @@ export const ACTIVITY_ACTIONS: Record<ActivityFamily, ActivityAction[]> = {
       detail: (m) => {
         const mb = num(m, "request_bytes");
         const size = mb !== undefined ? `${(mb / 1024 / 1024).toFixed(1)} MB` : undefined;
-        const why: Record<string, string> = {
-          upload_too_large: "Upload too large to send",
-          file_too_large: "A file was over its size cap",
-          file_invalid: "A file wasn't a readable image or PDF",
-          submission_too_large: "Submission over the total size cap",
-          page_too_small: "A page was too small to read",
-          pdfs_too_large: "PDFs over the per-turn-in PDF cap",
-        };
-        return join(why[str(m, "reason")] ?? "Upload rejected", size);
+        return join(UPLOAD_REJECTION_REASONS[str(m, "reason")] ?? "Upload rejected", size);
       },
     },
     {

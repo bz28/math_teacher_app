@@ -18,6 +18,7 @@ import { useToast } from "../lib/toast";
 import CallsPanel from "../components/CallsPanel";
 import StatTile from "../components/StatTile";
 import StatusPill from "../components/StatusPill";
+import BlockedUploads from "../components/BlockedUploads";
 import DataTable, { type Column } from "../components/DataTable";
 import {
   activityPill,
@@ -602,6 +603,11 @@ export default function SchoolDetail() {
           </div>
         )}
       </Section>
+
+      {/* Blocked uploads — the work students couldn't hand in (failed
+          calls live in the calls panel above). It carries its own
+          heading, so it sits between sections rather than in one. */}
+      <BlockedUploads schoolId={detail.id} />
 
       {/* ── 04 — MANAGE TEACHERS (invite + pending) ─────────────── */}
       <Section number="04" label="Manage teachers">
