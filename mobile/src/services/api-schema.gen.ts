@@ -91,6 +91,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/blocked-submissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Blocked Submissions
+         * @description Students the platform refused a homework upload from, in the last
+         *     `days`; scoped to one school or one student when given.
+         */
+        get: operations["blocked_submissions_v1_admin_blocked_submissions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/documents/{document_id}/content": {
         parameters: {
             query?: never;
@@ -653,6 +674,23 @@ export interface paths {
          *     is queued for a due date that has not arrived.
          */
         get: operations["student_submissions_v1_admin_students__student_id__submissions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/submissions/{submission_id}/case": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Submission Case */
+        get: operations["submission_case_v1_admin_submissions__submission_id__case_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4311,6 +4349,67 @@ export interface components {
             /** Skipped Rule Ids */
             skipped_rule_ids?: string[] | null;
         };
+        /**
+         * BlockedStudentRow
+         * @description One student × one homework they could not turn in. Grouped so
+         *     eleven log lines read as "one person, eleven attempts, thirteen
+         *     hours" — the sentence an operator acts on.
+         *
+         *     Every rejection names its student (submission_rejections records
+         *     only a signed-in one); `student_id` is null only when the account
+         *     has since been deleted — the log's actor is SET NULL with it — and
+         *     then a homework's rows from deleted accounts are one row.
+         */
+        BlockedStudentRow: {
+            /** Assignment Id */
+            assignment_id: string | null;
+            /** Assignment Title */
+            assignment_title: string | null;
+            /** Attempts */
+            attempts: number;
+            /** Course Name */
+            course_name: string | null;
+            /**
+             * First At
+             * Format: date-time
+             */
+            first_at: string;
+            /** Largest Request Bytes */
+            largest_request_bytes: number | null;
+            /**
+             * Last At
+             * Format: date-time
+             */
+            last_at: string;
+            /** Reasons */
+            reasons: {
+                [key: string]: number;
+            };
+            /** School Id */
+            school_id: string | null;
+            /** Student Email */
+            student_email: string | null;
+            /** Student Id */
+            student_id: string | null;
+            /** Student Name */
+            student_name: string;
+            /** Submitted Since */
+            submitted_since: boolean;
+            /** Top Reason */
+            top_reason: string;
+        };
+        /** BlockedSubmissionsResponse */
+        BlockedSubmissionsResponse: {
+            /** Days */
+            days: number;
+            /**
+             * Since
+             * Format: date-time
+             */
+            since: string;
+            /** Students */
+            students: components["schemas"]["BlockedStudentRow"][];
+        };
         /** BreakdownEntry */
         BreakdownEntry: {
             /** Deductions */
@@ -4323,6 +4422,212 @@ export interface components {
             problem_id: string;
             /** Score Status */
             score_status: string;
+        };
+        /**
+         * CaseFinal
+         * @description The grade as it stands now — the AI's draft until a teacher
+         *     edits it. `differs_from_ai` is the override signal: the final
+         *     percent or status is not the AI's call on this problem.
+         */
+        CaseFinal: {
+            /** Differs From Ai */
+            differs_from_ai: boolean;
+            /** Feedback */
+            feedback: string | null;
+            /** Percent */
+            percent: number;
+            /** Score Status */
+            score_status: string;
+        };
+        /**
+         * CaseGrade
+         * @description The AI's grade for one problem — the immutable `ai_breakdown`
+         *     entry, reasoning and confidence intact.
+         */
+        CaseGrade: {
+            /** Confidence */
+            confidence: number | null;
+            /** Percent */
+            percent: number;
+            /** Reasoning */
+            reasoning: string | null;
+            /** Score Status */
+            score_status: string;
+            /** Student Answer */
+            student_answer: string | null;
+            /** Student Feedback */
+            student_feedback: string | null;
+        };
+        /** CaseGradeSummary */
+        CaseGradeSummary: {
+            /** Ai Grading Status */
+            ai_grading_status: string | null;
+            /** Ai Score */
+            ai_score: number | null;
+            /** Final Score */
+            final_score: number | null;
+            /** Grade Published At */
+            grade_published_at: string | null;
+            /** Graded At */
+            graded_at: string | null;
+            /** Reviewed At */
+            reviewed_at: string | null;
+            /** Teacher Notes */
+            teacher_notes: string | null;
+        };
+        /** CaseIntegrity */
+        CaseIntegrity: {
+            activity_summary: components["schemas"]["IntegrityActivitySummary"] | null;
+            /** Check Id */
+            check_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Disposition */
+            disposition: string | null;
+            /** Headline */
+            headline: string | null;
+            /** Incomplete Reason */
+            incomplete_reason: string | null;
+            /** Inline Variant Result */
+            inline_variant_result: string | null;
+            /** Inline Variant Used */
+            inline_variant_used: boolean;
+            /** Overall Summary */
+            overall_summary: string | null;
+            /** Posture */
+            posture: string;
+            /** Probe Selection Reason */
+            probe_selection_reason: string | null;
+            /** Resolution */
+            resolution: string;
+            /** Resolved At */
+            resolved_at: string | null;
+            /** Resolved By Name */
+            resolved_by_name: string | null;
+            /** Status */
+            status: string;
+            /** Tier */
+            tier: string;
+            /** Turns */
+            turns: components["schemas"]["CaseTurn"][];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * CaseIntegrityProblem
+         * @description What the understanding check made of one problem.
+         *
+         *     `kind` is the one word the case file leads with:
+         *       probed         — discussed in chat; a verdict with rubric landed
+         *       probed_pending — discussed in chat; the check is still running
+         *       inconclusive   — chat hit the turn cap before a verdict
+         *       unfinished     — the student left the check before a verdict
+         *       diagnosed      — wrong on paper, never chatted; silent note
+         *       blank          — wrong on paper because nothing was written
+         *       unreadable     — the read was too poor to judge
+         *       diagnosis_failed — the silent-diagnosis call errored
+         *     A problem the check never touched has no entry at all.
+         */
+        CaseIntegrityProblem: {
+            /** Diagnosis Kind */
+            diagnosis_kind: string | null;
+            /** Diagnosis Note */
+            diagnosis_note: string | null;
+            /** Kind */
+            kind: string;
+            /** Problem Id */
+            problem_id: string;
+            /** Reasoning */
+            reasoning: string | null;
+            /** Rubric */
+            rubric: {
+                [key: string]: unknown;
+            } | null;
+            /** Selected Reason */
+            selected_reason: string | null;
+            /** Status */
+            status: string;
+            /** Teacher Dismissal Reason */
+            teacher_dismissal_reason: string | null;
+            /** Teacher Dismissed */
+            teacher_dismissed: boolean;
+        };
+        /** CaseProblem */
+        CaseProblem: {
+            /** Answer Key */
+            answer_key: string | null;
+            /** Bank Item Id */
+            bank_item_id: string;
+            final: components["schemas"]["CaseFinal"] | null;
+            grade: components["schemas"]["CaseGrade"] | null;
+            integrity: components["schemas"]["CaseIntegrityProblem"] | null;
+            /** Position */
+            position: number;
+            /** Question */
+            question: string;
+            reading: components["schemas"]["CaseReading"] | null;
+        };
+        /**
+         * CaseReading
+         * @description What the reader got for one problem, as the grader received it:
+         *     the photo's read with the student's confirm-screen corrections laid
+         *     over (`apply_extraction_edits`). Steps and the answer are raw — a
+         *     step's `latex` undelimited, `plain` prose.
+         */
+        CaseReading: {
+            final_answer: components["schemas"]["CaseReadingLine"] | null;
+            /** Steps */
+            steps: components["schemas"]["CaseReadingLine"][];
+            /** Student Edited */
+            student_edited: boolean;
+        };
+        /** CaseReadingLine */
+        CaseReadingLine: {
+            /** Latex */
+            latex: string;
+            /** Plain */
+            plain: string;
+        };
+        /**
+         * CaseTurn
+         * @description One row of the check's conversation. Tool calls and results are
+         *     included — they are the agent's decisions, and the case file
+         *     renders them as events in the thread.
+         */
+        CaseTurn: {
+            /** Content */
+            content: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Engagement */
+            engagement: string | null;
+            /** Ordinal */
+            ordinal: number;
+            /** Role */
+            role: string;
+            /** Seconds On Turn */
+            seconds_on_turn: number | null;
+            /** Telemetry */
+            telemetry: {
+                [key: string]: unknown;
+            } | null;
+            /** Tool Input */
+            tool_input: {
+                [key: string]: unknown;
+            } | null;
+            /** Tool Name */
+            tool_name: string | null;
+            /** Tool Use Id */
+            tool_use_id: string | null;
         };
         /** ChatMessage */
         ChatMessage: {
@@ -6062,6 +6367,27 @@ export interface components {
              */
             submitted_at: string;
         };
+        /** SubmissionCase */
+        SubmissionCase: {
+            /** Assignment Id */
+            assignment_id: string;
+            /** Assignment Title */
+            assignment_title: string;
+            /** Extraction Confidence */
+            extraction_confidence: number | null;
+            grade: components["schemas"]["CaseGradeSummary"] | null;
+            integrity: components["schemas"]["CaseIntegrity"] | null;
+            /** Problems */
+            problems: components["schemas"]["CaseProblem"][];
+            /** Student Id */
+            student_id: string;
+            /** Student Name */
+            student_name: string | null;
+            /** Submission Id */
+            submission_id: string;
+            /** Unplaced Reading */
+            unplaced_reading: components["schemas"]["CaseReadingLine"][];
+        };
         /**
          * SubmissionFileOut
          * @description One file the student turned in, as `photo_store.page_out` serves
@@ -7159,6 +7485,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    blocked_submissions_v1_admin_blocked_submissions_get: {
+        parameters: {
+            query?: {
+                days?: number;
+                school_id?: string | null;
+                student_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlockedSubmissionsResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8418,6 +8777,37 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submission_case_v1_admin_submissions__submission_id__case_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubmissionCase"];
                 };
             };
             /** @description Validation Error */
