@@ -39,6 +39,7 @@ left there is nothing to group, and the problem stores no reasons.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -281,7 +282,9 @@ def _ts(col: Any) -> Any:
     return func.coalesce(func.max(col).cast(Text), "")
 
 
-async def _stale_pairs(db: AsyncSession, limit: int) -> list[tuple[uuid.UUID, uuid.UUID, str]]:
+async def _stale_pairs(
+    db: AsyncSession, limit: int, pair: tuple[uuid.UUID, uuid.UUID] | None = None,
+) -> list[tuple[uuid.UUID, uuid.UUID, str]]:
     """Homework × section pairs whose counted grades moved since their
     reasons were last caught up, most recent first. The signature counts
     approved / published grades and their latest approval, publish and
@@ -302,6 +305,7 @@ async def _stale_pairs(db: AsyncSession, limit: int) -> list[tuple[uuid.UUID, uu
         .where(
             or_(SubmissionGrade.reviewed_at.is_not(None), SubmissionGrade.grade_published_at.is_not(None)),
             func.coalesce(Assignment.due_at, Assignment.created_at) > func.now() - _ACTIVE_WINDOW,
+            *((Submission.assignment_id == pair[0], Submission.section_id == pair[1]) if pair else ()),
         )
         .group_by(Submission.assignment_id, Submission.section_id)
         .subquery()
@@ -448,3 +452,56 @@ async def refresh_reteach_reasons(limit: int = PAIRS_PER_PASS) -> dict[str, int]
         if out["stopped"]:
             break
     return {"pairs": out["pairs"], "written": out["written"], "failed": out["failed"]}
+
+
+# ── Right after an approval ─────────────────────────────────────────
+
+# Strong refs to in-flight kicks, so GC can't collect one mid-run.
+_KICKS: set[asyncio.Task[None]] = set()
+# Pairs with a kick in flight, and those whose grades moved again while
+# it ran (it goes round once more, so the last approval is never missed).
+_RUNNING: set[tuple[uuid.UUID, uuid.UUID]] = set()
+_AGAIN: set[tuple[uuid.UUID, uuid.UUID]] = set()
+
+
+def schedule_refresh(assignment_id: uuid.UUID, section_id: uuid.UUID | None) -> None:
+    """Bring one homework × period's reasons up to date now, not at the
+    next drain pass. Call after the approval or grade save has committed;
+    it never blocks the request. Same pass as the drain, so it's
+    idempotent with it: the row lock keeps two from writing at once, and
+    a problem whose flag and approved feedback haven't changed costs no
+    call. Best-effort: if this process dies, the drain picks it up."""
+    if section_id is None:
+        return
+    pair = (assignment_id, section_id)
+    if pair in _RUNNING:
+        _AGAIN.add(pair)
+        return
+    _RUNNING.add(pair)
+    task = asyncio.get_running_loop().create_task(_refresh_now(pair))
+    _KICKS.add(task)
+    task.add_done_callback(_KICKS.discard)
+
+
+async def _refresh_now(pair: tuple[uuid.UUID, uuid.UUID]) -> None:
+    try:
+        while True:
+            _AGAIN.discard(pair)
+            async with get_session_factory()() as db:
+                due = await _stale_pairs(db, 1, pair)
+            for assignment_id, section_id, signature in due:
+                async with get_session_factory()() as db:
+                    await _refresh_pair(db, assignment_id, section_id, signature)
+            if pair not in _AGAIN:
+                return
+    except Exception:  # noqa: BLE001 — the drain is the backstop
+        logger.exception("reteach reasons kick failed assignment=%s section=%s", *pair)
+    finally:
+        _RUNNING.discard(pair)
+        _AGAIN.discard(pair)
+
+
+async def drain_refresh_tasks() -> None:
+    """Test helper: wait for every scheduled kick."""
+    while _KICKS:
+        await asyncio.gather(*list(_KICKS), return_exceptions=True)

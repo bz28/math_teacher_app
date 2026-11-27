@@ -360,6 +360,46 @@ async def test_with_ai_grading_an_ungraded_paper_holds_nothing(client: AsyncClie
     assert len(sent) == 2 and "Jo-note" in sent[1]
 
 
+async def test_approving_writes_reasons_without_waiting_for_the_drain(
+    client: AsyncClient, model: FakeModel,
+) -> None:
+    """Approve ✓ on the last draft, and a hand grade that completes a
+    paper, each bring the period's reasons up to date right away."""
+    w = await _world()
+    await _flagged_period(w)
+    await _student(w, "Kit", _entry(w["pid"], "zero", "Kit-note draft"), approved=False)
+    async with get_session_factory()() as s:
+        g = (await s.execute(select(SubmissionGrade).where(
+            SubmissionGrade.submission_id == w["subs"]["Kit"]))).scalar_one()
+        g.final_score, g.ai_score = 0.0, 0.0
+        await s.commit()
+
+    r = await client.post(f"/v1/teacher/submissions/{w['subs']['Kit']}/mark-reviewed", headers=_auth(w["token"]))
+    assert r.status_code == 200, r.text
+    await rr.drain_refresh_tasks()
+    sent = _mine(model, w)
+    assert len(sent) == 1 and "Kit-note" in sent[0]
+    assert (await _insights(client, w))["problems"][0]["reasons"]
+
+    await _student(w, "Lou", None)
+    r = await client.patch(
+        f"/v1/teacher/submissions/{w['subs']['Lou']}/grade", headers=_auth(w["token"]),
+        json={"breakdown": [{"problem_id": w["pid"], "score_status": "zero", "percent": 0,
+                             "feedback": "Lou-note hand graded"}]},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["reviewed_at"]
+    await rr.drain_refresh_tasks()
+    # The class hasn't doubled and nothing waits on her, so it rewrites.
+    sent = _mine(model, w)
+    assert len(sent) == 2 and "Lou-note" in sent[1]
+
+    # Approving again with nothing new costs no call.
+    r = await client.post(f"/v1/teacher/submissions/{w['subs']['Kit']}/mark-reviewed", headers=_auth(w["token"]))
+    await rr.drain_refresh_tasks()
+    assert len(_mine(model, w)) == 2
+
+
 async def test_a_failed_call_retries_then_gives_up(client: AsyncClient, model: FakeModel) -> None:
     w = await _world()
     await _flagged_period(w)

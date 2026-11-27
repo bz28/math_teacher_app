@@ -30,6 +30,7 @@ from sqlalchemy import text
 from api.core.auth import create_access_token, hash_password
 from api.core.cost_tracker import cost_tracker
 from api.core.graph_checklist import drain_checklist_tasks
+from api.core.reteach_reasons import drain_refresh_tasks as drain_reasons_kicks
 from api.core.llm_client import _circuit
 from api.database import Base, get_engine, get_session_factory
 from api.main import app
@@ -403,6 +404,7 @@ async def _drain_integrity_tasks() -> AsyncIterator[None]:
     yield
     await drain_integrity_background_tasks()
     await drain_checklist_tasks()
+    await drain_reasons_kicks()
     await _drain_fire_and_forget_pools()
 
 
