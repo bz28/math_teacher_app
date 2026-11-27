@@ -8,6 +8,7 @@ from pydantic import AfterValidator, BaseModel
 from sqlalchemy import Integer, and_, case, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from api.core import photo_store
 from api.core.class_rubric import (
@@ -16,6 +17,12 @@ from api.core.class_rubric import (
     class_rules,
     credit_guidance,
     rubric_revision,
+)
+from api.core.grading_queue import (
+    BLOCK_NO_EXTRACTION,
+    BLOCK_UNREADABLE,
+    ai_grade_block,
+    has_any_grade_clause,
 )
 from api.core.integrity_pipeline import UNFINISHED_REASONS
 from api.core.subjects import VALID_SUBJECTS
@@ -476,6 +483,10 @@ async def needs_attention(
             dirty_case.label("dirty"),
             SubmissionGrade.grade_published_at.label("grade_published_at"),
             overdue_case.label("is_overdue"),
+            _to_review_case().label("to_review"),
+            SubmissionGrade.final_score.label("final_score"),
+            SubmissionGrade.reviewed_at.label("reviewed_at"),
+            has_any_grade_clause().label("has_grade"),
         )
         .select_from(Submission)
         .join(Assignment, Assignment.id == Submission.assignment_id)
@@ -503,6 +514,14 @@ async def needs_attention(
         )
     )).all()
 
+    # "Can't be AI-graded" is the review page's own rule, `ai_grade_block`,
+    # so the two can't drift. It needs the reading, which is heavy — but
+    # any grade at all already answers "no", so only never-graded rows
+    # load it, with just the columns the rule reads.
+    blocked = await _cant_ai_grade_ids(
+        db, [r.submission_id for r in rows if not r.has_grade],
+    )
+
     items: list[dict[str, Any]] = []
     for r in rows:
         # First matching bucket wins — flagged integrity always trumps
@@ -517,6 +536,7 @@ async def needs_attention(
             # Belt-and-suspenders: the WHERE clause already excludes
             # clean-published rows, but never emit one if it slips through.
             continue
+        unreleased = bool(r.to_review and r.final_score is not None)
         items.append({
             "submission_id": str(r.submission_id),
             "student_id": str(r.student_id),
@@ -530,6 +550,23 @@ async def needs_attention(
             "section_name": r.section_name,
             "due_at": r.due_at.isoformat() if r.due_at else None,
             "reason": reason,
+            # Per-row facts the home queue sums per (homework × section),
+            # each the review page's own predicate for the same count:
+            #   flagged       — its Flagged chip (`flagged_case` ⇔ `isFlagged`)
+            #   to_approve    — a grade not yet released that still wants
+            #                   Approve ✓ (no `reviewed_at`: an AI grade
+            #                   nobody approved)
+            #   to_publish    — a grade not yet released that's already
+            #                   approved (hand grades approve themselves;
+            #                   an edit keeps the approval) — only Publish
+            #                   is left. The two together are the section's
+            #                   share of its "Publish N grades".
+            #   cant_ai_grade — its "N can't be AI-graded" note
+            #                   (`ai_grade_block` unreadable / no_extraction)
+            "flagged": bool(r.flagged),
+            "to_approve": unreleased and r.reviewed_at is None,
+            "to_publish": unreleased and r.reviewed_at is not None,
+            "cant_ai_grade": r.submission_id in blocked,
         })
 
     # Priority bucket, then most-overdue/soonest-due first (nulls last),
@@ -540,6 +577,39 @@ async def needs_attention(
         it["student_name"].lower(),
     ))
     return {"items": items, "total": len(items)}
+
+
+async def _cant_ai_grade_ids(
+    db: AsyncSession, submission_ids: list[uuid.UUID],
+) -> set[uuid.UUID]:
+    """Of these submissions, the ones `ai_grade_block` says can't be
+    AI-graded (unreadable, or no reading at all)."""
+    if not submission_ids:
+        return set()
+    rows = (await db.execute(
+        select(Submission, SubmissionGrade, Assignment)
+        .options(
+            load_only(
+                Submission.id, Submission.extraction, Submission.extraction_flagged_at,
+                Submission.submitted_at, Submission.extraction_confirmed_at,
+            ),
+            load_only(
+                SubmissionGrade.id, SubmissionGrade.final_score, SubmissionGrade.ai_score,
+                SubmissionGrade.ai_breakdown, SubmissionGrade.teacher_score,
+                SubmissionGrade.breakdown, SubmissionGrade.graded_at,
+                SubmissionGrade.reviewed_at, SubmissionGrade.published_final_score,
+                SubmissionGrade.published_breakdown, SubmissionGrade.ai_grading_status,
+            ),
+            load_only(Assignment.id, Assignment.ai_grading_enabled),
+        )
+        .join(Assignment, Assignment.id == Submission.assignment_id)
+        .outerjoin(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
+        .where(Submission.id.in_(submission_ids))
+    )).all()
+    return {
+        sub.id for sub, grade, assignment in rows
+        if ai_grade_block(sub, grade, assignment) in (BLOCK_UNREADABLE, BLOCK_NO_EXTRACTION)
+    }
 
 
 @router.get("/courses/{course_id}")

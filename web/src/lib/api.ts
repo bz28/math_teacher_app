@@ -1408,6 +1408,18 @@ export interface NeedsAttentionItem {
   section_name: string;
   due_at: string | null;
   reason: NeedsAttentionReason;
+  /** A grade not yet released that still wants Approve ✓ (an AI grade
+   *  nobody approved). */
+  to_approve: boolean;
+  /** A grade not yet released that's already approved — only Publish is
+   *  left. With `to_approve`, the section's share of the review page's
+   *  "Publish N grades". */
+  to_publish: boolean;
+  /** The review page's Flagged chip (same rule as `isFlagged`). */
+  flagged: boolean;
+  /** The review page's "can't be AI-graded" note (unreadable / no
+   *  reading) — the teacher grades these from the photo. */
+  cant_ai_grade: boolean;
 }
 
 /** One row per (student × section enrollment) in the Grades tab roster.
