@@ -1097,6 +1097,13 @@ export interface TeacherCourse {
   created_at: string;
 }
 
+/** One course, as its workspace reads it. */
+export interface TeacherCourseDetail extends TeacherCourse {
+  /** Any homework in the course, by any of its teachers: it then opens
+   *  on Homework rather than Sections. */
+  has_homework: boolean;
+}
+
 /** Per-course onboarding milestones driving the first-run "Set up your
  *  class" checklist on the course workspace. Each flag is an EXISTS
  *  probe on the backend. */
@@ -1592,7 +1599,7 @@ export const teacher = {
     return apiFetch<{ courses: TeacherCourse[] }>("/teacher/courses");
   },
   course(id: string) {
-    return apiFetch<TeacherCourse>(`/teacher/courses/${id}`);
+    return apiFetch<TeacherCourseDetail>(`/teacher/courses/${id}`);
   },
   courseSetupStatus(id: string) {
     return apiFetch<CourseSetupStatus>(`/teacher/courses/${id}/setup-status`);

@@ -4,7 +4,8 @@ import { Suspense, use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { teacher, type BankJob, type TeacherCourse } from "@/lib/api";
+import { teacher, type BankJob, type TeacherCourse, type TeacherCourseDetail } from "@/lib/api";
+import { landingTab } from "./_lib/landing-tab";
 import {
   BANK_JOB_POLL_INTERVAL_MS,
   BANK_JOB_POLL_LIMIT_MS,
@@ -51,8 +52,6 @@ const TABS: { key: TabKey; label: string }[] = [
 // appear in the tab row).
 const ALL_TAB_KEYS: TabKey[] = [...TABS.map((t) => t.key), "settings"];
 
-const DEFAULT_TAB: TabKey = "sections";
-
 const ACTIVE_JOB_STORAGE_KEY = (courseId: string) => `bank.activeJob.${courseId}`;
 
 export default function CourseWorkspacePage({ params }: { params: Promise<{ id: string }> }) {
@@ -71,22 +70,28 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [course, setCourse] = useState<TeacherCourse | null>(null);
+  const [course, setCourse] = useState<TeacherCourseDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Tab state lives in the URL (?tab=materials) so refresh, back/
   // forward, and deep-linked URLs all land on the right tab. Unknown
   // values fall back to the default.
+  //
+  // Without one, the course opens on landingTab — decided once, from
+  // the first read of the course (null until then), so a reload of the
+  // course mid-visit (the first homework just made) never moves the
+  // teacher off the tab they're on.
   const tabParam = searchParams.get("tab");
-  const tab: TabKey = ALL_TAB_KEYS.includes(tabParam as TabKey)
+  const [landing, setLanding] = useState<TabKey | null>(null);
+  if (landing === null && course) setLanding(landingTab(course));
+  const tab: TabKey | null = ALL_TAB_KEYS.includes(tabParam as TabKey)
     ? (tabParam as TabKey)
-    : DEFAULT_TAB;
+    : landing;
   const setTab = useCallback(
     (next: TabKey) => {
       const qs = new URLSearchParams(searchParams.toString());
-      if (next === DEFAULT_TAB) qs.delete("tab");
-      else qs.set("tab", next);
+      qs.set("tab", next);
       const q = qs.toString();
       router.replace(q ? `${pathname}?${q}` : pathname, { scroll: false });
     },
@@ -323,6 +328,7 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
                   : undefined
             }
             onClick={() => setTab(t.key)}
+            aria-current={tab === t.key ? "page" : undefined}
             className={`relative shrink-0 py-3 text-sm font-medium transition-colors ${
               tab === t.key
                 ? "font-semibold text-text-primary"

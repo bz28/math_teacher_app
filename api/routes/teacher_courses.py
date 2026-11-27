@@ -550,6 +550,13 @@ async def get_course(
 ) -> dict[str, Any]:
     course = await get_teacher_course(db, course_id, current_user.user_id)
     attention = await _course_attention(db, current_user.user_id, course_id)
+    # Which tab the course opens on: its homework once there is any
+    # (a co-teacher's counts — it's the course's), its sections before.
+    has_homework = bool((await db.execute(select(
+        select(Assignment.id).where(
+            Assignment.course_id == course_id, Assignment.type == "homework",
+        ).exists(),
+    ))).scalar())
     return {
         "id": str(course.id), "name": course.name, "subject": course.subject,
         "grade_level": course.grade_level,
@@ -557,6 +564,7 @@ async def get_course(
         "to_review": attention["to_review"],
         "flagged": attention["flagged"],
         "next_due_at": attention["next_due_at"],
+        "has_homework": has_homework,
     }
 
 
