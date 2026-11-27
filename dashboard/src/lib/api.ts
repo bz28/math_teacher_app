@@ -483,6 +483,9 @@ export const api = {
   llmCalls: (params?: Record<string, string>) => request<LLMCallsData>("/admin/llm-calls", params),
   llmCallsSummary: (params?: Record<string, string>) =>
     request<CallSummary>("/admin/llm-calls/summary", params),
+  llmCallsAttention: (params?: Record<string, string>) =>
+    request<{ items: AttentionItem[] }>("/admin/llm-calls/attention", params),
+  llmPayload: (id: string) => request<LLMPayload>(`/admin/llm-payloads/${id}`),
   extractionQuality: (params?: Record<string, string>) =>
     request<ExtractionQualityData>("/admin/extraction-quality", params),
   extractionDetail: (submissionId: string) =>
@@ -644,6 +647,26 @@ export interface CallSummary {
   }[];
 }
 
+/** One line of the Calls page's "needs you" band — a fact about the
+ *  last 24 hours, each a link into the calls behind it. */
+export type AttentionItem =
+  | { kind: "function_failing"; function: string; failed: number; of: number }
+  | { kind: "school_failures"; school_id: string; school_name: string; failed: number }
+  | { kind: "p95_up"; function: string; p95_ms: number; was_ms: number; n: number };
+
+/** A system prompt or tool schema, content-addressed and shared by every
+ *  call that sent the same bytes (`used_by`). */
+export interface LLMPayload {
+  id: string;
+  sha256: string;
+  text: string;
+  char_len: number;
+  kind: string;
+  first_seen_from: string;
+  first_seen_at: string;
+  used_by: number;
+}
+
 export interface LLMCallsData {
   summary: CallSummary;
   /** Filter options — the window's functions and models, not narrowed by
@@ -681,9 +704,18 @@ export interface LLMCallsData {
     user_id: string | null;
     user_name: string | null;
     school_id: string | null;
+    /** Who the call was for: the school stamped on it and, for a call on
+     *  a submission, the student who handed it in and their teacher. */
+    school_name: string | null;
+    teacher_name: string | null;
+    student_name: string | null;
     submission_id: string | null;
     /** A submission-pipeline call whose submission was deleted. */
     deleted_submission: boolean;
+    /** The system prompt / tool schema it sent (bodies via llmPayload);
+     *  null when not recorded. */
+    system_prompt_id: string | null;
+    tool_schema_id: string | null;
     metadata: Record<string, unknown> | null;
     created_at: string;
   }[];
@@ -693,6 +725,9 @@ export interface LLMCallsData {
    *  the general LLM-calls list. */
   submission: SubmissionSummary | null;
   users: { id: string; email: string }[];
+  /** Picker options: the scope's teachers, and students with calls. */
+  teachers: { id: string; name: string }[];
+  students: { id: string; name: string }[];
   repo: string;
 }
 

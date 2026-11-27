@@ -30,11 +30,11 @@ const PLATFORM = ["/schools", "/leads"];
 export function pageScope(pathname: string, search: string): PageScope {
   const params = new URLSearchParams(search);
   if (pathname === "/users" && params.get("role") === "admin") return "platform";
-  // LLM calls filtered to one user / submission / session is about that
+  // LLM calls filtered to one person / homework / submission / session is about that
   // one thing, and the page drops the school scope for it (LLMCalls.tsx).
   if (
     pathname === "/llm-calls" &&
-    ["user", "teacher", "student", "submission", "session"].some((k) => params.get(k))
+    ["user", "teacher", "student", "assignment", "submission", "session"].some((k) => params.get(k))
   ) {
     return null;
   }
