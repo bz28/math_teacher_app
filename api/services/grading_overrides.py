@@ -116,17 +116,29 @@ def _link_positions(
     is suspect too, even where two problems happen to share a percent."""
     recorded = ai_breakdown.get("problem_percents")
     percents = recorded if isinstance(recorded, dict) else {}
+    count = len(breakdown)
     seen: set[int] = set()
     shifted = False
     out: list[int | None] = []
     for index, (ai_g, final_g) in enumerate(zip(ai_grades, breakdown, strict=True)):
+        status = ai_g.get("score_status")
         position = _recorded_position(ai_g.get("problem_position"))
-        ai_pct = normalize_percent(ai_g.get("score_status"), ai_g.get("percent"))
+        ai_pct = normalize_percent(status, ai_g.get("percent"))
         own = percents.get(str(final_g.get("problem_id")))
+        # The record holds the raw percent; clamp it the same way before
+        # comparing, or a 99.67 on a big problem reads as a mismatch.
+        own_pct = (
+            normalize_percent(status, own)
+            if isinstance(own, (int, float)) and not isinstance(own, bool) else None
+        )
         if (
-            isinstance(own, (int, float)) and not isinstance(own, bool)
-            and ai_pct is not None and abs(float(own) - ai_pct) > 0.5
-        ) or (position is not None and position in seen):
+            (ai_pct is not None and own_pct is not None and abs(own_pct - ai_pct) > 0.5)
+            or (position is not None and (position in seen or position > count))
+        ):
+            # A number past the list's end is where a shift starts (every
+            # problem gets one entry); on an assignment with a deleted
+            # question it can also be a real one — withholding is the safe
+            # side of that trade, a wrong link is not.
             shifted = True
         if position is not None:
             seen.add(position)
@@ -160,9 +172,8 @@ def compare_grade(
     The grader's own per-problem record (``problem_percents``, keyed by
     problem id) is the check — the AI's call for the teacher entry's
     problem must be the percent this pair compares — along with a
-    position recorded twice. Counting is unchanged either way; only the
-    link is withheld. (An off-sheet grade whose percent matches its pair
-    can still link to a number the case file doesn't have; it says so.)
+    position recorded twice or past the list's end. Counting is unchanged
+    either way; only the link is withheld, and it errs toward withholding.
     """
     if not ai_breakdown or not breakdown:
         return None

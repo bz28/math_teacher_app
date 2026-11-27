@@ -138,11 +138,8 @@ def test_shifted_pairs_still_count_but_never_link_to_the_wrong_problem() -> None
     )
     assert deltas is not None
     assert len(deltas) == 3  # the measurement is unchanged
-    # p1 pairs truly; the second pair is AI #9 (100) against teacher p3,
-    # whose recorded call was 100 too, so it passes — and links to #9,
-    # which the case file reports as having nothing read. The third pair
-    # (AI p3 100 vs teacher p2, recorded 0) starts the shift.
-    assert [d.position for d in deltas] == [1, 9, None]
+    # p1 pairs truly; #9 on a 3-problem sheet starts the shift.
+    assert [d.position for d in deltas] == [1, None, None]
 
 
 def test_a_shift_withholds_every_later_link_even_on_a_shared_percent() -> None:
@@ -165,9 +162,46 @@ def test_a_shift_withholds_every_later_link_even_on_a_shared_percent() -> None:
     assert [d.position for d in deltas] == [1, None, None]
 
 
-def test_a_gap_from_a_deleted_question_keeps_its_links() -> None:
+def test_an_off_sheet_grade_with_a_matching_percent_still_withholds_later_links() -> None:
+    # #9 is a zero and pairs with p3's zero, so the percent check passes;
+    # the number past the sheet's end is what gives the shift away. The
+    # third case is p2's override and must not open #p3.
+    deltas = compare_grade(
+        {
+            "grades": [
+                {**_g("full", 100), "problem_position": 1},
+                {**_g("zero", 0), "problem_position": 9},
+                {**_g("zero", 0), "problem_position": 3},
+            ],
+            "problem_percents": {"p1": 100.0, "p3": 0.0, "p2": 0.0},
+        },
+        [_t("full", 100, "p1"), _t("zero", 0, "p3"), _t("full", 100, "p2")],
+    )
+    assert deltas is not None
+    assert [d.position for d in deltas] == [1, None, None]
+
+
+def test_a_big_problems_unclamped_record_is_not_a_mismatch() -> None:
+    # 99.67 on a 150-point problem is stored raw; the AI side clamps to 99.
+    deltas = compare_grade(
+        {
+            "grades": [
+                {**_g("partial", 99.6667), "problem_position": 1},
+                {**_g("zero", 0), "problem_position": 2},
+                {**_g("zero", 0), "problem_position": 3},
+            ],
+            "problem_percents": {"a": 99.6667, "b": 0.0, "c": 0.0},
+        },
+        [_t("partial", 99.6667, "a"), _t("full", 100, "b"), _t("full", 100, "c")],
+    )
+    assert deltas is not None
+    assert [d.position for d in deltas] == [1, 2, 3]
+
+
+def test_a_gap_from_a_deleted_question_errs_toward_withholding() -> None:
     # Content [a, (deleted), b, c] grades as positions 1, 3, 4 with three
-    # entries. Position 4 is real and the case file has it.
+    # entries. #4 is real but indistinguishable from an invented number,
+    # so it opens the case file at the top rather than risk a wrong jump.
     deltas = compare_grade(
         {
             "grades": [{**_g("zero", 0), "problem_position": p} for p in (1, 3, 4)],
@@ -176,7 +210,7 @@ def test_a_gap_from_a_deleted_question_keeps_its_links() -> None:
         [_t("full", 100, "a"), _t("full", 100, "b"), _t("full", 100, "c")],
     )
     assert deltas is not None
-    assert [d.position for d in deltas] == [1, 3, 4]
+    assert [d.position for d in deltas] == [1, 3, None]
 
 
 def test_homework_edited_after_grading_still_compares_and_links() -> None:
