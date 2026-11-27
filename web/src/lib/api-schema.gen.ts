@@ -3545,8 +3545,8 @@ export interface paths {
          *
          *     Row shape:
          *       { assignment_id, assignment_title, section_id, section_name,
-         *         due_at, total_students, submitted, flagged, to_grade, dirty,
-         *         published }
+         *         due_at, total_students, submitted, flagged, worth_a_look,
+         *         photo_problems, too_long, to_grade, dirty, published }
          *
          *     Sort + client-side: the frontend orders by urgency or due date and
          *     renders pills per count.

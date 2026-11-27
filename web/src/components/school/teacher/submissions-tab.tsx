@@ -6,8 +6,7 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { teacher, type SubmissionsInboxRow } from "@/lib/api";
 import { FlagPills } from "./_pieces/flag-pills";
-import { flagWords } from "./_pieces/flag-words";
-import { inboxCta } from "./_pieces/inbox-cta";
+import { gradeNextFlagReason, inboxCta } from "./_pieces/inbox-cta";
 import { formatDueShort } from "@/lib/utils";
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { Select } from "@/components/ui";
@@ -596,7 +595,7 @@ function pickGradeNext(rows: SubmissionsInboxRow[]): GradeNextTarget | null {
   if (!best) return null;
   const reason =
     best.flagged > 0
-      ? flagWords(best).join(" · ")
+      ? gradeNextFlagReason(best.flagged)
       : bestTier === 1
         ? `${best.submitted - best.published} to grade · overdue`
         : `${best.submitted - best.published} to grade`;

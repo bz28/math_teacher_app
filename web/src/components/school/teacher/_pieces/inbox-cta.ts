@@ -13,3 +13,10 @@ export function inboxCta(
   if (row.dirty > 0) return "Republish →";
   return "Review →";
 }
+
+/** The "Grade next" bar's reason for a flagged row: whole and short,
+ *  like the button, so on a phone the truncated line still reaches the
+ *  homework's title (the pills on its row say the kinds). */
+export function gradeNextFlagReason(flagged: number): string {
+  return `${flagged} to look at`;
+}
