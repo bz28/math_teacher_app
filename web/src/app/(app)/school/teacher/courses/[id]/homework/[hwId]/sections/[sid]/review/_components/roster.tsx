@@ -4,9 +4,9 @@ import {
   RowDispositionPill,
 } from "@/components/school/teacher/_pieces/integrity-pieces";
 import type { RosterEntry, RosterFilter } from "../_lib/types";
+import { needsTeacher } from "../_lib/next-student";
 import {
   isFlagged,
-  needsTeacher,
   isAwaitingGrade,
   isAiGrading,
   hasGraphToCheck,

@@ -29,6 +29,7 @@ export function ReviewActions({
   totalProblems,
   graphGate,
   onMarkReviewed,
+  onApproveAndNext,
   onUnmarkReviewed,
   nextStudent,
   onSelectNext,
@@ -53,6 +54,9 @@ export function ReviewActions({
   /** "Check N graph items first" while any is undecided, else null. */
   graphGate: string | null;
   onMarkReviewed: () => void;
+  /** Set when another student is waiting on her Approve: the button
+   *  approves and opens them in one click. */
+  onApproveAndNext: (() => void) | null;
   onUnmarkReviewed: () => void;
   nextStudent: RosterEntry | null;
   onSelectNext: () => void;
@@ -62,13 +66,11 @@ export function ReviewActions({
 }): ReactNode {
   return (
     <>
-      {/* Wraps on a phone rather than refusing to shrink. These four
-          controls measured 484px wide inside a 390px viewport, so
-          `shrink-0` alone pushed the grading header sideways — on the
-          screen a teacher is most likely to open between classes.
-          The no-shrink guarantee still holds from md: up, where there
-          is room for a single row. */}
-      <div className="flex flex-wrap items-center gap-3 md:flex-nowrap md:shrink-0">
+      {/* Wraps whenever the row runs out of room. A no-wrap row from md:
+          up pushed Report out of the strip in the narrow grading column
+          at a 1280 laptop width; on a phone the controls measured 484px
+          inside a 390px viewport. */}
+      <div className="flex flex-wrap items-center gap-3">
         {/* Submitted pages stay one click away — promoted to the
             page header so they're findable without scrolling to
             the problems card. Lightbox markup lives inside the
@@ -141,21 +143,26 @@ export function ReviewActions({
         )}
         {!handGraded && !approved && totalProblems > 0 && (
           <>
-            <span
-              className="inline-flex items-center gap-1 rounded-[--radius-pill] border border-border-light bg-[color:var(--color-surface-alt-2)] px-2.5 py-1 text-[11px] font-bold text-text-muted tabular-nums"
-              title={
-                allGraded
-                  ? "Every problem is graded — approve when you're ready"
-                  : "Grade every problem before you can approve this submission"
-              }
-            >
-              {!allGraded
-                ? `Not reviewed · ${gradedProblemCount}/${totalProblems} graded`
-                : graphGate ?? "Not reviewed"}
-            </span>
+            {/* Only when it says why Approve is waiting. A bare "Not
+                reviewed" beside an enabled Approve repeated the button
+                and pushed Report out of the strip at 1440. */}
+            {(!allGraded || graphGate) && (
+              <span
+                className="inline-flex items-center gap-1 rounded-[--radius-pill] border border-border-light bg-[color:var(--color-surface-alt-2)] px-2.5 py-1 text-[11px] font-bold text-text-muted tabular-nums"
+                title={
+                  !allGraded
+                    ? "Grade every problem before you can approve this submission"
+                    : "Mark each graph item Shown or Missing on its problem, then approve"
+                }
+              >
+                {!allGraded
+                  ? `Not reviewed · ${gradedProblemCount}/${totalProblems} graded`
+                  : graphGate}
+              </span>
+            )}
             <button
               type="button"
-              onClick={onMarkReviewed}
+              onClick={onApproveAndNext ?? onMarkReviewed}
               disabled={marking || savingGrade || regrading || !allGraded || graphGate !== null}
               title={
                 regrading
@@ -166,11 +173,13 @@ export function ReviewActions({
                       ? `Grade every problem first (${gradedProblemCount} of ${totalProblems} graded)`
                       : graphGate
                         ? `${graphGate}: mark each one Shown or Missing on its problem`
-                        : "Approve — mark this submission reviewed"
+                        : onApproveAndNext
+                          ? "Approve, then open the next student waiting on you (A)"
+                          : "Approve — mark this submission reviewed (A)"
               }
               className="rounded-[--radius-md] border border-[color:var(--color-success)]/40 bg-[color:var(--color-success)]/10 px-3.5 py-1.5 text-xs font-bold text-[color:var(--color-success)] transition-colors hover:border-[color:var(--color-success)]/60 disabled:cursor-not-allowed disabled:opacity-45"
             >
-              {marking ? "Approving…" : "Approve ✓"}
+              {marking ? "Approving…" : onApproveAndNext ? "Approve & next →" : "Approve ✓"}
             </button>
           </>
         )}

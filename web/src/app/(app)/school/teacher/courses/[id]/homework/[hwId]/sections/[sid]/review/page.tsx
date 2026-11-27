@@ -36,6 +36,7 @@ import {
   classOnly,
   applyRosterFilter,
 } from "./_lib/grading";
+import { awaitsApproval, needsTeacher, nextMatching } from "./_lib/next-student";
 import { DetailSkeleton, ReviewLoadingSkeleton } from "./_components/skeletons";
 import { VerdictLegendTrigger } from "./_components/reference-modals";
 import { RosterFilterBar, TriageRoster, NotSubmittedCard } from "./_components/roster";
@@ -1232,7 +1233,7 @@ function HomeworkSectionReview({
   // flip without a refetch. Errors surface on the saveError channel
   // (scoped by id).
   const handleMarkReviewed = useCallback(
-    async (submissionId: string) => {
+    async (submissionId: string): Promise<boolean> => {
       setMarkingReviewedId(submissionId);
       setSaveError((prev) =>
         prev?.forSubmissionId === submissionId ? null : prev,
@@ -1256,11 +1257,13 @@ function HomeworkSectionReview({
             ? { ...d, reviewed_at: res.reviewed_at }
             : d,
         );
+        return true;
       } catch (e) {
         setSaveError({
           forSubmissionId: submissionId,
           message: e instanceof Error ? e.message : "Failed to approve",
         });
+        return false;
       } finally {
         setMarkingReviewedId(null);
       }
@@ -1470,25 +1473,23 @@ function HomeworkSectionReview({
   );
 
   // Next submitter whose grade isn't released to students yet —
-  // either never published or dirty-since-edit. Wraps to the start so
-  // a teacher grading out of order still gets auto-advance. Returns
-  // null if every submitter is clean-published (or the section has
-  // no submitters at all).
-  const nextStudent = useMemo<RosterEntry | null>(() => {
-    if (!roster || !selectedEntry) return null;
-    const idx = roster.findIndex((e) => e.student_id === selectedEntry.student_id);
-    if (idx < 0) return null;
-    for (let i = 1; i <= roster.length; i++) {
-      const cand = roster[(idx + i) % roster.length];
-      if (cand.student_id === selectedEntry.student_id) break;
-      const sub = cand.submission;
-      if (!sub) continue;
-      if (sub.grade_published_at === null || sub.grade_dirty) {
-        return cand;
-      }
-    }
-    return null;
-  }, [roster, selectedEntry]);
+  // either never published or dirty-since-edit — and the next one still
+  // waiting on her Approve, where Approve & next goes. Both wrap, and are
+  // null when no other student qualifies.
+  const nextStudent = useMemo<RosterEntry | null>(
+    () =>
+      roster && selectedEntry
+        ? nextMatching(roster, selectedEntry.student_id, needsTeacher)
+        : null,
+    [roster, selectedEntry],
+  );
+  const nextToApprove = useMemo<RosterEntry | null>(
+    () =>
+      roster && selectedEntry
+        ? nextMatching(roster, selectedEntry.student_id, awaitsApproval)
+        : null,
+    [roster, selectedEntry],
+  );
 
   return (
     <div className="mx-auto max-w-7xl px-4 pb-10">
@@ -1739,6 +1740,22 @@ function HomeworkSectionReview({
                 onToggleIntegrityDetails={toggleIntegrityDetails}
                 onMarkReviewed={() =>
                   void handleMarkReviewed(selectedEntry.submission!.id)
+                }
+                onApproveAndNext={
+                  nextToApprove
+                    ? () => {
+                        // Approve, then open the next student still
+                        // waiting on her — unless she's already moved
+                        // to someone else while it saved.
+                        const approvedId = selectedEntry.submission!.id;
+                        const target = nextToApprove.student_id;
+                        void handleMarkReviewed(approvedId).then((ok) => {
+                          if (ok && selectedSubmissionIdRef.current === approvedId) {
+                            selectStudent(target);
+                          }
+                        });
+                      }
+                    : null
                 }
                 onUnmarkReviewed={() =>
                   void handleUnmarkReviewed(selectedEntry.submission!.id)

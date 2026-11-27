@@ -8,6 +8,7 @@ import type {
   TeacherSubmissionRow,
 } from "@/lib/api";
 import type { RosterEntry, RosterFilter, AiSkip } from "./types";
+import { needsTeacher } from "./next-student";
 
 // AI grader confidence bands. The pipeline reports a calibrated 0-1
 // score per problem; we read it, never compute it. <0.6 is the
@@ -104,15 +105,6 @@ export function isFlagged(entry: RosterEntry): boolean {
   return !!entry.submission && isFlaggedSubmission(entry.submission);
 }
 
-export function needsTeacher(entry: RosterEntry): boolean {
-  const sub = entry.submission;
-  if (!sub) return false;
-  // Settled state is a published-and-clean grade. Everything else —
-  // ungraded, graded-but-not-published, dirty, integrity-flagged — is
-  // work that wants the teacher's attention.
-  if (sub.grade_published_at !== null && !sub.grade_dirty) return false;
-  return true;
-}
 
 // Pure read-only predicate over already-loaded roster data: true when
 // any problem on the submission carries an AI grade the model flagged

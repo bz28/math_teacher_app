@@ -191,7 +191,10 @@ const SHORTCUT_GROUPS: { heading: string; rows: { keys: string[]; label: string 
   },
   {
     heading: "Students",
-    rows: [{ keys: ["Enter", "→"], label: "Next student" }],
+    rows: [
+      { keys: ["A"], label: "Approve, then open the next student waiting on you" },
+      { keys: ["Enter", "→"], label: "Next student" },
+    ],
   },
   {
     heading: "The work",
