@@ -2806,6 +2806,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/teacher/assignments/{assignment_id}/practiced": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Set Practiced
+         * @description Who in each of the set's periods has practiced it, and how many
+         *     answered each problem. Ungraded: no scores, no outcomes. Counts
+         *     enrolled, non-preview students only.
+         */
+        get: operations["get_set_practiced_v1_teacher_assignments__assignment_id__practiced_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teacher/assignments/{assignment_id}/publish": {
         parameters: {
             query?: never;
@@ -5783,6 +5805,32 @@ export interface components {
             /** Item Ids */
             item_ids?: string[] | null;
         };
+        /** PracticedSection */
+        PracticedSection: {
+            /** Not Yet */
+            not_yet: components["schemas"]["PracticedStudent"][];
+            /** Practiced */
+            practiced: number;
+            /**
+             * Section Id
+             * Format: uuid
+             */
+            section_id: string;
+            /** Section Name */
+            section_name: string;
+            /** Students */
+            students: number;
+        };
+        /** PracticedStudent */
+        PracticedStudent: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
         /** PreviewSeat */
         PreviewSeat: {
             /** Current */
@@ -6057,6 +6105,15 @@ export interface components {
             password: string;
             /** Token */
             token: string;
+        };
+        /** SetPracticed */
+        SetPracticed: {
+            /** Problems */
+            problems: {
+                [key: string]: number;
+            };
+            /** Sections */
+            sections: components["schemas"]["PracticedSection"][];
         };
         /** StepChatRequest */
         StepChatRequest: {
@@ -11708,6 +11765,37 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_set_practiced_v1_teacher_assignments__assignment_id__practiced_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assignment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetPracticed"];
                 };
             };
             /** @description Validation Error */

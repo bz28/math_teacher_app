@@ -45,13 +45,13 @@ from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
 from api.models.grading_job import STATUS_QUEUED, STATUS_RUNNING, GradingJob
-from api.models.practice_activity import MODE_PRACTICE, PracticeActivity
 from api.models.question_bank import QuestionBankGenerationJob, QuestionBankItem
 from api.models.reteach_reasons import ReteachReasons
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.user import User
 from api.routes.teacher_courses import get_teacher_course
+from api.routes.teacher_practice_activity import practiced_rows
 from api.services.bank import hydrate_assignment_content
 
 router = APIRouter()
@@ -515,13 +515,7 @@ async def _practice_for(
     # A failed (or lost) job's problem counts until something else covers
     # it — a retry that wrote versions, or one still writing.
     failed = {j.parent_question_id for j in jobs if j.parent_question_id not in live} - covered
-    practiced = set((await db.execute(
-        select(PracticeActivity.student_id).distinct().where(
-            PracticeActivity.practice_assignment_id == practice.id,
-            PracticeActivity.section_id == section_id,
-            PracticeActivity.mode == MODE_PRACTICE,
-        )
-    )).scalars()) & roster_ids
+    practiced = {sid for _sec, sid, _item in await practiced_rows(db, practice.id, [section_id])} & roster_ids
     return InsightsPractice(
         id=practice.id,
         title=practice.title,

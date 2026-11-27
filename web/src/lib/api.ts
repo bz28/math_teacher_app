@@ -1565,6 +1565,12 @@ export type InsightsHomework = Schemas["InsightsHomework"];
 export type InsightsProblem = Schemas["InsightsProblem"];
 export type InsightsPractice = Schemas["InsightsPractice"];
 
+/** Who in each of a practice set's periods has practiced it, and how
+ *  many answered each problem. Mirrors GET /teacher/assignments/{id}/practiced
+ *  (api/routes/teacher_practice_activity.py). Ungraded: no scores. */
+export type SetPracticed = Schemas["SetPracticed"];
+export type PracticedSection = Schemas["PracticedSection"];
+
 /** A teacher's "Report a problem" — the context is a snapshot of what
  *  they were looking at, so every field is nullable. */
 export interface TeacherReportPayload {
@@ -1951,6 +1957,11 @@ export const teacher = {
     return apiFetch<SectionInsightsResponse>(
       `/teacher/courses/${courseId}/sections/${sectionId}/insights${q}`,
     );
+  },
+  /** Who in each of a practice set's periods has practiced it, and how
+   *  many students answered each problem. Teacher-only; ungraded. */
+  setPracticed(assignmentId: string) {
+    return apiFetch<SetPracticed>(`/teacher/assignments/${assignmentId}/practiced`);
   },
   /** Replace the per-problem breakdown (and/or teacher notes) for a
    *  submission. Full replacement semantics — send every entry on

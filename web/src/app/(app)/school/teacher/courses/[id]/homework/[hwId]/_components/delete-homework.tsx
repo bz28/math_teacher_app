@@ -6,10 +6,13 @@ import { useState } from "react";
  *  confirm to catch accidental clicks. Published homework can't be
  *  deleted until it's unpublished. */
 export function DeleteHomework({
+  noun,
   disabled,
   busy,
   onDelete,
 }: {
+  /** What's being deleted, in the teacher's words. */
+  noun: "homework" | "practice set";
   disabled: boolean;
   busy: boolean;
   onDelete: () => void;
@@ -20,7 +23,7 @@ export function DeleteHomework({
       {confirmingDelete ? (
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold text-[color:var(--color-error)] ">
-            Delete this homework?
+            Delete this {noun}?
           </span>
           <button
             type="button"
@@ -43,10 +46,10 @@ export function DeleteHomework({
           type="button"
           onClick={() => setConfirmingDelete(true)}
           disabled={disabled}
-          title={disabled ? "Unpublish before deleting" : "Delete this homework"}
+          title={disabled ? "Unpublish before deleting" : `Delete this ${noun}`}
           className="text-xs font-semibold text-text-muted hover:text-[color:var(--color-error)] disabled:opacity-40 disabled:cursor-not-allowed"
         >
-          🗑 Delete homework
+          🗑 Delete {noun}
         </button>
       )}
     </div>

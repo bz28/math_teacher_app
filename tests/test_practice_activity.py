@@ -331,3 +331,87 @@ async def _course_id(world: dict[str, Any]) -> uuid.UUID:
                 Assignment.id == world["assignment_id"]
             )
         )).scalar_one()
+
+
+# ── Who practiced a set ──
+
+
+async def _enrolled(p: dict[str, Any], name: str, *, preview: bool = False) -> uuid.UUID:
+    async with get_session_factory()() as s:
+        u = User(email=f"{name.lower()}_{uuid.uuid4().hex[:6]}@t.com", password_hash=hash_password("x"),
+                 grade_level=8, role="student", name=name, is_preview=preview)
+        s.add(u)
+        await s.flush()
+        course_id = (await s.execute(
+            select(Assignment.course_id).where(Assignment.id == p["practice_id"])
+        )).scalar_one()
+        s.add(SectionEnrollment(section_id=p["section_id"], course_id=course_id, student_id=u.id))
+        await s.commit()
+        return u.id
+
+
+async def test_set_practiced_counts_the_period_and_lists_who_hasnt(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    p = await _seed_practice(world)
+    await _record_class_activity(p, world)
+    cal = await _enrolled(p, "Cal")
+    await _enrolled(p, "ana")
+    preview = await _enrolled(p, "Preview", preview=True)
+    async with get_session_factory()() as s:
+        s.add_all([
+            # A preview student's practice and a Learn walkthrough never count.
+            PracticeActivity(student_id=preview, section_id=p["section_id"], practice_assignment_id=p["practice_id"],
+                             bank_item_id=p["item_ids"][1], mode="practice", outcome="first_try"),
+            PracticeActivity(student_id=cal, section_id=p["section_id"], practice_assignment_id=p["practice_id"],
+                             bank_item_id=p["item_ids"][1], mode="learn", outcome="completed"),
+        ])
+        await s.commit()
+
+    r = await client.get(f"/v1/teacher/assignments/{p['practice_id']}/practiced",
+                         headers=_auth(world["teacher_token"]))
+    assert r.status_code == 200, r.text
+    data = r.json()
+    (sec,) = data["sections"]
+    assert (sec["students"], sec["practiced"]) == (4, 2)
+    assert [st["name"] for st in sec["not_yet"]] == ["ana", "Cal"]
+    assert data["problems"] == {str(p["item_ids"][0]): 2, str(p["item_ids"][1]): 1}
+
+
+async def test_set_practiced_is_for_the_sets_own_teacher_and_practice_only(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    p = await _seed_practice(world)
+    async with get_session_factory()() as s:
+        other = User(email=f"other_t_{uuid.uuid4().hex[:6]}@t.com", password_hash=hash_password("x"),
+                     grade_level=12, role="teacher", name="OtherT")
+        s.add(other)
+        await s.commit()
+        other_token = create_access_token(str(other.id), "teacher")
+    r = await client.get(f"/v1/teacher/assignments/{p['practice_id']}/practiced", headers=_auth(other_token))
+    assert r.status_code in (403, 404), r.text
+    r = await client.get(f"/v1/teacher/assignments/{world['assignment_id']}/practiced",
+                         headers=_auth(world["teacher_token"]))
+    assert r.status_code == 404, r.text
+
+
+async def test_set_practiced_still_answers_when_the_access_log_fails(
+    client: AsyncClient, world: dict[str, Any], monkeypatch: Any, caplog: Any,
+) -> None:
+    """A failed FERPA log rolls the session back; the read must not 500,
+    and the failure goes to the error log rather than vanishing."""
+    from api.core import audit_log
+
+    class Broken:
+        def __init__(self, **_: Any) -> None:
+            raise RuntimeError("audit table down")
+
+    p = await _seed_practice(world)
+    await _record_class_activity(p, world)
+    monkeypatch.setattr(audit_log, "StudentRecordAccessLog", Broken)
+    r = await client.get(f"/v1/teacher/assignments/{p['practice_id']}/practiced",
+                         headers=_auth(world["teacher_token"]))
+    assert r.status_code == 200, r.text
+    assert r.json()["sections"][0]["practiced"] == 2
+    assert any(rec.levelname == "ERROR" and "Failed to log student record access" in rec.getMessage()
+               for rec in caplog.records)

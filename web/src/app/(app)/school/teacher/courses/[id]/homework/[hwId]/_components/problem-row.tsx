@@ -27,12 +27,15 @@ export function ProblemRow({
   onChecklistChanged,
   reveal,
   published,
+  practiced,
 }: {
   problem: AssignmentProblem;
   /** Changes when the page asks this row to open its Grading ▾ and
    *  scroll into view. */
   reveal?: number;
   published: boolean;
+  /** On a live practice set: how many students answered this problem. */
+  practiced?: number;
   /** Present for a problem that requires a drawing. */
   checklist?: HomeworkGraphChecklist;
   checklistLookedAgain: boolean;
@@ -128,6 +131,9 @@ export function ProblemRow({
               >
                 Graph checklist · not checked
               </button>
+            )}
+            {practiced !== undefined && (
+              <span className="text-xs tabular-nums text-text-muted">{practiced} practiced</span>
             )}
             {onEdit ? (
               <button
