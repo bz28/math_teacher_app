@@ -63,7 +63,6 @@ CONSOLE_REQUESTS = [
     ("generation-jobs", "/v1/admin/generation/jobs?limit=25&offset=0"),
     # ── Customers ──
     ("schools", "/v1/admin/schools"),
-    ("leads", "/v1/admin/leads?limit=25&offset=0"),
     # ── System ──
     ("users", "/v1/admin/users?hours=720&limit=25&offset=0"),
     ("users-admins", "/v1/admin/users?hours=720&limit=25&offset=0&role=admin"),
