@@ -23,9 +23,6 @@ const COLORS = ["#14130f", "#4a6b3a", "#b8431a", "#3d5a78", "#a66b15", "#6b21a8"
 type CallRow = LLMCallsData["calls"][number];
 type Status = "" | "ok" | "failed";
 
-
-/** Params that name one person, homework, submission or session. */
-const ENTITY_KEYS = ["user", "teacher", "student", "assignment", "submission", "session"];
 export default function LLMCalls() {
   const [searchParams, setSearchParams] = useSearchParams();
   const confirm = useConfirm();
@@ -64,8 +61,7 @@ export default function LLMCalls() {
   );
   // "Internal only" (see INTERNAL_SCHOOL); a school id in `?school=` is
   // taken by the rail instead (Layout).
-  // An entity filter already means "ignore the place" (pageScope), so
-  // Internal only never stands beside one — setParams drops it.
+  // Never beside an entity filter — see the effect below.
   const internalOnly = !entityFilter && isInternalOnly("/llm-calls", `?${searchParams.toString()}`);
   const placeFilter = internalOnly ? INTERNAL_SCHOOL : scope;
   const schoolFilter = entityFilter ? null : placeFilter;
@@ -120,12 +116,23 @@ export default function LLMCalls() {
     setOffset(0);
   }, [query]);
 
+  // An entity filter already means "ignore the place" (pageScope), so
+  // Internal only never stands beside one: however the URL arrived (a
+  // picker, a hand-edited or old link), drop it, as Layout drops a
+  // `?school=<id>` it has taken into the rail.
+  const strayInternal = entityFilter && searchParams.get("school") === INTERNAL_SCHOOL;
+  useEffect(() => {
+    if (!strayInternal) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete("school");
+    setSearchParams(next, { replace: true });
+  }, [strayInternal, searchParams, setSearchParams]);
+
   const setParams = (changes: Record<string, string>) => {
     const next = new URLSearchParams(searchParams);
     for (const [k, v] of Object.entries(changes)) {
       if (v) next.set(k, v); else next.delete(k);
     }
-    if (ENTITY_KEYS.some((k) => next.get(k)) && next.get("school") === INTERNAL_SCHOOL) next.delete("school");
     setSearchParams(next);
   };
   const setParam = (key: string, value: string) => setParams({ [key]: value });
