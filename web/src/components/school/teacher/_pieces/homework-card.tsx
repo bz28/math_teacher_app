@@ -7,7 +7,7 @@ import {
   sectionTargetLabel,
   sectionToneClass,
 } from "@/lib/utils";
-import { extendedCount, missingCount, republishOnlyCount } from "./homework-buckets";
+import { extendedCount, missingCount, needsGradingAlert } from "./homework-buckets";
 import { StatusPill } from "./status-pill";
 
 export type HomeworkBucket =
@@ -60,11 +60,11 @@ export function HomeworkCard({
     selectedNames: hw.section_names,
     status: hw.status,
   });
-  // Every grade is out and only edits wait on a republish: calm amber,
-  // not the red overdue alarm (that's for ungraded/unreviewed work).
-  const republishOnly = bucket === "needsGrading" ? republishOnlyCount(hw) : 0;
-  const overdueDays =
-    bucket === "needsGrading" && hw.due_at && republishOnly === 0 ? daysOverdue(hw.due_at) : 0;
+  // Red for grading or review owed past due; calm amber when only edits
+  // wait on a republish (the students already have a grade).
+  const alert = bucket === "needsGrading" ? needsGradingAlert(hw) : null;
+  const republishOnly = alert?.tone === "amber" ? alert.republish : 0;
+  const overdueDays = alert?.tone === "red" ? alert.overdueDays : 0;
   // Outstanding submissions = submitted but not yet graded. Headline
   // signal for the NEEDS GRADING bucket: surface as a pill on the
   // title row so a teacher can scan a stack of cards and pick the one
@@ -84,7 +84,7 @@ export function HomeworkCard({
       type="button"
       onClick={onOpen}
       className={`block w-full rounded-[--radius-lg] border bg-surface p-4 text-left transition-all hover:-translate-y-px hover:shadow-sm ${
-        bucket === "needsGrading" && republishOnly === 0
+        alert?.tone === "red"
           ? "border-[color:var(--color-error-border)] hover:border-[color:var(--color-error)]"
           : bucket === "dueThisWeek"
             ? "border-[color:var(--color-info-border)] hover:border-[color:var(--color-info)]"
@@ -153,9 +153,8 @@ export function HomeworkCard({
             SubmissionGrade lifecycle flags instead. Every branch leads
             with submitted-vs-enrolled so a partial HW never reads as
             class-complete:
-              - published === submitted → some were edited since (a
-                fully released, unedited HW is Completed, not here); the
-                title row's amber "N to republish" carries it.
+              - only a republish owed (republishOnlyCount) → the title
+                row's amber "N to republish" carries it.
               - to_review > 0 → submissions still awaiting the teacher's
                 review (reviewed_at IS NULL).
               - else → everything reviewed, ready for the teacher to
@@ -163,9 +162,9 @@ export function HomeworkCard({
         {bucket === "needsGrading" && hw.submitted > 0 && (
           <span className="ml-1 font-semibold text-text-secondary">
             · {submittedLabel}
-            {hw.published === hw.submitted ? (
-              // Released, but edited since: the title row's amber
-              // "N to republish" says it.
+            {republishOnly > 0 ? (
+              // Released and reviewed, but edited since: the title row's
+              // amber "N to republish" says it.
               null
             ) : hw.to_review > 0 ? (
               <> · {hw.to_review} to review</>
@@ -238,10 +237,3 @@ function CompletedRow({
   );
 }
 
-/** How many full days past due. Returns 0 if not overdue. */
-function daysOverdue(iso: string): number {
-  const due = new Date(iso).getTime();
-  const now = Date.now();
-  if (now <= due) return 0;
-  return Math.floor((now - due) / (1000 * 60 * 60 * 24));
-}

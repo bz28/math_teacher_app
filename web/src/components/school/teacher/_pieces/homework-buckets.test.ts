@@ -9,6 +9,7 @@ import {
   extendedCount,
   isHomeworkCompleted,
   missingCount,
+  needsGradingAlert,
   republishOnlyCount,
 } from "./homework-buckets.ts";
 
@@ -207,8 +208,12 @@ test("a grade still waiting on the teacher keeps it in Needs grading", () => {
 });
 
 test("only a republish owed → calm 'N to republish', not overdue; any unreleased grade → 0", () => {
-  const past = { due_at: at(-20 * DAY), total_students: 25, submitted: 25, published: 25 };
+  const past = { due_at: at(-20 * DAY), total_students: 25, submitted: 25, graded: 25, published: 25 };
   assert.equal(republishOnlyCount(hw({ ...past, republish: 1 })), 1);
+  // Still "published", but the edit took its score away (cleared) or its
+  // review stamp (forced regrade): grading/review owed → red stays.
+  assert.equal(republishOnlyCount(hw({ ...past, graded: 24, republish: 1 })), 0);
+  assert.equal(republishOnlyCount(hw({ ...past, to_review: 1, republish: 1 })), 0);
   // A grade not yet released is real grading work: overdue stays red.
   assert.equal(republishOnlyCount(hw({ ...past, published: 24, republish: 1 })), 0);
   assert.equal(republishOnlyCount(hw(past)), 0);
@@ -220,4 +225,23 @@ test("a Completed row counts students still inside their extension", () => {
   assert.equal(extendedCount(hw(past), NOW), 1);
   assert.equal(extendedCount(hw({ ...past, due_at: at(2 * DAY) }), NOW), 0);
   assert.equal(extendedCount(hw({ ...past, status: "draft" }), NOW), 0);
+});
+
+test("the Needs-grading card: red (with days overdue) for owed grading, amber for a republish only", () => {
+  const past = { due_at: at(-3 * DAY), total_students: 25, submitted: 25, graded: 25, published: 25 };
+  assert.deepEqual(needsGradingAlert(hw({ ...past, republish: 2 }), NOW), { tone: "amber", republish: 2 });
+  assert.deepEqual(
+    needsGradingAlert(hw({ ...past, published: 20, to_review: 5 }), NOW),
+    { tone: "red", overdueDays: 3 },
+  );
+  // A cleared score on a published grade is grading owed, not a republish.
+  assert.deepEqual(
+    needsGradingAlert(hw({ ...past, graded: 24, republish: 1 }), NOW),
+    { tone: "red", overdueDays: 3 },
+  );
+  // Due earlier today: red border, no "days overdue" yet.
+  assert.deepEqual(
+    needsGradingAlert(hw({ ...past, due_at: at(-2 * 3_600_000), published: 20 }), NOW),
+    { tone: "red", overdueDays: 0 },
+  );
 });

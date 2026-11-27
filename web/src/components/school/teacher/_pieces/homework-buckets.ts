@@ -63,10 +63,34 @@ export function missingCount(
  * republish for — every turned-in grade is out, some edited since. The
  * students already have a grade, so the card reads as a calm amber
  * "N to republish", not a red overdue alarm. 0 when any grade is still
- * unreleased (that is real overdue grading work).
+ * unreleased, ungraded or unreviewed — that is real overdue grading
+ * work. (A published grade can lose its score or its review stamp and
+ * stay "published": clearing it, a forced AI regrade, a partial hand
+ * grade. Those are counted in `republish` too, so `published` alone
+ * can't tell.)
  */
 export function republishOnlyCount(hw: TeacherAssignment): number {
-  return hw.published === hw.submitted ? hw.republish : 0;
+  const allOutAndReviewed =
+    hw.published === hw.submitted && hw.graded === hw.submitted && hw.to_review === 0;
+  return allOutAndReviewed ? hw.republish : 0;
+}
+
+/** What a Needs-grading card leads with: red (border, and "N days
+ *  overdue" once a full day has passed) for grading or review owed past
+ *  due; calm amber "N to republish" when only edits wait on a republish. */
+export type NeedsGradingAlert =
+  | { tone: "red"; overdueDays: number }
+  | { tone: "amber"; republish: number };
+
+export function needsGradingAlert(
+  hw: TeacherAssignment,
+  now: number = Date.now(),
+): NeedsGradingAlert {
+  const republish = republishOnlyCount(hw);
+  if (republish > 0) return { tone: "amber", republish };
+  const due = hw.due_at ? new Date(hw.due_at).getTime() : null;
+  const overdueDays = due !== null && now > due ? Math.floor((now - due) / 86_400_000) : 0;
+  return { tone: "red", overdueDays };
 }
 
 /**
