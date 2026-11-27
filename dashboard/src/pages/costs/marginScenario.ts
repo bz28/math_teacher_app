@@ -12,6 +12,7 @@ import type {
   CatalogModel, Stage, SubmissionKind, UnitEconomicsData,
 } from "../../lib/costsApi.ts";
 import type { ModelChoice, Scenario } from "./marginModel.ts";
+import { ALL_SCHOOLS } from "../../lib/urlScope.ts";
 
 export const STAGES: Stage[] = ["vision", "grading", "integrity", "generation", "tutoring"];
 
@@ -44,6 +45,16 @@ export interface Default {
 // Rates to the hundredth: a 0.03-a-month quiz habit is measured, not 0.
 const round1 = (n: number) => Math.round(n * 10) / 10;
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** The lowest value each input means anything at, the same floors the
+ *  arithmetic applies (a school year of under a month, a class of under
+ *  one student), so the field, the URL and the math hold one number. */
+const FLOORS: Partial<Record<NumKey, number>> = {
+  subjects: 1, schoolYearMonths: 1, studentsPerClass: 1, studentsPerTeacher: 0.1,
+};
+export function floorOf(k: NumKey): number {
+  return FLOORS[k] ?? 0;
+}
 
 /** Every numeric input's starting value, and whether it was measured. */
 export function scenarioDefaults(d: UnitEconomicsData): Record<NumKey, Default> {
@@ -93,7 +104,9 @@ export function snapshotParams(
   school: string | null,
 ): URLSearchParams {
   const out = new URLSearchParams(base);
-  if (school) out.set("school", school);
+  // "all" rather than nothing: the recipient's own saved scope would
+  // otherwise stand in for the sender's All schools.
+  out.set("school", school ?? ALL_SCHOOLS);
   for (const [k, v] of Object.entries(nums)) out.set(k, String(v));
   for (const s of STAGES) {
     const id = models[s];

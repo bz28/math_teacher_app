@@ -4,7 +4,7 @@ import StatTile from "../../components/StatTile";
 import type { Stage, UnitEconomicsData } from "../../lib/costsApi";
 import { computeMargin, marginAtPrice, type ModelChoice, type Scenario } from "./marginModel";
 import {
-  STAGES, cardPriceFor, defaultModels, ratesUnmeasured, readRateCard, scenarioDefaults, snapshotParams,
+  STAGES, cardPriceFor, defaultModels, floorOf, ratesUnmeasured, readRateCard, scenarioDefaults, snapshotParams,
   stageOptions, unknownModels,
   type NumKey,
 } from "./marginScenario";
@@ -65,12 +65,15 @@ export default function MarginTab({ data, modelLabel }: Props) {
   // is dropped, so a link carries only what the sender actually moved.
   const num = (k: NumKey): number => {
     const raw = params.get(k);
-    return raw !== null && raw !== "" && Number.isFinite(Number(raw)) ? Number(raw) : defaults[k].value;
+    // A hand-edited URL is clamped too, not only what's typed.
+    return raw !== null && raw !== "" && Number.isFinite(Number(raw))
+      ? Math.max(Number(raw), floorOf(k))
+      : defaults[k].value;
   };
-  // Clamped at the field's floor (subjects ≥ 1, everything else ≥ 0), so
-  // the field, the URL and the arithmetic all hold the same number.
+  // Clamped at the floor the arithmetic applies, so the field, the URL
+  // and the math all hold the same number.
   const setNum = (k: NumKey, v: string) => {
-    const n = v === "" ? NaN : Math.max(Number(v), k === "subjects" ? 1 : 0);
+    const n = v === "" ? NaN : Math.max(Number(v), floorOf(k));
     set(k, Number.isNaN(n) || n === defaults[k].value ? null : String(n));
   };
 
@@ -197,7 +200,7 @@ export default function MarginTab({ data, modelLabel }: Props) {
                   <span className="mono">{v}</span>
                 </span>
                 <input
-                  type="range" min={0} max={Math.max(s.max, v)} step={s.step} value={v}
+                  type="range" min={floorOf(s.key)} max={Math.max(s.max, v)} step={s.step} value={v}
                   onChange={(e) => setNum(s.key, e.target.value)}
                 />
                 <span className="costs-caption">

@@ -246,7 +246,10 @@ export function computeMargin(
   // scenario, which teaches people to ignore it.
   for (const line of lines) {
     const unit = unitOf(data, line.key);
-    line.thin = !idle.has(line.key) && Boolean(unit) && unit!.n < data.min_sample;
+    // An uncosted line (in use, zero observations) has its own, plainer
+    // warning; "fewer than N" would undersell none at all.
+    const none = uncosted.some((k) => line.key === `submission:${k}`);
+    line.thin = !idle.has(line.key) && !none && Boolean(unit) && unit!.n < data.min_sample;
   }
   anyThin = lines.some((l) => l.thin);
   // Derived from the lines, like anyThin. It used to be assigned only

@@ -248,7 +248,8 @@ test("a bucket with no measurement contributes nothing and is not free", () => {
   const quiz = r.lines.find((l) => l.key === "submission:quiz");
   assert.ok(quiz, "quiz line must exist even with no measurement");
   assert.equal(quiz!.perStudentMonth, 0);
-  assert.equal(quiz!.thin, true, "must be flagged, not silently zero");
+  assert.deepEqual(r.uncosted, ["quiz"], "must be flagged, not silently zero");
+  assert.equal(quiz!.thin, false, "once — by the plainer no-cost warning");
 });
 
 // ── The stage is the API's: each leg is priced by its own family ─────

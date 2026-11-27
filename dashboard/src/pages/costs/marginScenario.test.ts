@@ -7,7 +7,7 @@ import { test } from "node:test";
 import type { CatalogModel, UnitEconomicsData } from "../../lib/costsApi.ts";
 import {
   DEFAULT_RATE_CARD, cardPriceFor, defaultModels, ratesUnmeasured, readRateCard, scenarioDefaults,
-  snapshotParams, stageOptions, unknownModels,
+  floorOf, snapshotParams, stageOptions, unknownModels,
 } from "./marginScenario.ts";
 import { windowDays } from "./unitWindows.ts";
 
@@ -160,6 +160,9 @@ test("a copied link pins every input; a bare one carries only what moved", () =>
   assert.equal(q.get("m_grading"), "claude-haiku-4-5");
   assert.deepEqual(JSON.parse(q.get("rates")!), DEFAULT_RATE_CARD);
   assert.equal(base.get("quiz"), null, "the page's own URL is left alone");
+  // Made on All schools: says so, or the recipient's own scope stands in.
+  const all = snapshotParams(base, nums as never, {}, DEFAULT_RATE_CARD, null);
+  assert.equal(all.get("school"), "all");
 });
 
 test("a link's model the catalog doesn't price is named", () => {
@@ -170,4 +173,14 @@ test("a link's model the catalog doesn't price is named", () => {
 test("a days value the picker doesn't offer reads as the default window", () => {
   for (const bad of ["abc", "0", "5", "-30", null]) assert.equal(windowDays(bad), "");
   for (const ok of ["7", "30", "90", ""]) assert.equal(windowDays(ok), ok);
+});
+
+
+test("each input's floor is the one the arithmetic applies", () => {
+  assert.equal(floorOf("subjects"), 1);
+  assert.equal(floorOf("schoolYearMonths"), 1);
+  assert.equal(floorOf("studentsPerClass"), 1);
+  assert.equal(floorOf("studentsPerTeacher"), 0.1);
+  assert.equal(floorOf("onboardingFee"), 0);
+  assert.equal(floorOf("homework"), 0);
 });

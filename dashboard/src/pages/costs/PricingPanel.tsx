@@ -1,4 +1,4 @@
-import { DEFAULT_RATE_CARD, TIER_LABELS, subjectIndex, tierFor, type NumKey } from "./marginScenario";
+import { DEFAULT_RATE_CARD, TIER_LABELS, floorOf, subjectIndex, tierFor, type NumKey } from "./marginScenario";
 import NumberField from "./NumberField";
 import { usd } from "./spendFormat";
 
@@ -80,7 +80,7 @@ export default function PricingPanel({
             <label key={t.key}>
               <span className="costs-caption">{t.label}</span>
               <NumberField
-                inputMode="decimal" min={t.key === "subjects" ? 1 : 0} step={t.step}
+                inputMode="decimal" min={floorOf(t.key)} step={t.step}
                 value={nums[t.key]}
                 onCommit={(v) => onNum(t.key, v)}
               />
