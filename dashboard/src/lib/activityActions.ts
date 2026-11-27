@@ -110,6 +110,15 @@ export const ACTIVITY_ACTIONS: Record<ActivityFamily, ActivityAction[]> = {
       detail: (m) => quoted(m, "title", "Duplicated a homework"),
     },
     {
+      action: "assignment.due_dates",
+      label: "Changed due date",
+      detail: (m) => {
+        const due = str(m, "due_at");
+        return join(str(m, "title"), due ? `due ${new Date(due).toLocaleString()}` : "no due date") ||
+          "Changed due date";
+      },
+    },
+    {
       action: "assignment.publish",
       label: "Published",
       detail: (m) => quoted(m, "title", "Published"),

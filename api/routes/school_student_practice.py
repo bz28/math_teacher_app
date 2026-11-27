@@ -1380,6 +1380,9 @@ async def list_homework(
     next_steps = await _next_steps(db, list(submission_by_aid.values()))
     due = await student_due_dates(db, user.id, rows)
     now = datetime.now(UTC)
+    # In the student's own date order (their section's, or their
+    # extension), not the homework's; ties keep the newest-first order.
+    rows = sorted(rows, key=lambda a: (due[a.id] is None, due[a.id] or now))
     # A teacher's preview is never closed: she checks the homework as a
     # student would, whatever its policy and due date.
     shut_ids = {

@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.audit_log import log_student_record_access
 from api.core.homework_points import problem_points
+from api.core.late_policy import section_due_column
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
 from api.models.assignment import (
@@ -86,7 +87,9 @@ async def _published_and_past_due(
         select(
             AssignmentSection.assignment_id,
             AssignmentSection.section_id,
-            Assignment.due_at,
+            # Each section's own date: a later section isn't Missing
+            # before its date comes.
+            section_due_column().label("due_at"),
         )
         .join(Assignment, Assignment.id == AssignmentSection.assignment_id)
         .where(

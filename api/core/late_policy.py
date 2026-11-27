@@ -41,7 +41,7 @@ from collections.abc import Iterable
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only
 
@@ -93,6 +93,25 @@ async def _section_dates(
         .where(AssignmentSection.assignment_id.in_(aids), SectionEnrollment.student_id.in_(sids))
     )
     return {(aid, sid): at for aid, sid, at in rows.all()}
+
+
+def section_due_column() -> ColumnElement[datetime | None]:
+    """SQL for `_class_due` over a query that joins AssignmentSection to
+    Assignment: the section row's date, the homework's when the row has
+    none, and none at all when the homework has no date."""
+    return case(
+        (Assignment.due_at.is_(None), None),
+        else_=func.coalesce(AssignmentSection.due_at, Assignment.due_at),
+    )
+
+
+async def section_due_at(
+    db: AsyncSession, assignment: Assignment, student_id: uuid.UUID,
+) -> datetime | None:
+    """The student's section date on this homework, before any personal
+    extension: what a reopen has to extend."""
+    sections = await _section_dates(db, [assignment.id], [student_id])
+    return _class_due(assignment, sections.get((assignment.id, student_id)))
 
 
 def _class_due(assignment: Assignment, section_due: datetime | None) -> datetime | None:

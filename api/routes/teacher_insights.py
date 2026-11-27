@@ -34,6 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.core.audit_log import log_student_record_access
 from api.core.grading_queue import EXTRACTION_GRACE
 from api.core.integrity_ai import UNREADABLE_THRESHOLD
+from api.core.late_policy import section_due_column
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
@@ -264,7 +265,7 @@ async def get_section_insights(
     # Published homework pushed to this section, newest first. Quizzes and
     # tests have no student submit path yet, and practice is ungraded.
     hw_rows = (await db.execute(
-        select(Assignment, AssignmentSection.published_at)
+        select(Assignment, AssignmentSection.published_at, section_due_column().label("section_due"))
         .join(AssignmentSection, AssignmentSection.assignment_id == Assignment.id)
         .where(
             AssignmentSection.section_id == section_id,
@@ -274,11 +275,13 @@ async def get_section_insights(
             Assignment.type == "homework",
         )
         .order_by(
-            func.coalesce(Assignment.due_at, AssignmentSection.published_at).desc(),
+            func.coalesce(section_due_column(), AssignmentSection.published_at).desc(),
             Assignment.created_at.desc(),
         )
     )).all()
     homeworks = [r.Assignment for r in hw_rows]
+    # This section's date for each homework.
+    section_due = {r.Assignment.id: r.section_due for r in hw_rows}
     hw_ids = [a.id for a in homeworks]
     ai_enabled = {a.id: a.ai_grading_enabled for a in homeworks}
 
@@ -333,7 +336,7 @@ async def get_section_insights(
         InsightsHomework(
             id=a.id,
             title=a.title,
-            due_at=a.due_at,
+            due_at=section_due[a.id],
             students=len(roster_ids | {sid for (a_id, sid) in by_hw_student if a_id == a.id}),
             not_submitted=sum(1 for sid in roster_ids if (a.id, sid) not in by_hw_student),
             **coverage[a.id],

@@ -71,6 +71,7 @@ async def set_due_dates(
         due_at=None if body.clear_due_at else body.due_at,
         set_due=set_due,
         section_due=body.section_due_dates,
+        dry_run=body.dry_run,
     )
     sections = [SectionDueDate(**d) for d in await section_due_dates(db, a)]
     out = DueDatesResponse(

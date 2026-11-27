@@ -61,6 +61,7 @@ async def apply_due_dates(
     due_at: datetime | None = None,
     set_due: bool = False,
     section_due: dict[uuid.UUID, datetime] | None = None,
+    dry_run: bool = False,
 ) -> DueDateChange:
     """Set the homework's date (`set_due`; every section follows it, None
     clears it) and/or individual sections' dates, then re-derive lateness
@@ -95,10 +96,13 @@ async def apply_due_dates(
         for section_id, at in section_due.items():
             rows[section_id].due_at = at
     await db.flush()
+    await sync_homework_due(db, assignment)
 
-    from api.core.grading_queue import reschedule_assignment
+    if not dry_run:
+        # Queued grading doesn't change the counts a preview reports.
+        from api.core.grading_queue import reschedule_assignment
 
-    await reschedule_assignment(db, assignment)
+        await reschedule_assignment(db, assignment)
     await refresh_lateness(db, assignment)
     await db.flush()
 
@@ -113,6 +117,27 @@ async def apply_due_dates(
             if was_published:
                 published += 1
     return DueDateChange(lateness, grades, published)
+
+
+async def sync_homework_due(db: AsyncSession, a: Assignment) -> None:
+    """Keep the homework's own date on its earliest section's date, so
+    anything that shows one date for it shows the first one due. A row
+    with no date reads as the homework's. No sections, or no date: left
+    as it is."""
+    if a.due_at is None:
+        return
+    # A row with no date reads as the homework's: pin it first, so moving
+    # the homework's date doesn't move that section too.
+    await db.execute(
+        update(AssignmentSection)
+        .where(AssignmentSection.assignment_id == a.id, AssignmentSection.due_at.is_(None))
+        .values(due_at=a.due_at)
+    )
+    dates = (await db.execute(
+        select(AssignmentSection.due_at).where(AssignmentSection.assignment_id == a.id)
+    )).scalars().all()
+    if dates:
+        a.due_at = min(at for at in dates if at is not None)
 
 
 async def section_due_dates(db: AsyncSession, a: Assignment) -> list[dict[str, Any]]:

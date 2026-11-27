@@ -50,6 +50,7 @@ from api.core.late_policy import (
     lateness_out,
     refresh_lateness,
     score_before_penalty,
+    section_due_at,
     set_final_score,
     submission_penalty_percent,
 )
@@ -83,7 +84,7 @@ from api.services.bank import (
     rehome_shared_bank_items,
     snapshot_bank_items,
 )
-from api.services.due_dates import apply_due_dates, section_due_dates
+from api.services.due_dates import apply_due_dates, section_due_dates, sync_homework_due
 
 router = APIRouter()
 
@@ -1135,6 +1136,10 @@ async def assign_to_sections(
         db.add(AssignmentSection(
             assignment_id=a.id, section_id=sid, published_at=now, due_at=a.due_at,
         ))
+    await db.flush()
+    # Dropping the earliest section leaves the homework's date on a day
+    # no section has.
+    await sync_homework_due(db, a)
 
     await db.commit()
     return {"status": "ok"}
@@ -1967,7 +1972,9 @@ async def reopen_for_student(
     now = datetime.now(UTC)
     if body.due_at <= now:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Pick a due date in the future")
-    if a.due_at is not None and body.due_at < a.due_at:
+    # An extension of the student's own section date: earlier would do nothing.
+    section_due = await section_due_at(db, a, student_id)
+    if section_due is not None and body.due_at < section_due:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Pick a date on or after the class due date",

@@ -358,12 +358,16 @@ async def reschedule_assignment(
         return 0
     # Each student's own date: sections can differ, and so can extensions.
     due = await effective_due_dates(db, assignment, {sid for _, sid in jobs})
-    moved = 0
+    by_date: dict[datetime | None, list[uuid.UUID]] = {}
     for job_id, student_id in jobs:
+        by_date.setdefault(due[student_id], []).append(job_id)
+    moved = 0
+    # One UPDATE per distinct date: a section's, or an extension's.
+    for at, job_ids in by_date.items():
         result = cast("CursorResult[Any]", await db.execute(
             update(GradingJob)
-            .where(GradingJob.id == job_id, GradingJob.status == STATUS_QUEUED)
-            .values(scheduled_for=due[student_id], updated_at=_now()),
+            .where(GradingJob.id.in_(job_ids), GradingJob.status == STATUS_QUEUED)
+            .values(scheduled_for=at, updated_at=_now()),
         ))
         moved += int(result.rowcount or 0)
     return moved
