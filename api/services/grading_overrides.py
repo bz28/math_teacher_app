@@ -41,7 +41,7 @@ signed delta across all compared problems gives the headline bias signal
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -90,23 +90,22 @@ class ProblemDelta:
     delta: float  # final - ai; + = teacher raised (AI too harsh)
     is_override: bool
     # The problem's 1-based position on the assignment — what the case
-    # file's `#pN` anchor names. The AI snapshot records it; an entry that
-    # lacks it falls back to its place in the (order-preserving) list.
+    # file's `#pN` anchor names. See ``compare_grade`` for where it comes from.
     position: int
 
 
-def _position(recorded: Any, index: int) -> int:
-    """The AI's recorded ``problem_position`` when it is a usable int,
-    else the entry's 1-based place in the list (``bool`` is an ``int``
-    subclass, so it is refused explicitly)."""
+def _recorded_position(recorded: Any) -> int | None:
+    """The AI's recorded ``problem_position`` when it is a usable int
+    (``bool`` is an ``int`` subclass, so it is refused explicitly)."""
     if isinstance(recorded, int) and not isinstance(recorded, bool) and recorded >= 1:
         return recorded
-    return index + 1
+    return None
 
 
 def compare_grade(
     ai_breakdown: dict[str, Any] | None,
     breakdown: list[dict[str, Any]] | None,
+    positions: Mapping[str, int] | None = None,
 ) -> list[ProblemDelta] | None:
     """Compare a single grade's AI snapshot against the teacher's final.
 
@@ -120,6 +119,15 @@ def compare_grade(
 
     ``None`` means "exclude this submission from the report" — distinct
     from an empty/zero-override result, which means "compared, no change".
+
+    ``positions`` maps a problem id to its 1-based place on the assignment.
+    With it, each teacher entry's ``problem_id`` names the problem a delta
+    is about, and a pair whose AI grade recorded a DIFFERENT position is
+    two problems side by side, not one problem graded twice — so it is
+    skipped rather than counted (the AI snapshot keeps grades for
+    positions not on the assignment, which shifts the lists). Without a
+    mapping, or for an entry it doesn't cover, the AI's recorded position
+    stands, else the entry's place in the list.
     """
     if not ai_breakdown or not breakdown:
         return None
@@ -143,6 +151,10 @@ def compare_grade(
         if ai_pct is None or final_pct is None:
             continue
         assert isinstance(ai_status, str) and isinstance(final_status, str)
+        ai_pos = _recorded_position(ai_g.get("problem_position"))
+        final_pos = positions.get(str(final_g.get("problem_id"))) if positions else None
+        if ai_pos is not None and final_pos is not None and ai_pos != final_pos:
+            continue
         delta = final_pct - ai_pct
         is_override = (ai_status != final_status) or (
             abs(delta) > OVERRIDE_PERCENT_TOLERANCE
@@ -155,7 +167,7 @@ def compare_grade(
                 final_percent=final_pct,
                 delta=delta,
                 is_override=is_override,
-                position=_position(ai_g.get("problem_position"), index),
+                position=final_pos or ai_pos or index + 1,
             )
         )
     return deltas or None

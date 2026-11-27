@@ -114,6 +114,40 @@ def test_position_falls_back_to_list_place_when_unrecorded() -> None:
     assert [d.position for d in deltas] == [1, 2, 3, 4, 5]
 
 
+def _t(status: str, percent: float, problem_id: str) -> dict:
+    return {**_g(status, percent), "problem_id": problem_id}
+
+
+def test_teacher_entry_names_the_problem_and_shifted_pairs_are_skipped() -> None:
+    # The grader kept a grade for position 9 (not on the assignment) and
+    # skipped problem 2, so the teacher list reads p1, p3, then p2's
+    # appended zero. Index pairing would compare p9's AI grade with p3's
+    # teacher grade and p3's with p2's — and link them to the wrong
+    # problem. With the assignment's order, only the true pair counts.
+    positions = {"p1": 1, "p2": 2, "p3": 3}
+    deltas = compare_grade(
+        _ai(
+            {**_g("zero", 0), "problem_position": 1},
+            {**_g("full", 100), "problem_position": 9},
+            {**_g("full", 100), "problem_position": 3},
+        ),
+        [_t("full", 100, "p1"), _t("full", 100, "p3"), _t("zero", 0, "p2")],
+        positions,
+    )
+    assert deltas is not None
+    assert [(d.position, d.ai_status, d.final_status) for d in deltas] == [(1, "zero", "full")]
+
+
+def test_teacher_position_stands_when_the_ai_recorded_none() -> None:
+    deltas = compare_grade(
+        _ai(_g("zero", 0), _g("zero", 0)),
+        [_t("full", 100, "b"), _t("full", 100, "a")],
+        {"a": 4, "b": 6},
+    )
+    assert deltas is not None
+    assert [d.position for d in deltas] == [6, 4]
+
+
 def test_sub_tolerance_percent_nudge_is_not_an_override() -> None:
     deltas = compare_grade(
         _ai(_g("partial", 60)),

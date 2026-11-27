@@ -43,6 +43,7 @@ from api.models.assignment import Assignment, Submission, SubmissionGrade
 from api.models.course import Course
 from api.models.user import User
 from api.routes.admin_helpers import time_range
+from api.services.bank import problem_ids_in_content
 from api.services.grading_overrides import (
     ProblemDelta,
     compare_grade,
@@ -70,6 +71,12 @@ _EFFECTIVE_AT = func.coalesce(
 )
 
 
+def problem_positions(content: Any) -> dict[str, int]:
+    """Each problem id on an assignment → its 1-based position, the same
+    numbering the grader and the case file's ``#pN`` use."""
+    return {bid: i for i, bid in enumerate(problem_ids_in_content(content), start=1)}
+
+
 async def _reviewed_rows(
     db: AsyncSession,
     since: Any,
@@ -80,8 +87,10 @@ async def _reviewed_rows(
     """The eligible reviewed/published AI grades in-window, one row per
     submission grade: (ai_breakdown, breakdown, effective_at, subject,
     course name). Shared by the summary report and the drill-in so both
-    read the exact same population. The submission id rides last so the
-    drill-in can link each case to its case file."""
+    read the exact same population. The submission id and the
+    assignment's content ride last: the drill-in links each case to its
+    problem in the case file, and both use the content's problem order
+    to pair AI and teacher entries (see ``problem_positions``)."""
     filters = [
         or_(
             SubmissionGrade.reviewed_at.is_not(None),
@@ -113,6 +122,7 @@ async def _reviewed_rows(
             Course.subject,
             Course.name,
             SubmissionGrade.submission_id,
+            Assignment.content,
         )
         .join(Submission, Submission.id == SubmissionGrade.submission_id)
         .join(User, User.id == Submission.student_id)
@@ -149,8 +159,8 @@ async def grading_quality(
     # only ever offers subjects with data behind them.
     subjects_seen: set[str] = set()
 
-    for ai_breakdown, breakdown, at, subj, course_name, _submission_id in rows:
-        deltas = compare_grade(ai_breakdown, breakdown)
+    for ai_breakdown, breakdown, at, subj, course_name, _submission_id, content in rows:
+        deltas = compare_grade(ai_breakdown, breakdown, problem_positions(content))
         if deltas is None:
             unalignable += 1
             continue
@@ -290,8 +300,8 @@ async def grading_quality_overrides(
     rows = await _reviewed_rows(db, since, subject, course, school_id)
 
     cases: list[dict[str, Any]] = []
-    for ai_breakdown, breakdown, at, subj, course_name, submission_id in rows:
-        deltas = compare_grade(ai_breakdown, breakdown)
+    for ai_breakdown, breakdown, at, subj, course_name, submission_id, content in rows:
+        deltas = compare_grade(ai_breakdown, breakdown, problem_positions(content))
         if deltas is None:
             continue
         day = at.date().isoformat() if at is not None else None
