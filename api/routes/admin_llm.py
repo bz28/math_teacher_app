@@ -8,6 +8,7 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import Date, cast, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from api.config import settings
 from api.core.llm_attribution import calls_of, is_deleted_submission_call, school_calls
@@ -57,6 +58,7 @@ class CallFilters:
         user_id: str | None = Query(default=None),
         teacher_id: str | None = Query(default=None),
         student_id: str | None = Query(default=None),
+        assignment_id: str | None = Query(default=None),
         submission_id: str | None = Query(default=None),
         session_id: str | None = Query(default=None),
         school_id: str | None = Query(default=None),
@@ -70,6 +72,7 @@ class CallFilters:
             ("user_id", user_id),
             ("teacher_id", teacher_id),
             ("student_id", student_id),
+            ("assignment_id", assignment_id),
             ("submission_id", submission_id),
             ("session_id", session_id),
             ("school_id", None if school_id == INTERNAL_SCHOOL_SENTINEL else school_id),
@@ -99,6 +102,11 @@ class CallFilters:
         for person in (teacher_id, student_id):
             if person:
                 who.append(calls_of(person))
+        if assignment_id:
+            # One homework: every call on a submission handed in to it.
+            who.append(LLMCall.submission_id.in_(
+                select(Submission.id).where(Submission.assignment_id == assignment_id)
+            ))
         if submission_id:
             # Per-submission flight recorder: every Vision, integrity and
             # grading call for one homework.
@@ -125,6 +133,9 @@ class CallFilters:
             ))
 
         self.conditions = [*place, *who, *which]
+        # The school the rail is scoped to, for the teacher picker: a
+        # school id, the "internal" sentinel, or None for every school.
+        self.school_scope = school_id
         # Dropdown options must not shrink to the current choice: the user
         # list spans the window and school, the function and model lists
         # everything but the narrowing filters.
@@ -269,10 +280,26 @@ async def llm_calls(
         .order_by("day")
     )).all()
 
-    # Recent calls (paginated) — join user info
+    # Recent calls (paginated), each with who it was for: the school
+    # stamped on it, and — for a call on a submission — the student who
+    # handed it in and the teacher who set the homework.
+    student = aliased(User)
+    teacher = aliased(User)
     calls_query = (
-        select(LLMCall, User.email.label("user_email"), User.name.label("user_name"))
+        select(
+            LLMCall,
+            User.email.label("user_email"),
+            User.name.label("user_name"),
+            School.name.label("school_name"),
+            student.name.label("student_name"),
+            teacher.name.label("teacher_name"),
+        )
         .outerjoin(User, User.id == LLMCall.user_id)
+        .outerjoin(School, School.id == LLMCall.school_id)
+        .outerjoin(Submission, Submission.id == LLMCall.submission_id)
+        .outerjoin(student, student.id == Submission.student_id)
+        .outerjoin(Assignment, Assignment.id == Submission.assignment_id)
+        .outerjoin(teacher, teacher.id == Assignment.teacher_id)
         .where(*base_filters)
     )
     calls_query = (
@@ -380,6 +407,35 @@ async def llm_calls(
         .order_by(User.email)
     )).all()
 
+    # The teacher and student pickers: the people the window and school
+    # reach — teachers of the school (or every teacher), and students who
+    # had a call in the window (every grading/integrity call is stamped
+    # with its student, so that is everyone with work in it).
+    teacher_rows = (await db.execute(
+        select(User.id, User.name, User.email)
+        .where(
+            User.role == "teacher",
+            *(
+                [] if not filters.school_scope
+                else [User.school_id.is_(None)]
+                if filters.school_scope == INTERNAL_SCHOOL_SENTINEL
+                else [User.school_id == filters.school_scope]
+            ),
+        )
+        .order_by(User.name)
+    )).all()
+    student_rows = (await db.execute(
+        select(User.id, User.name, User.email)
+        .where(
+            User.role == "student",
+            User.id.in_(
+                select(func.distinct(LLMCall.user_id))
+                .where(*filters.user_options, LLMCall.user_id.isnot(None))
+            ),
+        )
+        .order_by(User.name)
+    )).all()
+
     # The function and model choices for the filter dropdowns. The
     # aggregates follow every filter now, so they can't double as the
     # option list (picking a function would leave a list of one).
@@ -454,6 +510,9 @@ async def llm_calls(
                 "user_id": str(c.user_id) if c.user_id else None,
                 "user_name": user_name or user_email or "Deleted User",
                 "school_id": str(c.school_id) if c.school_id else None,
+                "school_name": school_name,
+                "student_name": student_name,
+                "teacher_name": teacher_name,
                 "submission_id": str(c.submission_id) if c.submission_id else None,
                 # A submission-pipeline call whose submission was deleted.
                 # Still the student's (user_id) — labelled, never re-homed.
@@ -477,7 +536,7 @@ async def llm_calls(
                 ),
                 "created_at": c.created_at.isoformat(),
             }
-            for c, user_email, user_name in calls
+            for c, user_email, user_name, school_name, student_name, teacher_name in calls
         ],
         "total_count": summary["calls"],
         # Case-file identity for the single-submission trace view. Null on the
@@ -486,6 +545,12 @@ async def llm_calls(
         "users": [
             {"id": str(r.id), "email": r.email}
             for r in user_rows
+        ],
+        "teachers": [
+            {"id": str(r.id), "name": r.name or r.email} for r in teacher_rows
+        ],
+        "students": [
+            {"id": str(r.id), "name": r.name or r.email} for r in student_rows
         ],
         # Lets the dashboard build a "Debug results" link to the GitHub issue the
         # debug agent files (labelled llm-debug, with the call id in its body).
