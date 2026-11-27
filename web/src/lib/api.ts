@@ -1419,6 +1419,10 @@ export interface NeedsAttentionItem {
   to_publish: boolean;
   /** The review page's Flagged chip (same rule as `isFlagged`). */
   flagged: boolean;
+  /** Which kind of flag, when flagged: the understanding check is worth
+   *  a look ("check"), or the photo or reading is the problem
+   *  ("reading"). Home shows them apart and neither in alarm red. */
+  flag_kind: "check" | "reading" | null;
   /** The review page's "can't be AI-graded" note (unreadable / no
    *  reading) — the teacher grades these from the photo. */
   cant_ai_grade: boolean;

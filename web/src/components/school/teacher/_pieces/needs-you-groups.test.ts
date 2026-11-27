@@ -23,6 +23,7 @@ function item(o: Partial<NeedsAttentionItem>): NeedsAttentionItem {
     to_approve: false,
     to_publish: false,
     flagged: false,
+    flag_kind: null,
     cant_ai_grade: false,
     ...o,
   };
@@ -30,7 +31,7 @@ function item(o: Partial<NeedsAttentionItem>): NeedsAttentionItem {
 
 test("one row per homework × section, in the order its most urgent student came", () => {
   const groups = groupNeedsYou([
-    item({ submission_id: "a", section_id: "p3", section_name: "Period 3", flagged: true }),
+    item({ submission_id: "a", section_id: "p3", section_name: "Period 3", flagged: true, flag_kind: "check" }),
     item({ submission_id: "b", section_id: "p1" }),
     item({ submission_id: "c", section_id: "p3", section_name: "Period 3" }),
     item({ submission_id: "d", assignment_id: "hw2", section_id: "p1" }),
@@ -48,9 +49,9 @@ test("one row per homework × section, in the order its most urgent student came
 test("counts mirror the review page; the remainder is ungraded", () => {
   const [g] = groupNeedsYou([
     item({ submission_id: "1", to_approve: true }),
-    item({ submission_id: "2", to_approve: true, flagged: true }),
-    item({ submission_id: "3", flagged: true, cant_ai_grade: true }),
-    item({ submission_id: "4", flagged: true }),
+    item({ submission_id: "2", to_approve: true, flagged: true, flag_kind: "check" }),
+    item({ submission_id: "3", flagged: true, flag_kind: "reading", cant_ai_grade: true }),
+    item({ submission_id: "4", flagged: true, flag_kind: "check" }),
     item({ submission_id: "5" }),
     item({ submission_id: "6", to_publish: true }),
   ]);
@@ -59,7 +60,10 @@ test("counts mirror the review page; the remainder is ungraded", () => {
   assert.equal(g.toApprove, 2);
   // Approved but unreleased — only Publish left, never "to approve".
   assert.equal(g.toPublish, 1);
-  assert.equal(g.flagged, 3);
+  // The two kinds of flag stay apart: a photo problem is never counted
+  // as an understanding check worth a look.
+  assert.equal(g.worthALook, 2);
+  assert.equal(g.photoProblem, 1);
   assert.equal(g.cantAiGrade, 1);
   assert.equal(g.ungraded, 1);
 });
@@ -95,7 +99,14 @@ test("a student's chip agrees with the row's counts", () => {
   // chip reads the same flags the counts do.
   assert.equal(studentChip(item({ reason: "ungraded", to_publish: true })), "to_publish");
   assert.equal(studentChip(item({ reason: "overdue", to_approve: true })), "to_approve");
-  assert.equal(studentChip(item({ reason: "flagged", flagged: true, to_approve: true })), "flagged");
+  assert.equal(
+    studentChip(item({ reason: "flagged", flagged: true, flag_kind: "check", to_approve: true })),
+    "worth_a_look",
+  );
+  assert.equal(
+    studentChip(item({ reason: "flagged", flagged: true, flag_kind: "reading", cant_ai_grade: true })),
+    "photo_problem",
+  );
   assert.equal(studentChip(item({ reason: "dirty", to_publish: true })), "republish");
   assert.equal(studentChip(item({ reason: "ungraded", cant_ai_grade: true })), "cant_ai_grade");
   assert.equal(studentChip(item({ reason: "overdue" })), "overdue");

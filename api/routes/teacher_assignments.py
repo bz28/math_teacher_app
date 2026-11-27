@@ -22,6 +22,7 @@ from api.core.class_rubric import MAX_CLASS_RULES
 from api.core.constants import DEFAULT_HOMEWORK_INSTRUCTIONS, MAX_RUBRIC_FIELD_CHARS
 from api.core.entitlements import Entitlement, check_entitlement
 from api.core.extraction_edits import apply_extraction_edits
+from api.core.flagged import flagged_case
 from api.core.graph_checklist import homework_checklists
 from api.core.graph_grading import VerdictError, note_hand_edits, open_item_count, open_items, set_teacher_verdict
 from api.core.homework_points import (
@@ -77,7 +78,7 @@ from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.unit import Unit
 from api.models.user import User
-from api.routes.teacher_courses import flagged_case, get_teacher_course
+from api.routes.teacher_courses import get_teacher_course
 from api.schemas.extraction import SubmissionFileOut
 from api.services.bank import (
     hydrate_assignment_content,

@@ -23,14 +23,16 @@ import {
 // head is the part that matters most on a Monday morning.
 const INITIAL_VISIBLE = 5;
 
-// Reason → chip. Mirrors the dashboard's StatusPill vocabulary so the
-// queue reads the same as the per-course pills: red = integrity, amber
-// = grading work, info = a published grade the teacher edited since.
+// Reason → chip. Nothing here is alarm red: an understanding check worth
+// a look raises scrutiny (amber, like other work waiting on the teacher)
+// and never brands the student; a photo or reading problem is about the
+// picture, not the student (muted). Info = a published grade edited since.
 const CHIP: Record<
   StudentChip,
-  { tone: "red" | "amber" | "info" | "muted"; label: string; icon?: string }
+  { tone: "amber" | "info" | "muted"; label: string; icon?: string }
 > = {
-  flagged: { tone: "red", label: "Flagged", icon: "⚑" },
+  worth_a_look: { tone: "amber", label: "Worth a look" },
+  photo_problem: { tone: "muted", label: "Photo problem" },
   to_approve: { tone: "amber", label: "To approve" },
   to_publish: { tone: "info", label: "To publish" },
   republish: { tone: "info", label: "Republish", icon: "↻" },
@@ -205,8 +207,9 @@ function QueueList({
   );
 }
 
-/** The counts a row carries, in the review page's words. Flagged leads
- *  (integrity is what a teacher wants to see first), then the grades
+/** The counts a row carries, in the review page's words. Flags lead —
+ *  the understanding check worth a look, then a photo or reading
+ *  problem, never in alarm red, then the grades
  *  waiting on her (to approve, then approved and only to publish); what she'll grade from the photo and work the AI
  *  hasn't reached yet follow as quiet text — true, but not a call to act. */
 function GroupCounts({ group }: { group: NeedsYouGroup }) {
@@ -216,8 +219,17 @@ function GroupCounts({ group }: { group: NeedsYouGroup }) {
   ].filter(Boolean);
   return (
     <div className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1">
-      {group.flagged > 0 && (
-        <StatusPill tone="red" label={`${group.flagged} flagged`} icon="⚑" />
+      {group.worthALook > 0 && (
+        <StatusPill
+          tone="amber"
+          label={`Understanding check: ${group.worthALook} worth a look`}
+        />
+      )}
+      {group.photoProblem > 0 && (
+        <StatusPill
+          tone="muted"
+          label={`${group.photoProblem} photo or reading problem${group.photoProblem === 1 ? "" : "s"}`}
+        />
       )}
       {group.toApprove > 0 && (
         <StatusPill tone="amber" label={`${group.toApprove} to approve`} />

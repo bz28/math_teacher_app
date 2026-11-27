@@ -424,3 +424,50 @@ async def test_row_counts_match_review_page_predicates(client: AsyncClient) -> N
         "unreadable": (False, False, True, True),
         "waiting": (False, False, False, False),
     }
+
+
+async def test_flag_kind_keeps_a_check_apart_from_a_photo_problem(client: AsyncClient) -> None:
+    """Home shows "worth a look" (the understanding check) apart from a
+    photo or reading problem: a blurry photo must never read as an
+    integrity concern. Each kind is one branch family of `flagged_case`."""
+    w = await _seed()
+    hw = await _publish_hw(w, due_at=None)
+
+    async def student() -> uuid.UUID:
+        async with get_session_factory()() as s:
+            u = User(email=f"student_{uuid.uuid4().hex[:8]}@t.com", password_hash=hash_password("x"),
+                     grade_level=8, role="student", name=f"S {uuid.uuid4().hex[:4]}")
+            s.add(u)
+            await s.flush()
+            s.add(SectionEnrollment(section_id=w["section_id"], course_id=w["course_id"], student_id=u.id))
+            await s.commit()
+            return u.id
+
+    asked = await _add_submission(w, hw)                                  # agent asked for review
+    no_verdict = await _add_submission(w, hw, student_id=await student())  # ended without a verdict
+    blurry = await _add_submission(w, hw, student_id=await student())      # check couldn't read it
+    misread = await _add_submission(w, hw, student_id=await student())     # student flagged the reading
+    both = await _add_submission(w, hw, student_id=await student())        # worth a look AND misread
+    plain = await _add_submission(w, hw, student_id=await student())       # not flagged
+    async with get_session_factory()() as s:
+        s.add_all([
+            IntegrityCheckSubmission(submission_id=asked, status="complete", disposition="flag_for_review"),
+            IntegrityCheckSubmission(submission_id=no_verdict, status="complete", disposition=None),
+            IntegrityCheckSubmission(submission_id=blurry, status="skipped_unreadable"),
+            IntegrityCheckSubmission(submission_id=both, status="complete", disposition="flag_for_review"),
+        ])
+        for sid in (misread, both):
+            (await s.get(Submission, sid)).extraction_flagged_at = datetime.now(UTC)
+        await s.commit()
+
+    by_sub = {i["submission_id"]: i for i in (await _get(w, client))["items"]}
+    kinds = {k: by_sub[str(v)]["flag_kind"] for k, v in {
+        "asked": asked, "no_verdict": no_verdict, "blurry": blurry,
+        "misread": misread, "both": both, "plain": plain,
+    }.items()}
+    assert kinds == {
+        "asked": "check", "no_verdict": "check", "blurry": "reading",
+        "misread": "reading", "both": "check", "plain": None,
+    }
+    assert all(by_sub[str(v)]["flagged"] == (kinds[k] is not None) for k, v in {
+        "asked": asked, "blurry": blurry, "plain": plain}.items())
