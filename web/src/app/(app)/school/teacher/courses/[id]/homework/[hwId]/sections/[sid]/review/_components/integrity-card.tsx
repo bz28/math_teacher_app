@@ -12,7 +12,6 @@ import {
   type IntegrityActivityNotableTurnLite,
 } from "@/components/school/teacher/_pieces/integrity-pieces";
 import type {
-  IntegrityResolutionOutcome,
   IntegrityResolution,
   TeacherIntegrityDetail,
   TeacherIntegrityTranscriptTurn,
@@ -64,22 +63,23 @@ export function IntegrityCard({
   unfinished: UnfinishedCheck | null;
   onResolved: (
     submissionId: string,
-    resolution: IntegrityResolutionOutcome,
+    resolution: IntegrityResolution,
   ) => void;
   detailsOpen: boolean;
   onToggleDetails: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const detailsId = useId();
-  // The outcome just picked, held only until the refetched detail lands
-  // (a new object) so the chips don't flash back as clickable in between.
+  // The resolution just set (an outcome, or "unresolved" by Undo), held
+  // only until the refetched detail lands (a new object) so the card
+  // doesn't flash back to the old state in between.
   const [justResolved, setJustResolved] = useState<{
     detail: TeacherIntegrityDetail;
-    outcome: IntegrityResolutionOutcome;
+    resolution: IntegrityResolution;
   } | null>(null);
   const resolution: IntegrityResolution =
     justResolved && justResolved.detail === integrity
-      ? justResolved.outcome
+      ? justResolved.resolution
       : (integrity?.resolution ?? "unresolved");
 
   // Prefer full detail. If it's missing (fetch pending / 404), use
@@ -266,7 +266,7 @@ export function IntegrityCard({
               resolvedByName={integrity.resolved_by_name}
               resolvedAt={integrity.resolved_at}
               onResolved={(r) => {
-                setJustResolved({ detail: integrity, outcome: r });
+                setJustResolved({ detail: integrity, resolution: r });
                 onResolved(integrity.submission_id, r);
               }}
             />

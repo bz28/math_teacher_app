@@ -15,18 +15,34 @@ import { CheckIcon } from "@/components/ui/icons";
 /* ── Types ── */
 type ToastVariant = "success" | "error" | "warning" | "info";
 
+/** One button on the toast (e.g. Undo). Clicking it runs `onAction`
+ *  and dismisses the toast. */
+export interface ToastAction {
+  label: string;
+  onAction: () => void;
+}
+
+interface ToastOptions {
+  action?: ToastAction;
+  /** How long it stays up, unhovered. Defaults to 4 s. */
+  durationMs?: number;
+}
+
 interface Toast {
   id: number;
   message: string;
   variant: ToastVariant;
+  action?: ToastAction;
 }
 
 interface ToastAPI {
-  success: (message: string) => void;
-  error: (message: string) => void;
-  warning: (message: string) => void;
-  info: (message: string) => void;
+  success: (message: string, opts?: ToastOptions) => void;
+  error: (message: string, opts?: ToastOptions) => void;
+  warning: (message: string, opts?: ToastOptions) => void;
+  info: (message: string, opts?: ToastOptions) => void;
 }
+
+const DEFAULT_DURATION_MS = 4000;
 
 /* ── Context ── */
 const ToastContext = createContext<ToastAPI | null>(null);
@@ -70,6 +86,7 @@ const variantStyles: Record<ToastVariant, string> = {
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
+  const durations = useRef<Map<number, number>>(new Map());
 
   const schedule = useCallback((id: number) => {
     const existing = timers.current.get(id);
@@ -78,8 +95,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       id,
       setTimeout(() => {
         timers.current.delete(id);
+        durations.current.delete(id);
         setToasts((prev) => prev.filter((t) => t.id !== id));
-      }, 4000),
+      }, durations.current.get(id) ?? DEFAULT_DURATION_MS),
     );
   }, []);
 
@@ -87,13 +105,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     const t = timers.current.get(id);
     if (t) clearTimeout(t);
     timers.current.delete(id);
+    durations.current.delete(id);
     setToasts((prev) => prev.filter((x) => x.id !== id));
   }, []);
 
   const push = useCallback(
-    (variant: ToastVariant, message: string) => {
+    (variant: ToastVariant, message: string, opts?: ToastOptions) => {
       const id = ++nextId;
-      setToasts((prev) => [...prev, { id, message, variant }]);
+      if (opts?.durationMs) durations.current.set(id, opts.durationMs);
+      setToasts((prev) => [...prev, { id, message, variant, action: opts?.action }]);
       schedule(id);
     },
     [schedule],
@@ -118,10 +138,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const api: ToastAPI = {
-    success: (m) => push("success", m),
-    error: (m) => push("error", m),
-    warning: (m) => push("warning", m),
-    info: (m) => push("info", m),
+    success: (m, o) => push("success", m, o),
+    error: (m, o) => push("error", m, o),
+    warning: (m, o) => push("warning", m, o),
+    info: (m, o) => push("info", m, o),
   };
 
   return (
@@ -157,6 +177,18 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             >
               <span className="flex-shrink-0">{icons[toast.variant]}</span>
               <p className="text-sm font-medium">{toast.message}</p>
+              {toast.action && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    dismiss(toast.id);
+                    toast.action?.onAction();
+                  }}
+                  className="ml-1 flex-shrink-0 rounded-[--radius-sm] px-1.5 py-0.5 text-sm font-bold underline underline-offset-2 hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
+                >
+                  {toast.action.label}
+                </button>
+              )}
               <button
                 onClick={() => dismiss(toast.id)}
                 aria-label="Dismiss notification"

@@ -2305,8 +2305,9 @@ export const teacher = {
   },
   /** Set the teacher's session-level resolution on an integrity check —
    *  the "I handled this" action. Clears the flag from the roster's
-   *  needs-attention aggregate. Does NOT change the AI's disposition. */
-  resolveIntegrity(submissionId: string, resolution: IntegrityResolutionOutcome) {
+   *  needs-attention aggregate. "unresolved" is Undo: it reopens the
+   *  check. Does NOT change the AI's disposition, nor any grade. */
+  resolveIntegrity(submissionId: string, resolution: IntegrityResolution) {
     return apiFetch<void>(`/teacher/integrity/submissions/${submissionId}/resolve`, {
       method: "POST",
       body: JSON.stringify({ resolution }),

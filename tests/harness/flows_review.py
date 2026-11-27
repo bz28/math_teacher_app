@@ -157,7 +157,8 @@ async def review_integrity_flow(
     that resolution and swaps the chips for the quiet Reviewed chip.
     Then the load-bearing invariant, read from the DB: resolving set
     ONLY the check's resolution — the AI verdict stands and the grade is
-    neither approved nor published.
+    neither approved nor published. Before that, Undo on the toast a
+    resolve raises puts the check back to unresolved (DB-checked).
 
     Set HARNESS_FLOW_SHOTS=<dir> to save a screenshot of each state."""
     import os
@@ -247,6 +248,29 @@ async def review_integrity_flow(
         # inside it would be read out on every student switch.
         if await page.locator("[role=status]:visible", has_text=rs.last_answer).count():
             issues.append("the quoted answer sits inside the card's live region")
+
+        # Undo: a resolve raises an Undo toast; Undo puts the check back
+        # to unresolved (chips return, nothing recorded in the DB).
+        await step("clicking 'Confirmed concern' did nothing",
+                   card_chips.get_by_role("button", name="Confirmed concern")
+                   .click(timeout=_TIMEOUT_MS))
+        undo = page.get_by_role("button", name="Undo", exact=True)
+        if await step("resolving raised no Undo toast",
+                      undo.wait_for(timeout=_TIMEOUT_MS)):
+            await shot("02a-undo-toast")
+            await undo.click(timeout=_TIMEOUT_MS)
+            await step("after Undo the outcome chips did not come back",
+                       card_chips.first.wait_for(timeout=_TIMEOUT_MS))
+            await shot("02b-after-undo")
+            async with get_session_factory()() as s:
+                undone = (await s.execute(select(IntegrityCheckSubmission).where(
+                    IntegrityCheckSubmission.submission_id == uuid.UUID(rs.submission_id))
+                )).scalar_one()
+            if undone.resolution != "unresolved" or undone.resolved_at is not None:
+                issues.append(
+                    f"after Undo the check is {undone.resolution!r} "
+                    f"(resolved_at {undone.resolved_at}), expected unresolved with no resolver",
+                )
 
         await step("clicking 'Cleared — no concern' did nothing",
                    card_chips.get_by_role("button", name="Cleared — no concern")

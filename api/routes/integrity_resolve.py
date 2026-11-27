@@ -26,8 +26,9 @@ class ResolveRequest(BaseModel):
     """Teacher's session-level resolution of an integrity check. The
     outcome is what the teacher decided after reviewing — it does NOT
     change the AI's disposition. All three outcomes clear the flag from
-    the roster's needs-attention aggregate."""
-    resolution: Literal["cleared", "confirmed_concern", "contacted"]
+    the roster's needs-attention aggregate. "unresolved" is the teacher's
+    Undo: it reopens the check and clears who/when."""
+    resolution: Literal["unresolved", "cleared", "confirmed_concern", "contacted"]
 
 
 @router.post(
@@ -46,7 +47,9 @@ async def teacher_resolve_integrity(
     from the roster's needs-attention aggregate so a reviewed
     submission stops showing as flagged forever. Owner-of-course gated,
     like the other teacher integrity endpoints. Idempotent: re-resolving
-    with a new outcome just updates the outcome and re-stamps who/when."""
+    with a new outcome just updates the outcome and re-stamps who/when.
+    "unresolved" (Undo right after a resolve) puts the check back in the
+    flagged aggregate with no resolver recorded. Never touches a grade."""
     sub = (await db.execute(
         select(Submission).where(Submission.id == submission_id)
     )).scalar_one_or_none()
@@ -63,6 +66,10 @@ async def teacher_resolve_integrity(
         raise HTTPException(status_code=404, detail="Integrity check not found")
 
     check.resolution = body.resolution
-    check.resolved_by = current_user.user_id
-    check.resolved_at = datetime.now(UTC)
+    if body.resolution == "unresolved":
+        check.resolved_by = None
+        check.resolved_at = None
+    else:
+        check.resolved_by = current_user.user_id
+        check.resolved_at = datetime.now(UTC)
     await db.commit()

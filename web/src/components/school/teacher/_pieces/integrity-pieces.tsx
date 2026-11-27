@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   teacher,
   type IntegrityActivityReason,
@@ -13,6 +13,7 @@ import {
   type TeacherIntegrityTranscriptTurn,
   type UnfinishedCheck,
 } from "@/lib/api";
+import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
 // ── Disposition badge ──
@@ -434,10 +435,15 @@ function formatResolvedAt(iso: string): string {
   });
 }
 
+/** How long the Undo toast after a resolve stays up (unhovered). */
+export const RESOLVE_UNDO_MS = 8000;
+
 /** The teacher's "I handled this" control. Unresolved: the outcomes as
  *  chips, so one click resolves. Resolved: a quiet Reviewed chip whose
- *  Change reopens the chips (with Cancel). Only ever sets the check's
- *  resolution — never the AI's verdict, and never the grade. */
+ *  Change reopens the chips (with Cancel). Every resolve raises an Undo
+ *  toast for RESOLVE_UNDO_MS that puts back the previous resolution
+ *  (unresolved, or the outcome Change replaced). Only ever sets the
+ *  check's resolution — never the AI's verdict, and never the grade. */
 export function ResolveIntegrityControl({
   submissionId,
   resolution,
@@ -449,20 +455,43 @@ export function ResolveIntegrityControl({
   resolution: IntegrityResolution;
   resolvedByName: string | null;
   resolvedAt: string | null;
-  onResolved: (resolution: IntegrityResolutionOutcome) => void;
+  /** After a resolve, and after an Undo with the restored resolution. */
+  onResolved: (resolution: IntegrityResolution) => void;
 }) {
+  const toast = useToast();
+  // Undo can fire after this control re-rendered (or unmounted, once the
+  // teacher moved on): call the newest handler, not the one captured
+  // when the toast went up.
+  const latestOnResolved = useRef(onResolved);
+  useEffect(() => {
+    latestOnResolved.current = onResolved;
+  });
   const [picking, setPicking] = useState(false);
   const [submitting, setSubmitting] =
     useState<IntegrityResolutionOutcome | null>(null);
   const [error, setError] = useState(false);
 
+  async function undo(previous: IntegrityResolution) {
+    try {
+      await teacher.resolveIntegrity(submissionId, previous);
+      latestOnResolved.current(previous);
+    } catch {
+      toast.error("Couldn't undo. Use Change on the card to set it back.");
+    }
+  }
+
   async function resolve(outcome: IntegrityResolutionOutcome) {
+    const previous = resolution;
     setSubmitting(outcome);
     setError(false);
     try {
       await teacher.resolveIntegrity(submissionId, outcome);
       setPicking(false);
       onResolved(outcome);
+      toast.success(`Marked reviewed · ${RESOLUTION_LABEL[outcome]}`, {
+        durationMs: RESOLVE_UNDO_MS,
+        action: { label: "Undo", onAction: () => void undo(previous) },
+      });
     } catch {
       setError(true);
     } finally {

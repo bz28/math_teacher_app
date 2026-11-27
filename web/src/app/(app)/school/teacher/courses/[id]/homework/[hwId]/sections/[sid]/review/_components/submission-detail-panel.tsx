@@ -11,7 +11,7 @@ import {
   teacher,
   type AiGradeEntry,
   type GradeBreakdownEntry,
-  type IntegrityResolutionOutcome,
+  type IntegrityResolution,
   type SubmissionAttempt,
   type SubmissionFile,
   type TeacherIntegrityDetail,
@@ -165,7 +165,7 @@ export function SubmissionDetailPanel({
   onFeedbackChange: (problemId: string, text: string) => void;
   onIntegrityResolved: (
     submissionId: string,
-    resolution: IntegrityResolutionOutcome,
+    resolution: IntegrityResolution,
   ) => void;
   /** Session-level open/closed for the integrity card's Details. */
   integrityDetailsOpen: boolean;

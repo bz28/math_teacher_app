@@ -3723,6 +3723,8 @@ export interface paths {
          *     submission stops showing as flagged forever. Owner-of-course gated,
          *     like the other teacher integrity endpoints. Idempotent: re-resolving
          *     with a new outcome just updates the outcome and re-stamps who/when.
+         *     "unresolved" (Undo right after a resolve) puts the check back in the
+         *     flagged aggregate with no resolver recorded. Never touches a grade.
          */
         post: operations["teacher_resolve_integrity_v1_teacher_integrity_submissions__submission_id__resolve_post"];
         delete?: never;
@@ -5916,14 +5918,15 @@ export interface components {
          * @description Teacher's session-level resolution of an integrity check. The
          *     outcome is what the teacher decided after reviewing — it does NOT
          *     change the AI's disposition. All three outcomes clear the flag from
-         *     the roster's needs-attention aggregate.
+         *     the roster's needs-attention aggregate. "unresolved" is the teacher's
+         *     Undo: it reopens the check and clears who/when.
          */
         ResolveRequest: {
             /**
              * Resolution
              * @enum {string}
              */
-            resolution: "cleared" | "confirmed_concern" | "contacted";
+            resolution: "unresolved" | "cleared" | "confirmed_concern" | "contacted";
         };
         /** RespondRequest */
         RespondRequest: {

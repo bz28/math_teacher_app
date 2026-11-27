@@ -3553,10 +3553,11 @@
         "type": "object"
       },
       "ResolveRequest": {
-        "description": "Teacher's session-level resolution of an integrity check. The\noutcome is what the teacher decided after reviewing \u2014 it does NOT\nchange the AI's disposition. All three outcomes clear the flag from\nthe roster's needs-attention aggregate.",
+        "description": "Teacher's session-level resolution of an integrity check. The\noutcome is what the teacher decided after reviewing \u2014 it does NOT\nchange the AI's disposition. All three outcomes clear the flag from\nthe roster's needs-attention aggregate. \"unresolved\" is the teacher's\nUndo: it reopens the check and clears who/when.",
         "properties": {
           "resolution": {
             "enum": [
+              "unresolved",
               "cleared",
               "confirmed_concern",
               "contacted"
@@ -18773,7 +18774,7 @@
     },
     "/v1/teacher/integrity/submissions/{submission_id}/resolve": {
       "post": {
-        "description": "Set the teacher's session-level resolution on an integrity check.\n\nThis is the \"I handled this\" action \u2014 it does NOT touch the AI's\ndisposition (the agent's verdict stands), but it clears the flag\nfrom the roster's needs-attention aggregate so a reviewed\nsubmission stops showing as flagged forever. Owner-of-course gated,\nlike the other teacher integrity endpoints. Idempotent: re-resolving\nwith a new outcome just updates the outcome and re-stamps who/when.",
+        "description": "Set the teacher's session-level resolution on an integrity check.\n\nThis is the \"I handled this\" action \u2014 it does NOT touch the AI's\ndisposition (the agent's verdict stands), but it clears the flag\nfrom the roster's needs-attention aggregate so a reviewed\nsubmission stops showing as flagged forever. Owner-of-course gated,\nlike the other teacher integrity endpoints. Idempotent: re-resolving\nwith a new outcome just updates the outcome and re-stamps who/when.\n\"unresolved\" (Undo right after a resolve) puts the check back in the\nflagged aggregate with no resolver recorded. Never touches a grade.",
         "operationId": "teacher_resolve_integrity_v1_teacher_integrity_submissions__submission_id__resolve_post",
         "parameters": [
           {
