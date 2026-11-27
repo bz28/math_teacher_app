@@ -15,10 +15,11 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.audit_log import log_student_record_access
+from api.core.integrity_pipeline import INCOMPLETE_NOT_STARTED
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
 from api.models.assignment import Assignment, Submission
@@ -41,9 +42,6 @@ class OtherCourse(BaseModel):
 class UnderstandingCheck(BaseModel):
     assignment_id: uuid.UUID
     assignment_title: str
-    # The section the work was turned in for: its review page holds the
-    # conversation.
-    section_id: uuid.UUID
     summary: str
     submitted_at: datetime
 
@@ -105,17 +103,22 @@ async def get_student_context(
         .order_by(Course.name, Section.name)
     )).all()
 
-    # Finished checks with a summary, newest work first. A check force-closed
-    # without one (the student never answered) has nothing to read here.
+    # Finished checks on work turned in for this section (the review page
+    # the link opens lists only the section's current students), newest
+    # first. A check the student never started is closed with a summary
+    # saying so, but there's no conversation to read: left out.
     check_rows = (await db.execute(
-        select(Assignment.id, Assignment.title, Submission.section_id,
+        select(Assignment.id, Assignment.title,
                IntegrityCheckSubmission.overall_summary, Submission.submitted_at)
         .join(Submission, Submission.id == IntegrityCheckSubmission.submission_id)
         .join(Assignment, Assignment.id == Submission.assignment_id)
         .where(
             Submission.student_id == student_id,
             Assignment.course_id == course_id,
+            Submission.section_id == section_id,
             IntegrityCheckSubmission.status == "complete",
+            or_(IntegrityCheckSubmission.incomplete_reason.is_(None),
+                IntegrityCheckSubmission.incomplete_reason != INCOMPLETE_NOT_STARTED),
             IntegrityCheckSubmission.overall_summary.is_not(None),
             IntegrityCheckSubmission.overall_summary != "",
         )
@@ -130,7 +133,7 @@ async def get_student_context(
         ],
         understanding_checks=[
             UnderstandingCheck(assignment_id=r.id, assignment_title=r.title,
-                               section_id=r.section_id, summary=r.overall_summary,
+                               summary=r.overall_summary,
                                submitted_at=r.submitted_at)
             for r in check_rows
         ],

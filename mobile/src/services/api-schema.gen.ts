@@ -6977,11 +6977,6 @@ export interface components {
             /** Assignment Title */
             assignment_title: string;
             /**
-             * Section Id
-             * Format: uuid
-             */
-            section_id: string;
-            /**
              * Submitted At
              * Format: date-time
              */

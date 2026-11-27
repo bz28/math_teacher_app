@@ -6277,11 +6277,6 @@
             "title": "Assignment Title",
             "type": "string"
           },
-          "section_id": {
-            "format": "uuid",
-            "title": "Section Id",
-            "type": "string"
-          },
           "submitted_at": {
             "format": "date-time",
             "title": "Submitted At",
@@ -6295,7 +6290,6 @@
         "required": [
           "assignment_id",
           "assignment_title",
-          "section_id",
           "summary",
           "submitted_at"
         ],

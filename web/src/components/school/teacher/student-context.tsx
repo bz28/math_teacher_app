@@ -41,10 +41,12 @@ export function OtherCourses({
  *  raises a question for the teacher to look into, it doesn't answer it. */
 export function UnderstandingChecks({
   courseId,
+  sectionId,
   studentId,
   checks,
 }: {
   courseId: string;
+  sectionId: string;
   studentId: string;
   checks: StudentContext["understanding_checks"];
 }) {
@@ -72,7 +74,7 @@ export function UnderstandingChecks({
                 <span className="ml-2 text-xs text-text-muted">{formatDate(c.submitted_at)}</span>
               </div>
               <Link
-                href={studentReviewHref(courseId, c.assignment_id, c.section_id, studentId)}
+                href={studentReviewHref(courseId, c.assignment_id, sectionId, studentId)}
                 className="shrink-0 text-xs font-semibold text-primary hover:underline"
               >
                 Read the conversation

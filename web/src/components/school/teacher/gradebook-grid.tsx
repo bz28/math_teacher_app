@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { studentReviewHref } from "@/lib/review-deep-link";
+import { studentHistoryHref } from "@/lib/student-history-href";
 import {
   useCallback,
   useEffect,
@@ -92,7 +94,7 @@ export function GradebookGrid({
   }, [hide]);
 
   const reviewHref = (assignmentId: string, studentId: string) =>
-    `/school/teacher/courses/${courseId}/homework/${assignmentId}/sections/${data.section.id}/review?student=${studentId}`;
+    studentReviewHref(courseId, assignmentId, data.section.id, studentId);
 
   if (data.assignments.length === 0) {
     return (
@@ -160,7 +162,7 @@ export function GradebookGrid({
                   className={`sticky left-0 z-10 border-b border-r border-border-light bg-surface px-3 py-2 text-left font-semibold text-text-primary group-hover:bg-[color:var(--color-surface-alt-2)] sm:px-4 ${STUDENT_COL}`}
                 >
                   <Link
-                    href={`/school/teacher/courses/${courseId}/grades/${data.section.id}/students/${s.student_id}`}
+                    href={studentHistoryHref(courseId, data.section.id, s.student_id)}
                     className="block truncate rounded-[--radius-sm] hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                   >
                     {s.name}

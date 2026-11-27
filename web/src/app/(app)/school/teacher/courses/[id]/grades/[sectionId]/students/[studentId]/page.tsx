@@ -145,7 +145,7 @@ export default function StudentGradesPage({
       )}
 
       {ctx && (
-        <UnderstandingChecks courseId={courseId} studentId={studentId} checks={ctx.understanding_checks} />
+        <UnderstandingChecks courseId={courseId} sectionId={sectionId} studentId={studentId} checks={ctx.understanding_checks} />
       )}
 
       {/* Ungraded practice/learn engagement — sits below the graded

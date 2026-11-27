@@ -44,7 +44,7 @@ async def _course(s, name: str, teacher: User, student: User | None, *,
 
 async def _check(s, course: Course, sec: Section, teacher: User, student: User, title: str, *,
                  status: str = "complete", summary: str | None = "Explained each step.",
-                 at: datetime | None = None) -> None:
+                 at: datetime | None = None, incomplete: str | None = None) -> None:
     hw = Assignment(course_id=course.id, teacher_id=teacher.id, title=title, type="homework",
                     status="published", content={"problems": []})
     s.add(hw)
@@ -54,7 +54,8 @@ async def _check(s, course: Course, sec: Section, teacher: User, student: User, 
     s.add(sub)
     await s.flush()
     s.add(IntegrityCheckSubmission(submission_id=sub.id, status=status, overall_summary=summary,
-                                   disposition="flag_for_review", headline="Could not explain"))
+                                   incomplete_reason=incomplete, disposition="flag_for_review",
+                                   headline="Could not explain"))
 
 
 async def _world() -> dict:
@@ -71,7 +72,18 @@ async def _world() -> dict:
         await _check(s, a, a1, teacher, student, "HW 1", at=now - timedelta(days=2))
         await _check(s, a, a1, teacher, student, "HW 2", at=now)
         await _check(s, a, a1, teacher, student, "HW 3", status="in_progress", summary=None)
-        await _check(s, a, a1, teacher, student, "HW 4", summary=None)   # closed, never answered
+        await _check(s, a, a1, teacher, student, "HW 4", summary=None)
+        # Force-closed, never started: closed with a summary, but nothing to read.
+        await _check(s, a, a1, teacher, student, "HW 5", incomplete="not_started",
+                     summary="The student never answered the understanding check.")
+        # Left partway: there is a conversation to read.
+        await _check(s, a, a1, teacher, student, "HW 6", incomplete="left_partway",
+                     at=now - timedelta(days=1))
+        # Turned in for a section of this course the student has since left.
+        a2 = Section(course_id=a.id, name="Algebra P2")
+        s.add(a2)
+        await s.flush()
+        await _check(s, a, a2, teacher, student, "HW 7")
         await _check(s, b, b1, teacher, student, "Geo HW")                # another course's
         await s.commit()
         return {"course": a.id, "section": a1.id, "student": student.id,
@@ -97,15 +109,14 @@ async def test_other_courses_are_this_teachers_active_ones(client: AsyncClient) 
 async def test_finished_checks_in_this_course_newest_first(client: AsyncClient) -> None:
     w = await _world()
     checks = (await client.get(_url(w), headers=_auth(w["token"]))).json()["understanding_checks"]
-    assert [c["assignment_title"] for c in checks] == ["HW 2", "HW 1"]
+    assert [c["assignment_title"] for c in checks] == ["HW 2", "HW 6", "HW 1"]
     assert checks[0]["summary"] == "Explained each step."
-    assert checks[0]["section_id"] == str(w["section"])
 
 
 async def test_a_check_never_carries_its_verdict(client: AsyncClient) -> None:
     w = await _world()
     check = (await client.get(_url(w), headers=_auth(w["token"]))).json()["understanding_checks"][0]
-    assert set(check) == {"assignment_id", "assignment_title", "section_id", "summary", "submitted_at"}
+    assert set(check) == {"assignment_id", "assignment_title", "summary", "submitted_at"}
 
 
 async def test_another_teacher_cannot_read_it(client: AsyncClient) -> None:
