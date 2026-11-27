@@ -4,6 +4,7 @@ import { Modal } from "@/components/ui/modal";
 import {
   ActivityDigest,
   ActivityTurnMarker,
+  activityReasonText,
   formatMs,
   integrityNeedsResolution,
   ResolveIntegrityControl,
@@ -12,6 +13,7 @@ import {
 } from "@/components/school/teacher/_pieces/integrity-pieces";
 import type {
   IntegrityResolutionOutcome,
+  IntegrityResolution,
   TeacherIntegrityDetail,
   TeacherIntegrityTranscriptTurn,
   UnfinishedCheck,
@@ -19,13 +21,18 @@ import type {
 } from "@/lib/api";
 import type { IntegrityBannerKey } from "../_lib/types";
 import { NEUTRAL_STYLE, INTEGRITY_STYLE } from "../_lib/integrity-style";
+import { quotedAnswer, type QuotedAnswer } from "../_lib/quoted-answer";
 
 /**
  * Compact integrity verdict card. Collapsed by default: verdict icon +
  * headline, the activity flags as chips, and a footer with the Details
- * toggle, "Conversation ↗", and — on an open flag — "Mark reviewed" as
- * the one primary action. Details holds the AI summary, the activity
- * digest, and (once resolved) the resolution chip with Change.
+ * toggle and "Conversation ↗". On an open check (flagged, inconclusive,
+ * unreadable, unfinished) the card also quotes the student's most
+ * telling answer and shows the resolution outcomes as chips, so one
+ * click resolves it — the same call and outcomes "Mark reviewed" used,
+ * and never a grade approval. Once resolved, a quiet "Reviewed" chip
+ * with Change takes their place. Details holds the AI summary and the
+ * activity digest.
  *
  * Lives at the top of the pinned right rail on xl, and in the grade
  * column below xl, so the verdict no longer pushes PROBLEMS down the
@@ -58,6 +65,16 @@ export function IntegrityCard({
 }) {
   const [open, setOpen] = useState(false);
   const detailsId = useId();
+  // The outcome just picked, held only until the refetched detail lands
+  // (a new object) so the chips don't flash back as clickable in between.
+  const [justResolved, setJustResolved] = useState<{
+    detail: TeacherIntegrityDetail;
+    outcome: IntegrityResolutionOutcome;
+  } | null>(null);
+  const resolution: IntegrityResolution =
+    justResolved && justResolved.detail === integrity
+      ? justResolved.outcome
+      : (integrity?.resolution ?? "unresolved");
 
   // Prefer full detail. If it's missing (fetch pending / 404), use
   // the overview so the disposition signal still surfaces without
@@ -94,8 +111,7 @@ export function IntegrityCard({
   // A teacher who marked the check reviewed has handled it — drop the
   // loud verdict color to a neutral tint (keep the icon/label) so a
   // resolved flag no longer reads as an open alarm.
-  const resolved =
-    !!integrity && integrity.resolution !== "unresolved";
+  const resolved = !!integrity && resolution !== "unresolved";
   const style = resolved
     ? { ...INTEGRITY_STYLE[key], ...NEUTRAL_STYLE }
     : INTEGRITY_STYLE[key];
@@ -127,22 +143,23 @@ export function IntegrityCard({
 
   const activitySummary = integrity?.activity_summary ?? null;
   const totals = activitySummary?.totals ?? null;
-  // "Mark reviewed" is the one primary action on an open flag, so it
-  // sits on the collapsed card. Needs full detail (resolution +
-  // resolved-by); hidden during the overview-only gap. Once resolved,
-  // the resolution chip (with Change) moves into Details.
-  const showMarkReviewed =
-    !!integrity &&
-    integrityNeedsResolution(integrity) &&
-    integrity.resolution === "unresolved";
+  // Resolving is the one action on an open check, so its outcomes sit
+  // on the collapsed card. Needs full detail (resolution + resolved-by);
+  // hidden during the overview-only gap. Once resolved, the quiet
+  // Reviewed chip (with Change) stays in the same spot.
+  const showResolve =
+    !!integrity && (resolved || integrityNeedsResolution(integrity));
+  const quote =
+    integrity && !resolved && integrityNeedsResolution(integrity)
+      ? quotedAnswer(integrity)
+      : null;
   const inProgressCount = key === "in_progress" && overviewFallback;
   const hasDetails =
     !!shownSummary ||
     key === "unfinished" ||
     !!integrity?.didnt_engage ||
     !!inProgressCount ||
-    !!activitySummary ||
-    resolved;
+    !!activitySummary;
 
   return (
     <>
@@ -221,19 +238,29 @@ export function IntegrityCard({
             {/* Always neutral-styled — the card carries the verdict
                 color; the digest is supporting evidence. */}
             <ActivityDigest summary={activitySummary} />
-            {integrity && resolved && (
-              <ResolveIntegrityControl
-                submissionId={integrity.submission_id}
-                resolution={integrity.resolution}
-                resolvedByName={integrity.resolved_by_name}
-                resolvedAt={integrity.resolved_at}
-                onResolved={(r) => onResolved(integrity.submission_id, r)}
-              />
-            )}
           </div>
         )}
 
-        {(hasDetails || hasMeaningfulTranscript || showMarkReviewed) && (
+        {quote && <QuotedAnswerExcerpt quote={quote} />}
+
+        {showResolve && (
+          <div className="mt-3">
+            <ResolveIntegrityControl
+              // Remount per student so a half-open Change doesn't carry over.
+              key={integrity.submission_id}
+              submissionId={integrity.submission_id}
+              resolution={resolution}
+              resolvedByName={integrity.resolved_by_name}
+              resolvedAt={integrity.resolved_at}
+              onResolved={(r) => {
+                setJustResolved({ detail: integrity, outcome: r });
+                onResolved(integrity.submission_id, r);
+              }}
+            />
+          </div>
+        )}
+
+        {(hasDetails || hasMeaningfulTranscript) && (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
             {hasDetails ? (
               <button
@@ -248,29 +275,15 @@ export function IntegrityCard({
             ) : (
               <span />
             )}
-            <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
-              {/* "Mark reviewed" — clearing a flag drops it from the
-                  roster Flagged filter. */}
-              {showMarkReviewed && (
-                <ResolveIntegrityControl
-                  primary
-                  submissionId={integrity.submission_id}
-                  resolution={integrity.resolution}
-                  resolvedByName={integrity.resolved_by_name}
-                  resolvedAt={integrity.resolved_at}
-                  onResolved={(r) => onResolved(integrity.submission_id, r)}
-                />
-              )}
-              {hasMeaningfulTranscript && (
-                <button
-                  type="button"
-                  onClick={() => setOpen(true)}
-                  className="shrink-0 rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-semibold text-text-secondary hover:border-primary/40 hover:text-primary focus:border-primary focus:outline-none"
-                >
-                  Conversation ↗
-                </button>
-              )}
-            </div>
+            {hasMeaningfulTranscript && (
+              <button
+                type="button"
+                onClick={() => setOpen(true)}
+                className="ml-auto shrink-0 rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-semibold text-text-secondary hover:border-primary/40 hover:text-primary focus:border-primary focus:outline-none"
+              >
+                Conversation ↗
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -282,6 +295,28 @@ export function IntegrityCard({
         />
       )}
     </>
+  );
+}
+
+function QuotedAnswerExcerpt({ quote }: { quote: QuotedAnswer }) {
+  const note = quote.reason
+    ? activityReasonText(quote.reason, quote.turn)
+    : null;
+  return (
+    <figure className="mt-3 rounded-[--radius-md] border border-border-light bg-surface px-3 py-2.5">
+      <figcaption className="text-[10px] font-semibold uppercase tracking-[0.06em] text-text-muted">
+        {note ? <>Their answer · {note}</> : "Their last answer"}
+      </figcaption>
+      {quote.question && (
+        <p className="mt-1.5 line-clamp-2 text-[11px] leading-snug text-text-muted">
+          <span className="font-semibold">AI asked:</span>{" "}
+          <MathText text={quote.question} />
+        </p>
+      )}
+      <blockquote className="mt-1.5 line-clamp-3 border-l-2 border-text-muted/40 pl-2.5 text-[13px] leading-snug text-text-primary">
+        <MathText text={quote.turn.content} />
+      </blockquote>
+    </figure>
   );
 }
 

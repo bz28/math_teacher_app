@@ -300,6 +300,16 @@ const ACTIVITY_REASON_COPY: Record<
   },
 };
 
+/** One-line description of why a student turn was notable, e.g.
+ *  "pasted 412 chars before sending" — the same words the transcript's
+ *  per-turn marker uses. */
+export function activityReasonText(
+  reason: IntegrityActivityReason,
+  turn: TeacherIntegrityTranscriptTurn,
+): string {
+  return ACTIVITY_REASON_COPY[reason](turn);
+}
+
 /** Lite shape: just the per-turn entry from activity_summary.notable_turns. */
 export type IntegrityActivityNotableTurnLite = {
   ordinal: number;
@@ -424,22 +434,22 @@ function formatResolvedAt(iso: string): string {
   });
 }
 
+/** The teacher's "I handled this" control. Unresolved: the outcomes as
+ *  chips, so one click resolves. Resolved: a quiet Reviewed chip whose
+ *  Change reopens the chips (with Cancel). Only ever sets the check's
+ *  resolution — never the AI's verdict, and never the grade. */
 export function ResolveIntegrityControl({
   submissionId,
   resolution,
   resolvedByName,
   resolvedAt,
   onResolved,
-  primary = false,
 }: {
   submissionId: string;
   resolution: IntegrityResolution;
   resolvedByName: string | null;
   resolvedAt: string | null;
   onResolved: (resolution: IntegrityResolutionOutcome) => void;
-  /** Render the unresolved "Mark reviewed" button as the filled primary
-   *  action — where it's the one thing left to do on a flagged check. */
-  primary?: boolean;
 }) {
   const [picking, setPicking] = useState(false);
   const [submitting, setSubmitting] =
@@ -482,30 +492,12 @@ export function ResolveIntegrityControl({
     );
   }
 
-  // Collapsed "Mark reviewed" button — expands to the outcome picker.
-  if (!picking) {
-    return (
-      <button
-        type="button"
-        onClick={() => setPicking(true)}
-        className={cn(
-          "rounded-[--radius-md] px-3 py-1.5 text-xs font-semibold",
-          primary
-            ? "bg-primary text-white shadow-sm transition-colors hover:bg-primary-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-            : "border border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:text-primary focus:border-primary focus:outline-none",
-        )}
-      >
-        Mark reviewed
-      </button>
-    );
-  }
-
   return (
     <div className="space-y-1.5">
       <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-text-muted">
         Mark reviewed as
       </p>
-      <div className="flex flex-wrap gap-1.5">
+      <div role="group" aria-label="Mark reviewed as" className="flex flex-wrap gap-1.5">
         {RESOLUTION_OUTCOMES.map((o) => (
           <button
             key={o.value}
@@ -513,7 +505,7 @@ export function ResolveIntegrityControl({
             disabled={submitting !== null}
             onClick={() => void resolve(o.value)}
             className={cn(
-              "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors",
+              "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
               resolution === o.value
                 ? "border-primary/50 bg-primary-bg text-primary"
                 : "border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:text-primary",
@@ -524,17 +516,19 @@ export function ResolveIntegrityControl({
             {submitting === o.value ? "Saving…" : o.label}
           </button>
         ))}
-        <button
-          type="button"
-          disabled={submitting !== null}
-          onClick={() => {
-            setPicking(false);
-            setError(false);
-          }}
-          className="rounded-full px-2 py-1 text-xs font-medium text-text-muted hover:text-text-secondary"
-        >
-          Cancel
-        </button>
+        {picking && (
+          <button
+            type="button"
+            disabled={submitting !== null}
+            onClick={() => {
+              setPicking(false);
+              setError(false);
+            }}
+            className="rounded-full px-2 py-1 text-xs font-medium text-text-muted hover:text-text-secondary"
+          >
+            Cancel
+          </button>
+        )}
       </div>
       {error && (
         <p className="text-[11px] text-error">Couldn&apos;t save. Try again.</p>
