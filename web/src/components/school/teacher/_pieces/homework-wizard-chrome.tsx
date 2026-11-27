@@ -1,12 +1,10 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { formatDue } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { LATE_POLICY_OPTIONS } from "./assignment-wizard-steps";
 
-// The New Homework wizard's frame: its discard prompt, stepper, problem
-// source tabs and review summary.
+// The New Homework wizard's frame: its discard prompt, stepper and
+// problem source tabs.
 
 export type Mode = "generate" | "upload";
 
@@ -214,116 +212,6 @@ export function ModeTabs({
           </button>
         );
       })}
-    </div>
-  );
-}
-
-// ── Review step ──
-
-export function ReviewStep({
-  title,
-  unitNames,
-  unitCount,
-  dueAt,
-  latePolicy,
-  sectionCount,
-  mode,
-  count,
-  fileCount,
-  hasRubric,
-  totalPoints,
-}: {
-  title: string;
-  unitNames: string[];
-  unitCount: number;
-  dueAt: string;
-  latePolicy: string;
-  sectionCount: number;
-  mode: Mode;
-  count: number;
-  fileCount: number;
-  hasRubric: boolean;
-  totalPoints: number;
-}) {
-  const lateLabel =
-    LATE_POLICY_OPTIONS.find((o) => o.value === latePolicy)?.label ?? latePolicy;
-  const unitsText =
-    unitNames.length > 0
-      ? unitNames.join(", ")
-      : `${unitCount} unit${unitCount === 1 ? "" : "s"}`;
-  const problemsText =
-    mode === "generate"
-      ? `Generate ${count} problem${count === 1 ? "" : "s"} with AI`
-      : fileCount > 0
-        ? `Extract from ${fileCount} uploaded page${fileCount === 1 ? "" : "s"}`
-        : "No pages added yet";
-
-  return (
-    <div className="space-y-5">
-      <p className="text-xs text-text-muted">
-        One last look. Creating sets the due date, sections, late policy and
-        grading rubric in one go — then the AI&apos;s problems land in a review
-        queue, where you approve them and publish.
-      </p>
-
-      <dl className="overflow-hidden rounded-[--radius-md] border border-border-light">
-        <SummaryRow label="Title" value={title.trim() || "Untitled"} />
-        <SummaryRow label="Units" value={unitsText} />
-        <SummaryRow
-          label="Due"
-          value={dueAt ? formatDue(new Date(dueAt).toISOString()) : "No due date"}
-          muted={!dueAt}
-        />
-        <SummaryRow label="Late policy" value={lateLabel} />
-        <SummaryRow
-          label="Sections"
-          value={
-            sectionCount === 0
-              ? "All sections in this course"
-              : `${sectionCount} section${sectionCount === 1 ? "" : "s"}`
-          }
-          muted={sectionCount === 0}
-        />
-        <SummaryRow label="Problems" value={problemsText} muted={mode === "upload" && fileCount === 0} />
-        <SummaryRow label="Points" value={`${totalPoints}, split evenly`} />
-        <SummaryRow
-          label="Grading"
-          value={hasRubric ? "Class rules + rules for this homework" : "Class rules"}
-          muted={!hasRubric}
-          last
-        />
-      </dl>
-    </div>
-  );
-}
-
-function SummaryRow({
-  label,
-  value,
-  muted,
-  last,
-}: {
-  label: string;
-  value: string;
-  muted?: boolean;
-  last?: boolean;
-}) {
-  return (
-    <div
-      className={`flex items-baseline gap-4 px-4 py-2.5 ${
-        last ? "" : "border-b border-border-light"
-      }`}
-    >
-      <dt className="w-28 shrink-0 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
-        {label}
-      </dt>
-      <dd
-        className={`min-w-0 flex-1 text-sm ${
-          muted ? "italic text-text-muted" : "text-text-primary"
-        }`}
-      >
-        {value}
-      </dd>
     </div>
   );
 }

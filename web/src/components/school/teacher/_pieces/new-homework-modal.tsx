@@ -25,7 +25,6 @@ import {
 import {
   DiscardConfirmDialog,
   ModeTabs,
-  ReviewStep,
   WizardStepper,
   type Mode,
 } from "./homework-wizard-chrome";
@@ -35,7 +34,7 @@ import {
   UploadSection,
   useStagedFiles,
 } from "./homework-wizard-upload";
-import { GradingSetupCard } from "./grading-setup-card";
+import { WizardGradingLine } from "./wizard-grading-line";
 import {
   GenerationParamsCustomize,
   persistGenerationParams,
@@ -46,16 +45,15 @@ import {
  *
  * Replaces the old "make a draft, then reopen the detail page to set
  * due date / late policy / sections / rubric / publish" two-trip flow.
- * The teacher now sets EVERYTHING up front across four steps:
+ * The teacher sets everything up front across two steps:
  *
- *   1 — Details   title, units, due date, late policy, sections
+ *   1 — Details   title, unit (picked for her when the course has one),
+ *                 due date as chips at 11:59 PM, sections
  *                 (shared AssignmentDetailsStep)
- *   2 — Problems  Generate from materials OR Upload a worksheet
- *                 (shared AssignmentProblemsStep + the upload pane)
- *   3 — Grading   the AI rubric (shared GradingSetupCard)
- *   4 — Review    summary + finish: "Create & generate" / "Create &
- *                 extract", with "Save as draft" as an escape on every
- *                 step.
+ *   2 — Problems  Generate from materials OR Upload a worksheet, with
+ *                 grading (points, late policy, rubric) folded into one
+ *                 line; finish is "Create & generate" / "Create &
+ *                 extract". "Save as draft" is an escape on both steps.
  *
  * On finish we create the draft, assign the picked sections, persist
  * the rubric, then kick the generate/upload job and route the teacher
@@ -67,13 +65,11 @@ import {
  * single click instead of a configuration trip.
  */
 
-type Step = 1 | 2 | 3 | 4;
+type Step = 1 | 2;
 
 const STEPS: { n: Step; label: string }[] = [
   { n: 1, label: "Details" },
   { n: 2, label: "Problems" },
-  { n: 3, label: "Grading" },
-  { n: 4, label: "Review" },
 ];
 
 export function NewHomeworkModal({
@@ -110,6 +106,10 @@ export function NewHomeworkModal({
   // ── Step 1 — Details ──
   const [title, setTitle] = useState("");
   const [unitIds, setUnitIds] = useState<string[]>(defaultUnitIds);
+  // The units the wizard opened with: the filtered unit, or the course's
+  // only unit once it loads. A pristine wizard isn't "dirty" for having
+  // picked them, and the hint says why they're already picked.
+  const [startUnitIds, setStartUnitIds] = useState<string[]>(defaultUnitIds);
   const [dueAt, setDueAt] = useState<string>("");
   const [latePolicy, setLatePolicy] = useState<string>("none");
   const [sectionIds, setSectionIds] = useState<string[]>([]);
@@ -148,12 +148,6 @@ export function NewHomeworkModal({
   const pointsValid =
     Number.isInteger(totalPoints) && totalPoints >= 1 && totalPoints <= MAX_TOTAL_POINTS;
 
-  // Units, loaded for the Review-step summary (names) + the unit guard.
-  // The Details step's UnitMultiSelect loads its own copy; this is a
-  // cheap parallel read so we can show "Quadratics, Linear" instead of
-  // "2 units" on the final review.
-  const [units, setUnits] = useState<TeacherUnit[]>([]);
-
   // Inline document uploads for the generate step's source-material
   // picker. Owned at the modal so the pending rows survive the picker
   // remounting when the step switches. Uploads land in the first picked
@@ -166,19 +160,24 @@ export function NewHomeworkModal({
   });
 
   // Load units + docs eagerly on mount. Both are tiny lists scoped to
-  // the course; pre-loading avoids a flash of empty UI when the teacher
-  // reaches the generate picker or the review summary.
+  // the course. A course with one unit gets it picked — unless the
+  // teacher already picked units or the list came in filtered.
   useEffect(() => {
     let cancelled = false;
-    teacher
-      .units(courseId)
-      .then((r) => {
-        if (!cancelled) setUnits(r.units);
-      })
-      .catch(() => {
-        // Non-fatal — the Details step loads units independently; this
-        // copy only powers the review summary's unit names.
-      });
+    if (defaultUnitIds.length === 0) {
+      teacher
+        .units(courseId)
+        .then((r) => {
+          if (cancelled) return;
+          const only = onlyUnitId(r.units);
+          if (!only) return;
+          setUnitIds((cur) => (cur.length === 0 ? [only] : cur));
+          setStartUnitIds((cur) => (cur.length === 0 ? [only] : cur));
+        })
+        .catch(() => {
+          // Non-fatal — the teacher picks the unit herself.
+        });
+    }
     teacher
       .documents(courseId)
       .then((r) => {
@@ -193,6 +192,8 @@ export function NewHomeworkModal({
     return () => {
       cancelled = true;
     };
+    // defaultUnitIds is read once, at open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId]);
 
   const detailsValid = title.trim().length > 0 && unitIds.length > 0;
@@ -200,12 +201,18 @@ export function NewHomeworkModal({
 
   // Has the teacher put real work into this wizard? Measured against the
   // modal's *initial* state (units can arrive pre-selected via
-  // defaultUnitIds), so a pristine open is never "dirty" — we only prompt
-  // before discarding work the teacher would actually lose. `busy` is
-  // excluded: a mid-flight create routes away via onCreated, not a close.
+  // defaultUnitIds or the course's only unit), so a pristine open is
+  // never "dirty" — we only prompt before discarding work the teacher
+  // would actually lose. `busy` is excluded: a mid-flight create routes
+  // away via onCreated, not a close.
   const unitsChanged =
-    unitIds.length !== defaultUnitIds.length ||
-    unitIds.some((id) => !defaultUnitIds.includes(id));
+    unitIds.length !== startUnitIds.length ||
+    unitIds.some((id) => !startUnitIds.includes(id));
+  const unitHint = unitsChanged || unitIds.length === 0
+    ? undefined
+    : defaultUnitIds.length > 0
+      ? "The unit you're looking at, picked for you."
+      : "The only unit in this course, picked for you.";
   const isDirty =
     title.trim().length > 0 ||
     unitsChanged ||
@@ -373,9 +380,6 @@ export function NewHomeworkModal({
       };
 
   const current = STEPS.find((s) => s.n === step)!;
-  const unitNames = topUnits(units)
-    .filter((u) => unitIds.includes(u.id))
-    .map((u) => u.name);
 
   // Backdrop / Escape are suppressed together while a create or upload is
   // mid-flight so a stray dismiss can't orphan an in-flight request.
@@ -403,11 +407,16 @@ export function NewHomeworkModal({
         : !title.trim()
           ? "Add a title to continue"
           : "Pick a unit to continue"
-      : step === 3 && !pointsValid
+      : step === 2 && !pointsValid
         ? `Points must be a whole number from 1 to ${MAX_TOTAL_POINTS}`
-      : step === 4 && mode === "upload" && validStagedCount === 0
+      : step === 2 && mode === "upload" && validStagedCount === 0
         ? "Add at least one worksheet page to extract"
         : null;
+  // With nothing blocking, the last step says what happens next.
+  const footerNote =
+    step === 2 && !blockReason
+      ? "Problems go to your review queue. Students see nothing until you publish."
+      : null;
 
   return (
     <>
@@ -471,12 +480,8 @@ export function NewHomeworkModal({
                     courseId={courseId}
                     unitIds={unitIds}
                     onUnitIdsChange={setUnitIds}
-                    schedule={{
-                      dueAt,
-                      onDueAtChange: setDueAt,
-                      latePolicy,
-                      onLatePolicyChange: setLatePolicy,
-                    }}
+                    unitHint={unitHint}
+                    due={{ dueAt, onDueAtChange: setDueAt }}
                     sectionIds={sectionIds}
                     onSectionIdsChange={setSectionIds}
                     disabled={busy}
@@ -529,68 +534,20 @@ export function NewHomeworkModal({
                         disabled={busy}
                       />
                     )}
+                    <WizardGradingLine
+                      courseId={courseId}
+                      totalPointsText={totalPointsText}
+                      onTotalPointsTextChange={setTotalPointsText}
+                      pointsValid={pointsValid}
+                      latePolicy={latePolicy}
+                      onLatePolicyChange={setLatePolicy}
+                      rubric={rubric}
+                      onRubricChange={onChangeRubric}
+                      disabled={busy}
+                    />
                   </div>
                 )}
 
-                {step === 3 && (
-                  <div className="space-y-2">
-                    <div className="rounded-[--radius-md] border border-border-light bg-bg-subtle/40 px-4 py-3">
-                      <label
-                        htmlFor="hw-total-points"
-                        className="flex flex-wrap items-center gap-2 text-sm font-semibold text-text-primary"
-                      >
-                        This homework is worth
-                        <input
-                          id="hw-total-points"
-                          type="text"
-                          inputMode="numeric"
-                          value={totalPointsText}
-                          onChange={(e) => setTotalPointsText(e.target.value)}
-                          onFocus={(e) => e.target.select()}
-                          aria-invalid={!pointsValid || undefined}
-                          className={`w-16 rounded-[--radius-sm] border bg-bg-base px-2 py-1 text-right font-mono text-sm font-semibold tabular-nums text-text-primary focus:border-primary focus:outline-none ${
-                            pointsValid ? "border-border-light" : "border-[color:var(--color-error)]"
-                          }`}
-                        />
-                        points
-                      </label>
-                      <p className="mt-1 text-xs text-text-muted">
-                        Split evenly across its problems. You can change any
-                        problem&apos;s points once they&apos;re made.
-                      </p>
-                    </div>
-                    {/* GradingSetupCard owns its own card chrome; -mt
-                        pulls it tight under the helper line. */}
-                    <div className="-mt-2">
-                      <GradingSetupCard
-                        rubric={rubric}
-                        saveState="idle"
-                        saveError={null}
-                        onChange={onChangeRubric}
-                        courseId={courseId}
-                        // Leaving for settings would discard this unsaved
-                        // wizard — no link out from inside it.
-                        linkToClassRubric={false}
-                      />
-                    </div>
-                  </div>
-                )}
-
-                {step === 4 && (
-                  <ReviewStep
-                    title={title}
-                    unitNames={unitNames}
-                    unitCount={unitIds.length}
-                    dueAt={dueAt}
-                    latePolicy={latePolicy}
-                    sectionCount={sectionIds.length}
-                    mode={mode}
-                    count={count}
-                    fileCount={validStagedCount}
-                    hasRubric={hasRubricText(rubric)}
-                    totalPoints={totalPoints}
-                  />
-                )}
               </motion.div>
             </AnimatePresence>
           </div>
@@ -600,7 +557,7 @@ export function NewHomeworkModal({
               sits above the actions so the submit error (which used to
               render at the bottom of the scrollable body, below the
               fold) and the why-disabled reason are always in view. */}
-          {(error || blockReason) && (
+          {(error || blockReason || footerNote) && (
             <div
               id="hw-wizard-msg"
               className="border-t border-border-light px-6 pt-3 text-xs"
@@ -613,13 +570,13 @@ export function NewHomeworkModal({
                     : "text-text-muted"
                 }
               >
-                {error ?? blockReason}
+                {error ?? blockReason ?? footerNote}
               </span>
             </div>
           )}
           <div
             className={`flex items-center justify-between gap-3 px-6 py-3 ${
-              error || blockReason ? "" : "border-t border-border-light"
+              error || blockReason || footerNote ? "" : "border-t border-border-light"
             }`}
           >
             <div className="flex items-center gap-1">
@@ -650,13 +607,11 @@ export function NewHomeworkModal({
               </button>
             </div>
 
-            {step < 4 ? (
+            {step === 1 ? (
               <button
                 type="button"
-                onClick={() =>
-                  step === 1 ? onContinueFromDetails() : goTo((step + 1) as Step)
-                }
-                disabled={busy || (step === 1 && !detailsValid) || (step === 3 && !pointsValid)}
+                onClick={onContinueFromDetails}
+                disabled={busy || !detailsValid}
                 aria-describedby={blockReason ? "hw-wizard-msg" : undefined}
                 className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-[color:var(--color-surface-alt-2)] disabled:text-text-muted disabled:opacity-100"
               >
@@ -666,17 +621,17 @@ export function NewHomeworkModal({
               <button
                 type="button"
                 onClick={onGenerate}
-                disabled={busy || !detailsValid}
+                disabled={busy || !detailsValid || !pointsValid}
                 aria-describedby={blockReason ? "hw-wizard-msg" : undefined}
                 className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-[color:var(--color-surface-alt-2)] disabled:text-text-muted disabled:opacity-100"
               >
-                {busy ? "Creating…" : "Create & generate →"}
+                {busy ? "Creating…" : "Create & generate"}
               </button>
             ) : (
               <button
                 type="button"
                 onClick={onUpload}
-                disabled={busy || !detailsValid || validStagedCount === 0}
+                disabled={busy || !detailsValid || !pointsValid || validStagedCount === 0}
                 title={
                   validStagedCount === 0
                     ? "Add at least one worksheet page first"
@@ -685,7 +640,7 @@ export function NewHomeworkModal({
                 aria-describedby={blockReason ? "hw-wizard-msg" : undefined}
                 className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-[color:var(--color-surface-alt-2)] disabled:text-text-muted disabled:opacity-100"
               >
-                {busy ? "Creating…" : "Create & extract →"}
+                {busy ? "Creating…" : "Create & extract"}
               </button>
             )}
           </div>
@@ -705,3 +660,8 @@ export function NewHomeworkModal({
   );
 }
 
+/** The course's one top-level unit, or null when it has none or several. */
+function onlyUnitId(units: TeacherUnit[]): string | null {
+  const top = topUnits(units);
+  return top.length === 1 ? top[0].id : null;
+}
