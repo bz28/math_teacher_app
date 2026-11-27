@@ -13,7 +13,8 @@ import type { BlockedSubmissionsData } from "../lib/caseFile";
 
 const DAYS = 30;
 
-const mb = (n: number | null) => (n == null ? null : `${(n / 1024 / 1024).toFixed(1)} MB`);
+const size = (n: number | null) =>
+  n == null ? null : n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`;
 
 export default function BlockedUploads({
   studentId, schoolId,
@@ -79,7 +80,7 @@ export default function BlockedUploads({
                   {UPLOAD_REJECTION_REASONS[r.top_reason] ?? r.top_reason}
                   {Object.keys(r.reasons).length > 1 && <span className="cp-muted"> +{Object.keys(r.reasons).length - 1}</span>}
                 </td>
-                <td className="cp-r cp-mono">{mb(r.largest_request_bytes) ?? "—"}</td>
+                <td className="cp-r cp-mono">{size(r.largest_request_bytes) ?? "—"}</td>
                 <td title={r.last_at}>{formatRelativeDate(r.last_at)}</td>
                 <td>
                   {r.submitted_since

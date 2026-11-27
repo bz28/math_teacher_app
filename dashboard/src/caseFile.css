@@ -217,7 +217,10 @@
 .ct-failed .ct-dot { background: var(--danger); }
 .ct-failed .ct-text { color: var(--danger); font-style: normal; }
 
-/* Blocked uploads */
+/* Blocked uploads — a short table: let columns size to what they hold
+   (the console's tables are fixed-layout and clip). */
+.bu-table { table-layout: auto; }
+.bu-table td { white-space: normal; overflow: visible; }
 .bu-window {
   margin-left: 8px;
   font-family: var(--font-sans);
