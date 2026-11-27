@@ -125,8 +125,8 @@ Concrete inventory of **what exists today**, derived from
 ### Admin — `dashboard/`
 - **Sales/ops**: Leads + lead detail (notes, meetings), Schools + school detail,
   Independent students, Independent teachers + teacher detail, Admins (invite), Audit logs.
-- **AI quality/diagnostics**: LLM calls, Harness runs, Quality, Grading quality, Golden set,
-  per-submission trace.
+- **AI quality/diagnostics**: LLM calls, Teacher reports, Accuracy (extraction quality),
+  Grading quality, per-submission trace.
 
 ### Public / marketing — web
 - Landing, `/for-districts`, `/demo` (request-a-demo → contact lead),

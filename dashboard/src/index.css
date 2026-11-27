@@ -1776,13 +1776,6 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
   color: var(--ink) !important;
 }
 
-/* ──────────────────────────────────────────────────────────────────
-   Golden Set — live eval-health console. Overview aesthetic: tiles +
-   DataTable + StatusPill, with a curate toolbar and a case drawer.
-   ────────────────────────────────────────────────────────────────── */
-
-@keyframes gs-slide-in { from { transform: translateX(24px); opacity: 0.6; } to { transform: none; opacity: 1; } }
-
 /* Toast entrance — subtle slide-up + fade, respects reduced motion. */
 @keyframes toast-in {
   from { opacity: 0; transform: translateY(8px); }

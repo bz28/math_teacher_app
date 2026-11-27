@@ -2,8 +2,8 @@ import { SUBJECT_COLOR, MODE_COLOR } from "../lib/quality";
 
 /**
  * MetaChip — a tiny colored-dot label for a session's subject or mode.
- * Shared by the Solution-quality tab and its drill-in so a subject/mode
- * reads identically in the table, the chips, and the detail header.
+ * Used by the Accuracy (extraction quality) page so a subject/mode reads
+ * identically in its filters and its table.
  */
 interface Props {
   label: string;

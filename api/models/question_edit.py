@@ -14,16 +14,15 @@ first three edits were already gone. The workshop chat kept its own
 transcript, so agent-driven changes were partly recoverable; hand-edits
 left nothing but the latest undo slot.
 
-## No backfill is possible, and the API says so
+## No backfill is possible
 
 Every other migration in this repo backfills, because the data existed
 and only the column was new. Here the EVENTS were never recorded. There
 is nothing to reconstruct from: the intermediate states are gone.
 
-So the honest thing is to say when counting started rather than let a
-zero read as "this question was never touched" — which would quietly
-mislead exactly the analysis this table exists to support. Admin
-responses carry `TRACKING_SINCE`; the UI shows "tracking began …".
+Recording began at the merge of 2026-08-02 18:16 UTC: a question with no
+rows from before then was not "never touched", only not tracked yet.
+Any reader of this table must say so rather than let a zero mislead.
 
 ## One row per changed FIELD, not per request
 
@@ -54,7 +53,7 @@ artifacts of the question, and the harness probes already cover them.
 """
 
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime
 
 from sqlalchemy import DateTime, ForeignKey, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
@@ -99,16 +98,6 @@ FIELD_FINAL_ANSWER = "final_answer"
 # not an LLM call; before/after are "yes"/"no".
 FIELD_REQUIRES_DRAWING = "requires_drawing"
 
-# When recording began. Deliberately a constant rather than a stored
-# row: it is a fact about the deploy, not about any question, and the
-# admin API returns it so a count of 0 can be read as "not tracked then"
-# instead of "never edited".
-#
-# This is the MERGE time, not the date the code was written. It was
-# briefly set five days early, which would have had the page assert
-# it was counting across a window in which nothing was recorded —
-# the precise misreading the constant exists to prevent.
-TRACKING_SINCE = datetime(2026, 8, 2, 18, 16, tzinfo=UTC)
 
 
 class QuestionEdit(Base):
