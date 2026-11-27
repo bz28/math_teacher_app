@@ -1103,7 +1103,8 @@ export interface SchoolOverviewData {
     cost_30d: number;
     cost_prev_30d: number;
     projected_month_end: number;
-    trend_12_weeks: { week_start: string | null; cost: number }[];
+    projected_low: number;
+    projected_high: number;
   };
   activity: {
     this_week: ActivityCounts;
