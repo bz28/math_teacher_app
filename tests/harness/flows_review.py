@@ -10,7 +10,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from tests.harness.browser import HarnessBrowser
 from tests.harness.flow_result import FLOW_TIMEOUT_MS as _TIMEOUT_MS
 from tests.harness.flow_result import FlowResult
-from tests.harness.seed import Seed, seed_review_homework
+from tests.harness.seed import Seed, seed_review_homework, seed_review_integrity
 
 
 async def review_page_flow(
@@ -145,4 +145,102 @@ async def review_page_flow(
                 await page.keyboard.press("Escape")
                 await step(f"the {what} dialog did not close on Escape",
                            dialog.first.wait_for(state="detached", timeout=_TIMEOUT_MS))
+    return FlowResult(name, title, not issues, issues)
+
+
+async def review_integrity_flow(
+    browser: HarnessBrowser, web_base: str, api_base: str, seed: Seed,
+) -> FlowResult:
+    """Teacher resolves a flagged understanding check from the review
+    page's integrity card in one click: the card quotes the student's
+    last answer and shows the three outcome chips; clicking one saves
+    that resolution and swaps the chips for the quiet Reviewed chip.
+    Then the load-bearing invariant, read from the DB: resolving set
+    ONLY the check's resolution — the AI verdict stands and the grade is
+    neither approved nor published.
+
+    Set HARNESS_FLOW_SHOTS=<dir> to save a screenshot of each state."""
+    import os
+    import re
+    import uuid
+
+    from sqlalchemy import select
+
+    from api.database import get_session_factory
+    from api.models.assignment import SubmissionGrade
+    from api.models.integrity_check import IntegrityCheckSubmission
+
+    name, title = "review_integrity", "Teacher resolves an integrity flag from the card"
+    issues: list[str] = []
+    rs = await seed_review_integrity(seed)
+    shots = os.environ.get("HARNESS_FLOW_SHOTS")
+    url = (
+        f"{web_base.rstrip('/')}/school/teacher/courses/{rs.course_id}"
+        f"/homework/{rs.assignment_id}/sections/{rs.section_id}/review"
+    )
+    async with browser.authed_page(seed.teacher_token, seed.teacher_refresh) as page:
+        async def shot(label: str) -> None:
+            if shots:
+                os.makedirs(shots, exist_ok=True)
+                await page.screenshot(path=os.path.join(shots, f"integrity-{label}.png"))
+
+        async def step(what: str, coro) -> bool:
+            try:
+                await coro
+                return True
+            except PlaywrightTimeoutError:
+                issues.append(what)
+                return False
+
+        # Belt and braces: this flow must never release or approve grades.
+        await page.route("**/publish-grades*", lambda route: route.abort())
+        await page.goto(url, wait_until="domcontentloaded", timeout=_TIMEOUT_MS)
+        roster = page.locator("aside", has_text="submitted").last
+        if not await step(
+            f"the roster has no row for {rs.flagged_student}",
+            roster.get_by_role("button", name=re.compile(rs.flagged_student))
+            .click(timeout=_TIMEOUT_MS),
+        ):
+            return FlowResult(name, title, False, issues)
+        chips = page.get_by_role("group", name="Mark reviewed as")
+        if not await step(
+            "the flagged check's card shows no outcome chips to resolve it",
+            chips.first.wait_for(timeout=_TIMEOUT_MS),
+        ):
+            return FlowResult(name, title, False, issues)
+        # The card renders in the xl rail AND (hidden) the grade column;
+        # act on the visible copy only.
+        card_chips = page.locator("[role=group][aria-label='Mark reviewed as']:visible")
+        for outcome in ("Cleared — no concern", "Confirmed concern", "Contacted student"):
+            if not await card_chips.get_by_role("button", name=outcome).count():
+                issues.append(f"the card is missing the '{outcome}' outcome")
+        await step("the card does not quote the student's last answer",
+                   page.get_by_text(rs.last_answer).locator("visible=true").first
+                   .wait_for(timeout=_TIMEOUT_MS))
+        await shot("01-flagged")
+
+        await step("clicking 'Cleared — no concern' did nothing",
+                   card_chips.get_by_role("button", name="Cleared — no concern")
+                   .click(timeout=_TIMEOUT_MS))
+        await step("resolving did not show the Reviewed chip on the card",
+                   page.get_by_text(re.compile(r"Reviewed.*Cleared")).locator("visible=true")
+                   .first.wait_for(timeout=_TIMEOUT_MS))
+        await step("the outcome chips stayed up after resolving",
+                   card_chips.first.wait_for(state="detached", timeout=_TIMEOUT_MS))
+        await shot("02-resolved")
+
+    async with get_session_factory()() as s:
+        sub_id = uuid.UUID(rs.submission_id)
+        check = (await s.execute(select(IntegrityCheckSubmission).where(
+            IntegrityCheckSubmission.submission_id == sub_id))).scalar_one()
+        grade = (await s.execute(select(SubmissionGrade).where(
+            SubmissionGrade.submission_id == sub_id))).scalar_one()
+    if check.resolution != "cleared":
+        issues.append(f"the check's resolution is {check.resolution!r}, expected 'cleared'")
+    if check.disposition != "flag_for_review":
+        issues.append(f"resolving changed the AI verdict to {check.disposition!r}")
+    if grade.reviewed_at is not None:
+        issues.append("resolving the integrity check approved the grade")
+    if grade.grade_published_at is not None:
+        issues.append("resolving the integrity check published the grade")
     return FlowResult(name, title, not issues, issues)
