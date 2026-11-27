@@ -1788,7 +1788,7 @@ input::placeholder, textarea::placeholder { color: var(--muted-2); }
 
 /* ══════════════════════════════════════════════════════════════════
    CANONICAL SYSTEM — shared components (StatusPill, StatTile,
-   DataTable) + shell nav groups + Overview "what's broken" home.
+   DataTable) + shell nav groups.
    The reusable layer every tab is meant to draw from.
    ══════════════════════════════════════════════════════════════════ */
 
@@ -2214,85 +2214,6 @@ table.dt tr:last-child td { border-bottom: none; }
 .rail-status-ok   .rail-status-dot { background: var(--ok); }
 .rail-status-down .rail-status-dot { background: var(--danger); }
 .rail-status-down { color: var(--danger); }
-
-/* ── Overview — attention band ("what's broken" hero) ─────────────── */
-.attention {
-  border: 1px solid var(--rule-strong);
-  border-radius: 5px;
-  background: var(--surface);
-  margin-bottom: 32px;
-  overflow: hidden;
-}
-.attention-alert { border-color: rgba(138, 35, 23, 0.35); }
-.attention-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 20px;
-  border-bottom: 1px solid var(--rule);
-}
-.attention-clear .attention-head { border-bottom: none; }
-.attention-title {
-  font-family: var(--font-display);
-  font-size: 22px;
-  letter-spacing: -0.3px;
-  color: var(--ink);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.attention-title-clear { color: var(--ok); }
-.attention-count {
-  font-family: var(--font-mono);
-  font-size: 13px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-.attention-list { list-style: none; margin: 0; padding: 0; }
-.attention-item {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 14px;
-  width: 100%;
-  padding: 13px 20px;
-  border: none;
-  background: transparent;
-  border-bottom: 1px solid var(--rule);
-  text-align: left;
-  cursor: pointer;
-  font-family: var(--font-sans);
-  font-size: 14px;
-  color: var(--ink-soft);
-  transition: background 0.12s;
-}
-.attention-item:last-child { border-bottom: none; }
-.attention-item:hover { background: var(--paper-2); }
-.attention-item-bar {
-  width: 3px;
-  align-self: stretch;
-  border-radius: 2px;
-  margin: -13px 0;
-}
-.attention-item-bar-danger { background: var(--danger); }
-.attention-item-bar-warn   { background: var(--warn); }
-.attention-item-text { min-width: 0; }
-.attention-item-text b { font-weight: 600; color: var(--ink); }
-.attention-item-arrow {
-  font-family: var(--font-mono);
-  color: var(--muted-2);
-  transition: color 0.12s, transform 0.12s;
-}
-.attention-item:hover .attention-item-arrow {
-  color: var(--accent);
-  transform: translateX(2px);
-}
-.attention-clear-sub {
-  font-family: var(--font-sans);
-  font-size: 13px;
-  color: var(--muted);
-}
 
 /* ── Segmented control — role preset filter on the Users tab ───────── */
 .segmented {

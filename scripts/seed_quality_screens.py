@@ -260,10 +260,9 @@ async def main() -> None:
                 grade_published_at=graded_at + timedelta(minutes=i),
             ))
 
-        # ── Generation quality: bank items with a repair history, so the
-        #    page that reads `question_edits` can be seen and screenshotted
-        #    too. Counts are chosen to straddle its severity thresholds
-        #    (1 = polish, 2 = a pattern, 4 = arrived wrong).
+        # ── Bank items with a repair history (`question_edits`), so the
+        #    admin assignment page has edited and unedited questions to
+        #    show.
         algebra_asg = courses[0][1]
         algebra_unit = (await s.execute(
             select(Unit).where(Unit.course_id == algebra.id)
@@ -293,7 +292,7 @@ async def main() -> None:
                 s.add(QuestionEdit(
                     bank_item_id=item.id, edited_by_id=teacher.id,
                     school_id=school.id,
-                    # Alternate so both stat tiles have something in them.
+                    # Both kinds of edit: by hand and in the Workshop.
                     kind=EDIT_MANUAL if i % 2 == 0 else EDIT_WORKSHOP,
                     field=FIELD_QUESTION,
                     before=f"{question} v{i}",
@@ -301,9 +300,7 @@ async def main() -> None:
                     created_at=base + timedelta(hours=i * 3),
                 ))
 
-        # A solution repair and a reject on a fourth item — neither should
-        # appear in the generation report's counts. Seeded precisely so a
-        # screenshot proves the scoping holds rather than asserting it.
+        # A fourth item whose only repair is to its solution.
         quiet = QuestionBankItem(
             course_id=algebra.id, unit_id=algebra_unit.id,
             originating_assignment_id=algebra_asg.id,

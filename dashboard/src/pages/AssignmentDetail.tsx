@@ -11,8 +11,7 @@ import { api, type AssignmentDetailData, type AssignmentProblem } from "../lib/a
 // One assignment, as the teacher built it.
 //
 // The console can already tell you a teacher published something (the
-// activity log) and which generated questions teachers had to fix
-// (GenerationQuality). Neither shows the artifact — the problems she
+// activity log). That doesn't show the artifact — the problems she
 // KEPT and put in front of a class. That gap is what this page closes,
 // so the lifecycle line is the page's argument, not its decoration:
 // twelve generated, four published is the whole story in two numbers.
