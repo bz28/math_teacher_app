@@ -34,6 +34,7 @@ from sqlalchemy import cast as sql_cast
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.late_policy import effective_due_at, effective_due_dates
 from api.database import get_session_factory
 from api.models.assignment import Assignment, Submission, SubmissionGrade
 from api.models.grading_job import (
@@ -89,8 +90,10 @@ async def enqueue_submission(
     `scheduled_for` is the whole policy:
 
     - `run_now` (a teacher pressed something) → now, picked up next drain.
-    - assignment has a `due_at` → that timestamp, so the class grades
-      together and shares one cached prefix. A submission arriving after
+    - assignment has a `due_at` → the student's effective due date (their
+      section's, or their extension), so a section grades together and
+      shares one cached prefix, and nobody is graded before their own
+      deadline. A submission arriving after
       the due date gets a past timestamp, i.e. the next drain — late work
       grades automatically, just without the grouping discount.
     - no `due_at` → NULL. There is no moment that means "the class is
@@ -123,7 +126,7 @@ async def enqueue_submission(
     running (or `done`, without `revive_done`), so nothing new is on its
     way from this call.
     """
-    scheduled_for = _now() if run_now else assignment.due_at
+    scheduled_for = _now() if run_now else await _student_due(db, assignment, submission_id)
 
     values: dict[str, Any] = {
         "submission_id": submission_id,
@@ -321,7 +324,8 @@ def ai_grade_block(
 async def reschedule_assignment(
     db: AsyncSession, assignment: Assignment,
 ) -> int:
-    """Re-point an assignment's queued jobs at its current due date.
+    """Re-point an assignment's queued jobs at each student's current due
+    date (their section's, or their extension).
 
     Enqueue-time scheduling is a snapshot, and `enqueue_submission`'s
     `least()` can only ever move a job EARLIER — so nothing else in the
@@ -345,15 +349,35 @@ async def reschedule_assignment(
     correct: editing the deadline afterwards is a later, more specific
     instruction about when this class should grade.
     """
-    result = cast("CursorResult[Any]", await db.execute(
-        update(GradingJob)
-        .where(
-            GradingJob.assignment_id == assignment.id,
-            GradingJob.status == STATUS_QUEUED,
-        )
-        .values(scheduled_for=assignment.due_at, updated_at=_now()),
-    ))
-    return int(result.rowcount or 0)
+    jobs = (await db.execute(
+        select(GradingJob.id, Submission.student_id)
+        .join(Submission, Submission.id == GradingJob.submission_id)
+        .where(GradingJob.assignment_id == assignment.id, GradingJob.status == STATUS_QUEUED)
+    )).all()
+    if not jobs:
+        return 0
+    # Each student's own date: sections can differ, and so can extensions.
+    due = await effective_due_dates(db, assignment, {sid for _, sid in jobs})
+    moved = 0
+    for job_id, student_id in jobs:
+        result = cast("CursorResult[Any]", await db.execute(
+            update(GradingJob)
+            .where(GradingJob.id == job_id, GradingJob.status == STATUS_QUEUED)
+            .values(scheduled_for=due[student_id], updated_at=_now()),
+        ))
+        moved += int(result.rowcount or 0)
+    return moved
+
+
+async def _student_due(
+    db: AsyncSession, assignment: Assignment, submission_id: uuid.UUID,
+) -> datetime | None:
+    student_id = (await db.execute(
+        select(Submission.student_id).where(Submission.id == submission_id)
+    )).scalar_one_or_none()
+    if student_id is None:
+        return assignment.due_at
+    return await effective_due_at(db, assignment, student_id)
 
 
 async def _reclaim_stale(db: AsyncSession) -> int:

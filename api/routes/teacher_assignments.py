@@ -83,6 +83,7 @@ from api.services.bank import (
     rehome_shared_bank_items,
     snapshot_bank_items,
 )
+from api.services.due_dates import apply_due_dates, section_due_dates
 
 router = APIRouter()
 
@@ -804,6 +805,10 @@ async def get_assignment(
     stats = (await bulk_assignment_stats(db, [a.id])).get(a.id, _EMPTY_STATS)
     result = assignment_to_dict(a, sections, stats)
     result["content"] = await hydrate_assignment_content(db, a)
+    result["section_due_dates"] = [
+        {**d, "section_id": str(d["section_id"]), "due_at": d["due_at"].isoformat() if d["due_at"] else None}
+        for d in await section_due_dates(db, a)
+    ]
     result["answer_key"] = a.answer_key
     result["rubric"] = a.rubric
     by_problem = assignment_points(a)
@@ -867,33 +872,22 @@ async def update_assignment(
     if body.status is not None:
         a.status = body.status
 
-    due_at_changed = False
-    if body.clear_due_at:
-        a.due_at = None
-        due_at_changed = True
-    elif body.due_at is not None and body.due_at != "":
+    new_due: datetime | None = None
+    due_at_changed = body.clear_due_at or (body.due_at is not None and body.due_at != "")
+    if due_at_changed and not body.clear_due_at:
         try:
-            a.due_at = datetime.fromisoformat(body.due_at)
+            new_due = datetime.fromisoformat(body.due_at or "")
         except ValueError:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid due_at format")
-        due_at_changed = True
-    if due_at_changed:
-        # Queued grading is scheduled off the due date, and that
-        # scheduling is a snapshot taken when each student confirmed.
-        # Without re-pointing it, extending a deadline still grades the
-        # class at the OLD time (before the extension has even run out),
-        # and clearing a due date leaves rows at a past timestamp that
-        # auto-grade anyway — contradicting the rule that no due date
-        # means "wait for the teacher".
-        from api.core.grading_queue import reschedule_assignment
-
-        await reschedule_assignment(db, a)
     late_policy_changed = body.late_policy is not None and body.late_policy != a.late_policy
     if body.late_policy is not None:
         a.late_policy = body.late_policy
-    if due_at_changed or late_policy_changed:
-        # Lateness is measured against the due date and priced by the
-        # policy, so either moving re-derives it for work already in.
+    if due_at_changed:
+        # Every section follows the homework's date; lateness, penalties
+        # and queued grading follow them (services/due_dates.py).
+        await apply_due_dates(db, a, due_at=new_due, set_due=True)
+    elif late_policy_changed:
+        # The policy prices lateness, so changing it re-derives it.
         await refresh_lateness(db, a)
     if body.unit_ids is not None:
         await _validate_units_in_course(db, a.course_id, body.unit_ids)
@@ -1053,6 +1047,7 @@ async def publish_assignment(
                     "assignment_id": a.id,
                     "section_id": sid,
                     "published_at": now,
+                    "due_at": a.due_at,
                 }
                 for sid in course_section_ids
             ])
@@ -1138,7 +1133,7 @@ async def assign_to_sections(
             await db.delete(row)
     for sid in desired_ids - existing_ids:
         db.add(AssignmentSection(
-            assignment_id=a.id, section_id=sid, published_at=now,
+            assignment_id=a.id, section_id=sid, published_at=now, due_at=a.due_at,
         ))
 
     await db.commit()

@@ -13,11 +13,14 @@
   this policy or moves the due date earlier after it came in.
 
 The due date that counts is the student's *effective* one (`effective_due_at`
-and friends): the later of the class due date and their personal due date
-when the teacher reopened the homework for them (`StudentDueDate`). A
-personal date is only ever an extension — work turned in before it is on
-time, and a turn-in already in is re-priced against it. A homework with no
-class due date is never late and never closes, personal date or not.
+and friends). It starts from their section's date (`AssignmentSection.due_at`,
+which is the homework's own date unless the teacher set one per section;
+a student in no section of it gets the homework's), then takes the later of
+that and their personal due date when the teacher reopened the homework for
+them (`StudentDueDate`). A personal date is only ever an extension — work
+turned in before it is on time, and a turn-in already in is re-priced
+against it. A homework with no due date is never late and never closes,
+personal date or not.
 
 The penalty is applied in exactly one place, `set_final_score`, which every
 writer of `SubmissionGrade.final_score` goes through. `final_score` is the
@@ -42,7 +45,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only
 
-from api.models.assignment import Assignment, StudentDueDate, Submission, SubmissionGrade
+from api.models.assignment import (
+    Assignment,
+    AssignmentSection,
+    StudentDueDate,
+    Submission,
+    SubmissionGrade,
+)
+from api.models.section_enrollment import SectionEnrollment
 
 LATE_POLICY_NONE = "none"
 LATE_POLICY_PENALTY_PER_DAY = "penalty_per_day"
@@ -59,13 +69,39 @@ _DAY = timedelta(hours=24)
 
 
 def _extended(class_due: datetime | None, personal: datetime | None) -> datetime | None:
-    """A personal date only ever extends: the later of it and the class
-    date. With no class date nothing is due, so nothing is late — a
-    personal date can't give one student a deadline the class doesn't
-    have, and a class date moved past it wins."""
+    """A personal date only ever extends: the later of it and the
+    student's section date. With no class date nothing is due, so nothing
+    is late — a personal date can't give one student a deadline the class
+    doesn't have, and a class date moved past it wins."""
     if class_due is None or personal is None:
         return class_due
     return max(class_due, personal)
+
+
+async def _section_dates(
+    db: AsyncSession, assignment_ids: Iterable[uuid.UUID], student_ids: Iterable[uuid.UUID],
+) -> dict[tuple[uuid.UUID, uuid.UUID], datetime | None]:
+    """(assignment, student) → the due date on the student's section row
+    for that homework. Missing when the student is in no section of it.
+    A student has one section per course (uq_section_enrollments_student_course)."""
+    aids, sids = list(set(assignment_ids)), list(set(student_ids))
+    if not aids or not sids:
+        return {}
+    rows = await db.execute(
+        select(AssignmentSection.assignment_id, SectionEnrollment.student_id, AssignmentSection.due_at)
+        .join(SectionEnrollment, SectionEnrollment.section_id == AssignmentSection.section_id)
+        .where(AssignmentSection.assignment_id.in_(aids), SectionEnrollment.student_id.in_(sids))
+    )
+    return {(aid, sid): at for aid, sid, at in rows.all()}
+
+
+def _class_due(assignment: Assignment, section_due: datetime | None) -> datetime | None:
+    """The student's section date; the homework's when the row has none
+    (rows written before per-section dates, or by seed scripts). A
+    homework with no due date has none for any section."""
+    if assignment.due_at is None:
+        return None
+    return section_due if section_due is not None else assignment.due_at
 
 
 async def effective_due_at(
@@ -80,7 +116,10 @@ async def effective_due_dates(
 ) -> dict[uuid.UUID, datetime | None]:
     """`effective_due_at` for several students on one homework."""
     ids = set(student_ids)
-    due: dict[uuid.UUID, datetime | None] = dict.fromkeys(ids, assignment.due_at)
+    sections = await _section_dates(db, [assignment.id], ids)
+    due: dict[uuid.UUID, datetime | None] = {
+        sid: _class_due(assignment, sections.get((assignment.id, sid))) for sid in ids
+    }
     if ids:
         rows = await db.execute(
             select(StudentDueDate.student_id, StudentDueDate.due_at).where(
@@ -88,7 +127,7 @@ async def effective_due_dates(
                 StudentDueDate.student_id.in_(ids),
             )
         )
-        due.update({sid: _extended(assignment.due_at, at) for sid, at in rows.all()})
+        due.update({sid: _extended(due[sid], at) for sid, at in rows.all()})
     return due
 
 
@@ -98,7 +137,10 @@ async def student_due_dates(
     """`effective_due_at` for one student across several homeworks, keyed
     by assignment id."""
     by_id = {a.id: a for a in assignments}
-    due: dict[uuid.UUID, datetime | None] = {aid: a.due_at for aid, a in by_id.items()}
+    sections = await _section_dates(db, by_id, [student_id])
+    due: dict[uuid.UUID, datetime | None] = {
+        aid: _class_due(a, sections.get((aid, student_id))) for aid, a in by_id.items()
+    }
     if due:
         rows = await db.execute(
             select(StudentDueDate.assignment_id, StudentDueDate.due_at).where(
@@ -106,7 +148,7 @@ async def student_due_dates(
                 StudentDueDate.assignment_id.in_(list(due)),
             )
         )
-        due.update({aid: _extended(by_id[aid].due_at, at) for aid, at in rows.all()})
+        due.update({aid: _extended(due[aid], at) for aid, at in rows.all()})
     return due
 
 

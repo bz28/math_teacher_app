@@ -262,5 +262,7 @@ async def duplicate_homework(
     # fills the rows it fans out itself.
     now = datetime.now(UTC)
     for sid in dict.fromkeys(section_ids):
-        db.add(AssignmentSection(assignment_id=copy_.id, section_id=sid, published_at=now))
+        db.add(AssignmentSection(
+            assignment_id=copy_.id, section_id=sid, published_at=now, due_at=due_at,
+        ))
     return copy_
