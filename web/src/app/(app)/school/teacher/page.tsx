@@ -4,13 +4,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { teacher, type TeacherCourse } from "@/lib/api";
+import { teacher, type Drafts, type TeacherCourse } from "@/lib/api";
 import { formatDueRelative } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
 import { TOUR_ACTIONS, TOUR_IDS, useTour, useTourAction } from "@/components/tour";
 import { StatusPill } from "@/components/school/teacher/_pieces/status-pill";
 import { SubjectChip } from "@/components/school/teacher/_pieces/subject-chip";
 import { NeedsYouQueue } from "@/components/school/teacher/_pieces/needs-you-queue";
+import { DraftsInProgress } from "@/components/school/teacher/_pieces/drafts-in-progress";
 import { Modal, Select } from "@/components/ui";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -19,13 +20,21 @@ export default function SchoolTeacherDashboard() {
   const [loading, setLoading] = useState(true);
   const [showNewCourse, setShowNewCourse] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Drafts | null>(null);
 
   const reload = async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await teacher.courses();
+      // Drafts load with the courses, so their line is in place when the
+      // page appears rather than arriving later and pushing the course
+      // list down. A failed drafts read just leaves the line out.
+      const [res, d] = await Promise.all([
+        teacher.courses(),
+        teacher.drafts().catch(() => null),
+      ]);
       setCourses(res.courses);
+      setDrafts(d);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load courses");
     } finally {
@@ -154,6 +163,7 @@ export default function SchoolTeacherDashboard() {
           the teacher actually has courses; a brand-new teacher gets the
           onboarding empty state above instead. */}
       {courses.length > 0 && <NeedsYouQueue />}
+      {courses.length > 0 && drafts && <DraftsInProgress {...drafts} />}
 
       {courses.length > 0 && (
       <motion.div

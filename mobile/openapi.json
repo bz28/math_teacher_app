@@ -1396,6 +1396,80 @@
         "title": "DismissRequest",
         "type": "object"
       },
+      "DraftHomework": {
+        "properties": {
+          "assignment_id": {
+            "format": "uuid",
+            "title": "Assignment Id",
+            "type": "string"
+          },
+          "course_id": {
+            "format": "uuid",
+            "title": "Course Id",
+            "type": "string"
+          },
+          "course_name": {
+            "title": "Course Name",
+            "type": "string"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          },
+          "pending_review": {
+            "title": "Pending Review",
+            "type": "integer"
+          },
+          "problem_count": {
+            "title": "Problem Count",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "assignment_id",
+          "title",
+          "course_id",
+          "course_name",
+          "due_at",
+          "problem_count",
+          "pending_review"
+        ],
+        "title": "DraftHomework",
+        "type": "object"
+      },
+      "Drafts": {
+        "properties": {
+          "drafts": {
+            "items": {
+              "$ref": "#/components/schemas/DraftHomework"
+            },
+            "title": "Drafts",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "drafts",
+          "total"
+        ],
+        "title": "Drafts",
+        "type": "object"
+      },
       "EntitlementLimits": {
         "properties": {
           "daily_chats_limit": {
@@ -18665,6 +18739,33 @@
           }
         ],
         "summary": "Toggle Visibility",
+        "tags": [
+          "teacher"
+        ]
+      }
+    },
+    "/v1/teacher/drafts": {
+      "get": {
+        "description": "This teacher's draft homework in courses that aren't archived,\nmost recently edited first.",
+        "operationId": "list_drafts_v1_teacher_drafts_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Drafts"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Drafts",
         "tags": [
           "teacher"
         ]
