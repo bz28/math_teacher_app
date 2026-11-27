@@ -56,8 +56,8 @@ from tests.harness.seed import (
 
 # Generous, so slow CI is never mistaken for a failure.
 _TIMEOUT_MS = 30000
-# The flagged problem's line on Student Insights, e.g. "5 of 5 got it wrong".
-_INSIGHTS_WRONG_RE = re.compile(r"\d+ of \d+ got it wrong")
+# The flagged problem's line on Student Insights, e.g. "5 of 5 didn't get full credit".
+_INSIGHTS_MISSED_RE = re.compile(r"\d+ of \d+ didn't get full credit")
 # API-flow HTTP timeout. Generous so a cold/slow API isn't read as a failure;
 # a genuine hang raises httpx.TimeoutException → run_flows DROPS the flow.
 _HTTP_TIMEOUT_S = 30.0
@@ -165,10 +165,11 @@ async def _logout_flow(
 async def _student_insights_flow(
     browser: HarnessBrowser, web_base: str, api_base: str, seed: Seed,
 ) -> FlowResult:
-    """Teacher opens Student Insights -> sees the problem most of the class got
-    wrong, ready to turn into practice. Seeds enough approved zero-credit
-    grades for the tab to flag the problem (it waits for a minimum count),
-    then asserts the flagged problem's "N of N got it wrong" line and the
+    """Teacher opens Student Insights -> sees the problem most of the class
+    didn't get full credit on, ready to turn into practice. Seeds enough
+    approved zero-credit grades for the tab to flag the problem (it waits for
+    a minimum count), then asserts the flagged problem's "N of N didn't get
+    full credit" line and the
     "Create practice set" control that builds the reteach."""
     name, title = "student_insights", "Teacher reads Student Insights"
     issues: list[str] = []
@@ -180,10 +181,10 @@ async def _student_insights_flow(
         )
         try:
             await page.get_by_role("button", name="Student Insights").first.click(timeout=_TIMEOUT_MS)
-            await page.get_by_text(_INSIGHTS_WRONG_RE).first.wait_for(timeout=_TIMEOUT_MS)
+            await page.get_by_text(_INSIGHTS_MISSED_RE).first.wait_for(timeout=_TIMEOUT_MS)
         except PlaywrightTimeoutError:
             issues.append(
-                "Student Insights never flagged the problem every graded student got wrong",
+                "Student Insights never flagged the problem no graded student got full credit on",
             )
             return FlowResult(name, title, False, issues)
         if not await page.get_by_role("button", name="Create practice set").count():

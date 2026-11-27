@@ -4,7 +4,7 @@ One section-scoped read powers the whole Insights tab:
 
   GET /teacher/courses/{course_id}/sections/{section_id}/insights?assignment_id=
 
-Pure counting over stored rows — no LLM at read time. Three parts:
+Pure reads of stored rows — no LLM at read time. Three parts:
 
   homeworks[]  every published homework in the section, newest first,
                with a coverage line (counted / to approve / to grade /
@@ -12,11 +12,16 @@ Pure counting over stored rows — no LLM at read time. Three parts:
                the numbers are never presented as the whole class when
                they aren't.
   problems[]   the selected homework's problems in homework order: how
-               many counted grades, how many scored under half, and
-               whether the problem is flagged for reteaching (see
-               `_is_flagged`). Whole class only — no per-student lists.
+               many counted grades, how many fell short of full credit,
+               whether the problem is flagged for reteaching
+               (`insights_counting.is_flagged`), and for a flagged one
+               the most common reasons points came off, grouped from the
+               teacher's approved feedback ahead of time by the grading
+               drain (`reteach_reasons`). Counts are whole class; each
+               reason names the students behind it for the teacher alone.
   practice     the practice set made from that homework for this
-               section, if any, and which problems it already covers.
+               section, if any, which problems it already covers, and how
+               many of the period's students have practiced it.
 
 Which grades count is the load-bearing rule (`counted_breakdown`): the
 teacher sees and approves every AI grade, so an AI draft never counts.
@@ -33,12 +38,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.audit_log import log_student_record_access
 from api.core.grading_queue import EXTRACTION_GRACE
+from api.core.insights_counting import FLAG_MIN_COUNTED, counted_breakdown, is_flagged, tally
 from api.core.integrity_ai import UNREADABLE_THRESHOLD
+from api.core.reteach_reasons import MAX_ATTEMPTS as REASON_MAX_ATTEMPTS
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
 from api.models.grading_job import STATUS_QUEUED, STATUS_RUNNING, GradingJob
+from api.models.practice_activity import MODE_PRACTICE, PracticeActivity
 from api.models.question_bank import QuestionBankGenerationJob, QuestionBankItem
+from api.models.reteach_reasons import ReteachReasons
 from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.user import User
@@ -46,14 +55,6 @@ from api.routes.teacher_courses import get_teacher_course
 from api.services.bank import hydrate_assignment_content
 
 router = APIRouter()
-
-_SCORE_STATUSES = ("full", "partial", "zero")
-
-# Reteach rule. A student got a problem wrong when they scored under
-# half of it; a problem is flagged when more than half the counted
-# grades are wrong, once enough are counted to mean something.
-_WRONG_BELOW_PERCENT = 50.0
-_FLAG_MIN_COUNTED = 5
 
 # Generation jobs run as in-process tasks that a restart loses, leaving
 # the row queued or running for good. A job only touches its row when it
@@ -87,13 +88,31 @@ class InsightsHomework(BaseModel):
     not_submitted: int
 
 
+class InsightsReasonStudent(BaseModel):
+    id: uuid.UUID
+    name: str
+    submission_id: uuid.UUID
+
+
+class InsightsReason(BaseModel):
+    """One common reason points came off, from the teacher's feedback."""
+    label: str
+    count: int
+    students: list[InsightsReasonStudent]
+
+
 class InsightsProblem(BaseModel):
     bank_item_id: uuid.UUID
     position: int
     question: str
     counted: int  # students with a counted grade on this problem
-    wrong: int    # of those, how many scored under half
+    missed: int   # of those, how many fell short of full credit
     flagged: bool
+    # Flagged problems only: the most common reasons, most students first.
+    reasons: list[InsightsReason]
+    # Flagged, and its reasons haven't been written yet (the grading
+    # drain writes them once grades are approved).
+    reasons_pending: bool
 
 
 class InsightsPractice(BaseModel):
@@ -107,6 +126,10 @@ class InsightsPractice(BaseModel):
     failed: int      # problems whose writing failed and that nothing else covers
     # Homework problems the set already has versions of (or is writing).
     covered_item_ids: list[uuid.UUID]
+    # Enrolled students who answered at least one of its problems, of all
+    # enrolled students. Ungraded: engagement, never a score.
+    practiced: int
+    students: int
 
 
 class SectionInsightsResponse(BaseModel):
@@ -120,37 +143,7 @@ class SectionInsightsResponse(BaseModel):
     practice: InsightsPractice | None
 
 
-# ── Counting rule ──────────────────────────────────────────────────
-
-
-def counted_breakdown(grade: Any) -> list[dict[str, Any]] | None:
-    """The per-problem grades that count toward insights, or None.
-
-    - Approved (`reviewed_at` set; hand grades self-approve) → the live
-      breakdown. Edits after approval keep the approval, by design.
-    - Otherwise published (`grade_published_at` set) → the snapshot the
-      student was shown, never the live column: a forced AI regrade
-      clears `reviewed_at` but keeps the publish stamp, leaving an unseen
-      AI draft in `breakdown`.
-    - Otherwise → not counted. An unapproved AI draft never counts.
-
-    `grade` is anything carrying the SubmissionGrade columns (the model,
-    or a column row from the insights query). An empty list is the
-    "un-graded" signal (a retracted grade), so it counts as nothing —
-    as does a breakdown with no well-formed entries.
-    """
-    if grade is None:
-        return None
-    if grade.reviewed_at is not None:
-        rows = grade.breakdown
-    elif grade.grade_published_at is not None:
-        rows = grade.published_breakdown
-    else:
-        return None
-    if not isinstance(rows, list) or not rows:
-        return None
-    valid = [e for e in rows if isinstance(e, dict) and e.get("score_status") in _SCORE_STATUSES]
-    return valid or None
+# ── Coverage ───────────────────────────────────────────────────────
 
 
 def _confidence(raw: str | None) -> float:
@@ -206,19 +199,6 @@ def _coverage_bucket(
     # the job was skipped, failed or waits for a Grade press, or the
     # teacher retracted the grade.
     return "to_grade"
-
-
-def _is_wrong(entry: dict[str, Any]) -> bool:
-    """Under half credit. Every grade writes `percent` (auto for full and
-    zero, required for partial); fall back on the status if it's missing."""
-    pct = entry.get("percent")
-    if isinstance(pct, int | float) and not isinstance(pct, bool):
-        return pct < _WRONG_BELOW_PERCENT
-    return bool(entry["score_status"] == "zero")
-
-
-def _is_flagged(counted: int, wrong: int) -> bool:
-    return counted >= _FLAG_MIN_COUNTED and wrong * 2 > counted
 
 
 # ── Endpoint ───────────────────────────────────────────────────────
@@ -346,9 +326,9 @@ async def get_section_insights(
         section=InsightsSection(id=section.id, name=section.name),
         homeworks=hw_out,
         selected_homework_id=selected.id if selected else None,
-        problems=await _problems_for(db, selected, by_hw_student) if selected else [],
-        flag_min_counted=_FLAG_MIN_COUNTED,
-        practice=await _practice_for(db, selected, section_id) if selected else None,
+        problems=await _problems_for(db, selected, section_id, by_hw_student) if selected else [],
+        flag_min_counted=FLAG_MIN_COUNTED,
+        practice=await _practice_for(db, selected, section_id, roster_ids) if selected else None,
     )
 
 
@@ -370,24 +350,24 @@ def _pick_homework(
 async def _problems_for(
     db: AsyncSession,
     hw: Assignment,
+    section_id: uuid.UUID,
     by_hw_student: dict[tuple[uuid.UUID, uuid.UUID], list[dict[str, Any]] | None],
 ) -> list[InsightsProblem]:
-    """Whole-class counts per problem for one homework, in homework order."""
+    """Whole-class counts per problem for one homework, in homework order,
+    with the stored reasons for the flagged ones."""
     hydrated = await hydrate_assignment_content(db, hw)
     problem_list = [p for p in (hydrated or {}).get("problems") or [] if isinstance(p, dict)]
-
-    # Breakdown entries join to problems on problem_id (= bank_item_id),
-    # never list position — grading and hydration can drop or reorder.
-    tally: dict[str, list[int]] = {str(p["bank_item_id"]): [0, 0] for p in problem_list if p.get("bank_item_id")}
-    for (a_id, _sid), counted in by_hw_student.items():
-        if a_id != hw.id or counted is None:
-            continue
-        for e in counted:
-            t = tally.get(str(e.get("problem_id")))
-            if t is None:
-                continue  # entry for a problem no longer on the homework
-            t[0] += 1
-            t[1] += _is_wrong(e)
+    counts = tally(
+        (str(p["bank_item_id"]) for p in problem_list if p.get("bank_item_id")),
+        (counted for (a_id, _sid), counted in by_hw_student.items() if a_id == hw.id),
+    )
+    stored = (await db.execute(
+        select(ReteachReasons.problems).where(
+            ReteachReasons.assignment_id == hw.id, ReteachReasons.section_id == section_id,
+        )
+    )).scalar_one_or_none() or {}
+    flagged = {pid for pid, (c, m) in counts.items() if is_flagged(c, m)}
+    reasons = await _reasons_for({pid: stored.get(pid) for pid in flagged}, section_id, db)
 
     return [
         InsightsProblem(
@@ -395,16 +375,69 @@ async def _problems_for(
             position=p.get("position") or idx,
             question=p.get("question") or "",
             counted=t[0],
-            wrong=t[1],
-            flagged=_is_flagged(t[0], t[1]),
+            missed=t[1],
+            flagged=key in flagged,
+            reasons=reasons.get(key, []),
+            reasons_pending=key in flagged and _reasons_pending(stored.get(key)),
         )
         for idx, p in enumerate(problem_list, start=1)
-        if (key := str(p.get("bank_item_id"))) in tally and (t := tally[key])
+        if (key := str(p.get("bank_item_id"))) in counts and (t := counts[key])
     ]
 
 
+def _reasons_pending(entry: Any) -> bool:
+    """No reasons yet, and the drain will still try: never written, or
+    its calls failed fewer times than the writer gives up after."""
+    if not isinstance(entry, dict):
+        return True
+    return entry.get("reasons") is None and int(entry.get("attempts") or 0) < REASON_MAX_ATTEMPTS
+
+
+async def _reasons_for(
+    entries: dict[str, Any], section_id: uuid.UUID, db: AsyncSession,
+) -> dict[str, list[InsightsReason]]:
+    """Stored reasons per flagged problem, each with the students behind
+    it. A stored submission resolves only while it's still a non-preview
+    submission in this section, so a reason never names anyone else."""
+    written = {
+        pid: [r for r in e["reasons"] if isinstance(r, dict)]
+        for pid, e in entries.items()
+        if isinstance(e, dict) and isinstance(e.get("reasons"), list)
+    }
+    sub_ids: set[uuid.UUID] = set()
+    for rs in written.values():
+        for r in rs:
+            for raw in r.get("submission_ids") or ():
+                try:
+                    sub_ids.add(uuid.UUID(str(raw)))
+                except ValueError:
+                    continue
+    students = {
+        str(row.submission_id): InsightsReasonStudent(id=row.id, name=row.name, submission_id=row.submission_id)
+        for row in (await db.execute(
+            select(Submission.id.label("submission_id"), User.id, User.name)
+            .join(User, User.id == Submission.student_id)
+            .where(
+                Submission.id.in_(sub_ids),
+                Submission.section_id == section_id,
+                User.is_preview.is_(False),
+            )
+        )).all()
+    } if sub_ids else {}
+
+    out: dict[str, list[InsightsReason]] = {}
+    for pid, rs in written.items():
+        reasons = []
+        for r in rs:
+            who = [students[s] for s in dict.fromkeys(str(x) for x in r.get("submission_ids") or ()) if s in students]
+            if who and isinstance(r.get("label"), str) and r["label"].strip():
+                reasons.append(InsightsReason(label=r["label"].strip(), count=len(who), students=who))
+        out[pid] = sorted(reasons, key=lambda r: -r.count)
+    return out
+
+
 async def _practice_for(
-    db: AsyncSession, hw: Assignment, section_id: uuid.UUID,
+    db: AsyncSession, hw: Assignment, section_id: uuid.UUID, roster_ids: set[uuid.UUID],
 ) -> InsightsPractice | None:
     """The newest practice set made from `hw` for this section ALONE —
     one set per homework per section, so adding problems later appends
@@ -454,6 +487,13 @@ async def _practice_for(
     # A failed (or lost) job's problem counts until something else covers
     # it — a retry that wrote versions, or one still writing.
     failed = {j.parent_question_id for j in jobs if j.parent_question_id not in live} - covered
+    practiced = set((await db.execute(
+        select(PracticeActivity.student_id).distinct().where(
+            PracticeActivity.practice_assignment_id == practice.id,
+            PracticeActivity.section_id == section_id,
+            PracticeActivity.mode == MODE_PRACTICE,
+        )
+    )).scalars()) & roster_ids
     return InsightsPractice(
         id=practice.id,
         title=practice.title,
@@ -463,4 +503,6 @@ async def _practice_for(
         writing=len(live),
         failed=len(failed),
         covered_item_ids=sorted(c for c in covered if c is not None),
+        practiced=len(practiced),
+        students=len(roster_ids),
     )

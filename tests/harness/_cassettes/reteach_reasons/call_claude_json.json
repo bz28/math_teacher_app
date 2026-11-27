@@ -1,0 +1,38 @@
+{
+  "2f8b888af7150a0749dc2c70e8650118": {
+    "meta": {
+      "mode": "reteach_reasons",
+      "model": "claude-haiku-4-5-20251001",
+      "note": "hand-written, never a live call",
+      "prompt": "You help a teacher plan a reteach. You get one homework problem and, for each st || Problem:\nSolve by elimination: 3x + 2y = 16, x - 2y = 0.\n\nStudents who didn't get full credit:\n[1] 60% | Note: You f",
+      "prompt_versions": [
+        "safety_preamble@v1",
+        "reteach_reasons@v1"
+      ],
+      "recorded_at": 1795752579.0031118
+    },
+    "response": {
+      "reasons": [
+        {
+          "label": "Found x, then stopped before finding y",
+          "students": [
+            1,
+            2
+          ]
+        },
+        {
+          "label": "Subtracted the equations, so y didn't cancel",
+          "students": [
+            3
+          ]
+        },
+        {
+          "label": "Arithmetic slip after eliminating",
+          "students": [
+            4
+          ]
+        }
+      ]
+    }
+  }
+}

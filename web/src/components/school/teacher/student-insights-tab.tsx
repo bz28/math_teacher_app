@@ -27,8 +27,8 @@ import { useUpgradePrompt } from "@/hooks/use-upgrade-prompt";
  *
  * Reads GET /teacher/.../sections/{sid}/insights: whole-class counts
  * from grades the teacher approved or published (an AI draft never
- * counts), one homework at a time. Problems more than half the period
- * got wrong (under 50% credit) lead, already in a practice basket; the
+ * counts), one homework at a time. Problems at least half the period
+ * didn't get full credit on lead, already in a practice basket; the
  * rest sit behind "Other problems" and can be added too. The tray at
  * the bottom turns the basket into one practice set per homework per
  * period, or adds to the set that already exists.
@@ -124,8 +124,9 @@ export function StudentInsightsTab({ courseId }: { courseId: string }) {
           Student Insights
         </h2>
         <p className="mt-1 text-sm text-text-muted">
-          Problems most of the class got wrong on each homework, ready to turn
-          into practice. Counts only grades you&rsquo;ve approved or published.
+          Problems most of the class didn&rsquo;t get full credit on, ready to
+          turn into practice. Counts only grades you&rsquo;ve approved or
+          published.
         </p>
       </header>
 
@@ -329,10 +330,10 @@ function Lead({
       {tooFew
         ? `Too few grades counted on ${homework.title} to flag problems yet. It takes ${minCounted}.`
         : flagged === 0
-          ? `No problem on ${homework.title} was missed by most of ${sectionName}.`
+          ? `Most of ${sectionName} got full credit on every problem in ${homework.title}.`
           : flagged === 1
-            ? `Most of ${sectionName} got 1 problem wrong on ${homework.title}.`
-            : `Most of ${sectionName} got ${flagged} problems wrong on ${homework.title}.`}
+            ? `Most of ${sectionName} lost points on 1 problem in ${homework.title}.`
+            : `Most of ${sectionName} lost points on ${flagged} problems in ${homework.title}.`}
     </p>
   );
 }
@@ -378,11 +379,11 @@ function ProblemRow({
         <MathText text={p.question} />
       </span>
       <span className="col-start-2 sm:col-start-auto">
-        <WrongBar wrong={p.wrong} counted={p.counted} />
+        <MissedBar missed={p.missed} counted={p.counted} />
         <span className="mt-1.5 block text-[12px] tabular-nums text-text-muted">
           {p.counted === 0
             ? "No grades counted"
-            : `${p.wrong} of ${p.counted} got it wrong`}
+            : `${p.missed} of ${p.counted} didn't get full credit`}
         </span>
       </span>
       <span className="col-start-2 sm:col-start-auto sm:justify-self-end">
@@ -409,8 +410,8 @@ function ProblemRow({
   );
 }
 
-/** How much of the class got it wrong — red share against the rest. */
-function WrongBar({ wrong, counted }: { wrong: number; counted: number }) {
+/** How much of the class lost points — red share against the rest. */
+function MissedBar({ missed, counted }: { missed: number; counted: number }) {
   if (counted === 0)
     return (
       <span className="block h-1.5 rounded-full bg-[color:var(--color-surface-alt-2)]" />
@@ -418,11 +419,11 @@ function WrongBar({ wrong, counted }: { wrong: number; counted: number }) {
   return (
     <span
       role="img"
-      aria-label={`${wrong} of ${counted} got it wrong`}
+      aria-label={`${missed} of ${counted} didn't get full credit`}
       className="flex h-1.5 overflow-hidden rounded-full bg-[color:var(--color-surface-alt-2)]"
     >
       <span
-        style={{ width: `${(wrong / counted) * 100}%` }}
+        style={{ width: `${(missed / counted) * 100}%` }}
         className="bg-[color:var(--color-error)]"
       />
     </span>

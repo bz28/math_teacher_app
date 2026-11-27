@@ -2,8 +2,8 @@
 
 Two layers:
   - pure unit tests of the counting rule (`counted_breakdown`), the
-    coverage buckets and the reteach rule (`_is_wrong` / `_is_flagged`)
-    — the load-bearing logic;
+    coverage buckets and the reteach rule (`missed_full_credit` /
+    `is_flagged`) — the load-bearing logic;
   - integration tests that seed a small world and check what the
     endpoint returns: section scoping, coverage buckets, per-problem
     whole-class counts and flags, the homework's practice set, and auth.
@@ -19,6 +19,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 
 from api.core.auth import create_access_token, hash_password
+from api.core.insights_counting import counted_breakdown, is_flagged, missed_full_credit
 from api.database import get_session_factory
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
 from api.models.course import Course, CourseTeacher
@@ -28,7 +29,7 @@ from api.models.section import Section
 from api.models.section_enrollment import SectionEnrollment
 from api.models.unit import Unit
 from api.models.user import User
-from api.routes.teacher_insights import _coverage_bucket, _is_flagged, _is_wrong, counted_breakdown
+from api.routes.teacher_insights import _coverage_bucket
 from tests.conftest import auth_headers as _auth
 
 NOW = datetime.now(UTC)
@@ -142,21 +143,23 @@ def test_a_running_job_is_grading_even_with_ai_switched_off() -> None:
 # ── reteach rule ───────────────────────────────────────────────────
 
 
-def test_wrong_means_under_half_credit() -> None:
-    assert _is_wrong(_e("zero", 0))
-    assert _is_wrong(_e("partial", 49.9))
-    assert not _is_wrong(_e("partial", 50))   # exactly half is not wrong
-    assert not _is_wrong(_e("full", 100))
+def test_missed_means_short_of_full_credit() -> None:
+    assert missed_full_credit(_e("zero", 0))
+    assert missed_full_credit(_e("partial", 90))
+    assert missed_full_credit(_e("partial", 99.5))
+    assert not missed_full_credit(_e("full", 100))
     # No percent: fall back on the status.
-    assert _is_wrong({"score_status": "zero"})
-    assert not _is_wrong({"score_status": "partial"})
+    assert missed_full_credit({"score_status": "partial"})
+    assert not missed_full_credit({"score_status": "full"})
 
 
-def test_flagged_needs_more_than_half_of_at_least_five() -> None:
-    assert _is_flagged(5, 3)
-    assert not _is_flagged(6, 3)    # exactly half is not "more than half"
-    assert not _is_flagged(4, 4)    # too few counted to mean anything
-    assert _is_flagged(20, 11)
+def test_flagged_needs_at_least_half_of_at_least_five() -> None:
+    assert is_flagged(5, 3)
+    assert is_flagged(6, 3)         # exactly half counts: "at least half"
+    assert not is_flagged(6, 2)
+    assert not is_flagged(4, 4)     # too few counted to mean anything
+    assert is_flagged(22, 11)
+    assert not is_flagged(22, 10)
 
 
 # ── Integration ────────────────────────────────────────────────────
@@ -284,14 +287,15 @@ async def test_problems_are_whole_class_counts_in_homework_order(client: AsyncCl
     ids2 = w["ids2"]
     assert [p["bank_item_id"] for p in body["problems"]] == ids2
     # Ana: full, zero, full. Ben's published snapshot (not his regrade):
-    # zero, zero, partial at exactly 50% — which is not wrong.
-    assert [(p["counted"], p["wrong"]) for p in body["problems"]] == [(2, 1), (2, 2), (2, 0)]
+    # zero, zero, partial — short of full credit, so missed.
+    assert [(p["counted"], p["missed"]) for p in body["problems"]] == [(2, 1), (2, 2), (2, 1)]
     # Two counted grades is too few to flag anything.
     assert not any(p["flagged"] for p in body["problems"])
     assert body["flag_min_counted"] == 5
     assert body["practice"] is None
     # No per-student data leaves the endpoint.
     assert "watch" not in body and "students" not in body["problems"][0]
+    assert all(p["reasons"] == [] and not p["reasons_pending"] for p in body["problems"])
 
 
 async def test_section_scoping(client: AsyncClient) -> None:
@@ -299,7 +303,7 @@ async def test_section_scoping(client: AsyncClient) -> None:
     body = (await client.get(_url(w, "p3"), headers=_auth(w["token"]))).json()
     hw2 = body["homeworks"][0]
     assert (hw2["students"], hw2["counted"]) == (1, 1)
-    assert all((p["counted"], p["wrong"]) == (1, 1) for p in body["problems"])
+    assert all((p["counted"], p["missed"]) == (1, 1) for p in body["problems"])
 
 
 async def _enroll_and_grade(w: dict[str, Any], n: int, statuses: list[str]) -> None:
@@ -326,13 +330,31 @@ async def _enroll_and_grade(w: dict[str, Any], n: int, statuses: list[str]) -> N
 
 async def test_a_problem_most_of_the_class_got_wrong_is_flagged(client: AsyncClient) -> None:
     w = await _world()
-    # Three more students: Q1 full, Q2 partial at 25% (wrong), Q3 full.
+    # Three more students: Q1 full, Q2 partial, Q3 full.
     await _enroll_and_grade(w, 3, ["full", "partial", "full"])
     problems = (await client.get(_url(w), headers=_auth(w["token"]))).json()["problems"]
-    # Q2: 5 of 5 wrong → flagged. Q1: 1 of 5. Q3: 0 of 5.
-    assert [(p["counted"], p["wrong"], p["flagged"]) for p in problems] == [
-        (5, 1, False), (5, 5, True), (5, 0, False),
+    # Q2: 5 of 5 short of full credit → flagged. Q1: 1 of 5. Q3: Ben's 1 of 5.
+    assert [(p["counted"], p["missed"], p["flagged"]) for p in problems] == [
+        (5, 1, False), (5, 5, True), (5, 1, False),
     ]
+    # Flagged with nothing written yet: the drain hasn't been round.
+    assert [p["reasons_pending"] for p in problems] == [False, True, False]
+
+
+async def test_partial_credit_from_half_the_class_flags_a_problem(client: AsyncClient) -> None:
+    """The decided rule: at least half didn't get full credit. Real
+    struggle is partial credit, which the old under-half rule missed."""
+    w = await _world()
+    await _enroll_and_grade(w, 4, ["full", "full", "full"])
+    problems = (await client.get(_url(w), headers=_auth(w["token"]))).json()["problems"]
+    # Q3: Ben's 50% of 6 counted → not flagged. Q2: Ana + Ben (2 of 6) → not.
+    assert [(p["counted"], p["missed"], p["flagged"]) for p in problems] == [
+        (6, 1, False), (6, 2, False), (6, 1, False),
+    ]
+    await _enroll_and_grade(w, 2, ["full", "partial", "full"])
+    problems = (await client.get(_url(w), headers=_auth(w["token"]))).json()["problems"]
+    # Q2: 4 of 8 — exactly half → flagged.
+    assert [(p["missed"], p["flagged"]) for p in problems] == [(1, False), (4, True), (1, False)]
 
 
 async def test_the_homeworks_practice_set_for_this_section(client: AsyncClient) -> None:

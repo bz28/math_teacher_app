@@ -330,6 +330,13 @@ def _mock_integrity_ai() -> Any:
             new_callable=AsyncMock,
             return_value={"feedback": "(mock note)"},
         ),
+        # Insights' reasons under a flagged problem, written by the
+        # grading drain (reteach_reasons).
+        patch(
+            "api.core.reteach_reasons.call_claude_json",
+            new_callable=AsyncMock,
+            return_value={"reasons": []},
+        ),
     ):
         yield
 

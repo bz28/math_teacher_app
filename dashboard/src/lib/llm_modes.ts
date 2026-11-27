@@ -35,6 +35,7 @@ export const LLM_MODES = {
   GRAPH_CHECKLIST: "graph_checklist",
   DRAWING_CHECK: "drawing_check",
   GRAPH_FEEDBACK: "graph_feedback",
+  RETEACH_REASONS: "reteach_reasons",
 } as const;
 
 export type LLMMode = (typeof LLM_MODES)[keyof typeof LLM_MODES];

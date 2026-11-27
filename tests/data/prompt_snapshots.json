@@ -38,6 +38,7 @@
   "raw:question_bank_generation._EXTRACT_WORKSHEET_TEMPLATE": "b77b664fc0145a3d6b3f2e9ed4b8e52b585f71eae82909ea3e8cad748765ad99",
   "raw:question_bank_generation._REGENERATE_SYSTEM_TEMPLATE": "af14820a77d03a19f1956a1d67a81ff55af107e28edb1348c62e6415cb5528d4",
   "raw:question_bank_generation._REPLACEMENT_RULE": "9d27665151e8b3d8a319180abd7f2b8693dd3c230783690210f60f0473384ca6",
+  "raw:reteach_reasons._SYSTEM": "5e4bf22c89f2d0417a3bae2cb6233e4bf4acbb99ff7f8aa57a37bd432f9ed3b9",
   "raw:step_decomposition._CONSTRUCTION_STEP_FIGURES": "ca0f6fd01df61012c0ebb2224d8b60d69095515a06b04a28136412a9c2a1ab6b",
   "raw:step_decomposition._SHAPE_STEP_FIGURES": "06f42cbce2a5586f5af982b5bda25137a49bbf006e0bba4540746209a07bb272",
   "raw:step_decomposition._SYSTEM_PROMPT_TEMPLATE": "a93a7d6766b0185efb43cb01e574d028acb895de7683b09a5e9d41e3e951fd52",
