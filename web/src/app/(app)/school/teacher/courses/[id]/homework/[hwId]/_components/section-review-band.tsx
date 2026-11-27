@@ -70,7 +70,7 @@ export function SectionReviewBand({
               </div>
               <Link
                 href={`/school/teacher/courses/${courseId}/homework/${assignmentId}/sections/${r.section_id}/review`}
-                aria-label={`Review ${r.section_name}`}
+                aria-label={`${allOut ? "Open" : "Review"} ${r.section_name}`}
                 className={`inline-flex shrink-0 items-center gap-1.5 rounded-[--radius-sm] px-3.5 py-1.5 text-[13px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
                   lead
                     ? "bg-primary text-white hover:bg-primary-dark"

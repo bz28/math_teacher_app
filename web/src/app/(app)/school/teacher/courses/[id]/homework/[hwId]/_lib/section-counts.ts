@@ -1,7 +1,9 @@
 import type { SubmissionsInboxRow } from "@/lib/api";
 
-/** What's waiting on the teacher in one section, as the review page
- *  and the home queue count it:
+/** What's waiting on the teacher in one section, as the home queue
+ *  counts it and as the review page does for real students (the review
+ *  page's Publish count also includes the teacher's own preview
+ *  submission, which the inbox leaves out):
  *  toApprove — grades not yet out that still want Approve ✓
  *  toPublish — grades not yet out, already approved: only Publish left
  *              (with toApprove, the section's share of "Publish N grades")
