@@ -2432,7 +2432,7 @@ async def grade_pending_submissions(
         stmt = stmt.where(Submission.section_id == section_id)
     rows = (await db.execute(stmt)).all()
 
-    queued = 0
+    queued_ids: list[str] = []
     for sub, grade in rows:
         if ai_grade_block(sub, grade, assignment) is not None:
             continue
@@ -2441,7 +2441,19 @@ async def grade_pending_submissions(
             requested_by_id=current_user.user_id, run_now=True,
             revive_done=True,
         ):
-            queued += 1
+            queued_ids.append(str(sub.id))
+    queued = len(queued_ids)
+    if queued:
+        # Names each submission it queued, so a submission's case file
+        # can say "X pressed Grade all" rather than guess from timing.
+        await record_activity(
+            db, current_user, "grade.ai_batch", "assignment", assignment.id,
+            {
+                "queued": queued,
+                "section_id": str(section_id) if section_id else None,
+                "submission_ids": queued_ids,
+            },
+        )
     await db.commit()
     if queued:
         _spawn_drain(drain)
@@ -2515,6 +2527,11 @@ async def grade_submission_now(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Couldn't queue this submission for AI grading",
             )
+    else:
+        await record_activity(
+            db, current_user, "grade.ai_single", "submission", sub.id,
+            {"assignment_id": str(sub.assignment_id)},
+        )
     await db.commit()
     if queued:
         _spawn_drain(drain)

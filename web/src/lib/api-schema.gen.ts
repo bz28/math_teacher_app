@@ -4475,6 +4475,28 @@ export interface components {
             /** Teacher Notes */
             teacher_notes: string | null;
         };
+        /**
+         * CaseGradingJob
+         * @description The submission's grading job as it stands — the queue keeps one
+         *     row per submission and resets it on a regrade, so this is the most
+         *     recent run only.
+         */
+        CaseGradingJob: {
+            /** Attempts */
+            attempts: number;
+            /** Finished At */
+            finished_at: string | null;
+            /** Last Error */
+            last_error: string | null;
+            /** Requested By Name */
+            requested_by_name: string | null;
+            /** Scheduled For */
+            scheduled_for: string | null;
+            /** Started At */
+            started_at: string | null;
+            /** Status */
+            status: string;
+        };
         /** CaseIntegrity */
         CaseIntegrity: {
             activity_summary: components["schemas"]["IntegrityActivitySummary"] | null;
@@ -4593,6 +4615,27 @@ export interface components {
             latex: string;
             /** Plain */
             plain: string;
+        };
+        /**
+         * CaseTimelineEvent
+         * @description One thing that happened to this grade. `action` is an activity
+         *     action (`grade.save`, ...) or a derived `grading.*` event;
+         *     `metadata` is the activity row's, as written.
+         */
+        CaseTimelineEvent: {
+            /** Action */
+            action: string;
+            /** Actor Name */
+            actor_name: string | null;
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /** Metadata */
+            metadata: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * CaseTurn
@@ -6376,6 +6419,7 @@ export interface components {
             /** Extraction Confidence */
             extraction_confidence: number | null;
             grade: components["schemas"]["CaseGradeSummary"] | null;
+            grading_job: components["schemas"]["CaseGradingJob"] | null;
             integrity: components["schemas"]["CaseIntegrity"] | null;
             /** Problems */
             problems: components["schemas"]["CaseProblem"][];
@@ -6385,6 +6429,8 @@ export interface components {
             student_name: string | null;
             /** Submission Id */
             submission_id: string;
+            /** Timeline */
+            timeline: components["schemas"]["CaseTimelineEvent"][];
             /** Unplaced Reading */
             unplaced_reading: components["schemas"]["CaseReadingLine"][];
         };

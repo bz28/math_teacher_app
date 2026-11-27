@@ -176,6 +176,18 @@ export const ACTIVITY_ACTIONS: Record<ActivityFamily, ActivityAction[]> = {
       detail: () => "Reopened for review",
     },
     {
+      // "Grade all": AI-grade every never-graded submission now.
+      action: "grade.ai_batch",
+      label: "Grade all (AI)",
+      detail: (m) => `Sent ${plural(num(m, "queued"), "submission")} to AI grading`,
+    },
+    {
+      // "Grade with AI" on one student's submission.
+      action: "grade.ai_single",
+      label: "Grade with AI",
+      detail: () => "Sent one submission to AI grading",
+    },
+    {
       action: "grade.publish",
       label: "Published grades",
       detail: (m) =>
