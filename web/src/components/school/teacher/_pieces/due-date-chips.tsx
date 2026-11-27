@@ -7,6 +7,7 @@ import {
   DEFAULT_DUE_TIME,
   dueChoices,
   joinDue,
+  localDate,
   shortDayLabel,
   splitDue,
 } from "./due-choices";
@@ -87,7 +88,7 @@ export function DueDateChips({
             aria-label="Due date"
             tabIndex={-1}
             value={picked?.date ?? ""}
-            min={choices[0]?.date}
+            min={localDate(now)}
             onChange={(e) => {
               if (e.target.value) onChange(joinDue(e.target.value, time));
             }}

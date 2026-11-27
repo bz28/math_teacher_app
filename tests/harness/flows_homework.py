@@ -41,7 +41,10 @@ async def create_homework_flow(
         await dialog.get_by_role("textbox").first.fill("Harness wizard homework")
         try:
             await dialog.get_by_role("button", name=re.compile(r"^Tomorrow")).click(timeout=_TIMEOUT_MS)
-            await dialog.get_by_text(re.compile(r"11:59\s*PM")).first.wait_for(timeout=_TIMEOUT_MS)
+            # The hint under the chips, which shows only once a date is
+            # picked (the "Due · 11:59 PM" heading is always there).
+            await dialog.get_by_text(re.compile(r"11:59\s*PM · AI grading starts then")).wait_for(
+                timeout=_TIMEOUT_MS)
         except PlaywrightTimeoutError:
             issues.append("the Tomorrow due chip did not set a due date at 11:59 PM")
             return FlowResult(name, title, False, issues)
@@ -51,6 +54,26 @@ async def create_homework_flow(
         except PlaywrightTimeoutError:
             issues.append("Continue did not reach the Problems step with its Grading line")
             return FlowResult(name, title, False, issues)
+        # Invalid points open the grading panel; it must stay open while the
+        # teacher types a valid number, even after a Back/Continue remount.
+        points = dialog.locator("#hw-total-points")
+        try:
+            await dialog.get_by_role("button", name="Edit").click(timeout=_TIMEOUT_MS)
+            await points.fill("")
+            await dialog.get_by_role("button", name="← Back").click(timeout=_TIMEOUT_MS)
+            # Step 1 fully back, so Continue remounts the Problems step.
+            await dialog.get_by_text("The only unit in this course, picked for you.").wait_for(
+                timeout=_TIMEOUT_MS)
+            await points.wait_for(state="detached", timeout=_TIMEOUT_MS)
+            await dialog.get_by_role("button", name="Continue →").click(timeout=_TIMEOUT_MS)
+            # At a person's pace: the bug closed the panel between the keys.
+            await points.press_sequentially("50", delay=200)
+            await points.wait_for(timeout=2000)
+        except PlaywrightTimeoutError:
+            issues.append("the points field closed while the teacher was typing a valid number")
+            return FlowResult(name, title, False, issues)
+        if await points.input_value() != "50":
+            issues.append("typing 50 into the points field did not leave 50 in it")
         try:
             await dialog.get_by_role("button", name="Save as draft").click(timeout=_TIMEOUT_MS)
             await page.wait_for_url(re.compile(r"/homework/[0-9a-f-]{36}"), timeout=_TIMEOUT_MS)

@@ -42,9 +42,12 @@ export function WizardGradingLine({
   onRubricChange: (patch: Partial<TeacherRubric>) => void;
   disabled: boolean;
 }) {
-  const [editing, setEditing] = useState(false);
+  // Opens itself when the points are invalid and stays open until the
+  // teacher presses Done: closing on the first valid keystroke would pull
+  // the input out from under her mid-number ("5" of "50").
+  const [open, setOpen] = useState(() => !pointsValid);
+  if (!pointsValid && !open) setOpen(true);
   const panelId = useId();
-  const open = editing || !pointsValid;
   const rules = hasRubricText(rubric) ? "Class rules + yours" : "Class rules";
   const late = LATE_SHORT[latePolicy] ?? latePolicy;
   const points = pointsValid ? `${Number(totalPointsText.trim())} pts` : "points?";
@@ -56,10 +59,10 @@ export function WizardGradingLine({
         <span className="min-w-0 flex-1 truncate text-text-secondary">
           {rules} · {points} · Late: {late}
         </span>
-        {!(open && !pointsValid) && (
+        {pointsValid && (
           <button
             type="button"
-            onClick={() => setEditing((v) => !v)}
+            onClick={() => setOpen((v) => !v)}
             aria-expanded={open}
             aria-controls={panelId}
             disabled={disabled}
