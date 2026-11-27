@@ -98,7 +98,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Blocked Submissions */
+        /**
+         * Blocked Submissions
+         * @description Students the platform refused a homework upload from, in the last
+         *     `days`; scoped to one school or one student when given.
+         */
         get: operations["blocked_submissions_v1_admin_blocked_submissions_get"];
         put?: never;
         post?: never;
@@ -4350,6 +4354,11 @@ export interface components {
          * @description One student × one homework they could not turn in. Grouped so
          *     eleven log lines read as "one person, eleven attempts, thirteen
          *     hours" — the sentence an operator acts on.
+         *
+         *     Every rejection names its student (submission_rejections records
+         *     only a signed-in one); `student_id` is null only when the account
+         *     has since been deleted — the log's actor is SET NULL with it — and
+         *     then a homework's rows from deleted accounts are one row.
          */
         BlockedStudentRow: {
             /** Assignment Id */
@@ -4381,7 +4390,7 @@ export interface components {
             /** Student Email */
             student_email: string | null;
             /** Student Id */
-            student_id: string;
+            student_id: string | null;
             /** Student Name */
             student_name: string;
             /** Submitted Since */
@@ -4400,8 +4409,6 @@ export interface components {
             since: string;
             /** Students */
             students: components["schemas"]["BlockedStudentRow"][];
-            /** Unattributed */
-            unattributed: components["schemas"]["UnattributedBlockRow"][];
         };
         /** BreakdownEntry */
         BreakdownEntry: {
@@ -4520,6 +4527,7 @@ export interface components {
          *       probed         — discussed in chat; a verdict with rubric landed
          *       probed_pending — discussed in chat; the check is still running
          *       inconclusive   — chat hit the turn cap before a verdict
+         *       unfinished     — the student left the check before a verdict
          *       diagnosed      — wrong on paper, never chatted; silent note
          *       blank          — wrong on paper because nothing was written
          *       unreadable     — the read was too poor to judge
@@ -6969,38 +6977,6 @@ export interface components {
             /** Total Ms */
             total_ms: number;
         };
-        /**
-         * UnattributedBlockRow
-         * @description Rejections the size cap refused before authentication where the
-         *     bearer token could not name the student. Counted per homework so
-         *     the incident is still visible; the person is not.
-         */
-        UnattributedBlockRow: {
-            /** Assignment Id */
-            assignment_id: string | null;
-            /** Assignment Title */
-            assignment_title: string | null;
-            /** Attempts */
-            attempts: number;
-            /** Course Name */
-            course_name: string | null;
-            /**
-             * First At
-             * Format: date-time
-             */
-            first_at: string;
-            /** Largest Request Bytes */
-            largest_request_bytes: number | null;
-            /**
-             * Last At
-             * Format: date-time
-             */
-            last_at: string;
-            /** School Id */
-            school_id: string | null;
-            /** Top Reason */
-            top_reason: string;
-        };
         /** UpdateAssignmentRequest */
         UpdateAssignmentRequest: {
             /** Answer Key */
@@ -7527,6 +7503,7 @@ export interface operations {
             query?: {
                 days?: number;
                 school_id?: string | null;
+                student_id?: string | null;
             };
             header?: never;
             path?: never;

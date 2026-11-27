@@ -76,14 +76,10 @@ async def test_blocked_submissions_groups_by_student_and_homework(
         actor_user_id=world["student_id"], assignment_id=hw,
         reason="file_invalid", request_bytes=40_000, decoded_bytes=0,
     )
-    # A second student, one attempt; an unattributed pre-auth refusal.
+    # A second student, one attempt.
     await record_submission_rejection(
         actor_user_id=world["outsider_id"], assignment_id=hw,
         reason="upload_too_large", request_bytes=26_100_000,
-    )
-    await record_submission_rejection(
-        actor_user_id=None, assignment_id=hw,
-        reason="upload_too_large", request_bytes=12_000_000,
     )
 
     r = await client.get("/v1/admin/blocked-submissions", headers=auth_headers(admin_token))
@@ -105,9 +101,42 @@ async def test_blocked_submissions_groups_by_student_and_homework(
     assert top["submitted_since"] is False
     assert top["first_at"] <= top["last_at"]
 
-    assert len(body["unattributed"]) == 1
-    assert body["unattributed"][0]["attempts"] == 1
-    assert body["unattributed"][0]["assignment_title"] == "HW 1"
+    # Scoped to one student, as their page asks.
+    r = await client.get(
+        "/v1/admin/blocked-submissions", params={"student_id": str(world["outsider_id"])},
+        headers=auth_headers(admin_token),
+    )
+    assert [s["student_id"] for s in r.json()["students"]] == [str(world["outsider_id"])]
+
+
+async def test_a_deleted_students_rejections_stay_on_the_board(
+    client: AsyncClient, world: dict[str, Any], admin_token: str,
+) -> None:
+    """Deleting the account nulls the log's actor (SET NULL); the
+    incident stays, as one "Deleted student" row per homework."""
+    async with get_session_factory()() as s:
+        gone = User(
+            email=f"gone_{uuid.uuid4().hex[:6]}@t.com", password_hash="x",
+            grade_level=8, role="student", name="Gone",
+        )
+        s.add(gone)
+        await s.commit()
+        gone_id = gone.id
+    for reason in ("page_too_small", "file_invalid"):
+        await record_submission_rejection(
+            actor_user_id=gone_id, assignment_id=world["assignment_id"],
+            reason=reason, request_bytes=40_000,
+        )
+    async with get_session_factory()() as s:
+        await s.delete(await s.get(User, gone_id))
+        await s.commit()
+
+    r = await client.get("/v1/admin/blocked-submissions", headers=auth_headers(admin_token))
+    [row] = r.json()["students"]
+    assert row["student_id"] is None
+    assert row["student_name"] == "Deleted student"
+    assert row["attempts"] == 2
+    assert row["submitted_since"] is False
 
 
 async def test_blocked_submissions_marks_a_student_who_got_through(
@@ -145,7 +174,6 @@ async def test_blocked_submissions_excludes_preview_students_and_old_rows(
     )
     r = await client.get("/v1/admin/blocked-submissions", headers=auth_headers(admin_token))
     assert r.json()["students"] == []
-    assert r.json()["unattributed"] == []
 
     # The window is honoured: nothing landed inside the last day.
     await record_submission_rejection(
@@ -397,6 +425,9 @@ async def test_case_reads_the_problem_as_the_grader_got_it(
         assert sub is not None
         sub.extraction = {
             "steps": [
+                # An empty read line: dropped, as the grader drops it, so
+                # the steps below keep the grader's numbering.
+                {"step_num": 9, "problem_position": 1, "latex": "", "plain_english": ""},
                 {"step_num": 1, "problem_position": 1, "latex": "(x-2)(x-3)=0", "plain_english": ""},
                 {"step_num": 2, "problem_position": 1, "latex": "x=2", "plain_english": ""},
                 {"step_num": 3, "problem_position": 7, "latex": "y", "plain_english": ""},
@@ -448,3 +479,84 @@ async def test_case_reads_the_problem_as_the_grader_got_it(
         g.breakdown = [{"problem_id": bid, "score_status": "partial", "percent": 50.0, "feedback": ""}]
         await s.commit()
     assert (await problem())["final"]["differs_from_ai"] is True
+
+
+async def test_a_problem_whose_read_the_student_cleared_is_marked_edited(
+    client: AsyncClient, world: dict[str, Any], admin_token: str,
+) -> None:
+    from api.models.assignment import Submission
+
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=auth_headers(world["student_token"]),
+        json={"files": [PAGE_PNG]},
+    )
+    submission_id = uuid.UUID(r.json()["submission_id"])
+    await drain_integrity_background_tasks()
+    async with get_session_factory()() as s:
+        sub = await s.get(Submission, submission_id)
+        assert sub is not None
+        sub.extraction = {
+            "steps": [{"step_num": 1, "problem_position": 1, "latex": "x=7", "plain_english": ""}],
+            "final_answers": [],
+            "confidence": 0.9,
+        }
+        sub.extraction_edits = {"1:1": ""}
+        await s.commit()
+    r = await client.get(
+        f"/v1/admin/submissions/{submission_id}/case", headers=auth_headers(admin_token),
+    )
+    assert r.json()["problems"][0]["reading"] == {
+        "steps": [], "final_answer": None, "student_edited": True,
+    }
+
+
+async def test_an_abandoned_checks_problems_read_unfinished_not_inconclusive(
+    client: AsyncClient, world: dict[str, Any], admin_token: str,
+) -> None:
+    """The finalizer closes an unverdicted problem as `cap_reached`
+    whether the turn cap hit or the student walked away; the case file
+    says which, from the check's incomplete_reason."""
+    set_agent_script([[make_text("Walk me through problem 1.")]])
+    submission_id = await _submit_and_confirm(client, world)
+
+    async def kind_after(reason: str) -> str:
+        async with get_session_factory()() as s:
+            check = (await s.execute(
+                select(IntegrityCheckSubmission)
+                .where(IntegrityCheckSubmission.submission_id == uuid.UUID(submission_id))
+            )).scalar_one()
+            check.status = "complete"
+            check.incomplete_reason = reason
+            problem = (await s.execute(
+                select(IntegrityCheckProblem)
+                .where(IntegrityCheckProblem.integrity_check_submission_id == check.id)
+            )).scalar_one()
+            problem.status = "cap_reached"
+            await s.commit()
+        r = await client.get(
+            f"/v1/admin/submissions/{submission_id}/case", headers=auth_headers(admin_token),
+        )
+        kind: str = r.json()["problems"][0]["integrity"]["kind"]
+        return kind
+
+    assert await kind_after("left_partway") == "unfinished"
+    assert await kind_after("not_started") == "unfinished"
+    assert await kind_after("turn_cap") == "inconclusive"
+
+
+def test_a_teachers_call_on_an_unclear_graph_item_is_not_an_override() -> None:
+    """The teacher review page's rule: her ✗ on an item the drawing check
+    left unclear takes its points off the AI's call before comparing."""
+    from api.routes.admin_submissions import _overrode_ai
+
+    graph = {"points": 4, "items": [
+        {"n": 1, "points": 2, "verdict": "unclear", "teacher": "no"},
+        {"n": 2, "points": 2, "verdict": "yes", "teacher": None},
+    ]}
+    # AI full; her ✗ took the unclear item's half off.
+    assert _overrode_ai({"score_status": "partial", "percent": 50.0}, 100.0, graph) is False
+    # Without the graph call, 50 against 100 is an override.
+    assert _overrode_ai({"score_status": "partial", "percent": 50.0}, 100.0, None) is True
+    # A hand re-score past the graph call still is.
+    assert _overrode_ai({"score_status": "partial", "percent": 30.0}, 100.0, graph) is True

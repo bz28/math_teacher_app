@@ -107,7 +107,7 @@
         "type": "object"
       },
       "BlockedStudentRow": {
-        "description": "One student \u00d7 one homework they could not turn in. Grouped so\neleven log lines read as \"one person, eleven attempts, thirteen\nhours\" \u2014 the sentence an operator acts on.",
+        "description": "One student \u00d7 one homework they could not turn in. Grouped so\neleven log lines read as \"one person, eleven attempts, thirteen\nhours\" \u2014 the sentence an operator acts on.\n\nEvery rejection names its student (submission_rejections records\nonly a signed-in one); `student_id` is null only when the account\nhas since been deleted \u2014 the log's actor is SET NULL with it \u2014 and\nthen a homework's rows from deleted accounts are one row.",
         "properties": {
           "assignment_id": {
             "anyOf": [
@@ -197,8 +197,15 @@
             "title": "Student Email"
           },
           "student_id": {
-            "title": "Student Id",
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Student Id"
           },
           "student_name": {
             "title": "Student Name",
@@ -249,20 +256,12 @@
             },
             "title": "Students",
             "type": "array"
-          },
-          "unattributed": {
-            "items": {
-              "$ref": "#/components/schemas/UnattributedBlockRow"
-            },
-            "title": "Unattributed",
-            "type": "array"
           }
         },
         "required": [
           "days",
           "since",
-          "students",
-          "unattributed"
+          "students"
         ],
         "title": "BlockedSubmissionsResponse",
         "type": "object"
@@ -686,7 +685,7 @@
         "type": "object"
       },
       "CaseIntegrityProblem": {
-        "description": "What the understanding check made of one problem.\n\n`kind` is the one word the case file leads with:\n  probed         \u2014 discussed in chat; a verdict with rubric landed\n  probed_pending \u2014 discussed in chat; the check is still running\n  inconclusive   \u2014 chat hit the turn cap before a verdict\n  diagnosed      \u2014 wrong on paper, never chatted; silent note\n  blank          \u2014 wrong on paper because nothing was written\n  unreadable     \u2014 the read was too poor to judge\n  diagnosis_failed \u2014 the silent-diagnosis call errored\nA problem the check never touched has no entry at all.",
+        "description": "What the understanding check made of one problem.\n\n`kind` is the one word the case file leads with:\n  probed         \u2014 discussed in chat; a verdict with rubric landed\n  probed_pending \u2014 discussed in chat; the check is still running\n  inconclusive   \u2014 chat hit the turn cap before a verdict\n  unfinished     \u2014 the student left the check before a verdict\n  diagnosed      \u2014 wrong on paper, never chatted; silent note\n  blank          \u2014 wrong on paper because nothing was written\n  unreadable     \u2014 the read was too poor to judge\n  diagnosis_failed \u2014 the silent-diagnosis call errored\nA problem the check never touched has no entry at all.",
         "properties": {
           "diagnosis_kind": {
             "anyOf": [
@@ -7088,97 +7087,6 @@
         "title": "TypingCadence",
         "type": "object"
       },
-      "UnattributedBlockRow": {
-        "description": "Rejections the size cap refused before authentication where the\nbearer token could not name the student. Counted per homework so\nthe incident is still visible; the person is not.",
-        "properties": {
-          "assignment_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Assignment Id"
-          },
-          "assignment_title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Assignment Title"
-          },
-          "attempts": {
-            "title": "Attempts",
-            "type": "integer"
-          },
-          "course_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Course Name"
-          },
-          "first_at": {
-            "format": "date-time",
-            "title": "First At",
-            "type": "string"
-          },
-          "largest_request_bytes": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Largest Request Bytes"
-          },
-          "last_at": {
-            "format": "date-time",
-            "title": "Last At",
-            "type": "string"
-          },
-          "school_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "School Id"
-          },
-          "top_reason": {
-            "title": "Top Reason",
-            "type": "string"
-          }
-        },
-        "required": [
-          "assignment_id",
-          "assignment_title",
-          "course_name",
-          "school_id",
-          "attempts",
-          "first_at",
-          "last_at",
-          "largest_request_bytes",
-          "top_reason"
-        ],
-        "title": "UnattributedBlockRow",
-        "type": "object"
-      },
       "UpdateAssignmentRequest": {
         "properties": {
           "answer_key": {
@@ -8861,6 +8769,7 @@
     },
     "/v1/admin/blocked-submissions": {
       "get": {
+        "description": "Students the platform refused a homework upload from, in the last\n`days`; scoped to one school or one student when given.",
         "operationId": "blocked_submissions_v1_admin_blocked_submissions_get",
         "parameters": [
           {
@@ -8890,6 +8799,23 @@
                 }
               ],
               "title": "School Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "student_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Student Id"
             }
           }
         ],

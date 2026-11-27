@@ -45,6 +45,7 @@ from api.core.integrity_pipeline import (
     PROBLEM_STATUS_SKIPPED_UNREADABLE,
     PROBLEM_STATUS_VERDICT_SUBMITTED,
     ROLE_TOOL_CALL,
+    UNFINISHED_REASONS,
     agent_posture_for_check,
     tier_from_reason,
 )
@@ -72,8 +73,13 @@ router = APIRouter()
 class BlockedStudentRow(BaseModel):
     """One student × one homework they could not turn in. Grouped so
     eleven log lines read as "one person, eleven attempts, thirteen
-    hours" — the sentence an operator acts on."""
-    student_id: str
+    hours" — the sentence an operator acts on.
+
+    Every rejection names its student (submission_rejections records
+    only a signed-in one); `student_id` is null only when the account
+    has since been deleted — the log's actor is SET NULL with it — and
+    then a homework's rows from deleted accounts are one row."""
+    student_id: str | None
     student_name: str
     student_email: str | None
     assignment_id: str | None
@@ -96,26 +102,10 @@ class BlockedStudentRow(BaseModel):
     submitted_since: bool
 
 
-class UnattributedBlockRow(BaseModel):
-    """Rejections the size cap refused before authentication where the
-    bearer token could not name the student. Counted per homework so
-    the incident is still visible; the person is not."""
-    assignment_id: str | None
-    assignment_title: str | None
-    course_name: str | None
-    school_id: str | None
-    attempts: int
-    first_at: datetime
-    last_at: datetime
-    largest_request_bytes: int | None
-    top_reason: str
-
-
 class BlockedSubmissionsResponse(BaseModel):
     days: int
     since: datetime
     students: list[BlockedStudentRow]
-    unattributed: list[UnattributedBlockRow]
 
 
 def _meta_int(meta: dict[str, Any], key: str) -> int | None:
@@ -127,9 +117,12 @@ def _meta_int(meta: dict[str, Any], key: str) -> int | None:
 async def blocked_submissions(
     days: int = Query(default=7, ge=1, le=90),
     school_id: uuid.UUID | None = Query(default=None),
+    student_id: uuid.UUID | None = Query(default=None),
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> BlockedSubmissionsResponse:
+    """Students the platform refused a homework upload from, in the last
+    `days`; scoped to one school or one student when given."""
     window = last_days(days)
     filters = [
         ActivityLog.action == "submission.rejected",
@@ -137,27 +130,25 @@ async def blocked_submissions(
     ]
     if school_id is not None:
         filters.append(ActivityLog.school_id == school_id)
+    if student_id is not None:
+        filters.append(ActivityLog.actor_user_id == student_id)
     rows = list((await db.execute(
         select(ActivityLog).where(*filters).order_by(ActivityLog.performed_at.asc())
     )).scalars().all())
 
     # Group in Python: a window holds tens of rows, not thousands, and
     # the per-group "submitted since?" check is one query per group.
-    attributed: dict[tuple[uuid.UUID, uuid.UUID | None], list[ActivityLog]] = {}
-    unattributed: dict[uuid.UUID | None, list[ActivityLog]] = {}
+    groups: dict[tuple[uuid.UUID | None, uuid.UUID | None], list[ActivityLog]] = {}
     for r in rows:
         meta = r.action_metadata or {}
         # A teacher rehearsing as a preview student is not a child who
         # couldn't turn in homework.
         if meta.get("is_preview"):
             continue
-        if r.actor_user_id is None:
-            unattributed.setdefault(r.target_id, []).append(r)
-        else:
-            attributed.setdefault((r.actor_user_id, r.target_id), []).append(r)
+        groups.setdefault((r.actor_user_id, r.target_id), []).append(r)
 
-    student_ids = {sid for sid, _ in attributed}
-    assignment_ids = {aid for _, aid in attributed if aid} | {aid for aid in unattributed if aid}
+    student_ids = {sid for sid, _ in groups if sid}
+    assignment_ids = {aid for _, aid in groups if aid}
 
     users_by_id: dict[uuid.UUID, User] = {}
     if student_ids:
@@ -207,11 +198,11 @@ async def blocked_submissions(
         }
 
     students: list[BlockedStudentRow] = []
-    for (sid, aid), group in attributed.items():
-        u = users_by_id.get(sid)
+    for (sid, aid), group in groups.items():
+        u = users_by_id.get(sid) if sid else None
         summary = _summarize(group)
         submitted_since = False
-        if aid is not None:
+        if sid is not None and aid is not None:
             submitted_since = (await db.execute(
                 select(Submission.id).where(
                     Submission.student_id == sid,
@@ -220,9 +211,7 @@ async def blocked_submissions(
                 ).limit(1)
             )).scalar_one_or_none() is not None
         students.append(BlockedStudentRow(
-            student_id=str(sid),
-            # The account may have been deleted since; the row survives
-            # (actor FK is SET NULL only on the log, the id stays here).
+            student_id=str(sid) if sid else None,
             student_name=(u.name or u.email) if u else "Deleted student",
             student_email=u.email if u else None,
             submitted_since=submitted_since,
@@ -233,16 +222,8 @@ async def blocked_submissions(
     # Ties break on recency so the live problem outranks the stale one.
     students.sort(key=lambda s: (-s.attempts, -s.last_at.timestamp()))
 
-    unattributed_rows = [
-        UnattributedBlockRow(**_hw(aid), **{
-            k: v for k, v in _summarize(group).items() if k != "reasons"
-        })
-        for aid, group in unattributed.items()
-    ]
-    unattributed_rows.sort(key=lambda s: -s.attempts)
-
     return BlockedSubmissionsResponse(
-        days=days, since=window.start, students=students, unattributed=unattributed_rows,
+        days=days, since=window.start, students=students,
     )
 
 
@@ -276,6 +257,7 @@ class CaseIntegrityProblem(BaseModel):
       probed         — discussed in chat; a verdict with rubric landed
       probed_pending — discussed in chat; the check is still running
       inconclusive   — chat hit the turn cap before a verdict
+      unfinished     — the student left the check before a verdict
       diagnosed      — wrong on paper, never chatted; silent note
       blank          — wrong on paper because nothing was written
       unreadable     — the read was too poor to judge
@@ -394,13 +376,16 @@ class SubmissionCase(BaseModel):
     integrity: CaseIntegrity | None
 
 
-def _integrity_kind(p: IntegrityCheckProblem) -> str:
+def _integrity_kind(p: IntegrityCheckProblem, incomplete_reason: str | None) -> str:
     if p.status in (PROBLEM_STATUS_VERDICT_SUBMITTED, PROBLEM_STATUS_DISMISSED):
         return "probed"
     if p.status == PROBLEM_STATUS_PENDING:
         return "probed_pending"
     if p.status == PROBLEM_STATUS_CAP_REACHED:
-        return "inconclusive"
+        # The finalizer closes a problem with no verdict the same way
+        # whether the chat hit the turn cap or the student walked away;
+        # only the check's reason tells them apart.
+        return "unfinished" if incomplete_reason in UNFINISHED_REASONS else "inconclusive"
     if p.status == PROBLEM_STATUS_SKIPPED_UNREADABLE:
         return "unreadable"
     if p.status == PROBLEM_STATUS_DIAGNOSIS_ONLY:
@@ -412,6 +397,31 @@ def _integrity_kind(p: IntegrityCheckProblem) -> str:
             return "diagnosis_failed"
         return "diagnosed"
     return p.status
+
+
+def _status_of(percent: float) -> str:
+    return "full" if percent >= 100 else "zero" if percent <= 0 else "partial"
+
+
+def _overrode_ai(final: dict[str, Any], ai_percent: float, graph: Any) -> bool:
+    """Did the teacher change the AI's call on this problem? The teacher
+    review page's rule (`teacherOverrodeAi` after `withGraphCalls`, in
+    web/.../review/_lib/grading.ts): her ✗ on a graph item the drawing
+    check left unclear is part of the AI's call, not an override — the
+    check asked her. Then a different status, or a different partial
+    percent, is an override."""
+    if isinstance(graph, dict) and (graph.get("points") or 0) > 0:
+        off = sum(
+            i.get("points", 0) * 100 / graph["points"]
+            for i in graph.get("items") or []
+            if isinstance(i, dict) and i.get("verdict") == "unclear" and i.get("teacher") == "no"
+        )
+        ai_percent = min(max(ai_percent - off, 0.0), 100.0)
+    final_percent = float(final.get("percent") or 0.0)
+    final_status = str(final.get("score_status") or _status_of(final_percent))
+    if final_status != _status_of(ai_percent):
+        return True
+    return final_status == "partial" and round(final_percent) != round(ai_percent)
 
 
 def _ai_grades_by_position(raw: Any) -> dict[int, dict[str, Any]]:
@@ -451,7 +461,9 @@ def _readings_by_position(sub: Submission) -> dict[int | None, CaseReading] | No
         return out[pos]
 
     for step in overlaid.get("steps") or []:
-        if isinstance(step, dict):
+        # A step with neither field is dropped, as the grader and the
+        # teacher view drop it — so step N here is the grader's step N.
+        if isinstance(step, dict) and (step.get("latex") or step.get("plain_english")):
             reading(step.get("problem_position")).steps.append(
                 _line(step.get("latex"), step.get("plain_english")),
             )
@@ -579,6 +591,9 @@ async def submission_case(
         if isinstance(raw_percents, dict):
             ai_percents = raw_percents
     readings = _readings_by_position(sub)
+    graph_checks: dict[str, Any] = (
+        grade.graph_checks if grade and isinstance(grade.graph_checks, dict) else {}
+    )
     problems_out: list[CaseProblem] = []
     hw_items = await load_problems_for_assignment(db, assignment)
     hw_positions = {item["position"] for item in hw_items}
@@ -594,15 +609,13 @@ async def submission_case(
         final = final_by_bid.get(item["bank_item_id"])
         ip = integrity_by_bid.get(uuid.UUID(item["bank_item_id"]))
         differs = False
-        ai_percent = ai_percents.get(item["bank_item_id"])
-        if final and isinstance(ai_percent, (int, float)):
-            differs = round(float(final.get("percent") or 0.0)) != round(float(ai_percent))
-        elif ai and final:
+        ai_call = ai_percents.get(item["bank_item_id"])
+        if not isinstance(ai_call, (int, float)) and ai:
             # Grades from before `problem_percents` was stored.
-            differs = (
-                final.get("score_status") != ai.get("score_status")
-                or round(float(final.get("percent") or 0.0))
-                != round(float(ai.get("percent") or 0.0))
+            ai_call = ai.get("percent")
+        if final and isinstance(ai_call, (int, float)):
+            differs = _overrode_ai(
+                final, float(ai_call), graph_checks.get(item["bank_item_id"]),
             )
         problems_out.append(CaseProblem(
             position=position,
@@ -611,7 +624,14 @@ async def submission_case(
             answer_key=item["final_answer"],
             reading=(
                 readings.get(position)
-                or CaseReading(steps=[], final_answer=None, student_edited=False)
+                # Nothing read survives — possibly because the student
+                # cleared every line of it, which is still an edit.
+                or CaseReading(
+                    steps=[], final_answer=None,
+                    student_edited=any(
+                        str(k).startswith(f"{position}:") for k in sub.extraction_edits or {}
+                    ),
+                )
             ) if readings is not None else None,
             grade=CaseGrade(
                 score_status=str(ai.get("score_status") or "zero"),
@@ -629,7 +649,7 @@ async def submission_case(
             ) if final else None,
             integrity=CaseIntegrityProblem(
                 problem_id=str(ip.id),
-                kind=_integrity_kind(ip),
+                kind=_integrity_kind(ip, check.incomplete_reason if check else None),
                 status=ip.status,
                 rubric=ip.rubric,
                 reasoning=ip.ai_reasoning,
