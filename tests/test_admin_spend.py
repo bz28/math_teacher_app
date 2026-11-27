@@ -324,3 +324,44 @@ async def test_school_detail_teacher_and_class_costs_leave_out_preview(
         s for t in detail["teachers"] for s in t["sections"]
     ]
     assert sum(s["cost_30d"] for s in sections) == pytest.approx(4.0)
+
+
+
+# --------------------------------------------------------------------------
+# Review round 3
+# --------------------------------------------------------------------------
+
+async def test_the_first_hours_of_a_month_project_from_recent_weeks() -> None:
+    """1 Dec, 03:00: $3 so far. A clamped whole day said $93 for a school
+    spending ~$168 a week; the rest of the month goes at the full weeks'
+    average instead, and the range's low end isn't dragged under it."""
+    now = datetime(2026, 12, 1, 3, 0, tzinfo=UTC)
+    async with get_session_factory()() as s:
+        await s.execute(text("TRUNCATE TABLE llm_calls RESTART IDENTITY CASCADE"))
+        s.add_all([
+            _call(150.0, created_at=datetime(2026, 11, 17, tzinfo=UTC)),  # wk of 16 Nov
+            _call(186.0, created_at=datetime(2026, 11, 24, tzinfo=UTC)),  # wk of 23 Nov
+            _call(3.0, created_at=datetime(2026, 12, 1, 1, 0, tzinfo=UTC)),
+        ])
+        await s.commit()
+        h = await spend_headline(s, [], now)
+
+    remaining_weeks = (31 - 3 / 24) / 7
+    assert h["projected_month_end"] == pytest.approx(3.0 + 168.0 * remaining_weeks, abs=1e-3)
+    assert h["projected_low"] == pytest.approx(3.0 + 150.0 * remaining_weeks, abs=1e-3)
+    assert h["projected_high"] == pytest.approx(3.0 + 186.0 * remaining_weeks, abs=1e-3)
+
+
+async def test_internal_scope_is_the_no_school_calls_whatever_the_toggle(
+    client: AsyncClient,
+) -> None:
+    w = await _seed()
+    for include in ("false", "true"):
+        body = await _get(client, w, school_id="internal", include_internal=include)
+        assert body["total_cost"] == pytest.approx(8.0)
+
+
+async def test_a_braced_school_id_is_read_as_the_school(client: AsyncClient) -> None:
+    w = await _seed()
+    body = await _get(client, w, school_id="{" + w.radnor_id + "}")
+    assert body["total_cost"] == pytest.approx(5.0)

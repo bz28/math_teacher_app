@@ -168,11 +168,6 @@ async def spend_headline(
     cost_30d = await _total(db, conds, last_30)
     cost_prev_30d = await _total(db, conds, last_30.previous())
 
-    # Straight-line run rate: this month so far, per elapsed day, times the
-    # month. Crude on the 1st; the page says it's a run rate.
-    elapsed_days = max((now - month_start).total_seconds() / 86400.0, 1.0)
-    projected = this_month / elapsed_days * days_in_month
-
     # The range: the rest of the month at the slowest and the fastest of
     # the last few FULL weeks. Weeks before the first spend aren't "slow
     # weeks", they're before we existed, so they don't count.
@@ -197,6 +192,16 @@ async def spend_headline(
             full_weeks.append(weekly.get(start, 0.0))
             start += timedelta(weeks=1)
     remaining_weeks = max((month_end - now).total_seconds(), 0.0) / 86400.0 / 7
+
+    # Straight-line run rate: this month so far, per elapsed day, times the
+    # month. In the month's first day there's no rate to read yet (a few
+    # hours' spend over a clamped whole day reads ~1/8 of the truth), so
+    # the rest of the month goes at the recent full weeks' average.
+    elapsed_days = (now - month_start).total_seconds() / 86400.0
+    if elapsed_days < 1.0 and full_weeks:
+        projected = this_month + sum(full_weeks) / len(full_weeks) * remaining_weeks
+    else:
+        projected = this_month / max(elapsed_days, 1.0) * days_in_month
     if len(full_weeks) >= 2:
         low = this_month + min(full_weeks) * remaining_weeks
         high = this_month + max(full_weeks) * remaining_weeks
@@ -314,7 +319,9 @@ async def spend(
 ) -> dict[str, Any]:
     if school_id and school_id != INTERNAL_SCHOOL_SENTINEL:
         try:
-            uuid_lib.UUID(school_id)
+            # Canonical form: UUID() also takes urn:/braced spellings the
+            # driver would reject.
+            school_id = str(uuid_lib.UUID(school_id))
         except ValueError as e:
             raise HTTPException(status_code=400, detail="invalid school_id") from e
 
