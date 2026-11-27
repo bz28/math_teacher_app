@@ -262,6 +262,21 @@ def _grade_scope() -> Any:
     )
 
 
+# How long a hand-graded period's grades sit still before the papers
+# left ungraded stop holding its final read.
+_HAND_GRADING_QUIET = timedelta(hours=24)
+
+
+def _recent(grades: Any) -> bool:
+    """A counted grade moved within `_HAND_GRADING_QUIET`."""
+    since = datetime.now(UTC) - _HAND_GRADING_QUIET
+    return any(
+        t is not None and t > since
+        for g in grades
+        for t in (g.reviewed_at, g.grade_published_at, g.graded_at)
+    )
+
+
 def _ts(col: Any) -> Any:
     return func.coalesce(func.max(col).cast(Text), "")
 
@@ -333,7 +348,7 @@ async def _refresh_pair(
         _grade_scope()
         .add_columns(
             Submission.id.label("submission_id"),
-            SubmissionGrade.reviewed_at, SubmissionGrade.grade_published_at,
+            SubmissionGrade.reviewed_at, SubmissionGrade.grade_published_at, SubmissionGrade.graded_at,
             SubmissionGrade.breakdown, SubmissionGrade.published_breakdown,
         )
         .where(Submission.assignment_id == assignment_id, Submission.section_id == section_id)
@@ -349,23 +364,27 @@ async def _refresh_pair(
         for e in g.breakdown
         if isinstance(e, dict)
     }
-    # A paper turned in but not graded yet (common when she grades by
-    # hand) could land on any problem, so every problem waits on it —
-    # else each hand grade, which approves itself, would buy a new read.
-    ungraded = any(
+    # Hand grading (AI off): each grade approves itself, so drafts never
+    # say she's mid-way. A paper turned in but not graded yet could land on
+    # any problem, so every problem waits on it, while she's still at it:
+    # a paper left ungraded for good (unreadable, ignored) holds nothing
+    # once her grades have sat still for `_HAND_GRADING_QUIET`.
+    hand_grading = bool(hw and not hw.ai_grading_enabled) and _recent(grades)
+    if hand_grading and not any(
         g.reviewed_at is None and g.grade_published_at is None and not g.breakdown for g in grades
-    ) or (await db.execute(
-        select(Submission.id)
-        .join(User, User.id == Submission.student_id)
-        .outerjoin(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
-        .where(
-            Submission.assignment_id == assignment_id,
-            Submission.section_id == section_id,
-            User.is_preview.is_(False),
-            SubmissionGrade.id.is_(None),
-        )
-        .limit(1)
-    )).first() is not None
+    ):
+        hand_grading = (await db.execute(
+            select(Submission.id)
+            .join(User, User.id == Submission.student_id)
+            .outerjoin(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
+            .where(
+                Submission.assignment_id == assignment_id,
+                Submission.section_id == section_id,
+                User.is_preview.is_(False),
+                SubmissionGrade.id.is_(None),
+            )
+            .limit(1)
+        )).first() is not None
 
     problems: dict[str, Any] = dict(row.problems or {})
     settled = True
@@ -375,7 +394,10 @@ async def _refresh_pair(
         items = _items(pid, counted)
         key = _input_key(questions[pid], items)
         entry = problems.get(pid)
-        if not needs_call(entry, key, len(items), drafts_waiting=ungraded or pid in waiting_on):
+        if not needs_call(entry, key, len(items), drafts_waiting=pid in waiting_on):
+            continue
+        if hand_grading and not needs_call(entry, key, len(items), drafts_waiting=True):
+            settled = False  # come back once she's done, or has stopped
             continue
         written = {"input_key": key, "n_items": len(items), "prompt_version": prompt_version(_PROMPT)}
         if not items:

@@ -206,6 +206,14 @@ async def _flagged_period(w: dict[str, Any]) -> None:
     await _student(w, "Gus", _entry(pid, "zero", "p3-note"), section="p3")
 
 
+async def _hand_graded(w: dict[str, Any]) -> None:
+    async with get_session_factory()() as s:
+        hw = await s.get(Assignment, w["hw"])
+        assert hw is not None
+        hw.ai_grading_enabled = False
+        await s.commit()
+
+
 async def _stored(w: dict[str, Any], section: str = "p1") -> ReteachReasons | None:
     async with get_session_factory()() as s:
         return (await s.execute(select(ReteachReasons).where(
@@ -293,6 +301,7 @@ async def test_hand_grading_rewrites_once_the_papers_are_graded(client: AsyncCli
     """Hand grades approve themselves, so papers not graded yet are what
     she's still working through: the read waits for them too."""
     w = await _world()
+    await _hand_graded(w)
     await _flagged_period(w)
     await _student(w, "Lou", None)  # turned in, not graded yet
     await rr.refresh_reteach_reasons(limit=1000)
@@ -309,6 +318,46 @@ async def test_hand_grading_rewrites_once_the_papers_are_graded(client: AsyncCli
     await rr.refresh_reteach_reasons(limit=1000)
     sent = _mine(model, w)
     assert len(sent) == 2 and "Jo-note" in sent[1] and "Lou-note" in sent[1]
+
+
+async def test_a_paper_left_ungraded_holds_hand_grading_only_until_it_goes_quiet(
+    client: AsyncClient, model: FakeModel,
+) -> None:
+    w = await _world()
+    await _hand_graded(w)
+    await _flagged_period(w)
+    await _student(w, "Lou", None)  # never graded: unreadable, say
+    await rr.refresh_reteach_reasons(limit=1000)
+    await _student(w, "Jo", _entry(w["pid"], "partial", "Jo-note"))
+    await rr.refresh_reteach_reasons(limit=1000)
+    assert len(_mine(model, w)) == 1
+    async with get_session_factory()() as s:  # held, so the pair is still due
+        due = await rr._stale_pairs(s, 1000)
+    assert any(a == w["hw"] and sec == w["p1"] for a, sec, _sig in due)
+
+    # A day later, nothing has moved: the final read goes ahead.
+    async with get_session_factory()() as s:
+        old = datetime.now(UTC) - rr._HAND_GRADING_QUIET - timedelta(hours=1)
+        for g in (await s.execute(select(SubmissionGrade).join(Submission).where(
+                Submission.assignment_id == w["hw"]))).scalars():
+            g.graded_at, g.reviewed_at = old, old if g.reviewed_at else None
+        await s.commit()
+    await rr.refresh_reteach_reasons(limit=1000)
+    sent = _mine(model, w)
+    assert len(sent) == 2 and "Jo-note" in sent[1]
+
+
+async def test_with_ai_grading_an_ungraded_paper_holds_nothing(client: AsyncClient, model: FakeModel) -> None:
+    """A paper the AI won't grade (unreadable, flagged) never stops a
+    problem's read once its own drafts are approved."""
+    w = await _world()
+    await _flagged_period(w)
+    await _student(w, "Lou", None)
+    await rr.refresh_reteach_reasons(limit=1000)
+    await _student(w, "Jo", _entry(w["pid"], "partial", "Jo-note"))
+    await rr.refresh_reteach_reasons(limit=1000)
+    sent = _mine(model, w)
+    assert len(sent) == 2 and "Jo-note" in sent[1]
 
 
 async def test_a_failed_call_retries_then_gives_up(client: AsyncClient, model: FakeModel) -> None:
