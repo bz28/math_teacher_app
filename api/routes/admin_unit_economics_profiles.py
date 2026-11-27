@@ -55,7 +55,7 @@ def profile_rows(
         # Tie-broken on model id so identical requests return identical
         # answers; a bare max() takes whichever row Postgres emitted first.
         dominant = max(group, key=lambda r: (as_float(r.cost), r.model))
-        calls = sum(int(r.calls) for r in group)
+        calls = sum(float(r.calls) for r in group)
         cost = sum(as_float(r.cost) for r in group)
         units = denominators.get(kind) or 1.0
         tokens = {
@@ -68,7 +68,7 @@ def profile_rows(
         legs = [
             _Leg(
                 model=r.model,
-                calls_per_unit=int(r.calls) / units,
+                calls_per_unit=float(r.calls) / units,
                 input=as_float(r.avg_in),
                 output=as_float(r.avg_out),
                 cache_read=as_float(r.avg_cread),
