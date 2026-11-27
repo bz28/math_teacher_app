@@ -47,6 +47,7 @@ from api.core.integrity_pipeline import (
     ROLE_TOOL_CALL,
     UNFINISHED_REASONS,
     agent_posture_for_check,
+    finalize_if_abandoned,
     tier_from_reason,
 )
 from api.database import get_db
@@ -528,6 +529,12 @@ async def submission_case(
 
     # ── Integrity: per-problem rows keyed by bank item ──
     check = await load_check_for_submission(db, sub.id)
+    # The teacher's reads close a check the student abandoned past its
+    # deadline (the cron sweep does too, but only every few hours); this
+    # read does the same, so the case file never shows a check as live
+    # that the teacher's panel already says the student didn't finish.
+    if check is not None and await finalize_if_abandoned(check, db):
+        await db.commit()
     integrity_by_bid: dict[uuid.UUID, IntegrityCheckProblem] = {}
     integrity_out: CaseIntegrity | None = None
     if check is not None:

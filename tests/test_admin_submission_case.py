@@ -560,3 +560,31 @@ def test_a_teachers_call_on_an_unclear_graph_item_is_not_an_override() -> None:
     assert _overrode_ai({"score_status": "partial", "percent": 50.0}, 100.0, None) is True
     # A hand re-score past the graph call still is.
     assert _overrode_ai({"score_status": "partial", "percent": 30.0}, 100.0, graph) is True
+
+
+async def test_reading_the_case_closes_a_check_the_student_abandoned(
+    client: AsyncClient, world: dict[str, Any], admin_token: str,
+) -> None:
+    """The teacher's reads close a check idle past its deadline; the case
+    file's read does too, so it never shows a dead check as live."""
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import update
+
+    set_agent_script([[make_text("Walk me through problem 1.")]])
+    submission_id = await _submit_and_confirm(client, world)
+    async with get_session_factory()() as s:
+        await s.execute(
+            update(IntegrityCheckSubmission)
+            .where(IntegrityCheckSubmission.submission_id == uuid.UUID(submission_id))
+            .values(updated_at=datetime.now(UTC) - timedelta(days=2))
+        )
+        await s.commit()
+
+    r = await client.get(
+        f"/v1/admin/submissions/{submission_id}/case", headers=auth_headers(admin_token),
+    )
+    case = r.json()
+    assert case["integrity"]["status"] == "complete"
+    assert case["integrity"]["incomplete_reason"] == "not_started"
+    assert case["problems"][0]["integrity"]["kind"] == "unfinished"
