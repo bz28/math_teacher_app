@@ -541,7 +541,7 @@ export function NewHomeworkModal({
                     ) : mode === "bank" ? (
                       <BankPicker
                         courseId={courseId}
-                        initialUnitId={unitIds[0] ?? null}
+                        homeworkUnitIds={unitIds}
                         selected={bankIds}
                         onChange={setBankIds}
                         disabled={busy}

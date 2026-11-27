@@ -3,7 +3,7 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import { teacher, type BankItem, type TeacherUnit } from "@/lib/api";
 import { subfoldersOf, topUnits } from "@/lib/units";
-import { groupBankItems } from "./bank-groups";
+import { defaultUnitFilter, groupBankItems } from "./bank-groups";
 import { QuestionRow } from "./question-row";
 
 type Load =
@@ -20,15 +20,16 @@ type Load =
  */
 export function BankPicker({
   courseId,
-  initialUnitId,
+  homeworkUnitIds = [],
   excludeIds,
   selected,
   onChange,
   disabled,
 }: {
   courseId: string;
-  /** Start filtered to this unit (and its subfolders). */
-  initialUnitId?: string | null;
+  /** The homework's units: the filter starts on its unit when it has
+   *  one, on every unit when it spans several. */
+  homeworkUnitIds?: string[];
   excludeIds?: string[];
   selected: string[];
   onChange: (ids: string[]) => void;
@@ -37,7 +38,7 @@ export function BankPicker({
   const [load, setLoad] = useState<Load>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
   const [query, setQuery] = useState("");
-  const [unitId, setUnitId] = useState<string>(initialUnitId ?? "");
+  const [unitId, setUnitId] = useState<string>(() => defaultUnitFilter(homeworkUnitIds));
   const searchId = useId();
   const unitSelectId = useId();
 

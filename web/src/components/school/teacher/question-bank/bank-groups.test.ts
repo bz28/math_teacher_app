@@ -1,7 +1,7 @@
 // node --test src/components/school/teacher/question-bank/bank-groups.test.ts
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { LOOSE_GROUP_TITLE, groupBankItems } from "./bank-groups.ts";
+import { LOOSE_GROUP_TITLE, defaultUnitFilter, groupBankItems } from "./bank-groups.ts";
 
 type Use = { id: string; title: string; type: string; status: string; unit_ids: string[] };
 const hw = (id: string, title: string, status = "published", type = "homework"): Use => ({
@@ -60,4 +60,10 @@ test("unit filter; a homework is preferred over a practice set as the group", ()
     ["Practice A", "Practice · Draft"],
     [LOOSE_GROUP_TITLE, ""],
   ]);
+});
+
+test("the unit filter starts on the homework's unit, or every unit when it spans several", () => {
+  assert.equal(defaultUnitFilter(["u1"]), "u1");
+  assert.equal(defaultUnitFilter(["u3", "u4"]), "");
+  assert.equal(defaultUnitFilter([]), "");
 });

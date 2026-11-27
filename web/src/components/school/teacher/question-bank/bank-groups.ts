@@ -70,3 +70,10 @@ export function groupBankItems<T extends Pickable>(
     return a.title.localeCompare(b.title);
   });
 }
+
+/** Where the picker's unit filter starts: the homework's unit when it has
+ *  one, every unit when it spans several (a review set reuses across them)
+ *  or has none yet. "" means every unit. */
+export function defaultUnitFilter(homeworkUnitIds: readonly string[]): string {
+  return homeworkUnitIds.length === 1 ? homeworkUnitIds[0] : "";
+}
