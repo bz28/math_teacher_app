@@ -853,9 +853,8 @@ async def revert_bank_item(
     item.previous_requires_drawing = None
     # Undo restores the snapshot's status alongside its prose, so it can
     # move an item back to rejected (or approved) with no other trace. That
-    # status is what the bank and the admin assignment page show, so an
-    # unlogged revert makes them and this timeline disagree about the same
-    # item.
+    # status is what the bank shows, so an unlogged revert makes the bank
+    # and this timeline disagree about the same item.
     # `restored_status` is present only when the status actually moved.
     await record_activity(
         db, current_user, "bank_item.revert", "bank_item", item.id,

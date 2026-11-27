@@ -32,20 +32,12 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select, text
+from sqlalchemy import text
 
 from api.core.auth import hash_password
 from api.database import get_session_factory
 from api.models.assignment import Assignment, Submission, SubmissionGrade
 from api.models.course import Course
-from api.models.question_bank import QuestionBankItem
-from api.models.question_edit import (
-    EDIT_MANUAL,
-    EDIT_WORKSHOP,
-    FIELD_QUESTION,
-    FIELD_SOLUTION,
-    QuestionEdit,
-)
 from api.models.school import SCHOOL_KIND_INDIVIDUAL, School
 from api.models.section import Section
 from api.models.unit import Unit
@@ -259,66 +251,6 @@ async def main() -> None:
                 graded_at=graded_at,
                 grade_published_at=graded_at + timedelta(minutes=i),
             ))
-
-        # ── Bank items with a repair history (`question_edits`), so the
-        #    admin assignment page has edited and unedited questions to
-        #    show.
-        algebra_asg = courses[0][1]
-        algebra_unit = (await s.execute(
-            select(Unit).where(Unit.course_id == algebra.id)
-        )).scalars().first()
-        assert algebra_unit is not None
-
-        base = NOW - timedelta(days=2)
-        for title, question, n_edits in (
-            ("Quadratic factoring", "Factor x^2 + 5x + 6.", 4),
-            ("Systems of equations", "Solve 2x + y = 7 and x - y = 2.", 2),
-            ("Slope from two points", "Find the slope through (1,2) and (4,8).", 1),
-        ):
-            item = QuestionBankItem(
-                course_id=algebra.id, unit_id=algebra_unit.id,
-                originating_assignment_id=algebra_asg.id,
-                title=title, question=f"{question} v{n_edits}",
-                solution_steps=[], final_answer="see steps",
-                status="approved", source="generated",
-                generation_prompt=(
-                    "Write 5 mixed-difficulty algebra problems for a "
-                    "9th-grade class, no calculators."
-                ),
-            )
-            s.add(item)
-            await s.flush()
-            for i in range(n_edits):
-                s.add(QuestionEdit(
-                    bank_item_id=item.id, edited_by_id=teacher.id,
-                    school_id=school.id,
-                    # Both kinds of edit: by hand and in the Workshop.
-                    kind=EDIT_MANUAL if i % 2 == 0 else EDIT_WORKSHOP,
-                    field=FIELD_QUESTION,
-                    before=f"{question} v{i}",
-                    after=f"{question} v{i + 1}",
-                    created_at=base + timedelta(hours=i * 3),
-                ))
-
-        # A fourth item whose only repair is to its solution.
-        quiet = QuestionBankItem(
-            course_id=algebra.id, unit_id=algebra_unit.id,
-            originating_assignment_id=algebra_asg.id,
-            title="Solution fixed, question untouched",
-            question="Simplify (2x^3)(3x^4).",
-            solution_steps=[], final_answer="6x^7",
-            status="approved", source="generated",
-            generation_prompt="Write 5 mixed-difficulty algebra problems.",
-        )
-        s.add(quiet)
-        await s.flush()
-        s.add(QuestionEdit(
-            bank_item_id=quiet.id, edited_by_id=teacher.id,
-            school_id=school.id, kind=EDIT_MANUAL, field=FIELD_SOLUTION,
-            before="1. Add the exponents\n2x^3 * 3x^4 = 6x^12",
-            after="1. Add the exponents\n2x^3 * 3x^4 = 6x^7",
-            created_at=base,
-        ))
 
         await s.commit()
 
