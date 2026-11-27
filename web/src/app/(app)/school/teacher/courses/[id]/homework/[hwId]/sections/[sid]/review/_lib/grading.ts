@@ -114,6 +114,34 @@ export function needsTeacher(entry: RosterEntry): boolean {
   return true;
 }
 
+/** Still waiting on her Approve: needs her, and not yet approved. An
+ *  approved grade waiting only to be published doesn't — publishing is
+ *  a separate, homework-wide step. Her own preview turn-in never does. */
+export function awaitsApproval(entry: RosterEntry): boolean {
+  return (
+    needsTeacher(entry) &&
+    !entry.submission?.reviewed_at &&
+    !entry.submission?.is_preview
+  );
+}
+
+/** The first roster entry after `currentId` that `matches`, wrapping to
+ *  the start, so a teacher working out of order still moves on. Null
+ *  when no other entry matches. */
+export function nextMatching(
+  roster: RosterEntry[],
+  currentId: string,
+  matches: (entry: RosterEntry) => boolean,
+): RosterEntry | null {
+  const idx = roster.findIndex((e) => e.student_id === currentId);
+  if (idx < 0) return null;
+  for (let i = 1; i < roster.length; i++) {
+    const cand = roster[(idx + i) % roster.length];
+    if (matches(cand)) return cand;
+  }
+  return null;
+}
+
 // Pure read-only predicate over already-loaded roster data: true when
 // any problem on the submission carries an AI grade the model flagged
 // as low confidence. `breakdown` preserves the AI's per-problem

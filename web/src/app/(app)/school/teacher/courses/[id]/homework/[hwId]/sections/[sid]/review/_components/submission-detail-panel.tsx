@@ -116,6 +116,7 @@ export function SubmissionDetailPanel({
   integrityDetailsOpen,
   onToggleIntegrityDetails,
   onMarkReviewed,
+  onApproveAndNext,
   onUnmarkReviewed,
   onGraphVerdict,
   graphBusy,
@@ -171,6 +172,9 @@ export function SubmissionDetailPanel({
   integrityDetailsOpen: boolean;
   onToggleIntegrityDetails: () => void;
   onMarkReviewed: () => void;
+  /** Approve, then open the next student still waiting on her Approve.
+   *  Null when nobody else is — Approve then stays put. */
+  onApproveAndNext: (() => void) | null;
   onUnmarkReviewed: () => void;
   /** The teacher's ✓ / ✗ on an unclear graph checklist item. */
   onGraphVerdict: (problemId: string, n: number, verdict: "yes" | "no") => void;
@@ -412,6 +416,17 @@ export function SubmissionDetailPanel({
     graphItemsOpen > 0
       ? `Check ${graphItemsOpen === 1 ? "1 graph item" : `${graphItemsOpen} graph items`} first`
       : null;
+  // Mirrors the Approve button's enabled state, so A does exactly what a
+  // click would and nothing when the button is disabled or hidden.
+  const canApprove =
+    !handGraded &&
+    !approved &&
+    allGraded &&
+    graphGate === null &&
+    !marking &&
+    !savingGrade &&
+    !regrading;
+  const approve = onApproveAndNext ?? onMarkReviewed;
   const toggleExpand = useCallback(
     (id: string) => {
       setExpandState((s) => {
@@ -753,6 +768,14 @@ export function SubmissionDetailPanel({
             onSelectNext();
           }
           break;
+        case "a":
+        case "A":
+          // Approve (& next) — the same act as the button, never more.
+          if (canApprove) {
+            e.preventDefault();
+            approve();
+          }
+          break;
         case "ArrowRight":
         case "]":
           if (nextStudent) {
@@ -772,6 +795,8 @@ export function SubmissionDetailPanel({
       nextStudent,
       onSelectNext,
       onOpenWork,
+      canApprove,
+      approve,
     ],
   );
 
@@ -923,6 +948,7 @@ export function SubmissionDetailPanel({
           totalProblems={totalProblems}
           graphGate={graphGate}
           onMarkReviewed={onMarkReviewed}
+          onApproveAndNext={onApproveAndNext}
           onUnmarkReviewed={onUnmarkReviewed}
           nextStudent={nextStudent}
           onSelectNext={onSelectNext}

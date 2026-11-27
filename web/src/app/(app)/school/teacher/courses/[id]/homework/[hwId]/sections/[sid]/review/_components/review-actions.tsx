@@ -29,6 +29,7 @@ export function ReviewActions({
   totalProblems,
   graphGate,
   onMarkReviewed,
+  onApproveAndNext,
   onUnmarkReviewed,
   nextStudent,
   onSelectNext,
@@ -53,6 +54,9 @@ export function ReviewActions({
   /** "Check N graph items first" while any is undecided, else null. */
   graphGate: string | null;
   onMarkReviewed: () => void;
+  /** Set when another student is waiting on her Approve: the button
+   *  approves and opens them in one click. */
+  onApproveAndNext: (() => void) | null;
   onUnmarkReviewed: () => void;
   nextStudent: RosterEntry | null;
   onSelectNext: () => void;
@@ -155,7 +159,7 @@ export function ReviewActions({
             </span>
             <button
               type="button"
-              onClick={onMarkReviewed}
+              onClick={onApproveAndNext ?? onMarkReviewed}
               disabled={marking || savingGrade || regrading || !allGraded || graphGate !== null}
               title={
                 regrading
@@ -166,11 +170,13 @@ export function ReviewActions({
                       ? `Grade every problem first (${gradedProblemCount} of ${totalProblems} graded)`
                       : graphGate
                         ? `${graphGate}: mark each one Shown or Missing on its problem`
-                        : "Approve — mark this submission reviewed"
+                        : onApproveAndNext
+                          ? "Approve, then open the next student waiting on you (A)"
+                          : "Approve — mark this submission reviewed (A)"
               }
               className="rounded-[--radius-md] border border-[color:var(--color-success)]/40 bg-[color:var(--color-success)]/10 px-3.5 py-1.5 text-xs font-bold text-[color:var(--color-success)] transition-colors hover:border-[color:var(--color-success)]/60 disabled:cursor-not-allowed disabled:opacity-45"
             >
-              {marking ? "Approving…" : "Approve ✓"}
+              {marking ? "Approving…" : onApproveAndNext ? "Approve & next →" : "Approve ✓"}
             </button>
           </>
         )}
