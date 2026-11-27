@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { formatDue, sectionTargetLabel, sectionToneClass } from "@/lib/utils";
 import type { TeacherSection } from "@/lib/api";
+import { datesDiffer } from "@/components/school/teacher/_pieces/due-dates";
 import type { HomeworkDetail } from "../_lib/types";
 
 /**
@@ -20,6 +21,7 @@ export function HomeworkHeader({
   loading,
   busy,
   onSaveTitle,
+  onChangeDueDates,
 }: {
   hw: HomeworkDetail | null;
   backHref: string;
@@ -28,6 +30,8 @@ export function HomeworkHeader({
   loading: boolean;
   busy: boolean;
   onSaveTitle: (draft: string, done: () => void) => void;
+  /** Open the due-date dialog; works on a published homework too. */
+  onChangeDueDates: () => void;
 }) {
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
@@ -121,18 +125,39 @@ export function HomeworkHeader({
 
         </header>
 
-        {/* Read-only metadata strip — surfaces due / sections / problem
-            count without making the teacher expand the Configuration
-            accordion below. Editing still happens there; this is the
-            scan line. Practice has no due-date concept, so it's omitted
+        {/* Metadata strip — surfaces due / sections / problem count
+            without making the teacher expand the Configuration accordion
+            below. The due date's Change opens the due-date dialog, which
+            also works once published; the rest is edited below. Practice has no due-date concept, so it's omitted
             for that type. */}
         {hw && (
           <div className="mt-3 flex flex-wrap items-center gap-x-2 text-[11px] text-text-muted">
             {hw.type !== "practice" && (
               <>
-                <span className={hw.due_at ? "" : "italic"}>
-                  {hw.due_at ? formatDue(hw.due_at) : "No due date"}
-                </span>
+                {hw.due_at && datesDiffer(hw.section_due_dates) ? (
+                  <span>
+                    Due by section:{" "}
+                    {hw.section_due_dates.map((d, i) => (
+                      <span key={d.section_id}>
+                        {i > 0 && ", "}
+                        <span className="font-semibold text-text-secondary">{d.name}</span>{" "}
+                        {d.due_at ? formatDue(d.due_at).replace(/^Due /, "") : "no date"}
+                      </span>
+                    ))}
+                  </span>
+                ) : (
+                  <span className={hw.due_at ? "" : "italic"}>
+                    {hw.due_at ? formatDue(hw.due_at) : "No due date"}
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={onChangeDueDates}
+                  disabled={loading}
+                  className="font-semibold text-primary hover:underline disabled:opacity-50"
+                >
+                  Change
+                </button>
                 <span aria-hidden>·</span>
               </>
             )}
