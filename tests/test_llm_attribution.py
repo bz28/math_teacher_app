@@ -318,3 +318,29 @@ async def test_owners_in_keeps_only_those_owners(world: dict[str, Any]) -> None:
             select(everyone.c.call_id).where(everyone.c.owner_id == tess)
         )).scalars())
         assert {r.call_id for r in rows} == full
+
+
+async def test_an_admin_who_sets_homework_reads_the_same_on_users_and_calls(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """Admins can set homework (require_teacher admits them), so the Users
+    row and the Calls view it links to (`teacher=`, the whose-call rule)
+    must both count calls on it — not just the calls the admin made."""
+    async with get_session_factory()() as s:
+        admin = (await s.execute(select(User).where(User.role == "admin"))).scalar_one()
+        sub = (await s.execute(
+            select(Submission).where(Submission.student_id == uuid.UUID(world["ola"]))
+        )).scalar_one()
+        asg = (await s.execute(
+            select(Assignment).where(Assignment.id == sub.assignment_id)
+        )).scalar_one()
+        asg.teacher_id = admin.id  # the admin set Ola's homework
+        await s.commit()
+        admin_id = str(admin.id)
+
+    users = await _get(client, world, "/v1/admin/users", hours="24", role="admin")
+    row = next(u for u in users["users"] if u["id"] == admin_id)
+    calls = await _summary(client, world, teacher_id=admin_id)
+    # Their own $4.00 judge call + Ola's $8.00 grading on their homework.
+    assert row["total_cost"] == pytest.approx(12.0)
+    assert calls["spend"] == pytest.approx(row["total_cost"])
