@@ -630,6 +630,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/spend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Spend */
+        get: operations["spend_v1_admin_spend_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/students/{student_id}": {
         parameters: {
             query?: never;
@@ -8760,6 +8777,46 @@ export interface operations {
                 /** @description School UUID or 'internal' */
                 school_id: string;
             };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    spend_v1_admin_spend_get: {
+        parameters: {
+            query?: {
+                group_by?: "school" | "teacher" | "student" | "function" | "model";
+                bucket?: "day" | "week" | "month";
+                hours?: number;
+                from?: string | null;
+                to?: string | null;
+                school_id?: string | null;
+                /** @description Include internal calls (no school) and teachers' preview-as-student work. Off by default: neither is customer usage. */
+                include_internal?: boolean;
+            };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
