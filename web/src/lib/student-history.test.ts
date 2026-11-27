@@ -12,7 +12,7 @@ test("a partly graded score isn't shown", () => {
   assert.equal(draftScoreText("partly_graded", 50), null);
 });
 
-test("labels match the review page's markers", () => {
+test("each unpublished state has its label", () => {
   assert.equal(DRAFT_LABEL.awaiting_review, "Awaiting your review");
   assert.equal(DRAFT_LABEL.graded_unpublished, "Graded, not published");
   assert.equal(DRAFT_LABEL.partly_graded, "Partly graded");

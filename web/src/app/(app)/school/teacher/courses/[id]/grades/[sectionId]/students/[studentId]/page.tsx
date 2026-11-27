@@ -255,9 +255,11 @@ function PublishedHwRow({
   return (
     <Link
       href={href}
-      className="flex items-center justify-between gap-4 rounded-[--radius-md] border border-border-light bg-surface px-4 py-3 transition-all hover:-translate-y-px hover:border-primary/40 hover:shadow-sm"
+      // On a phone the status sits under the title: beside it, the long
+      // labels ("Graded, not published") left the title a few letters.
+      className="flex flex-col items-start gap-2 rounded-[--radius-md] border border-border-light bg-surface px-4 py-3 transition-all hover:-translate-y-px hover:border-primary/40 hover:shadow-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4"
     >
-      <div className="min-w-0 flex-1">
+      <div className="w-full min-w-0 flex-1">
         <div className="truncate text-sm font-bold text-text-primary">{hw.title}</div>
         {hw.due_at && (
           <div className="mt-0.5 text-[11px] text-text-muted">

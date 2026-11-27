@@ -496,7 +496,7 @@ async def get_student_grades(
     )).all()
     published_by_aid = {r.assignment_id: r for r in published_rows}
     # A grade that exists but isn't out yet, so the row doesn't read "Not
-    # graded yet" for it, worded as the review page's approval marker:
+    # graded yet" for it, in the states the review page marks:
     # approved (reviewed_at) or a complete hand grade is waiting only on
     # Publish ("graded_unpublished"); an AI grade nobody has approved is the
     # teacher's to-do ("awaiting_review"); a hand grade covering only some

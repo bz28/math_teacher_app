@@ -68,6 +68,14 @@ async def student_history_flow(
                    page.get_by_text(re.compile(rf"^{re.escape(first)} hasn.t practiced yet\.$"))
                    .wait_for(timeout=_TIMEOUT_MS))
         await shot("history-awaiting-review")
+        # On a phone the status pill sits under the title, not beside it,
+        # where the long labels left the title a few letters.
+        await page.set_viewport_size({"width": 375, "height": 812})
+        title_box = await page.locator(f'a[href*="/homework/{rs.assignment_id}/"] .truncate').first.bounding_box()
+        if title_box is None or title_box["width"] < 200:
+            issues.append("on a phone the awaiting-review row leaves its homework title under 200px wide")
+        await shot("history-awaiting-review-phone")
+        await page.set_viewport_size({"width": 1280, "height": 900})
 
         await page.goto(f"{base}/{rs.ungraded_student_id}", wait_until="domcontentloaded",
                         timeout=_TIMEOUT_MS)

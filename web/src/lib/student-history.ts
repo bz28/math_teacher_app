@@ -1,5 +1,7 @@
-// How a student's history row reads a grade that isn't published yet,
-// worded as the review page's own markers for the same states.
+// How a student's history row reads a grade that isn't published yet.
+// The states are the review page's (approved, unapproved AI grade, partly
+// hand-graded); the words say what's next for the teacher, so "Awaiting
+// your review" where the review roster's marker says "Not reviewed".
 
 export type DraftState = "awaiting_review" | "graded_unpublished" | "partly_graded";
 
