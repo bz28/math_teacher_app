@@ -3002,3 +3002,4 @@ table.dt tr:last-child td { border-bottom: none; }
 /* Five numbers in one row at every level, even on a narrow page. */
 .calls-panel .tile-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .calls-panel .stat-tile { min-width: 0; }
+.attention-place { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }

@@ -59,3 +59,14 @@ export function schoolLabel(s: {
   const where = [s.city, s.state].filter(Boolean).join(", ");
   return where ? `${s.name} — ${where}` : s.name;
 }
+
+/** The Calls page's bucket of calls with no school (admins, internal
+ *  tools); the API takes it as a school_id. Not a rail scope — the rail
+ *  holds a real school or all of them — so the Calls page alone keeps it
+ *  in its URL as `?school=internal`. */
+export const INTERNAL_SCHOOL = "internal";
+
+/** True on the Calls page while its "Internal only" filter is on. */
+export function isInternalOnly(pathname: string, search: string): boolean {
+  return pathname === "/llm-calls" && new URLSearchParams(search).get("school") === INTERNAL_SCHOOL;
+}

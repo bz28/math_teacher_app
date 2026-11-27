@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { apiHealth, getToken, setToken } from "../lib/api";
 import SchoolSwitcher from "./SchoolSwitcher";
 import { setSchoolScope, useSelectedSchool, type SelectedSchool } from "../lib/useSelectedSchool";
-import { pageScope, schoolLabel } from "../lib/pageScope";
+import { pageScope, schoolLabel, isInternalOnly } from "../lib/pageScope";
 
 interface NavItem {
   to: string;
@@ -73,9 +73,9 @@ function ScopeLine({ school }: { school: SelectedSchool }) {
     );
   }
 
-  // The Calls page's "Internal only" filter (?school=internal): calls that
-  // belong to no school. Not a rail scope, but it is what the page shows.
-  if (new URLSearchParams(search).get("school") === "internal") {
+  // The Calls page's "Internal only" filter: not a rail scope, but it is
+  // what the page shows.
+  if (isInternalOnly(pathname, search)) {
     return (
       <div className="scope-line" role="note">
         <span className="scope-line-label">Scope</span>

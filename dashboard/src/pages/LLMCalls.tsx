@@ -5,7 +5,8 @@ import {
   PieChart, Pie, Cell, Legend, AreaChart, Area, LineChart, Line,
 } from "recharts";
 import { api, type LLMCallsData } from "../lib/api";
-import { scopeParams, useSchoolScope } from "../lib/useSelectedSchool";
+import { scopeParams, useSchoolScope, useSelectedSchool } from "../lib/useSelectedSchool";
+import { INTERNAL_SCHOOL, isInternalOnly } from "../lib/pageScope";
 import { formatRelativeDate, shortModel, shortId, fmtCost, fmtLatency } from "../lib/format";
 import AttentionBand from "../components/AttentionBand";
 import CallDrawer from "../components/CallDrawer";
@@ -22,9 +23,6 @@ const COLORS = ["#14130f", "#4a6b3a", "#b8431a", "#3d5a78", "#a66b15", "#6b21a8"
 type CallRow = LLMCallsData["calls"][number];
 type Status = "" | "ok" | "failed";
 
-
-/** The calls-with-no-school bucket; the API takes it as a school_id. */
-const INTERNAL_SCHOOL = "internal";
 export default function LLMCalls() {
   const [searchParams, setSearchParams] = useSearchParams();
   const confirm = useConfirm();
@@ -56,14 +54,13 @@ export default function LLMCalls() {
   // admin's calls belong to no school. pageScope() treats these URLs as
   // single-thing pages for the same reason.
   const scope = useSchoolScope();
+  const selected = useSelectedSchool();
   const entityFilter = Boolean(
     userFilter || teacherFilter || studentFilter || assignmentFilter || submissionFilter || sessionFilter,
   );
-  // `?school=internal` narrows to calls with no school (admin, internal
-  // tools). The rail can't hold that bucket — its scope is a real school
-  // or all of them — so the page keeps it in the URL as its own filter;
-  // a school id in `?school=` is taken by the rail instead (Layout).
-  const internalOnly = searchParams.get("school") === INTERNAL_SCHOOL;
+  // "Internal only" (see INTERNAL_SCHOOL); a school id in `?school=` is
+  // taken by the rail instead (Layout).
+  const internalOnly = isInternalOnly("/llm-calls", `?${searchParams.toString()}`);
   const placeFilter = internalOnly ? INTERNAL_SCHOOL : scope;
   const schoolFilter = entityFilter ? null : placeFilter;
   const status: Status = ((): Status => {
@@ -228,7 +225,7 @@ export default function LLMCalls() {
   // one is on — a filtered total must not read as the window's.
   const narrowed = Boolean(fnFilter || modelFilter || status || search || entityFilter);
   const badges: { key: string; label: string; title: string }[] = [
-    internalOnly && !entityFilter && { key: "school", label: "Internal only", title: "Calls that belong to no school" },
+    internalOnly && { key: "school", label: "Internal only", title: "Calls that belong to no school" },
     assignmentFilter && { key: "assignment", label: `Homework: ${shortId(assignmentFilter)}`, title: "Every call on a submission to this homework" },
     submissionFilter && { key: "submission", label: `Submission: ${shortId(submissionFilter)}`, title: submissionFilter },
     sessionFilter && { key: "session", label: `Session: ${shortId(sessionFilter)}`, title: sessionFilter },
@@ -278,6 +275,7 @@ export default function LLMCalls() {
         // The place only — never the narrower filters, which a band click
         // clears — so the list it lands on is the set it counted.
         schoolId={placeFilter}
+        placeLabel={internalOnly ? "Internal" : selected.name ?? (scope ? "this school" : "All schools")}
         onFunction={(fn, failedOnly) => followBand({ function: fn, status: failedOnly ? "failed" : "" })}
         onSchool={(id) => followBand({ school: id, status: "failed" })}
       />

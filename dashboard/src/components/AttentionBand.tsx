@@ -10,9 +10,12 @@ import { scopeParams } from "../lib/useSelectedSchool";
  * wrong: a calm one-liner, not an empty box.
  */
 export default function AttentionBand({
-  schoolId, onFunction, onSchool,
+  schoolId, placeLabel, onFunction, onSchool,
 }: {
   schoolId: string | null;
+  /** The place the band counts — named on the band, since on a page
+   *  filtered to one person nothing else on screen says it. */
+  placeLabel: string;
   /** Open one function's calls over the last 24h — its failures only
    *  when the line is about failing, all of them when it's about speed. */
   onFunction: (fn: string, failedOnly: boolean) => void;
@@ -37,13 +40,15 @@ export default function AttentionBand({
     return (
       <div className="attention-band attention-calm" role="status">
         <strong>All clear</strong>
-        <span>No function failing, no school with failed calls, no latency jump in the last 24h.</span>
+        <span className="attention-place">{placeLabel} · 24h</span>
+        <span>No function failing, no school with failed calls, no latency jump.</span>
       </div>
     );
   }
   return (
     <div className="attention-band attention-alert" role="region" aria-label="Needs you">
       <strong>Needs you</strong>
+      <span className="attention-place">{placeLabel} · 24h</span>
       <ul>
         {items.map((it) => (
           <li key={itemKey(it)}>
@@ -67,9 +72,9 @@ function itemKey(it: AttentionItem): string {
 function describe(it: AttentionItem) {
   switch (it.kind) {
     case "function_failing":
-      return <><b>{it.function}</b> failing {it.failed} of last {it.of} · 24h</>;
+      return <><b>{it.function}</b> failing {it.failed} of last {it.of}</>;
     case "school_failures":
-      return <><b>{it.school_name}</b> · {it.failed} failed calls · 24h</>;
+      return <><b>{it.school_name}</b> · {it.failed} failed calls</>;
     case "p95_up":
       return <><b>{it.function}</b> p95 up to {fmtLatency(it.p95_ms)} (was {fmtLatency(it.was_ms)})</>;
   }
