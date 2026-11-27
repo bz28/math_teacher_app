@@ -818,8 +818,9 @@ export interface GradingQualityData {
  *  AI's original call, the teacher's final, and the signed delta. */
 export interface GradingOverrideCase {
   submission_id: string;
-  /** 1-based problem position — the case file's `#pN`. */
-  position: number;
+  /** 1-based problem position — the case file's `#pN` — or null when
+   *  the grade's lists don't line up well enough to name one problem. */
+  position: number | null;
   subject: string;
   course: string;
   day: string | null;

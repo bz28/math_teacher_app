@@ -41,7 +41,7 @@ signed delta across all compared problems gives the headline bias signal
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -89,9 +89,10 @@ class ProblemDelta:
     final_percent: float
     delta: float  # final - ai; + = teacher raised (AI too harsh)
     is_override: bool
-    # The problem's 1-based position on the assignment — what the case
-    # file's `#pN` anchor names. See ``compare_grade`` for where it comes from.
-    position: int
+    # The problem's 1-based position at grading time — what the case
+    # file's `#pN` anchor names — or None when this pair can't be placed
+    # on one problem. See ``compare_grade``.
+    position: int | None
 
 
 def _recorded_position(recorded: Any) -> int | None:
@@ -102,10 +103,31 @@ def _recorded_position(recorded: Any) -> int | None:
     return None
 
 
+def _link_position(
+    ai_breakdown: dict[str, Any],
+    ai_g: dict[str, Any],
+    final_g: dict[str, Any],
+    ai_pct: float,
+    index: int,
+    count: int,
+) -> int | None:
+    """Where in the case file this pair lives — see ``compare_grade``."""
+    recorded = ai_breakdown.get("problem_percents")
+    if isinstance(recorded, dict):
+        own = recorded.get(str(final_g.get("problem_id")))
+        if isinstance(own, (int, float)) and not isinstance(own, bool) and abs(float(own) - ai_pct) > 0.5:
+            return None
+    position = _recorded_position(ai_g.get("problem_position"))
+    if position is None:
+        return index + 1
+    # Every problem on the assignment gets one entry, so a recorded number
+    # past the list's end is one the grader invented — no problem to open.
+    return position if position <= count else None
+
+
 def compare_grade(
     ai_breakdown: dict[str, Any] | None,
     breakdown: list[dict[str, Any]] | None,
-    positions: Mapping[str, int] | None = None,
 ) -> list[ProblemDelta] | None:
     """Compare a single grade's AI snapshot against the teacher's final.
 
@@ -120,14 +142,16 @@ def compare_grade(
     ``None`` means "exclude this submission from the report" — distinct
     from an empty/zero-override result, which means "compared, no change".
 
-    ``positions`` maps a problem id to its 1-based place on the assignment.
-    With it, each teacher entry's ``problem_id`` names the problem a delta
-    is about, and a pair whose AI grade recorded a DIFFERENT position is
-    two problems side by side, not one problem graded twice — so it is
-    skipped rather than counted (the AI snapshot keeps grades for
-    positions not on the assignment, which shifts the lists). Without a
-    mapping, or for an entry it doesn't cover, the AI's recorded position
-    stands, else the entry's place in the list.
+    Each delta's ``position`` (for the console's link into the case file)
+    is the AI grade's recorded ``problem_position`` — the grading-time
+    number the case file anchors on — else its place in the list. It is
+    None when the pair is provably two different problems: the snapshot
+    keeps grades for positions that weren't on the assignment, which
+    shifts the lists while their lengths still match. The grader's own
+    per-problem record (``problem_percents``, keyed by problem id) is
+    the check — the AI's call for the teacher entry's problem must be
+    the percent this pair compares. Counting is unchanged either way;
+    only the link is withheld, so it never points at the wrong problem.
     """
     if not ai_breakdown or not breakdown:
         return None
@@ -151,10 +175,6 @@ def compare_grade(
         if ai_pct is None or final_pct is None:
             continue
         assert isinstance(ai_status, str) and isinstance(final_status, str)
-        ai_pos = _recorded_position(ai_g.get("problem_position"))
-        final_pos = positions.get(str(final_g.get("problem_id"))) if positions else None
-        if ai_pos is not None and final_pos is not None and ai_pos != final_pos:
-            continue
         delta = final_pct - ai_pct
         is_override = (ai_status != final_status) or (
             abs(delta) > OVERRIDE_PERCENT_TOLERANCE
@@ -167,7 +187,7 @@ def compare_grade(
                 final_percent=final_pct,
                 delta=delta,
                 is_override=is_override,
-                position=final_pos or ai_pos or index + 1,
+                position=_link_position(ai_breakdown, ai_g, final_g, ai_pct, index, len(breakdown)),
             )
         )
     return deltas or None

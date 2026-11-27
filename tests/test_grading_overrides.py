@@ -94,12 +94,13 @@ def test_position_is_the_ais_recorded_problem_position() -> None:
     deltas = compare_grade(
         _ai(
             {**_g("zero", 0), "problem_position": 3},
-            {**_g("full", 100), "problem_position": 7},
+            {**_g("full", 100), "problem_position": 1},
+            {**_g("full", 100), "problem_position": 2},
         ),
-        [_g("full", 100), _g("full", 100)],
+        [_g("full", 100), _g("full", 100), _g("full", 100)],
     )
     assert deltas is not None
-    assert [d.position for d in deltas] == [3, 7]
+    assert [d.position for d in deltas] == [3, 1, 2]
 
 
 def test_position_falls_back_to_list_place_when_unrecorded() -> None:
@@ -118,34 +119,43 @@ def _t(status: str, percent: float, problem_id: str) -> dict:
     return {**_g(status, percent), "problem_id": problem_id}
 
 
-def test_teacher_entry_names_the_problem_and_shifted_pairs_are_skipped() -> None:
+def test_shifted_pairs_still_count_but_never_link_to_the_wrong_problem() -> None:
     # The grader kept a grade for position 9 (not on the assignment) and
     # skipped problem 2, so the teacher list reads p1, p3, then p2's
-    # appended zero. Index pairing would compare p9's AI grade with p3's
-    # teacher grade and p3's with p2's — and link them to the wrong
-    # problem. With the assignment's order, only the true pair counts.
-    positions = {"p1": 1, "p2": 2, "p3": 3}
+    # appended zero. Counting stays exactly as before (index pairing);
+    # the link is withheld wherever the grader's own per-problem record
+    # shows the pair is two problems, or the number isn't on the sheet.
     deltas = compare_grade(
-        _ai(
-            {**_g("zero", 0), "problem_position": 1},
-            {**_g("full", 100), "problem_position": 9},
-            {**_g("full", 100), "problem_position": 3},
-        ),
+        {
+            "grades": [
+                {**_g("zero", 0), "problem_position": 1},
+                {**_g("full", 100), "problem_position": 9},
+                {**_g("full", 100), "problem_position": 3},
+            ],
+            "problem_percents": {"p1": 0.0, "p3": 100.0, "p2": 0.0},
+        },
         [_t("full", 100, "p1"), _t("full", 100, "p3"), _t("zero", 0, "p2")],
-        positions,
     )
     assert deltas is not None
-    assert [(d.position, d.ai_status, d.final_status) for d in deltas] == [(1, "zero", "full")]
+    assert len(deltas) == 3  # the measurement is unchanged
+    # p1 pairs truly; #p9 isn't on a 3-problem sheet; the third pair is
+    # AI p3 (100) against teacher p2, whose recorded AI call was 0.
+    assert [d.position for d in deltas] == [1, None, None]
 
 
-def test_teacher_position_stands_when_the_ai_recorded_none() -> None:
+def test_homework_edited_after_grading_still_compares_and_links() -> None:
+    # The teacher inserted a problem after grading. Both stored lists
+    # were written at grading time and still line up; nothing about the
+    # assignment's current order enters the comparison.
     deltas = compare_grade(
-        _ai(_g("zero", 0), _g("zero", 0)),
-        [_t("full", 100, "b"), _t("full", 100, "a")],
-        {"a": 4, "b": 6},
+        {
+            "grades": [{**_g("zero", 0), "problem_position": p} for p in (1, 2, 3)],
+            "problem_percents": {"A": 0.0, "B": 0.0, "C": 0.0},
+        },
+        [_t("full", 100, "A"), _t("full", 100, "B"), _t("full", 100, "C")],
     )
     assert deltas is not None
-    assert [d.position for d in deltas] == [6, 4]
+    assert [d.position for d in deltas] == [1, 2, 3]
 
 
 def test_sub_tolerance_percent_nudge_is_not_an_override() -> None:

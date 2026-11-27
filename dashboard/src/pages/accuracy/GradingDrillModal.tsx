@@ -64,14 +64,22 @@ export default function GradingDrillModal({
     return () => { active = false; };
   }, [target, baseParams]);
 
-  const cols: Column<GradingOverrideCase>[] = useMemo(() => [
+  // Stable per-load keys: cases carry no id, and an unplaced pair has no
+  // position, so one submission can repeat with nothing to tell them apart.
+  const keyed = useMemo(
+    () => (data?.cases ?? []).map((c, i) => ({ ...c, _k: String(i) })),
+    [data],
+  );
+  type Keyed = GradingOverrideCase & { _k: string };
+
+  const cols: Column<Keyed>[] = useMemo(() => [
     {
       key: "where", header: "Course", width: "40%",
       render: (c) => (
         <div style={{ minWidth: 0 }}>
           <div style={{ color: "var(--ink)" }}>{c.course}</div>
           <div style={{ fontSize: 11, color: "var(--muted)" }}>
-            Problem {c.position} · {subjectLabel(c.subject)}{c.day ? ` · ${c.day}` : ""}
+            {c.position ? `Problem ${c.position} · ` : ""}{subjectLabel(c.subject)}{c.day ? ` · ${c.day}` : ""}
           </div>
         </div>
       ),
@@ -94,10 +102,9 @@ export default function GradingDrillModal({
       <div style={{ padding: "18px 30px 30px" }}>
         <DataTable
           columns={cols}
-          rows={data?.cases ?? []}
-          // One case per graded problem of a submission, so the pair is unique.
-          rowKey={(c) => `${c.submission_id}:${c.position}`}
-          onRowClick={(c) => navigate(caseFilePath(c.submission_id, c.position))}
+          rows={keyed}
+          rowKey={(c) => c._k}
+          onRowClick={(c) => navigate(caseFilePath(c.submission_id, c.position ?? undefined))}
           drill
           loading={!data && !error}
           error={error}
