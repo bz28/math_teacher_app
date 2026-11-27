@@ -2,7 +2,16 @@
 //   node --experimental-strip-types --test src/lib/generation-progress.test.ts
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { generatingLabel, generationProgress, oldestFirst } from "./generation-progress.ts";
+import {
+  generatingLabel,
+  generationJobsKey,
+  generationProgress,
+  idsToRemember,
+  expiredJobIds,
+  oldestFirst,
+  startJobUpdate,
+  withStartedJob,
+} from "./generation-progress.ts";
 
 const job = (status: string, mode: string, requested: number, produced: number) => ({
   status,
@@ -46,4 +55,37 @@ test("review walks pending problems oldest first, one millisecond apart", () => 
   }));
   assert.deepEqual(oldestFirst(newestFirst).map((i) => i.n), [1, 2, 3, 4, 5, 6]);
   assert.equal(newestFirst[0].n, 6, "the input is left alone");
+});
+
+test("a started job is tracked with only the jobs still running", () => {
+  const j = (id: string, status: string) => ({ id, status, requested_count: 5, produced_count: 0 });
+  const next = withStartedJob([j("a", "done"), j("b", "failed"), j("c", "running"), j("d", "queued")], j("e", "queued"));
+  assert.deepEqual(next.map((x) => x.id), ["c", "d", "e"]);
+  // Starting the same job twice doesn't track it twice.
+  assert.deepEqual(withStartedJob(next, j("e", "running")).map((x) => x.id), ["c", "d", "e"]);
+  // The page restores from the key the wizard writes.
+  assert.equal(generationJobsKey("hw1"), "hw-gen-hw1");
+});
+
+test("starting a job builds on the latest jobs, not the ones seen at click time", () => {
+  const j = (id: string, status: string, produced = 0) => ({
+    id, status, requested_count: 5, produced_count: produced,
+  });
+  const update = startJobUpdate(j("b", "queued"));
+  // Clicked while "a" was running; a poll tick finished it before the start returned.
+  assert.deepEqual(update([j("a", "done", 5)]).map((x) => [x.id, x.status]), [["b", "queued"]]);
+});
+
+test("only running jobs are remembered; none running means forget the key", () => {
+  const j = (id: string, status: string) => ({ id, status, requested_count: 5, produced_count: 0 });
+  assert.deepEqual(idsToRemember([j("a", "running"), j("b", "done"), j("c", "queued")]), ["a", "c"]);
+  assert.deepEqual(idsToRemember([j("a", "done"), j("b", "failed")]), []);
+});
+
+test("each job's poll ceiling runs from when it was first seen", () => {
+  const seen = new Map([["old", 0], ["new", 240_000]]);
+  // Five minutes after the old job started, the new one has had one.
+  assert.deepEqual(expiredJobIds(["old", "new"], seen, 300_001, 300_000), ["old"]);
+  assert.deepEqual(expiredJobIds(["old", "new"], seen, 540_001, 300_000), ["old", "new"]);
+  assert.deepEqual(expiredJobIds(["unseen"], seen, 999_999, 300_000), []);
 });

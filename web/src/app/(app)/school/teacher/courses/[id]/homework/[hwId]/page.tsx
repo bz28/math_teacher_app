@@ -27,7 +27,11 @@ import { CollapsibleSection, ConfigBlock, configSummary } from "./_components/co
 import { DeleteHomework } from "./_components/delete-homework";
 import { HomeworkHeader } from "./_components/homework-header";
 import { InstructionsBlock } from "./_components/instructions-block";
-import { GenerationStalledBanner, PendingReviewLink } from "./_components/problems-heroes";
+import {
+  GenerationBanner,
+  GenerationStalledBanner,
+  PendingReviewLink,
+} from "./_components/problems-heroes";
 import { ProblemsSection } from "./_components/problems-section";
 import { RemoveProblemsView } from "./_components/remove-problems-view";
 
@@ -75,7 +79,7 @@ export default function HomeworkDetailPage({
   const inboxRows = useHomeworkInbox(hw?.status, courseId, assignmentId);
   const courseSections = useCourseSections(courseId);
   const {
-    setActiveJobs,
+    startJob,
     activeGenerating,
     aggregateRequested,
     aggregateProduced,
@@ -298,15 +302,9 @@ export default function HomeworkDetailPage({
         assignmentId={assignmentId}
         onClose={() => setShowGenerate(false)}
         onStarted={(job) => {
-          // Append rather than replace — a teacher could in
-          // principle queue multiple "Generate more" calls, and we
-          // already track multi-job for clone-as-practice. Drop
-          // any prior terminal jobs so they don't keep inflating
-          // the aggregate count after they finished.
-          setActiveJobs((prev) => [
-            ...prev.filter((j) => j.status !== "done" && j.status !== "failed"),
-            job,
-          ]);
+          // Tracked beside any still running (clone-as-practice fans out
+          // several) and remembered across leaving the page.
+          startJob(job);
           setShowGenerate(false);
         }}
       />
@@ -413,7 +411,18 @@ export default function HomeworkDetailPage({
             />
           )}
 
-          {pending.length > 0 && <PendingReviewLink count={pending.length} href={reviewHref} />}
+          {activeGenerating ? (
+            <GenerationBanner
+              requested={aggregateRequested}
+              produced={aggregateProduced}
+              reading={readingUpload}
+              more={problems.length > 0}
+              pendingCount={pending.length}
+              reviewHref={reviewHref}
+            />
+          ) : (
+            pending.length > 0 && <PendingReviewLink count={pending.length} href={reviewHref} />
+          )}
 
           <ProblemsSection
             hw={hw}
@@ -422,12 +431,7 @@ export default function HomeworkDetailPage({
             assignmentId={assignmentId}
             graded={graded}
             isPublished={isPublished}
-            generation={{
-              active: activeGenerating,
-              requested: aggregateRequested,
-              produced: aggregateProduced,
-              reading: readingUpload,
-            }}
+            awaitingProblems={activeGenerating || pending.length > 0}
             saveStates={saveStates}
             saveErrors={saveErrors}
             onChangePoints={onChangePoints}

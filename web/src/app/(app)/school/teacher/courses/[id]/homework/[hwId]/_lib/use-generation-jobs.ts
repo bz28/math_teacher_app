@@ -3,7 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { teacher, type BankJob } from "@/lib/api";
 import { jobNotices } from "@/lib/job-notice";
-import { generationProgress } from "@/lib/generation-progress";
+import {
+  expiredJobIds,
+  generationJobsKey,
+  generationProgress,
+  idsToRemember,
+  startJobUpdate,
+} from "@/lib/generation-progress";
 import {
   BANK_JOB_POLL_INTERVAL_MS,
   BANK_JOB_POLL_LIMIT_MS,
@@ -12,7 +18,7 @@ import {
 /**
  * The generation jobs writing problems for one homework: the ones the
  * wizard handed over in sessionStorage, plus any "Generate more" the
- * page starts (`setActiveJobs`). Polls them while they run and calls
+ * page starts (`startJob`). Polls them while they run and calls
  * `onProgress` whenever a job produced something, so the pending
  * banner shows up as the first problem lands.
  */
@@ -37,10 +43,10 @@ export function useGenerationJobs(
   // "Create & generate" — usually one entry, but clone-as-practice
   // fans out one job per source problem. On landing we restore them
   // all and the polling effect drives the generating hero/strip.
-  // The key survives navigation away and back; we clear it once
-  // every job has reached a terminal state.
+  // The key survives navigation away and back; it holds only the jobs
+  // still running (see the effect below the poll).
   useEffect(() => {
-    const key = `hw-gen-${assignmentId}`;
+    const key = generationJobsKey(assignmentId);
     const raw = sessionStorage.getItem(key);
     if (!raw) return;
     // Validate before fetching — a malformed/legacy value would
@@ -76,43 +82,37 @@ export function useGenerationJobs(
       });
   }, [assignmentId, courseId]);
 
-  // Poll any in-flight generation jobs so the hero/strip counts climb
+  // Poll any in-flight generation jobs so the banner's counts climb
   // live and the pending banner pops up the moment the first item
   // lands (not just on job done). Iterates every still-running job
   // each tick — usually 1, but clone-as-practice can have many.
-  // Stops polling once all reach a terminal state or the ceiling
-  // trips; same pattern as the course workspace page.
   //
-  // Ceiling tracking via ref because the effect re-runs every poll
-  // tick (setActiveJobs always produces a new array reference, so
-  // the [activeJobs] dep array re-fires). A local startedAt would
-  // reset every re-run and the BANK_JOB_POLL_LIMIT_MS check would
-  // never trip. The ref starts the timer on the empty→inflight
-  // transition and clears on inflight→empty — partial completes
-  // (some jobs done, others still running) keep the original
-  // timestamp so the failsafe applies to the long-tail job.
-  const pollStartRef = useRef<number | null>(null);
+  // Each job gets its own BANK_JOB_POLL_LIMIT_MS ceiling, timed from
+  // when it was first seen running, kept in a ref because the effect
+  // re-runs every tick (setActiveJobs makes a new array). A shared
+  // clock would fail a "Generate more" started late in an older job's
+  // run after only a minute or two.
+  const firstSeenRef = useRef(new Map<string, number>());
   useEffect(() => {
     const inflightIds = activeJobs
       .filter((j) => j.status !== "done" && j.status !== "failed")
       .map((j) => j.id);
-    if (inflightIds.length === 0) {
-      pollStartRef.current = null;
-      return;
+    const firstSeen = firstSeenRef.current;
+    for (const id of [...firstSeen.keys()]) {
+      if (!inflightIds.includes(id)) firstSeen.delete(id);
     }
-    if (pollStartRef.current === null) {
-      pollStartRef.current = Date.now();
+    if (inflightIds.length === 0) return;
+    for (const id of inflightIds) {
+      if (!firstSeen.has(id)) firstSeen.set(id, Date.now());
     }
-    const startedAt = pollStartRef.current;
     // Snapshot per-job produced counts at effect setup so we can
     // detect "did anything climb" without a stale closure read.
     const lastProduced = new Map(activeJobs.map((j) => [j.id, j.produced_count]));
     const interval = setInterval(async () => {
-      if (Date.now() - startedAt > BANK_JOB_POLL_LIMIT_MS) {
+      const expired = expiredJobIds(inflightIds, firstSeen, Date.now(), BANK_JOB_POLL_LIMIT_MS);
+      if (expired.length > 0) {
         setActiveJobs((prev) =>
-          prev.map((j) =>
-            inflightIds.includes(j.id) ? { ...j, status: "failed" as const } : j,
-          ),
+          prev.map((j) => (expired.includes(j.id) ? { ...j, status: "failed" as const } : j)),
         );
         return;
       }
@@ -142,6 +142,25 @@ export function useGenerationJobs(
     }, BANK_JOB_POLL_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [activeJobs, courseId]);
+
+  // Remember the running jobs across leaving the page (the wizard writes
+  // the same key), and forget them once none is running. Skipped while
+  // nothing is tracked, so the restore above reads the key first.
+  useEffect(() => {
+    if (activeJobs.length === 0) return;
+    const key = generationJobsKey(assignmentId);
+    const ids = idsToRemember(activeJobs);
+    try {
+      if (ids.length > 0) sessionStorage.setItem(key, JSON.stringify(ids));
+      else sessionStorage.removeItem(key);
+    } catch {
+      // Storage full or blocked: the banner just won't survive a reload.
+    }
+  }, [activeJobs, assignmentId]);
+
+  // A job started on this page (Generate more), tracked beside any still
+  // running.
+  const startJob = (job: BankJob) => setActiveJobs(startJobUpdate(job));
 
   const activeGenerating = activeJobs.some(
     (j) => j.status !== "done" && j.status !== "failed",
@@ -176,7 +195,7 @@ export function useGenerationJobs(
 
   return {
     activeJobs,
-    setActiveJobs,
+    startJob,
     activeGenerating,
     aggregateRequested,
     aggregateProduced,

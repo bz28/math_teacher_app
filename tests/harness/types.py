@@ -86,3 +86,13 @@ class JudgeScore:
     @property
     def mean(self) -> float:
         return round(sum(self.scores.values()) / len(self.scores), 2) if self.scores else 0.0
+
+
+@dataclass
+class FlowResult:
+    """One journey's outcome. `issues` is empty iff the journey completed."""
+
+    name: str
+    title: str  # human label for the proposal/report
+    passed: bool
+    issues: list[str] = field(default_factory=list)

@@ -36,13 +36,13 @@ import base64
 import io
 import re
 from collections.abc import Callable
-from dataclasses import dataclass, field
 
 import httpx
 from PIL import Image
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from tests.harness.browser import HarnessBrowser
+from tests.harness.flows_generation import generation_survives_leaving_flow
 from tests.harness.seed import (
     WORKSHOP_FLOW_FIGURE,
     Seed,
@@ -53,6 +53,7 @@ from tests.harness.seed import (
     seed_submitted_submission,
     seed_workshop_item,
 )
+from tests.harness.types import FlowResult
 
 # Generous, so slow CI is never mistaken for a failure.
 _TIMEOUT_MS = 30000
@@ -73,16 +74,6 @@ def _blank_page_b64() -> str:
 
 
 _PAGE_PNG_B64 = _blank_page_b64()
-
-
-@dataclass
-class FlowResult:
-    """One journey's outcome. `issues` is empty iff the journey completed."""
-
-    name: str
-    title: str  # human label for the proposal/report
-    passed: bool
-    issues: list[str] = field(default_factory=list)
 
 
 async def _login_flow(
@@ -738,7 +729,7 @@ _FLOWS = (
     _login_flow, _logout_flow, _student_insights_flow, _confirm_reading_flow,
     _retake_photos_flow, _reopen_resubmit_flow,
     _join_class_flow, _submit_homework_flow, _grade_publish_flow,
-    _workshop_steps_flow, _review_page_flow,
+    _workshop_steps_flow, _review_page_flow, generation_survives_leaving_flow,
 )
 
 
