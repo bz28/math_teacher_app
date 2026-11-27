@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { teacher, type SubmissionsInboxRow } from "@/lib/api";
+import { FlagPills } from "./_pieces/flag-pills";
+import { gradeNextFlagReason, inboxCta } from "./_pieces/inbox-cta";
 import { formatDueShort } from "@/lib/utils";
 import { EmptyState } from "@/components/school/shared/empty-state";
 import { Select } from "@/components/ui";
@@ -417,18 +419,7 @@ function InboxRow({
   const hasOutstanding = toReview + row.flagged > 0;
   const isAwaiting = row.submitted === 0;
 
-  // CTA copy escalates with what's actually pending: flagged rows
-  // are the highest-leverage click, ungraded next, then plain Review.
-  // Lets a teacher with 8 HWs in their inbox land on the most-urgent
-  // one without scanning the row body.
-  const ctaLabel =
-    row.flagged > 0
-      ? `Review ${row.flagged} flagged →`
-      : toReview > 0
-        ? `Grade ${toReview} →`
-        : row.dirty > 0
-          ? "Republish →"
-          : "Review →";
+  const ctaLabel = inboxCta(row);
 
   // Body content is identical between the link and waiting variants —
   // only the right-side CTA differs. Pulling it out keeps the two
@@ -445,13 +436,15 @@ function InboxRow({
           {/* Status pills hop onto the title row so the teacher's eye
               picks up "what about this row?" before the meta line. Same
               tone vocabulary as the courses dashboard / course header
-              status row — amber = needs me, red = harder failure. */}
+              status row — amber = needs me; flags by kind, never red. */}
           {toReview > 0 && (
             <StatusPill tone="amber" label={`${toReview} to grade`} />
           )}
-          {row.flagged > 0 && (
-            <StatusPill tone="red" label={`${row.flagged} flagged`} icon="⚑" />
-          )}
+          <FlagPills
+            worthALook={row.worth_a_look}
+            photoProblems={row.photo_problems}
+            tooLong={row.too_long}
+          />
           {!hasOutstanding &&
             row.submitted > 0 &&
             // "All reviewed" only when EVERYONE who was supposed to
@@ -602,7 +595,7 @@ function pickGradeNext(rows: SubmissionsInboxRow[]): GradeNextTarget | null {
   if (!best) return null;
   const reason =
     best.flagged > 0
-      ? `⚑ ${best.flagged} flagged`
+      ? gradeNextFlagReason(best.flagged)
       : bestTier === 1
         ? `${best.submitted - best.published} to grade · overdue`
         : `${best.submitted - best.published} to grade`;

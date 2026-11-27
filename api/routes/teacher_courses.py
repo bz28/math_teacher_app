@@ -18,13 +18,13 @@ from api.core.class_rubric import (
     credit_guidance,
     rubric_revision,
 )
+from api.core.flagged import FLAG_COUNT_NAMES, flag_kind_case, flag_kind_sums, flagged_case
 from api.core.grading_queue import (
     BLOCK_NO_EXTRACTION,
     BLOCK_UNREADABLE,
     ai_grade_block,
     has_any_grade_clause,
 )
-from api.core.integrity_pipeline import UNFINISHED_REASONS
 from api.core.subjects import VALID_SUBJECTS
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
@@ -173,81 +173,6 @@ def _dirty_case() -> Any:
     )
 
 
-def flagged_case() -> Any:
-    """Counts submissions needing teacher attention from the integrity
-    pipeline — flagged disposition, unreadable extraction, an inconclusive
-    check (no verdict, and not because the student walked away: the turn
-    cap, or an old close with no recorded reason — the roster shows both
-    as "Inconclusive"), an AI-grading skip with no grade, or
-    student-raised 'reader got something wrong' before confirm.
-
-    The one definition of "flagged": the courses dashboard, the needs-
-    attention queue and the per-homework inbox all sum this, and the
-    review page's Flagged filter (`isFlagged` in the roster) mirrors it
-    row for row, so the count a teacher clicks and the list she lands on
-    agree.
-
-    A student who didn't finish the understanding check is deliberately
-    NOT here. Walking away from a check raises scrutiny — the roster says
-    "Didn't finish the check" on that row — but it isn't evidence of
-    anything, and integrity never auto-flags.
-
-    Each integrity-check-based branch also requires the check to be
-    unresolved: once a teacher marks it reviewed, it's handled and no
-    longer counts. The extraction_flagged branch has no integrity-check
-    row to resolve, so it stays until the submission is graded."""
-    integrity_unresolved = (
-        IntegrityCheckSubmission.resolution == "unresolved"
-    )
-    return case(
-        (
-            and_(
-                IntegrityCheckSubmission.disposition == "flag_for_review",
-                integrity_unresolved,
-            ),
-            1,
-        ),
-        (
-            and_(
-                IntegrityCheckSubmission.status == "skipped_unreadable",
-                integrity_unresolved,
-            ),
-            1,
-        ),
-        (
-            and_(
-                IntegrityCheckSubmission.status == "complete",
-                IntegrityCheckSubmission.disposition.is_(None),
-                or_(
-                    IntegrityCheckSubmission.incomplete_reason.is_(None),
-                    IntegrityCheckSubmission.incomplete_reason.notin_(
-                        UNFINISHED_REASONS,
-                    ),
-                ),
-                integrity_unresolved,
-            ),
-            1,
-        ),
-        # AI grading was on but skipped it (unreadable photo, or too long to
-        # grade in one pass): a grade row exists with that ai_grading_status
-        # and no final_score, and (integrity off ⇒) no integrity row to catch
-        # it above. Without this branch it sits ungraded indefinitely,
-        # invisible to the needs-attention count. The LEFT JOIN on
-        # SubmissionGrade already exists.
-        (
-            and_(
-                SubmissionGrade.ai_grading_status.in_(
-                    ("skipped_unreadable", "skipped_too_long"),
-                ),
-                SubmissionGrade.final_score.is_(None),
-            ),
-            1,
-        ),
-        (Submission.extraction_flagged_at.is_not(None), 1),
-        else_=0,
-    )
-
-
 async def _course_attention(
     db: AsyncSession, teacher_id: uuid.UUID, course_id: uuid.UUID,
 ) -> dict[str, Any]:
@@ -259,6 +184,7 @@ async def _course_attention(
         select(
             func.coalesce(func.sum(_to_review_case()).cast(Integer), 0).label("to_review"),
             func.coalesce(func.sum(flagged_case()).cast(Integer), 0).label("flagged"),
+            *flag_kind_sums(),
         )
         .select_from(Submission)
         .join(Assignment, Assignment.id == Submission.assignment_id)
@@ -299,6 +225,7 @@ async def _course_attention(
     return {
         "to_review": counts_row.to_review,
         "flagged": counts_row.flagged,
+        **{n: getattr(counts_row, n) for n in FLAG_COUNT_NAMES.values()},
         "next_due_at": next_due_at.isoformat() if next_due_at else None,
     }
 
@@ -350,6 +277,7 @@ async def list_courses(
             Assignment.course_id.label("course_id"),
             func.coalesce(func.sum(_to_review_case()).cast(Integer), 0).label("to_review"),
             func.coalesce(func.sum(flagged_case()).cast(Integer), 0).label("flagged"),
+            *flag_kind_sums(),
         )
         .select_from(Submission)
         .join(Assignment, Assignment.id == Submission.assignment_id)
@@ -406,6 +334,7 @@ async def list_courses(
             func.coalesce(unit_counts.c.count, 0).label("unit_count"),
             func.coalesce(attention_counts.c.to_review, 0).label("to_review"),
             func.coalesce(attention_counts.c.flagged, 0).label("flagged"),
+            *(func.coalesce(attention_counts.c[n], 0).label(n) for n in FLAG_COUNT_NAMES.values()),
             next_due_counts.c.next_due_at,
         )
         .outerjoin(section_counts, section_counts.c.course_id == Course.id)
@@ -425,6 +354,9 @@ async def list_courses(
         "unit_count": r.unit_count,
         "to_review": r.to_review,
         "flagged": r.flagged,
+        # The flagged count by kind (api/core/flagged.py), so the course
+        # pills say "worth a look" apart from a photo or reading problem.
+        **{n: getattr(r, n) for n in FLAG_COUNT_NAMES.values()},
         "next_due_at": r.next_due_at.isoformat() if r.next_due_at else None,
         "created_at": r.Course.created_at.isoformat(),
     } for r in rows]}
@@ -458,6 +390,7 @@ async def needs_attention(
     student via a query param.
     """
     flagged_expr = flagged_case()
+    flag_kind_expr = flag_kind_case()
     dirty_case = _dirty_case()
     # Overdue is decided in SQL so timezone handling stays in the DB.
     overdue_case = case(
@@ -480,6 +413,7 @@ async def needs_attention(
             Section.id.label("section_id"),
             Section.name.label("section_name"),
             flagged_expr.label("flagged"),
+            flag_kind_expr.label("flag_kind"),
             dirty_case.label("dirty"),
             SubmissionGrade.grade_published_at.label("grade_published_at"),
             overdue_case.label("is_overdue"),
@@ -564,6 +498,9 @@ async def needs_attention(
             #   cant_ai_grade — its "N can't be AI-graded" note
             #                   (`ai_grade_block` unreadable / no_extraction)
             "flagged": bool(r.flagged),
+            # Which kind, so home can keep "worth a look" apart from a
+            # photo problem (api/core/flagged.py). None when not flagged.
+            "flag_kind": r.flag_kind,
             "to_approve": unreleased and r.reviewed_at is None,
             "to_publish": unreleased and r.reviewed_at is not None,
             "cant_ai_grade": r.submission_id in blocked,
@@ -626,6 +563,7 @@ async def get_course(
         "status": course.status, "created_at": course.created_at.isoformat(),
         "to_review": attention["to_review"],
         "flagged": attention["flagged"],
+        **{n: attention[n] for n in FLAG_COUNT_NAMES.values()},
         "next_due_at": attention["next_due_at"],
     }
 

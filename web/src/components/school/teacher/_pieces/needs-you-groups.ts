@@ -18,13 +18,20 @@ export interface NeedsYouGroup {
    *  toApprove — not released and not yet approved (Approve ✓ is owed)
    *  toPublish — not released, already approved (only Publish is owed);
    *              with toApprove, its share of "Publish N grades"
-   *  flagged   — its Flagged chip
+   *  worthALook   — flagged because the understanding check is worth a
+   *                 look (raises scrutiny; says nothing about the student)
+   *  photoProblem — flagged because the photo or the reading is the
+   *                 problem
+   *  tooLong      — flagged because it was too long for the AI grader;
+   *                 together the three are its Flagged chip
    *  cantAiGrade — its "N can't be AI-graded" note
    *  ungraded  — the rest: turned in, no grade yet, nothing blocking the
    *              AI (waiting on the due date or the student's confirm). */
   toApprove: number;
   toPublish: number;
-  flagged: number;
+  worthALook: number;
+  photoProblem: number;
+  tooLong: number;
   cantAiGrade: number;
   ungraded: number;
 }
@@ -52,7 +59,9 @@ export function groupNeedsYou(items: NeedsAttentionItem[]): NeedsYouGroup[] {
         items: [],
         toApprove: 0,
         toPublish: 0,
-        flagged: 0,
+        worthALook: 0,
+        photoProblem: 0,
+        tooLong: 0,
         cantAiGrade: 0,
         ungraded: 0,
       };
@@ -61,7 +70,9 @@ export function groupNeedsYou(items: NeedsAttentionItem[]): NeedsYouGroup[] {
     g.items.push(it);
     if (it.to_approve) g.toApprove += 1;
     if (it.to_publish) g.toPublish += 1;
-    if (it.flagged) g.flagged += 1;
+    if (it.flag_kind === "check") g.worthALook += 1;
+    if (it.flag_kind === "reading") g.photoProblem += 1;
+    if (it.flag_kind === "too_long") g.tooLong += 1;
     if (it.cant_ai_grade) g.cantAiGrade += 1;
     if (!it.to_approve && !it.to_publish && !it.flagged && !it.cant_ai_grade) g.ungraded += 1;
   }
@@ -87,13 +98,15 @@ export function studentReviewHref(item: NeedsAttentionItem): string {
   );
 }
 
-export type StudentChip = "flagged" | "republish" | "to_approve" | "to_publish" | "cant_ai_grade" | "overdue" | "ungraded";
+export type StudentChip = "worth_a_look" | "photo_problem" | "too_long" | "republish" | "to_approve" | "to_publish" | "cant_ai_grade" | "overdue" | "ungraded";
 
 /** The one chip a student gets in an expanded row, from the same facts
  *  the row's counts are summed from — so a "1 to publish" row never
- *  lists its student as "Ungraded". Flagged first, as on the server. */
+ *  lists its student as "Ungraded". A flag first, as on the server. */
 export function studentChip(item: NeedsAttentionItem): StudentChip {
-  if (item.flagged) return "flagged";
+  if (item.flag_kind === "check") return "worth_a_look";
+  if (item.flag_kind === "reading") return "photo_problem";
+  if (item.flag_kind === "too_long") return "too_long";
   if (item.reason === "dirty") return "republish";
   if (item.to_approve) return "to_approve";
   if (item.to_publish) return "to_publish";

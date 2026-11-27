@@ -12,6 +12,7 @@ import {
 } from "@/lib/constants";
 import { formatDueRelative } from "@/lib/utils";
 import { TOUR_ACTIONS, TOUR_IDS, useTour, useTourAction } from "@/components/tour";
+import { FlagPills } from "@/components/school/teacher/_pieces/flag-pills";
 import { StatusPill } from "@/components/school/teacher/_pieces/status-pill";
 import { SectionsTab } from "@/components/school/teacher/sections-tab";
 import { MaterialsTab } from "@/components/school/teacher/materials-tab";
@@ -580,9 +581,11 @@ function CourseStatusRow({ course }: { course: TeacherCourse }) {
       {course.to_review > 0 && (
         <StatusPill tone="amber" label={`${course.to_review} to review`} />
       )}
-      {course.flagged > 0 && (
-        <StatusPill tone="red" label={`${course.flagged} flagged`} icon="⚑" />
-      )}
+      <FlagPills
+            worthALook={course.worth_a_look}
+            photoProblems={course.photo_problems}
+            tooLong={course.too_long}
+          />
       {!hasWork && (
         <StatusPill tone="green" label="All caught up" icon="✓" />
       )}

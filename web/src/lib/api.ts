@@ -1091,8 +1091,14 @@ export interface TeacherCourse {
    *  this course. Mirrors the math used by the Submissions tab inbox
    *  so the courses dashboard never disagrees with what's inside. */
   to_review: number;
-  /** Integrity-flagged submissions across all published HWs. */
+  /** Flagged submissions across all published HWs, every kind. */
   flagged: number;
+  /** The flagged count by kind (api/core/flagged.py): the understanding
+   *  check is worth a look; the photo or reading is the problem; the
+   *  homework was too long for the AI grader. They add up to `flagged`. */
+  worth_a_look: number;
+  photo_problems: number;
+  too_long: number;
   /** Soonest upcoming due date among published HWs in the course.
    *  Null when nothing is upcoming (overdue is captured by to_review). */
   next_due_at: string | null;
@@ -1372,9 +1378,12 @@ export interface SubmissionsInboxRow {
   due_at: string | null;
   total_students: number;
   submitted: number;
-  /** Submissions whose integrity check flagged them
-   *  (uncertain / unlikely / unreadable). */
+  /** Flagged submissions, every kind (api/core/flagged.py). */
   flagged: number;
+  /** The flagged count by kind; they add up to `flagged`. */
+  worth_a_look: number;
+  photo_problems: number;
+  too_long: number;
   /** Graded but not yet published to students. */
   to_grade: number;
   /** Already published, but the teacher has edited the grade since.
@@ -1419,6 +1428,11 @@ export interface NeedsAttentionItem {
   to_publish: boolean;
   /** The review page's Flagged chip (same rule as `isFlagged`). */
   flagged: boolean;
+  /** Which kind of flag, when flagged: the understanding check is worth
+   *  a look ("check"), or the photo or reading is the problem
+   *  ("reading"), or the homework was too long for the AI grader
+   *  ("too_long"). Home shows them apart and none in alarm red. */
+  flag_kind: "check" | "reading" | "too_long" | null;
   /** The review page's "can't be AI-graded" note (unreadable / no
    *  reading) — the teacher grades these from the photo. */
   cant_ai_grade: boolean;
