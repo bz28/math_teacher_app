@@ -259,15 +259,16 @@ export default function HomeworkReviewPage({
 }
 
 /**
- * The homework a practice set was made from, for its versions' banner.
- * A homework that's gone or won't load leaves the banner without it
- * (the review itself still works), so this never throws.
+ * The set, and the homework it was made from, for its versions'
+ * banner. A homework that's gone or won't load leaves the banner
+ * without the original (the review itself still works); never throws.
  */
 async function loadOrigin(
   courseId: string,
   set: { title: string; status: string },
   homeworkId: string,
-): Promise<PracticeOrigin | undefined> {
+): Promise<PracticeOrigin> {
+  const origin: PracticeOrigin = { setTitle: set.title, setPublished: set.status === "published" };
   try {
     const hw = await teacher.assignment(homeworkId);
     const content = hw.content as { problems?: (OriginalProblem & { bank_item_id: string })[] } | null;
@@ -279,16 +280,15 @@ async function loadOrigin(
         figure_svg: p.figure_svg ?? null,
       };
     }
-    return {
-      setTitle: set.title,
-      setPublished: set.status === "published",
-      homeworkTitle: hw.title,
-      homeworkHref: `/school/teacher/courses/${courseId}/homework/${homeworkId}`,
+    origin.homework = {
+      title: hw.title,
+      href: `/school/teacher/courses/${courseId}/homework/${homeworkId}`,
       problems,
     };
   } catch {
-    return undefined;
+    // The set's own line still shows; only the original is missing.
   }
+  return origin;
 }
 
 /**
