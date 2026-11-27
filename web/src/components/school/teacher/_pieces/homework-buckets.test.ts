@@ -203,3 +203,14 @@ test("missingOnlyCount: 0 while a grade still waits on the teacher, before the d
     0,
   );
 });
+
+test("missingOnlyCount: nobody turned it in → the whole class is missing; an empty class → 0", () => {
+  assert.equal(
+    missingOnlyCount(hw({ due_at: at(-3 * DAY), total_students: 25, submitted: 0, published: 0 }), NOW),
+    25,
+  );
+  assert.equal(
+    missingOnlyCount(hw({ due_at: at(-3 * DAY), total_students: 0, submitted: 0, published: 0 }), NOW),
+    0,
+  );
+});
