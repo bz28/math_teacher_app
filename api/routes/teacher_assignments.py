@@ -8,7 +8,7 @@ from typing import Annotated, Any, Literal, Protocol
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
-from sqlalchemy import Integer, and_, case, func, or_, select
+from sqlalchemy import Integer, case, func, or_, select
 from sqlalchemy import delete as sql_delete
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import insert as pg_insert
