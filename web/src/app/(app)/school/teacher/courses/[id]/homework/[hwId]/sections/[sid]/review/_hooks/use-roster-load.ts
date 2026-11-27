@@ -115,30 +115,29 @@ export function useRosterLoad({
           // not be what flips a section to "all published" when none of
           // her students' work has been.
           if (!r.is_preview) otherGraded += 1;
-          // Everything below is an ACTION count. Publishing is
-          // homework-wide, so the button releases her rehearsal from
-          // here too, and every label and warning on that click has to
-          // say so — including the reviewed/unopened split and the
-          // flagged soft-confirm. This mirrors the in-section loop,
-          // which guards only its `graded` tally the same way.
+          // Everything below is an ACTION count for "Publish all
+          // periods", which releases her rehearsal too, so it counts
+          // here just as in-section (only the `graded` tally skips it).
           //
-          // Flagged rule (same as in-section): only flag_for_review,
-          // only while unresolved, only when the grade is actually
-          // about to go out.
+          // Flagged and graph warnings count only grades that would
+          // actually go out: approved, and new or edited. Flagged means
+          // flag_for_review, still unresolved.
           const ov = r.integrity_overview;
-          const isFlaggedUnresolved =
+          const goesOutFlagged =
+            !!r.reviewed_at &&
             ov?.disposition === "flag_for_review" &&
             ov.resolution === "unresolved";
+          const goesOutWithGraph = !!r.reviewed_at && (r.graph_items_open ?? 0) > 0;
           if (r.grade_published_at === null) {
             otherPending += 1;
             if (r.reviewed_at) otherPendingReviewed += 1;
-            if (isFlaggedUnresolved) otherFlagged += 1;
-            if ((r.graph_items_open ?? 0) > 0) otherGraph += 1;
+            if (goesOutFlagged) otherFlagged += 1;
+            if (goesOutWithGraph) otherGraph += 1;
           } else if (r.grade_dirty) {
             otherDirty += 1;
             if (r.reviewed_at) otherDirtyReviewed += 1;
-            if (isFlaggedUnresolved) otherFlagged += 1;
-            if ((r.graph_items_open ?? 0) > 0) otherGraph += 1;
+            if (goesOutFlagged) otherFlagged += 1;
+            if (goesOutWithGraph) otherGraph += 1;
           }
         }
         setPendingOtherSections(otherPending);

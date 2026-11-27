@@ -524,9 +524,13 @@ async def test_a_rehearsal_grade_can_be_published_so_she_can_see_it(
     assert r.status_code == 200, r.text
     submission_id = uuid.UUID(r.json()["submission_id"])
 
-    # Stand in for the grading pipeline, which needs an LLM.
+    # Stand in for the grading pipeline, which needs an LLM, and for her
+    # Approve: publishing only ever releases approved grades.
     async with get_session_factory()() as s:
-        s.add(SubmissionGrade(submission_id=submission_id, final_score=92.0))
+        s.add(SubmissionGrade(
+            submission_id=submission_id, final_score=92.0,
+            reviewed_at=datetime.now(UTC),
+        ))
         await s.commit()
 
     # Nothing to see yet — the score exists but was never released.
@@ -540,6 +544,8 @@ async def test_a_rehearsal_grade_can_be_published_so_she_can_see_it(
         headers=world["headers"], json={},
     )
     assert r.status_code == 200, r.text
+    # Released (checked below), but not counted: it went to nobody.
+    assert r.json()["published_count"] == 0
 
     detail = (await client.get(
         f"/v1/school/student/homework/{world['assignment_id']}", headers=headers,
@@ -606,8 +612,11 @@ async def test_a_rehearsal_stays_out_of_every_teacher_facing_number(
         headers=world["headers"], json={},
     )
     assert r.status_code == 200, r.text
-    # Reports grades that went to students — she is not one.
+    # Reports grades that went to students — she is not one. Her grade
+    # is unapproved, so it stays back, but she isn't one of the class's
+    # grades waiting on approval either.
     assert r.json()["published_count"] == 0
+    assert r.json()["unapproved_remaining"] == 0
 
     # Student Insights: her drafted grade must not surface as one to
     # approve, and she is not enrolled in the class she teaches.

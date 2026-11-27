@@ -2834,7 +2834,7 @@ export interface paths {
         put?: never;
         /**
          * Publish Grades
-         * @description Publish (or republish) all graded submissions on this HW.
+         * @description Publish (or republish) the approved grades in scope.
          *
          *     Two categories are picked up:
          *       • fresh — graded but never published
@@ -2844,11 +2844,10 @@ export interface paths {
          *
          *     Either way, the live `final_score / breakdown / teacher_notes`
          *     are snapshotted into the `published_*` columns and
-         *     `grade_published_at` is stamped. Ungraded submissions are skipped.
-         *
-         *     When `reviewed_only` is set, the eligible set is further narrowed to
-         *     grades the teacher has vetted (reviewed_at IS NOT NULL), so the
-         *     AI-suggested grades they never opened stay unpublished.
+         *     `grade_published_at` is stamped. Ungraded and unapproved grades are
+         *     never released: no path publishes a grade the teacher hasn't
+         *     approved. `unapproved_remaining` says how many in scope stayed
+         *     hidden for that reason, so the screen can say so.
          */
         post: operations["publish_grades_v1_teacher_assignments__assignment_id__publish_grades_post"];
         delete?: never;
@@ -5817,13 +5816,20 @@ export interface components {
             /** Status */
             status: string;
         };
-        /** PublishGradesRequest */
+        /**
+         * PublishGradesRequest
+         * @description What to release. Only ever grades the teacher approved
+         *     (reviewed_at set: her explicit Approve on an AI grade, or a hand
+         *     grade with every problem scored). No scope = every section of the
+         *     homework ("Publish all"); `section_id` = the class period she's
+         *     reviewing; `submission_id` = one student (late work, an early
+         *     return).
+         */
         PublishGradesRequest: {
-            /**
-             * Reviewed Only
-             * @default false
-             */
-            reviewed_only: boolean;
+            /** Section Id */
+            section_id?: string | null;
+            /** Submission Id */
+            submission_id?: string | null;
         };
         /** RecordActivityResponse */
         RecordActivityResponse: {
