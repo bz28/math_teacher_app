@@ -8,8 +8,8 @@
  *
  * One family uses the engine today: persona overviews (login-time) —
  * a big WelcomeCover then a guided walk: "teacher" | "student" |
- * "personal". The teacher overview is one comprehensive from-zero tour
- * that walks every workspace tab; the old per-feature first-use
+ * "personal". The teacher overview is a four-step from-zero tour that
+ * ends on New homework; the old per-feature first-use
  * coachmarks were retired (they fired once, invisibly, and confused
  * teachers). The `compact` flag the engine still honors is unused.
  */
@@ -46,12 +46,8 @@ export const TOUR_IDS = {
   teacherNewCourse: "teacher-new-course",
   teacherNewSection: "teacher-new-section",
   teacherInvite: "teacher-invite",
-  teacherMaterials: "teacher-materials",
   teacherNewHomework: "teacher-new-homework",
-  teacherPractice: "teacher-practice",
   teacherInsights: "teacher-insights",
-  teacherSubmissions: "teacher-submissions",
-  teacherGrades: "teacher-grades",
 
   // ── School-student dashboard (/school/student) ──
   studentJoin: "student-join",
@@ -82,11 +78,7 @@ export const TOUR_ACTIONS = {
   // the invite control (TOUR_IDS.teacherInvite, inside the roster) is
   // mounted before step two spotlights it.
   expandFirstSection: "teacher.expand-first-section",
-  gotoMaterials: "teacher.goto-materials",
   gotoHomework: "teacher.goto-homework",
-  gotoPractice: "teacher.goto-practice",
-  gotoSubmissions: "teacher.goto-submissions",
-  gotoGrades: "teacher.goto-grades",
 } as const;
 
 export interface TourCover {

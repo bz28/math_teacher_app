@@ -33,8 +33,14 @@ const EMPTY_FILTERS: HwFilters = { status: "all", section: null, unit: null };
 export function HomeworkTab({
   courseId,
   onGoToMaterials,
+  openNew,
+  onOpenNewConsumed,
 }: {
   courseId: string;
+  /** One-shot request (the setup checklist's New homework) to open the
+   *  New homework dialog; cleared through onOpenNewConsumed. */
+  openNew?: boolean;
+  onOpenNewConsumed?: () => void;
   /** Switches the parent course view to the Materials tab so a teacher
    *  with no units can create one before generating homework. */
   onGoToMaterials?: () => void;
@@ -45,6 +51,11 @@ export function HomeworkTab({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showNew, setShowNew] = useState(false);
+  useEffect(() => {
+    if (!openNew) return;
+    setShowNew(true);
+    onOpenNewConsumed?.();
+  }, [openNew, onOpenNewConsumed]);
   const [searchQuery, setSearchQuery] = useState("");
   const [filters, setFilters] = useState<HwFilters>(EMPTY_FILTERS);
 
