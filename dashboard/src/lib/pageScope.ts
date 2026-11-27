@@ -3,7 +3,7 @@
  *
  *   "school"   — its data belongs to schools and it sends `school_id`
  *                (Teacher reports, LLM calls, Users, Audit log,
- *                Accuracy).
+ *                Accuracy, Costs).
  *   "platform" — its data belongs to no school, so the scope does not
  *                apply: the Schools directory and Leads (the business
  *                side) and the Admins preset of Users (admins have no school).
@@ -22,6 +22,7 @@ const SCHOOL_SCOPED = [
   "/users",
   "/audit-logs",
   "/accuracy",
+  "/costs",
 ];
 
 const PLATFORM = ["/schools", "/leads"];

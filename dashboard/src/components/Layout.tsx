@@ -14,9 +14,8 @@ interface NavItem {
 //
 // DEBUG is the daily work: start from the calls, drill school → teacher →
 // student → submission, or come in from a teacher's report or an accuracy
-// case. MONEY joins below it as its pages land — a group pointing at an
-// unbuilt page is worse than no group. Users and Audit log are consulted,
-// not worked in, so they sit in the foot.
+// case. MONEY is what we spend and what one of each thing costs. Users and
+// Audit log are consulted, not worked in, so they sit in the foot.
 //
 // Leads is still routed (old links keep working) but has no slot here: it
 // is on its way out of the console.
@@ -28,6 +27,10 @@ const DEBUG: NavItem[] = [
   { to: "/schools", label: "Schools" },
   { to: "/reports", label: "Teacher reports" },
   { to: "/accuracy", label: "Accuracy" },
+];
+
+const MONEY: NavItem[] = [
+  { to: "/costs", label: "Costs" },
 ];
 
 const FOOT: NavItem[] = [
@@ -166,6 +169,21 @@ export default function Layout() {
         <div className="nav-section-label">Debug</div>
         <div className="nav-primary">
           {DEBUG.map((n) => (
+            <NavLink
+              key={n.to}
+              to={n.to}
+              className={({ isActive }) =>
+                `nav-link nav-link-primary ${isActive ? "active" : ""}`
+              }
+            >
+              {n.label}
+            </NavLink>
+          ))}
+        </div>
+
+        <div className="nav-section-label">Money</div>
+        <div className="nav-primary">
+          {MONEY.map((n) => (
             <NavLink
               key={n.to}
               to={n.to}

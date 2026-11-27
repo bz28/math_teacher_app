@@ -19,6 +19,7 @@ import TeacherDetail from "./pages/TeacherDetail";
 import AuditLogs from "./pages/AuditLogs";
 import AssignmentDetail from "./pages/AssignmentDetail";
 import SubmissionTrace from "./pages/SubmissionTrace";
+import Costs from "./pages/Costs";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (!getToken()) return <Navigate to="/login" replace />;
@@ -71,6 +72,9 @@ export default function App() {
           />
 
           <Route path="/users" element={<Users />} />
+
+          {/* Money. */}
+          <Route path="/costs" element={<Costs />} />
 
           <Route path="*" element={<Navigate to="/llm-calls" replace />} />
         </Route>

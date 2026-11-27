@@ -224,7 +224,7 @@ async function withAuth<T>(
   return parseBody(res);
 }
 
-async function request<T>(path: string, params?: Record<string, string>): Promise<T> {
+export async function request<T>(path: string, params?: Record<string, string>): Promise<T> {
   return withAuth(
     (token) => {
       const url = new URL(`${API_BASE}${path}`);
