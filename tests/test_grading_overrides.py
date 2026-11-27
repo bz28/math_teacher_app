@@ -138,9 +138,45 @@ def test_shifted_pairs_still_count_but_never_link_to_the_wrong_problem() -> None
     )
     assert deltas is not None
     assert len(deltas) == 3  # the measurement is unchanged
-    # p1 pairs truly; #p9 isn't on a 3-problem sheet; the third pair is
-    # AI p3 (100) against teacher p2, whose recorded AI call was 0.
+    # p1 pairs truly; the second pair is AI #9 (100) against teacher p3,
+    # whose recorded call was 100 too, so it passes — and links to #9,
+    # which the case file reports as having nothing read. The third pair
+    # (AI p3 100 vs teacher p2, recorded 0) starts the shift.
+    assert [d.position for d in deltas] == [1, 9, None]
+
+
+def test_a_shift_withholds_every_later_link_even_on_a_shared_percent() -> None:
+    # Off-sheet grade (9) mid-list, problem b skipped by the grader. The
+    # third pair is AI c (0) against teacher b (raised to full); b's
+    # recorded AI call is also 0, so the percent check alone would pass
+    # and link to #p3 — but the shift began a pair earlier.
+    deltas = compare_grade(
+        {
+            "grades": [
+                {**_g("full", 100), "problem_position": 1},
+                {**_g("full", 100), "problem_position": 9},
+                {**_g("zero", 0), "problem_position": 3},
+            ],
+            "problem_percents": {"a": 100.0, "c": 0.0, "b": 0.0},
+        },
+        [_t("full", 100, "a"), _t("zero", 0, "c"), _t("full", 100, "b")],
+    )
+    assert deltas is not None
     assert [d.position for d in deltas] == [1, None, None]
+
+
+def test_a_gap_from_a_deleted_question_keeps_its_links() -> None:
+    # Content [a, (deleted), b, c] grades as positions 1, 3, 4 with three
+    # entries. Position 4 is real and the case file has it.
+    deltas = compare_grade(
+        {
+            "grades": [{**_g("zero", 0), "problem_position": p} for p in (1, 3, 4)],
+            "problem_percents": {"a": 0.0, "b": 0.0, "c": 0.0},
+        },
+        [_t("full", 100, "a"), _t("full", 100, "b"), _t("full", 100, "c")],
+    )
+    assert deltas is not None
+    assert [d.position for d in deltas] == [1, 3, 4]
 
 
 def test_homework_edited_after_grading_still_compares_and_links() -> None:
