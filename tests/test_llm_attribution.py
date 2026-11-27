@@ -37,6 +37,7 @@ from api.core.llm_attribution import (
     SUBMISSION_STAMPED_SINCE,
     call_owners,
     calls_of,
+    deleted_submission_calls,
     is_deleted_submission_call,
 )
 from api.core.llm_client import LLMMode
@@ -344,3 +345,27 @@ async def test_an_admin_who_sets_homework_reads_the_same_on_users_and_calls(
     # Their own $4.00 judge call + Ola's $8.00 grading on their homework.
     assert row["total_cost"] == pytest.approx(12.0)
     assert calls["spend"] == pytest.approx(row["total_cost"])
+
+
+async def test_sql_and_row_forms_of_deleted_submission_agree(world: dict[str, Any]) -> None:
+    """The Calls list labels rows with the row form; a total that filters
+    with the SQL form must pick exactly the same calls."""
+    async with get_session_factory()() as s:
+        sam = uuid.UUID(world["sam"])
+        s.add_all([
+            _call(function=LLMMode.GRAPH_FEEDBACK, user_id=sam, submission_id=None, cost_usd=0.1),
+            _call(function=LLMMode.AI_GRADING, user_id=sam, submission_id=None, cost_usd=0.1,
+                  created_at=SUBMISSION_STAMPED_SINCE - timedelta(days=3)),
+        ])
+        await s.commit()
+        rows = (await s.execute(
+            select(LLMCall.id, LLMCall.function, LLMCall.submission_id, LLMCall.created_at)
+        )).all()
+        by_row = {r.id for r in rows if is_deleted_submission_call(
+            r.function, r.submission_id, r.created_at,
+        )}
+        by_sql = set((await s.execute(
+            select(LLMCall.id).where(deleted_submission_calls())
+        )).scalars())
+        assert by_sql == by_row
+        assert len(by_sql) == 2  # the integrity call in the world + graph feedback
