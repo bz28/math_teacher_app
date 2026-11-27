@@ -223,4 +223,43 @@ async def add_from_bank_on_homework_flow(
         got = problem_ids_in_content(after.content if after else None)
     if got != [tickets_id, lines_id]:
         issues.append(f"the homework holds {len(got)} problems, not the old one then the added one")
+    issues += await _practice_has_no_list_edits(browser, web_base, seed)
     return FlowResult(name, title, not issues, issues)
+
+
+async def _practice_has_no_list_edits(browser: HarnessBrowser, web_base: str, seed: Seed) -> list[str]:
+    """A draft practice set opens on the same page, but its problems are its
+    own versions, so the page must not offer to add or remove bank
+    questions (the API refuses either)."""
+    async with get_session_factory()() as s:
+        practice = Assignment(
+            course_id=uuid.UUID(seed.course_id), teacher_id=uuid.UUID(seed.teacher_id),
+            title="Page bank flow: practice", type="practice", status="draft",
+            unit_ids=[uuid.UUID(seed.unit_id)],
+        )
+        s.add(practice)
+        await s.flush()
+        version = QuestionBankItem(
+            course_id=practice.course_id, unit_id=uuid.UUID(seed.unit_id),
+            originating_assignment_id=practice.id, title="Page bank flow: practice version",
+            question="Solve 2x = 4.", final_answer="x = 2", status="approved", source="generated",
+        )
+        s.add(version)
+        await s.flush()
+        practice.content = {"problem_ids": [str(version.id)]}
+        await s.commit()
+        practice_id = str(practice.id)
+    issues: list[str] = []
+    async with browser.authed_page(seed.teacher_token, seed.teacher_refresh) as page:
+        await page.goto(
+            f"{web_base.rstrip('/')}/school/teacher/courses/{seed.course_id}/homework/{practice_id}",
+            wait_until="domcontentloaded", timeout=_TIMEOUT_MS,
+        )
+        try:
+            await page.get_by_text("Solve 2x = 4.").first.wait_for(timeout=_TIMEOUT_MS)
+        except PlaywrightTimeoutError:
+            return ["the draft practice set's page did not show its problem"]
+        for label in ("Add from bank", "Remove problems"):
+            if await page.get_by_role("button", name=label).count():
+                issues.append(f"a practice set offers {label}, which can't work there")
+    return issues

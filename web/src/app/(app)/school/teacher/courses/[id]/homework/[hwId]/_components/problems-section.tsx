@@ -57,7 +57,9 @@ export function ProblemsSection({
   /** Put the course's approved questions on this homework. Absent for a
    *  practice set, whose problems are its own generated versions. */
   onAddFromBank?: () => void;
-  onRemoveProblems: () => void;
+  /** Absent for a practice set: its problems are its own versions, not a
+   *  list this page rewrites. */
+  onRemoveProblems?: () => void;
   onEditProblem: (bankItemId: string) => void;
   checklistsLookedAgain: boolean;
   onChecklistChanged: () => Promise<void>;
@@ -91,21 +93,23 @@ export function ProblemsSection({
           >
             ✨ Generate more
           </button>
-          <button
-            type="button"
-            onClick={onRemoveProblems}
-            disabled={isPublished || problems.length === 0}
-            title={
-              isPublished
-                ? "Unpublish to remove problems"
-                : problems.length === 0
-                  ? "Nothing to remove"
-                  : "Remove problems from this homework in bulk"
-            }
-            className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-bold text-text-secondary hover:border-[color:var(--color-error-border)] hover:text-[color:var(--color-error)] disabled:opacity-50 disabled:hover:border-border-light disabled:hover:text-text-secondary"
-          >
-            Remove problems
-          </button>
+          {onRemoveProblems && (
+            <button
+              type="button"
+              onClick={onRemoveProblems}
+              disabled={isPublished || problems.length === 0}
+              title={
+                isPublished
+                  ? "Unpublish to remove problems"
+                  : problems.length === 0
+                    ? "Nothing to remove"
+                    : "Remove problems from this homework in bulk"
+              }
+              className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-bold text-text-secondary hover:border-[color:var(--color-error-border)] hover:text-[color:var(--color-error)] disabled:opacity-50 disabled:hover:border-border-light disabled:hover:text-text-secondary"
+            >
+              Remove problems
+            </button>
+          )}
         </div>
       </div>
 

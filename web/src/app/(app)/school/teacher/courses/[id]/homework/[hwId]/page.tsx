@@ -453,13 +453,17 @@ export default function HomeworkDetailPage({
             onChangeRubric={onChangeRubric}
             onGenerate={() => setShowGenerate(true)}
             onAddFromBank={graded ? () => setShowBank(true) : undefined}
-            onRemoveProblems={() => {
-              // Drop any in-flight publish soft-confirm so the
-              // teacher doesn't return from removal mode to a
-              // stale "Publish anyway?" bar from before.
-              setConfirmingPublish(false);
-              setEditingProblems(true);
-            }}
+            onRemoveProblems={
+              graded
+                ? () => {
+                    // Drop any in-flight publish soft-confirm so the
+                    // teacher doesn't return from removal mode to a
+                    // stale "Publish anyway?" bar from before.
+                    setConfirmingPublish(false);
+                    setEditingProblems(true);
+                  }
+                : undefined
+            }
             onEditProblem={(id) => void openWorkshopForProblem(id)}
             checklistsLookedAgain={checklistsLookedAgain}
             onChecklistChanged={refreshChecklists}
