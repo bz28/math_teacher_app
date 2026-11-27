@@ -401,6 +401,20 @@ async def test_approving_writes_reasons_without_waiting_for_the_drain(
     assert len(_mine(model, w)) == 2
 
 
+async def test_waiting_on_kicks_skips_one_from_another_event_loop() -> None:
+    """Tests marked anyio run on anyio's loop; the shared teardown waits
+    on this loop and must not trip over their kicks (CI: 'attached to a
+    different loop')."""
+    other = asyncio.new_event_loop()
+    foreign = other.create_future()  # stands in for a kick on that loop
+    rr._KICKS.add(foreign)  # type: ignore[arg-type]
+    try:
+        await asyncio.wait_for(rr.drain_refresh_tasks(), 2)
+    finally:
+        rr._KICKS.discard(foreign)  # type: ignore[arg-type]
+        other.close()
+
+
 async def test_an_approval_during_a_drain_pass_still_lands(
     client: AsyncClient, model: FakeModel,
 ) -> None:

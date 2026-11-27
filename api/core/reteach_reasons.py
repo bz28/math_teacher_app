@@ -515,6 +515,9 @@ async def _refresh_now(pair: tuple[uuid.UUID, uuid.UUID]) -> None:
 
 
 async def drain_refresh_tasks() -> None:
-    """Test helper: wait for every scheduled kick."""
-    while _KICKS:
-        await asyncio.gather(*list(_KICKS), return_exceptions=True)
+    """Test helper: wait for every kick scheduled on this event loop. A
+    test run on another loop (anyio's) leaves its kicks to finish there:
+    awaiting them here would raise."""
+    loop = asyncio.get_running_loop()
+    while mine := [t for t in _KICKS if t.get_loop() is loop]:
+        await asyncio.gather(*mine, return_exceptions=True)
