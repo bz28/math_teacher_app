@@ -29,12 +29,13 @@ export default function Costs() {
   // or a pasted link lands scoped too, not only a plain click. Read at
   // once so the first fetch is already scoped, then handed to the rail's
   // scope and dropped from the URL.
-  const linked = params.get("school");
+  // Empty (`?school=`, hand-typed) is no school: dropped, not "All".
+  const linked = params.get("school") || null;
   const stored = useSchoolScope();
   const scope = linked ?? stored;
   useEffect(() => {
-    if (!linked) return;
-    setSchoolScope(linked);
+    if (!params.has("school")) return;
+    if (linked) setSchoolScope(linked);
     const next = new URLSearchParams(params);
     next.delete("school");
     setParams(next, { replace: true });
