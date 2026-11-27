@@ -78,6 +78,19 @@ jobs:
       - name: Install dependencies
         run: pip install -e ".[dev]" -c constraints.txt
 
+      # Before the upgrade, not after: with two heads `alembic upgrade
+      # head` fails on its own, so a check placed after it can never
+      # run. This exists to name the problem ("two branch tips") instead
+      # of leaving alembic's message about narrowing to a branch.
+      # Counts lines, not "(head)" markers — a head reached via
+      # depends_on prints "(effective head)" and would slip past a grep
+      # for the literal "(head)".
+      - name: Single migration head
+        run: |
+          heads=$(alembic heads 2>/dev/null | grep -c . || true)
+          test "$heads" -eq 1 \
+            || { echo "::error::$heads alembic heads — two migration branch tips exist. Rebase one onto the other so there is a single linear history."; exit 1; }
+
       - name: Run migrations
         env:
           DATABASE_URL: postgresql+asyncpg://mathapp:mathapp@localhost:5432/mathapp_test
@@ -86,6 +99,33 @@ jobs:
           APP_ENV: test
           SENTRY_DSN: ""
         run: alembic upgrade head
+
+      # Migrations and models must agree. Without this, a model change
+      # that never got a migration passes CI silently — the test suite
+      # builds its schema from the models, so it never notices — and a
+      # promised follow-up migration can be forgotten entirely. Both had
+      # already happened by the time this step was added.
+      #
+      # Known blind spots, so nobody over-trusts a green check:
+      #   * server defaults — `compare_server_default=True` is not
+      #     usable here: these models declare Python-side `default=`, so
+      #     enabling it reports every real DB default as drift (47 false
+      #     positives on a clean schema).
+      #   * CHECK constraints — alembic does not reflect or diff them at
+      #     all, and this codebase encodes enum-ish values that way
+      #     (e.g. ck_schools_kind).
+      #   * partial-index predicates — a WHERE clause difference is
+      #     invisible, in both directions.
+      - name: Migrations match the models
+        env:
+          DATABASE_URL: postgresql+asyncpg://mathapp:mathapp@localhost:5432/mathapp_test
+          JWT_SECRET: ci-test-secret
+          CLAUDE_API_KEY: sk-ant-ci-fake-key
+          APP_ENV: test
+          SENTRY_DSN: ""
+        run: |
+          alembic check \
+            || { echo "::error::The models and the migrations disagree. Either a model change is missing its migration (write one), or a migration created something the models do not declare (declare it — see api/models/grading_job.py for the __table_args__ pattern). Do NOT blindly commit 'alembic revision --autogenerate' output: for the second case it emits a DROP for the object you just added."; exit 1; }
 
       - name: Lint
         run: ruff check api/ tests/
