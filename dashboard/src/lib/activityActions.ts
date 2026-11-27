@@ -248,9 +248,9 @@ export const ACTIVITY_ACTIONS: Record<ActivityFamily, ActivityAction[]> = {
         join(
           quoted(m, "title", "Undid edit to"),
           // The whole reason this action is logged: Undo restores the
-          // pre-edit status too, which is what the generation-quality
-          // board reads. Say so on the row, or the board and this
-          // timeline appear to contradict each other.
+          // pre-edit status too, which the bank shows. Say so on the
+          // row, or the item's status and this timeline appear to
+          // contradict each other.
           str(m, "restored_status") && `status back to ${str(m, "restored_status")}`,
         ),
     },

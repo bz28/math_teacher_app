@@ -1,7 +1,7 @@
 """Admin: one assignment, as the teacher built it.
 
 The page exists to show the artifact — the problems a teacher kept and
-published — which neither the activity log nor GenerationQuality shows.
+published — which the activity log doesn't show.
 These pin the parts that are easy to get quietly wrong:
 
 1. **Practice assignments resolve at all.** They don't populate
