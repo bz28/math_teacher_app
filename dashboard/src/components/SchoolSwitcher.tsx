@@ -38,9 +38,12 @@ export default function SchoolSwitcher({ selected }: { selected: SelectedSchool 
       // Staying put — but a page number from the old school's list can
       // point past the end of the new one's. Pages that keep their offset
       // in the URL (Audit log) start over; the rest remount (Layout).
+      // Picking a scope also ends the Calls page's "Internal only" filter
+      // (?school=internal), or the pick would change nothing on screen.
       const params = new URLSearchParams(search);
-      if (params.has("offset")) {
+      if (params.has("offset") || params.get("school") === "internal") {
         params.delete("offset");
+        if (params.get("school") === "internal") params.delete("school");
         navigate({ pathname, search: params.toString() }, { replace: true });
       }
     }

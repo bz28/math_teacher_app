@@ -73,6 +73,17 @@ function ScopeLine({ school }: { school: SelectedSchool }) {
     );
   }
 
+  // The Calls page's "Internal only" filter (?school=internal): calls that
+  // belong to no school. Not a rail scope, but it is what the page shows.
+  if (new URLSearchParams(search).get("school") === "internal") {
+    return (
+      <div className="scope-line" role="note">
+        <span className="scope-line-label">Scope</span>
+        <span><b>Internal only</b> — calls that belong to no school (admins, internal tools).</span>
+      </div>
+    );
+  }
+
   if (school.id === null) {
     return (
       <div className="scope-line" role="note">

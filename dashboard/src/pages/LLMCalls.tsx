@@ -64,7 +64,8 @@ export default function LLMCalls() {
   // or all of them — so the page keeps it in the URL as its own filter;
   // a school id in `?school=` is taken by the rail instead (Layout).
   const internalOnly = searchParams.get("school") === INTERNAL_SCHOOL;
-  const schoolFilter = entityFilter ? null : internalOnly ? INTERNAL_SCHOOL : scope;
+  const placeFilter = internalOnly ? INTERNAL_SCHOOL : scope;
+  const schoolFilter = entityFilter ? null : placeFilter;
   const status: Status = ((): Status => {
     const s = searchParams.get("status");
     return s === "ok" || s === "failed" ? s : "";
@@ -128,10 +129,13 @@ export default function LLMCalls() {
   // A band line describes the last 24h of the band's own scope — the
   // school, nothing narrower — so following one drops every narrower
   // filter, or the list it lands on is a different set of calls.
-  const followBand = (changes: Record<string, string>) => setParams({
-    user: "", teacher: "", student: "", assignment: "", submission: "", session: "", model: "",
-    function: "", hours: "", from: "", to: "", ...changes,
-  });
+  const followBand = (changes: Record<string, string>) => {
+    setSearch("");
+    setParams({
+      user: "", teacher: "", student: "", assignment: "", submission: "", session: "", model: "",
+      function: "", hours: "", from: "", to: "", ...changes,
+    });
+  };
 
   const handleDebug = async (callId: string) => {
     const ok = await confirm({
@@ -271,7 +275,9 @@ export default function LLMCalls() {
 
       {/* What needs a human now — each line a link into its calls. */}
       <AttentionBand
-        schoolId={schoolFilter}
+        // The place only — never the narrower filters, which a band click
+        // clears — so the list it lands on is the set it counted.
+        schoolId={placeFilter}
         onFunction={(fn, failedOnly) => followBand({ function: fn, status: failedOnly ? "failed" : "" })}
         onSchool={(id) => followBand({ school: id, status: "failed" })}
       />
