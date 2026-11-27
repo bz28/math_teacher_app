@@ -3,19 +3,24 @@ import { Checkbox } from "../components/Checkbox";
 import { urlSchoolParam } from "../lib/urlScope";
 import { scopeParams, useSchoolScope } from "../lib/useSelectedSchool";
 import SpendTab from "./costs/SpendTab";
+import UnitEconomicsTabs from "./costs/UnitEconomicsTabs";
 import "./costs/costs.css";
 
 /**
  * Costs — the console's money job. Spend is what we actually paid and
- * where it went; Unit costs and Margin (next) are what one of each thing
- * costs and what that means at a price.
+ * where it went; Unit costs and Margin are what one of each thing costs
+ * and what that means at a price.
  *
  * The tab and the internal toggle live in the URL so a link to "spend by
  * teacher, internal included" lands exactly there. The page follows the
  * rail's school scope.
  */
 
-const TABS = [{ key: "spend", label: "Spend" }] as const;
+const TABS = [
+  { key: "spend", label: "Spend" },
+  { key: "units", label: "Unit costs" },
+  { key: "margin", label: "Margin" },
+] as const;
 type Tab = (typeof TABS)[number]["key"];
 
 export default function Costs() {
@@ -71,6 +76,9 @@ export default function Costs() {
 
       {tab === "spend" && (
         <SpendTab scopeParams={scopeParams(scope)} includeInternal={includeInternal} />
+      )}
+      {tab !== "spend" && (
+        <UnitEconomicsTabs tab={tab} scopeParams={scopeParams(scope)} includeInternal={includeInternal} />
       )}
     </div>
   );

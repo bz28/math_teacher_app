@@ -60,6 +60,137 @@ export interface SpendData {
   };
 }
 
+// ── Unit economics ─────────────────────────────────────────────────
+//
+// What ONE homework / test / generated unit costs, as opposed to what we
+// spent in total. Every repriced figure is computed server-side
+// (api/routes/admin_unit_economics*.py): tokenizer rescaling, per-model
+// cache multipliers and price cliffs are easy to get subtly wrong, so the
+// page looks numbers up rather than recomputing them.
+
+/** The stages a model is chosen for, as the API names them. */
+export type Stage = "vision" | "grading" | "integrity" | "generation" | "tutoring";
+/** A function's stage; "other" = unmapped, never repriced. */
+export type Family = Stage | "other";
+
+/** A cost per unit, by catalog model id. `null` = can't be priced. */
+export type RepriceRow = Record<string, number | null>;
+
+export interface UnitFunction {
+  function: string;
+  /** Which stage's model choice prices this leg. Decided server-side,
+   *  where the call's context (inside a generation job or not) is known. */
+  family: Family;
+  models: string[];
+  measured_model: string;
+  /** `measured_model` resolved to a catalog id, or null if unpriced. */
+  measured_catalog_id: string | null;
+  calls_per_unit: number;
+  cost_per_unit: number;
+  tokens: { input: number; output: number; cache_read: number; cache_write: number };
+  reprice: RepriceRow;
+  /** Every leg priced on the model it actually ran on: equals
+   *  `cost_per_unit` when the arithmetic is sound (the trust check). */
+  self_reprice: number | null;
+}
+
+export interface UnitCost {
+  /** "submission:homework", "generation:unit", "residual:teacher", … */
+  kind: string;
+  label: string;
+  denominator: string;
+  n: number;
+  /** null when there is no data — never 0, which would read as free. */
+  cost_median: number | null;
+  cost_mean: number | null;
+  cost_p90: number | null;
+  cost_total: number;
+  /** generation:unit only — generation runs per unit, regenerations included. */
+  runs_per_unit?: number | null;
+  sufficient: boolean;
+  /** Too short a window to read a per-month rate from. */
+  window_too_short: boolean;
+}
+
+export interface CatalogModel {
+  id: string;
+  label: string;
+  input_per_mtok: number;
+  output_per_mtok: number;
+  is_configured: boolean;
+}
+
+/** Calls whose submission or generation job was deleted: their cost rides
+ *  pro rata on the window's surviving units. */
+export interface OrphanSummary {
+  calls: number;
+  cost_usd: number;
+  per_unit_usd: number;
+  spread_over: number;
+}
+
+export type SubmissionKind = "homework" | "quiz" | "test" | "practice";
+
+export interface Measured {
+  window_too_short: boolean;
+  active_students: number;
+  submissions: Record<SubmissionKind, number>;
+  /** null when no one handed anything in — unknown, not four zeros. */
+  submissions_per_student_month: Record<SubmissionKind, number> | null;
+  /** Every school, same window: a scope with no rate falls back to it. */
+  platform_submissions_per_student_month: Record<SubmissionKind, number> | null;
+  teachers: number;
+  students: number;
+  /** Teachers with teacher-side AI in the window — what that cost is per. */
+  active_teachers: number;
+  /** Active students per active teacher. */
+  students_per_teacher: number | null;
+}
+
+export interface StageModel {
+  label: string;
+  /** null when nothing in the stage ran in the window. */
+  model: string | null;
+  catalog_id: string | null;
+  cost_usd: number;
+}
+
+export interface UnitEconomicsData {
+  window: {
+    start: string;
+    end: string;
+    days: number;
+    /** "model_cutover" = since the first real call on the configured model. */
+    basis: string;
+    cutover_model: string | null;
+  };
+  units: UnitCost[];
+  functions_by_unit: Record<string, UnitFunction[]>;
+  deleted_submissions: OrphanSummary;
+  deleted_generation_jobs: OrphanSummary;
+  reconciliation: {
+    call_count: number;
+    recorded_usd: number;
+    recomputed_usd: number;
+    gap_pct: number;
+    unpriced_models: string[];
+    by_model: {
+      model: string;
+      calls: number;
+      recorded_usd: number;
+      recomputed_usd: number | null;
+      priced: boolean;
+    }[];
+  };
+  measured: Measured;
+  /** Every stage, in picker order, with the model that carried its spend. */
+  models_in_use: Record<Stage, StageModel>;
+  model_catalog: CatalogModel[];
+  min_sample: number;
+}
+
 export const costsApi = {
   spend: (params: Record<string, string>) => request<SpendData>("/admin/spend", params),
+  unitEconomics: (params: Record<string, string>) =>
+    request<UnitEconomicsData>("/admin/unit-economics", params),
 };
