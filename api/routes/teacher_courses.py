@@ -17,6 +17,11 @@ from api.core.class_rubric import (
     credit_guidance,
     rubric_revision,
 )
+from api.core.grading_queue import (
+    BLOCK_NO_EXTRACTION,
+    BLOCK_UNREADABLE,
+    ai_grade_block,
+)
 from api.core.integrity_pipeline import UNFINISHED_REASONS
 from api.core.subjects import VALID_SUBJECTS
 from api.database import get_db
@@ -476,6 +481,13 @@ async def needs_attention(
             dirty_case.label("dirty"),
             SubmissionGrade.grade_published_at.label("grade_published_at"),
             overdue_case.label("is_overdue"),
+            _to_review_case().label("to_review"),
+            # The ORM rows feed `ai_grade_block` — the review page's own
+            # rule for "can't be AI-graded" — so the two can't drift.
+            # `files` (the photos) is deferred on the model.
+            Submission,
+            SubmissionGrade,
+            Assignment,
         )
         .select_from(Submission)
         .join(Assignment, Assignment.id == Submission.assignment_id)
@@ -530,6 +542,22 @@ async def needs_attention(
             "section_name": r.section_name,
             "due_at": r.due_at.isoformat() if r.due_at else None,
             "reason": reason,
+            # Per-row facts the home queue sums per (homework × section),
+            # each the review page's own predicate for the same count:
+            #   flagged         — its Flagged chip (`flagged_case` ⇔ `isFlagged`)
+            #   to_approve      — a grade drafted and not yet released, the
+            #                     section's share of its "Publish N grades"
+            #   cant_ai_grade   — its "N can't be AI-graded" note
+            #                     (`ai_grade_block` unreadable / no_extraction)
+            "flagged": bool(r.flagged),
+            "to_approve": bool(
+                r.to_review
+                and r.SubmissionGrade is not None
+                and r.SubmissionGrade.final_score is not None,
+            ),
+            "cant_ai_grade": ai_grade_block(
+                r.Submission, r.SubmissionGrade, r.Assignment,
+            ) in (BLOCK_UNREADABLE, BLOCK_NO_EXTRACTION),
         })
 
     # Priority bucket, then most-overdue/soonest-due first (nulls last),

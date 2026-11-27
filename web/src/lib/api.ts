@@ -1408,6 +1408,14 @@ export interface NeedsAttentionItem {
   section_name: string;
   due_at: string | null;
   reason: NeedsAttentionReason;
+  /** Graded and not yet released — counts toward the section's
+   *  "N to approve" (its share of the review page's Publish count). */
+  to_approve: boolean;
+  /** The review page's Flagged chip (same rule as `isFlagged`). */
+  flagged: boolean;
+  /** The review page's "can't be AI-graded" note (unreadable / no
+   *  reading) — the teacher grades these from the photo. */
+  cant_ai_grade: boolean;
 }
 
 /** One row per (student × section enrollment) in the Grades tab roster.

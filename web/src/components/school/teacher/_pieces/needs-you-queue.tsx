@@ -1,17 +1,23 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { teacher, type NeedsAttentionItem, type NeedsAttentionReason } from "@/lib/api";
 import { Skeleton } from "@/components/ui";
 import { StatusPill } from "./status-pill";
 import { SubjectChip } from "./subject-chip";
+import {
+  groupNeedsYou,
+  groupReviewHref,
+  studentReviewHref,
+  type NeedsYouGroup,
+} from "./needs-you-groups";
 
-// How many rows show before the "Show N more" disclosure. A triage
-// queue should surface the most urgent work without becoming a wall —
-// the server already sorts most-urgent-first, so the head is the part
-// that matters most on a Monday morning.
+// How many homework × section rows show before the "Show N more"
+// disclosure. A triage queue should surface the most urgent work
+// without becoming a wall — the server sorts most-urgent-first, so the
+// head is the part that matters most on a Monday morning.
 const INITIAL_VISIBLE = 5;
 
 // Reason → chip. Mirrors the dashboard's StatusPill vocabulary so the
@@ -58,23 +64,18 @@ function dueHint(iso: string | null): { text: string; overdue: boolean } | null 
   };
 }
 
-function reviewHref(item: NeedsAttentionItem): string {
-  return (
-    `/school/teacher/courses/${item.course_id}` +
-    `/homework/${item.assignment_id}/sections/${item.section_id}/review` +
-    `?student=${item.student_id}`
-  );
-}
-
 /** Cross-course "Needs you today" triage queue. The single actionable
- *  list a teacher sees before deciding which course to open — every
- *  submission waiting on them, most-urgent-first, each row a one-click
- *  deep-link straight into the grading pane for that exact student. */
+ *  list a teacher sees before deciding which course to open — one row
+ *  per homework × section with work waiting on them, counted the way the
+ *  review page counts, most-urgent-first. Review lands on that section's
+ *  review page at its most urgent student; the students behind a row
+ *  open underneath it. */
 export function NeedsYouQueue() {
   const [items, setItems] = useState<NeedsAttentionItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
   const reduceMotion = useReducedMotion();
+  const groups = useMemo(() => (items ? groupNeedsYou(items) : null), [items]);
 
   // Monotonic request id: only the newest attempt is allowed to write
   // state. Guards both the mount fetch and every Retry with one
@@ -131,9 +132,10 @@ export function NeedsYouQueue() {
         <h2 className="font-serif text-[24px] leading-tight tracking-[-0.01em] text-text-primary">
           Needs you today
         </h2>
-        {items !== null && items.length > 0 && (
+        {groups !== null && groups.length > 0 && (
           <span className="font-mono text-[12px] tabular-nums text-text-muted">
-            {items.length} item{items.length === 1 ? "" : "s"}
+            {groups.length} to review · {items!.length} student
+            {items!.length === 1 ? "" : "s"}
           </span>
         )}
       </div>
@@ -141,12 +143,12 @@ export function NeedsYouQueue() {
       <div className="mt-3 overflow-hidden rounded-[--radius-md] border border-border bg-surface">
         {error ? (
           <QueueError onRetry={load} />
-        ) : items === null ? (
+        ) : groups === null ? (
           <QueueSkeleton />
-        ) : items.length === 0 ? (
+        ) : groups.length === 0 ? (
           <CaughtUp />
         ) : (
-          <QueueList items={items} expanded={expanded} onExpand={() => setExpanded(true)} reduceMotion={!!reduceMotion} />
+          <QueueList groups={groups} expanded={expanded} onExpand={() => setExpanded(true)} reduceMotion={!!reduceMotion} />
         )}
       </div>
     </motion.section>
@@ -154,30 +156,30 @@ export function NeedsYouQueue() {
 }
 
 function QueueList({
-  items,
+  groups,
   expanded,
   onExpand,
   reduceMotion,
 }: {
-  items: NeedsAttentionItem[];
+  groups: NeedsYouGroup[];
   expanded: boolean;
   onExpand: () => void;
   reduceMotion: boolean;
 }) {
-  const visible = expanded ? items : items.slice(0, INITIAL_VISIBLE);
-  const hidden = items.length - visible.length;
+  const visible = expanded ? groups : groups.slice(0, INITIAL_VISIBLE);
+  const hidden = groups.length - visible.length;
 
   return (
     <ul>
       <AnimatePresence initial={false}>
-        {visible.map((item, i) => (
+        {visible.map((group, i) => (
           <motion.li
-            key={item.submission_id}
+            key={group.key}
             initial={reduceMotion ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.18, delay: reduceMotion ? 0 : Math.min(i, 6) * 0.02 }}
           >
-            <QueueRow item={item} first={i === 0} />
+            <GroupRow group={group} first={i === 0} />
           </motion.li>
         ))}
       </AnimatePresence>
@@ -196,71 +198,122 @@ function QueueList({
   );
 }
 
-function QueueRow({ item, first }: { item: NeedsAttentionItem; first: boolean }) {
-  const chip = REASON_CHIP[item.reason];
-  const due = dueHint(item.due_at);
+/** The counts a row carries, in the review page's words. Flagged leads
+ *  (integrity is what a teacher wants to see first), then the grades
+ *  waiting on her; what she'll grade from the photo and work the AI
+ *  hasn't reached yet follow as quiet text — true, but not a call to act. */
+function GroupCounts({ group }: { group: NeedsYouGroup }) {
+  const quiet = [
+    group.cantAiGrade > 0 && `${group.cantAiGrade} can’t be AI-graded`,
+    group.ungraded > 0 && `${group.ungraded} not graded yet`,
+  ].filter(Boolean);
+  return (
+    <div className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1">
+      {group.flagged > 0 && (
+        <StatusPill tone="red" label={`${group.flagged} flagged`} icon="⚑" />
+      )}
+      {group.toApprove > 0 && (
+        <StatusPill tone="amber" label={`${group.toApprove} to approve`} />
+      )}
+      {quiet.length > 0 && (
+        <span className="text-[12px] text-text-muted">{quiet.join(" · ")}</span>
+      )}
+    </div>
+  );
+}
+
+function GroupRow({ group, first }: { group: NeedsYouGroup; first: boolean }) {
+  const [open, setOpen] = useState(false);
+  const listId = useId();
+  const due = dueHint(group.due_at);
+  const n = group.items.length;
 
   return (
+    <div className={first ? "" : "border-t border-border-light"}>
+      <div className="flex flex-col gap-3 px-4 py-3.5 sm:flex-row sm:items-center">
+        <div className="min-w-0 flex-1">
+          <p className="font-serif text-[18px] leading-tight tracking-[-0.01em] text-text-primary">
+            <span className="break-words">{group.assignment_title}</span>
+            <span aria-hidden className="mx-1.5 text-[color:var(--color-border)]">·</span>
+            <span className="whitespace-nowrap">{group.section_name}</span>
+          </p>
+          <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[12.5px] text-text-secondary">
+            <SubjectChip subject={group.subject} />
+            <span>{group.course_name}</span>
+            {due && (
+              <>
+                <span aria-hidden className="text-[color:var(--color-border)]">·</span>
+                <span
+                  className={
+                    due.overdue ? "text-[color:var(--color-error)]" : "text-text-secondary"
+                  }
+                >
+                  {due.text}
+                </span>
+              </>
+            )}
+            <span aria-hidden className="text-[color:var(--color-border)]">·</span>
+            {/* The students behind the row — the old one-row-per-student
+                detail, a click away instead of being the whole list. */}
+            <button
+              type="button"
+              onClick={() => setOpen((v) => !v)}
+              aria-expanded={open}
+              aria-controls={listId}
+              className="inline-flex items-center gap-1 rounded-[2px] font-medium text-text-secondary underline decoration-[color:var(--color-border)] underline-offset-2 transition-colors hover:text-primary hover:decoration-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+            >
+              {n} student{n === 1 ? "" : "s"}
+              <span
+                aria-hidden
+                className={`inline-block text-[10px] transition-transform ${open ? "rotate-180" : ""}`}
+              >
+                ▾
+              </span>
+            </button>
+          </p>
+          <GroupCounts group={group} />
+        </div>
+
+        <Link
+          href={groupReviewHref(group)}
+          aria-label={`Review ${group.assignment_title}, ${group.section_name}`}
+          className={`inline-flex shrink-0 items-center justify-center gap-1.5 self-start rounded-[--radius-sm] px-3.5 py-2 text-[13px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 sm:self-auto ${
+            first
+              ? "bg-primary text-white hover:bg-primary-dark"
+              : "border border-border bg-surface text-text-primary hover:border-primary/40 hover:text-primary"
+          }`}
+        >
+          Review
+          <span aria-hidden>→</span>
+        </Link>
+      </div>
+
+      {open && (
+        <ul id={listId} className="border-t border-border-light bg-[color:var(--color-surface-alt-2)]/50 py-1">
+          {group.items.map((item) => (
+            <li key={item.submission_id}>
+              <StudentRow item={item} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function StudentRow({ item }: { item: NeedsAttentionItem }) {
+  const chip = REASON_CHIP[item.reason];
+  return (
     <Link
-      href={reviewHref(item)}
-      className={`group flex items-center gap-3 px-4 py-3.5 transition-colors hover:bg-[color:var(--color-surface-alt-2)] ${
-        first ? "" : "border-t border-border-light"
-      }`}
+      href={studentReviewHref(item)}
+      className="group flex items-center gap-3 py-1.5 pl-8 pr-4 transition-colors hover:bg-[color:var(--color-surface-alt-2)]"
     >
       <div className="flex min-w-[94px] shrink-0">
         <StatusPill tone={chip.tone} label={chip.label} icon={chip.icon} />
       </div>
-
-      {/* The name is what a teacher scans; on a phone it was the thing
-          that lost. A 94px pill and a fixed 112px due column left about
-          100px for the identity, so every row read "Ava Alv… / Slope …"
-          — a triage queue that can't tell you who or what.
-          Below sm the two fixed columns stand down: the course name
-          drops (the assignment title and period already identify the
-          work) and the due joins the meta line, which hands the name
-          roughly 240px and renders it in full. From sm up the original
-          four-column row is untouched. */}
-      <div className="min-w-0 flex-1">
-        <p className="truncate font-serif text-[17px] leading-tight tracking-[-0.01em] text-text-primary transition-colors group-hover:text-primary">
-          {item.student_name}
-        </p>
-        <p className="mt-0.5 truncate text-[12.5px] text-text-secondary">
-          <span className="font-medium text-text-primary">{item.assignment_title}</span>
-          <span aria-hidden className="mx-1.5 hidden text-[color:var(--color-border)] sm:inline">·</span>
-          <span className="hidden sm:inline">{item.course_name}</span>
-          <span aria-hidden className="mx-1.5 text-[color:var(--color-border)]">·</span>
-          {item.section_name}
-          {/* On a phone the due only earns its space when the pill is
-              NOT already saying OVERDUE. Printing both spent the room
-              the period label needed, so a row read
-              "Slope & Intercepts · Perio…" while announcing lateness
-              twice. When it isn't overdue the pill carries no timing,
-              so the due is the only signal and stays. */}
-          {due && !due.overdue && (
-            <span className="sm:hidden">
-              <span aria-hidden className="mx-1.5 text-[color:var(--color-border)]">·</span>
-              {due.text}
-            </span>
-          )}
-        </p>
-      </div>
-
-      <div className="hidden shrink-0 sm:block">
-        <SubjectChip subject={item.subject} />
-      </div>
-
-      <div className="hidden w-[112px] shrink-0 text-right sm:block">
-        {due && (
-          <span
-            className={`font-mono text-[12px] ${
-              due.overdue ? "text-[color:var(--color-error)]" : "text-text-muted"
-            }`}
-          >
-            {due.text}
-          </span>
-        )}
-      </div>
-
+      <span className="min-w-0 flex-1 truncate text-[13.5px] text-text-primary transition-colors group-hover:text-primary">
+        {item.student_name}
+      </span>
       <span
         aria-hidden
         className="shrink-0 text-text-muted transition-transform group-hover:translate-x-0.5 group-hover:text-primary"

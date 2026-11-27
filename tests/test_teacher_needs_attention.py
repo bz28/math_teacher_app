@@ -354,3 +354,67 @@ async def test_unenrolled_after_submit_drops(client: AsyncClient) -> None:
         await s.commit()
     body = await _get(w, client)
     assert body == {"items": [], "total": 0}
+
+
+async def test_row_counts_match_review_page_predicates(client: AsyncClient) -> None:
+    """The home queue sums these per (homework × section) into "N to
+    approve", "⚑ N flagged" and "N can't be AI-graded"; each must be the
+    review page's own rule for the same count, or the row a teacher
+    clicks promises numbers the page she lands on doesn't show."""
+    w = await _seed()
+    hw = await _publish_hw(w, due_at=None)
+    async with get_session_factory()() as s:
+        a = await s.get(Assignment, hw)
+        a.ai_grading_enabled = True
+        await s.commit()
+
+    async def student() -> uuid.UUID:
+        async with get_session_factory()() as s:
+            u = User(
+                email=f"student_{uuid.uuid4().hex[:8]}@t.com",
+                password_hash=hash_password("x"), grade_level=8, role="student",
+                name=f"S {uuid.uuid4().hex[:4]}",
+            )
+            s.add(u)
+            await s.flush()
+            s.add(SectionEnrollment(
+                section_id=w["section_id"], course_id=w["course_id"], student_id=u.id,
+            ))
+            await s.commit()
+            return u.id
+
+    reading = {"steps": [], "confidence": 0.93}
+    now = datetime.now(UTC)
+    # Graded, not released → to approve.
+    drafted = await _add_submission(w, hw)
+    # Reading flagged by the student → flagged (never AI-graded).
+    misread = await _add_submission(w, hw, student_id=await student())
+    # AI skipped it as unreadable → flagged AND can't be AI-graded.
+    unreadable = await _add_submission(w, hw, student_id=await student())
+    # Read and confirmed, waiting on the grader → none of the three.
+    waiting = await _add_submission(w, hw, student_id=await student())
+    async with get_session_factory()() as s:
+        for sid in (drafted, misread, unreadable, waiting):
+            sub = await s.get(Submission, sid)
+            sub.extraction = reading
+            sub.submitted_at = now - timedelta(hours=2)
+            sub.extraction_confirmed_at = now - timedelta(hours=1)
+        (await s.get(Submission, misread)).extraction_flagged_at = now
+        s.add(SubmissionGrade(submission_id=drafted, final_score=80.0, breakdown=[]))
+        s.add(SubmissionGrade(submission_id=unreadable, ai_grading_status="skipped_unreadable"))
+        await s.commit()
+
+    by_sub = {i["submission_id"]: i for i in (await _get(w, client))["items"]}
+    facts = {
+        k: (by_sub[str(v)]["to_approve"], by_sub[str(v)]["flagged"], by_sub[str(v)]["cant_ai_grade"])
+        for k, v in {
+            "drafted": drafted, "misread": misread,
+            "unreadable": unreadable, "waiting": waiting,
+        }.items()
+    }
+    assert facts == {
+        "drafted": (True, False, False),
+        "misread": (False, True, False),
+        "unreadable": (False, True, True),
+        "waiting": (False, False, False),
+    }
