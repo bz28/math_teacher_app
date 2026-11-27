@@ -34,11 +34,9 @@ import {
   hasGraphToCheck,
   hasLowConfidence,
   classOnly,
-  awaitsApproval,
-  needsTeacher,
-  nextMatching,
   applyRosterFilter,
 } from "./_lib/grading";
+import { awaitsApproval, needsTeacher, nextMatching } from "./_lib/next-student";
 import { DetailSkeleton, ReviewLoadingSkeleton } from "./_components/skeletons";
 import { VerdictLegendTrigger } from "./_components/reference-modals";
 import { RosterFilterBar, TriageRoster, NotSubmittedCard } from "./_components/roster";

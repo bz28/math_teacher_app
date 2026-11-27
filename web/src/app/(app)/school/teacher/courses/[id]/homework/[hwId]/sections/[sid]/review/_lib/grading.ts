@@ -8,6 +8,7 @@ import type {
   TeacherSubmissionRow,
 } from "@/lib/api";
 import type { RosterEntry, RosterFilter, AiSkip } from "./types";
+import { needsTeacher } from "./next-student";
 
 // AI grader confidence bands. The pipeline reports a calibrated 0-1
 // score per problem; we read it, never compute it. <0.6 is the
@@ -104,43 +105,6 @@ export function isFlagged(entry: RosterEntry): boolean {
   return !!entry.submission && isFlaggedSubmission(entry.submission);
 }
 
-export function needsTeacher(entry: RosterEntry): boolean {
-  const sub = entry.submission;
-  if (!sub) return false;
-  // Settled state is a published-and-clean grade. Everything else —
-  // ungraded, graded-but-not-published, dirty, integrity-flagged — is
-  // work that wants the teacher's attention.
-  if (sub.grade_published_at !== null && !sub.grade_dirty) return false;
-  return true;
-}
-
-/** Still waiting on her Approve: needs her, and not yet approved. An
- *  approved grade waiting only to be published doesn't — publishing is
- *  a separate, homework-wide step. Her own preview turn-in never does. */
-export function awaitsApproval(entry: RosterEntry): boolean {
-  return (
-    needsTeacher(entry) &&
-    !entry.submission?.reviewed_at &&
-    !entry.submission?.is_preview
-  );
-}
-
-/** The first roster entry after `currentId` that `matches`, wrapping to
- *  the start, so a teacher working out of order still moves on. Null
- *  when no other entry matches. */
-export function nextMatching(
-  roster: RosterEntry[],
-  currentId: string,
-  matches: (entry: RosterEntry) => boolean,
-): RosterEntry | null {
-  const idx = roster.findIndex((e) => e.student_id === currentId);
-  if (idx < 0) return null;
-  for (let i = 1; i < roster.length; i++) {
-    const cand = roster[(idx + i) % roster.length];
-    if (matches(cand)) return cand;
-  }
-  return null;
-}
 
 // Pure read-only predicate over already-loaded roster data: true when
 // any problem on the submission carries an AI grade the model flagged
