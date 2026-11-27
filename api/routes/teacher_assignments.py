@@ -1109,6 +1109,14 @@ async def update_assignment(
                 detail="Unpublish before editing problems",
             )
         if body.bank_item_ids is not None:
+            if a.type == "practice":
+                # A practice set's problems are its own generated versions
+                # (approved_practice_items); bank questions written here
+                # would never show.
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="A practice set's problems come from its own versions",
+                )
             a.content = await snapshot_bank_items(db, a.course_id, body.bank_item_ids)
         else:
             a.content = body.content

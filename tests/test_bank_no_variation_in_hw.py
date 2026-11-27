@@ -251,3 +251,29 @@ async def test_primaries_still_work(
         },
     )
     assert r.status_code == 201, r.text
+
+
+async def test_bank_questions_cannot_be_put_on_a_practice_set(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """A practice set shows its own generated versions, so bank questions
+    written into its content would silently never appear: refused."""
+    from tests.conftest import auth_headers
+    async with get_session_factory()() as s:
+        course_id = (await s.execute(
+            text("SELECT course_id FROM assignments WHERE id=:id"), {"id": world["assignment_id"]},
+        )).scalar_one()
+    await _link_teacher_to_course(world["teacher_id"], course_id)
+    async with get_session_factory()() as s:
+        await s.execute(
+            text("UPDATE assignments SET type='practice', status='draft' WHERE id=:id"),
+            {"id": world["assignment_id"]},
+        )
+        await s.commit()
+    r = await client.patch(
+        f"/v1/teacher/assignments/{world['assignment_id']}",
+        json={"bank_item_ids": [str(world["primary_id"])]},
+        headers=auth_headers(world["teacher_token"]),
+    )
+    assert r.status_code == 400
+    assert "practice set" in r.json()["detail"]

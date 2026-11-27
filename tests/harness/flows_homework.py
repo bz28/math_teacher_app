@@ -92,9 +92,12 @@ async def create_homework_flow(
 
 
 _BANK_TITLES = ("Bank flow: ticket sales", "Bank flow: two lines")
+# The homework-page flow seeds its own pair: flows share one world, so
+# reusing the titles would list two of each.
+_PAGE_BANK_TITLES = ("Page bank flow: ticket sales", "Page bank flow: two lines")
 
 
-async def _seed_bank(seed: Seed) -> list[str]:
+async def _seed_bank(seed: Seed, titles: tuple[str, str] = _BANK_TITLES) -> list[str]:
     """Two approved questions the picker offers, plus a pending one and a
     variation it must not. Returns the approved ids in title order."""
     course, unit = uuid.UUID(seed.course_id), uuid.UUID(seed.unit_id)
@@ -110,8 +113,8 @@ async def _seed_bank(seed: Seed) -> list[str]:
         )
 
     async with get_session_factory()() as s:
-        tickets = item(_BANK_TITLES[0], "Adult tickets cost $8, student tickets $5.")
-        lines = item(_BANK_TITLES[1], "Solve y = 2x + 1 and y = -x + 7.")
+        tickets = item(titles[0], "Adult tickets cost $8, student tickets $5.")
+        lines = item(titles[1], "Solve y = 2x + 1 and y = -x + 7.")
         s.add_all([tickets, lines])
         await s.flush()
         s.add_all([
@@ -186,7 +189,7 @@ async def add_from_bank_on_homework_flow(
     after the first."""
     name, title = "add_from_bank_on_homework", "Teacher adds bank questions to a homework"
     issues: list[str] = []
-    tickets_id, lines_id = await _seed_bank(seed)
+    tickets_id, lines_id = await _seed_bank(seed, _PAGE_BANK_TITLES)
     async with get_session_factory()() as s:
         hw = await s.get(Assignment, uuid.UUID(seed.assignment_id))
         assert hw is not None
@@ -202,14 +205,14 @@ async def add_from_bank_on_homework_flow(
         dialog = page.get_by_role("dialog", name="Add from question bank")
         try:
             await page.get_by_role("button", name="Add from bank").click(timeout=_TIMEOUT_MS)
-            await dialog.get_by_text(_BANK_TITLES[1]).wait_for(timeout=_TIMEOUT_MS)
+            await dialog.get_by_text(_PAGE_BANK_TITLES[1]).wait_for(timeout=_TIMEOUT_MS)
         except PlaywrightTimeoutError:
             issues.append("Add from bank did not list the course's approved questions")
             return FlowResult(name, title, False, issues)
-        if await dialog.get_by_text(_BANK_TITLES[0]).count():
+        if await dialog.get_by_text(_PAGE_BANK_TITLES[0]).count():
             issues.append("the picker offered a question already on the homework")
         try:
-            await dialog.get_by_role("checkbox", name=re.compile(_BANK_TITLES[1])).check()
+            await dialog.get_by_role("checkbox", name=re.compile(_PAGE_BANK_TITLES[1])).check()
             await dialog.get_by_role("button", name="Add 1 problem").click(timeout=_TIMEOUT_MS)
             await dialog.wait_for(state="detached", timeout=_TIMEOUT_MS)
         except PlaywrightTimeoutError:

@@ -452,7 +452,7 @@ export default function HomeworkDetailPage({
             onChangeProblemPoints={onChangeProblemPoints}
             onChangeRubric={onChangeRubric}
             onGenerate={() => setShowGenerate(true)}
-            onAddFromBank={() => setShowBank(true)}
+            onAddFromBank={graded ? () => setShowBank(true) : undefined}
             onRemoveProblems={() => {
               // Drop any in-flight publish soft-confirm so the
               // teacher doesn't return from removal mode to a
