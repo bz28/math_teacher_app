@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { teacher, type NeedsAttentionItem } from "@/lib/api";
 import { Skeleton } from "@/components/ui";
+import { FlagPills } from "./flag-pills";
 import { StatusPill } from "./status-pill";
 import { SubjectChip } from "./subject-chip";
 import {
@@ -32,7 +33,8 @@ const CHIP: Record<
   { tone: "amber" | "info" | "muted"; label: string; icon?: string }
 > = {
   worth_a_look: { tone: "amber", label: "Worth a look" },
-  photo_problem: { tone: "muted", label: "Photo problem" },
+  photo_problem: { tone: "muted", label: "Photo or reading" },
+  too_long: { tone: "muted", label: "Too long for AI" },
   to_approve: { tone: "amber", label: "To approve" },
   to_publish: { tone: "info", label: "To publish" },
   republish: { tone: "info", label: "Republish", icon: "↻" },
@@ -207,9 +209,8 @@ function QueueList({
   );
 }
 
-/** The counts a row carries, in the review page's words. Flags lead —
- *  the understanding check worth a look, then a photo or reading
- *  problem, never in alarm red, then the grades
+/** The counts a row carries, in the review page's words. Flags lead
+ *  (FlagPills: never in alarm red), then the grades
  *  waiting on her (to approve, then approved and only to publish); what she'll grade from the photo and work the AI
  *  hasn't reached yet follow as quiet text — true, but not a call to act. */
 function GroupCounts({ group }: { group: NeedsYouGroup }) {
@@ -219,18 +220,11 @@ function GroupCounts({ group }: { group: NeedsYouGroup }) {
   ].filter(Boolean);
   return (
     <div className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1">
-      {group.worthALook > 0 && (
-        <StatusPill
-          tone="amber"
-          label={`Understanding check: ${group.worthALook} worth a look`}
-        />
-      )}
-      {group.photoProblem > 0 && (
-        <StatusPill
-          tone="muted"
-          label={`${group.photoProblem} photo or reading problem${group.photoProblem === 1 ? "" : "s"}`}
-        />
-      )}
+      <FlagPills
+        worthALook={group.worthALook}
+        photoProblems={group.photoProblem}
+        tooLong={group.tooLong}
+      />
       {group.toApprove > 0 && (
         <StatusPill tone="amber" label={`${group.toApprove} to approve`} />
       )}

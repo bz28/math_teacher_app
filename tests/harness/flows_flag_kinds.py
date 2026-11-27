@@ -46,8 +46,9 @@ _IN_ALARM_RED = """el => {
 async def flag_kinds_flow(
     browser: HarnessBrowser, web_base: str, api_base: str, seed: Seed,
 ) -> FlowResult:
-    """Home row → "Understanding check: 1 worth a look" and "1 photo or
-    reading problem", neither red; expanded, each student says which.
+    """Home row and course row → "Understanding check: 1 worth a look"
+    and "1 photo or reading problem", neither red, no "flagged" anywhere
+    on home; expanded, each student says which.
 
     Set HARNESS_FLOW_SHOTS=<dir> to save a screenshot of home."""
     from tests.harness import flows
@@ -92,15 +93,24 @@ async def flag_kinds_flow(
                 continue
             if await loc.first.evaluate(_IN_ALARM_RED):
                 issues.append(f"{what} is shown in alarm red")
-        if await queue.get_by_text("flagged").count():
+        # Not in the queue, and not anywhere else on home either: the
+        # course row and the headline say the same as the queue.
+        main = page.locator("main")
+        if await main.get_by_text(re.compile(r"\bflagged\b", re.I)).count():
             issues.append("home still lumps them together as \"flagged\"")
+        course_pill = main.get_by_role("link", name=re.compile("Geometry Harness")).get_by_text(
+            "Understanding check: 1 worth a look")
+        if not await course_pill.count():
+            issues.append("the course row doesn't say which kind its flags are")
+        elif await course_pill.first.evaluate(_IN_ALARM_RED):
+            issues.append("the course row's flag is shown in alarm red")
         students = queue.get_by_role("button", name=re.compile(r"^\d+ students?"))
         try:
             await students.first.click(timeout=_TIMEOUT_MS)
         except PlaywrightTimeoutError:
             issues.append("the row's students can't be opened")
         else:
-            for student, chip in ((rs.graded_student, "Worth a look"), (rs.ungraded_student, "Photo problem")):
+            for student, chip in ((rs.graded_student, "Worth a look"), (rs.ungraded_student, "Photo or reading")):
                 link = queue.get_by_role("link", name=student)
                 try:
                     await link.wait_for(timeout=_TIMEOUT_MS)

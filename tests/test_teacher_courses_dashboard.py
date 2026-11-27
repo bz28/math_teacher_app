@@ -823,3 +823,37 @@ async def test_course_detail_isolates_aggregates_across_teachers_courses(
     )).json()
     assert detail_a["to_review"] == 0
     assert detail_b["to_review"] == 1
+
+
+async def test_courses_count_each_kind_of_flag_apart(client: AsyncClient) -> None:
+    """The course pills say "worth a look" apart from a photo or reading
+    problem, on the list and on the course itself; `flagged` stays the
+    total of every kind."""
+    w = await _seed_teacher_with_course()
+    hw_id = await _publish_homework(
+        course_id=w["course_id"], teacher_id=w["teacher_id"],
+        section_id=w["section_id"], unit_id=w["unit_id"], due_at=None,
+    )
+    async with get_session_factory()() as s:
+        students = [w["student_id"]] + [
+            await _seed_student_in_section(s, w["section_id"], w["course_id"]) for _ in range(3)
+        ]
+        subs = []
+        for sid in students:
+            sub = Submission(assignment_id=hw_id, student_id=sid,
+                             section_id=w["section_id"], status="submitted")
+            s.add(sub)
+            subs.append(sub)
+        await s.flush()
+        s.add(IntegrityCheckSubmission(submission_id=subs[0].id, status="complete",
+                                       disposition="flag_for_review"))
+        s.add(IntegrityCheckSubmission(submission_id=subs[1].id, status="skipped_unreadable"))
+        subs[2].extraction_flagged_at = datetime.now(UTC)
+        s.add(SubmissionGrade(submission_id=subs[3].id, ai_grading_status="skipped_too_long"))
+        await s.commit()
+
+    c = (await client.get("/v1/teacher/courses", headers=_auth(w["teacher_token"]))).json()["courses"][0]
+    assert (c["flagged"], c["worth_a_look"], c["photo_problems"], c["too_long"]) == (4, 1, 2, 1)
+    one = (await client.get(f"/v1/teacher/courses/{w['course_id']}",
+                            headers=_auth(w["teacher_token"]))).json()
+    assert (one["flagged"], one["worth_a_look"], one["photo_problems"], one["too_long"]) == (4, 1, 2, 1)

@@ -52,6 +52,7 @@ test("counts mirror the review page; the remainder is ungraded", () => {
     item({ submission_id: "2", to_approve: true, flagged: true, flag_kind: "check" }),
     item({ submission_id: "3", flagged: true, flag_kind: "reading", cant_ai_grade: true }),
     item({ submission_id: "4", flagged: true, flag_kind: "check" }),
+    item({ submission_id: "7", flagged: true, flag_kind: "too_long" }),
     item({ submission_id: "5" }),
     item({ submission_id: "6", to_publish: true }),
   ]);
@@ -64,6 +65,8 @@ test("counts mirror the review page; the remainder is ungraded", () => {
   // as an understanding check worth a look.
   assert.equal(g.worthALook, 2);
   assert.equal(g.photoProblem, 1);
+  // Too long for the AI grader is neither: the photo is fine.
+  assert.equal(g.tooLong, 1);
   assert.equal(g.cantAiGrade, 1);
   assert.equal(g.ungraded, 1);
 });
@@ -107,6 +110,7 @@ test("a student's chip agrees with the row's counts", () => {
     studentChip(item({ reason: "flagged", flagged: true, flag_kind: "reading", cant_ai_grade: true })),
     "photo_problem",
   );
+  assert.equal(studentChip(item({ reason: "flagged", flagged: true, flag_kind: "too_long" })), "too_long");
   assert.equal(studentChip(item({ reason: "dirty", to_publish: true })), "republish");
   assert.equal(studentChip(item({ reason: "ungraded", cant_ai_grade: true })), "cant_ai_grade");
   assert.equal(studentChip(item({ reason: "overdue" })), "overdue");

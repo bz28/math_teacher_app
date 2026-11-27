@@ -18,7 +18,7 @@ from api.core.class_rubric import (
     credit_guidance,
     rubric_revision,
 )
-from api.core.flagged import flag_kind_case, flagged_case
+from api.core.flagged import FLAG_COUNT_NAMES, flag_kind_case, flag_kind_sums, flagged_case
 from api.core.grading_queue import (
     BLOCK_NO_EXTRACTION,
     BLOCK_UNREADABLE,
@@ -184,6 +184,7 @@ async def _course_attention(
         select(
             func.coalesce(func.sum(_to_review_case()).cast(Integer), 0).label("to_review"),
             func.coalesce(func.sum(flagged_case()).cast(Integer), 0).label("flagged"),
+            *flag_kind_sums(),
         )
         .select_from(Submission)
         .join(Assignment, Assignment.id == Submission.assignment_id)
@@ -224,6 +225,7 @@ async def _course_attention(
     return {
         "to_review": counts_row.to_review,
         "flagged": counts_row.flagged,
+        **{n: getattr(counts_row, n) for n in FLAG_COUNT_NAMES.values()},
         "next_due_at": next_due_at.isoformat() if next_due_at else None,
     }
 
@@ -275,6 +277,7 @@ async def list_courses(
             Assignment.course_id.label("course_id"),
             func.coalesce(func.sum(_to_review_case()).cast(Integer), 0).label("to_review"),
             func.coalesce(func.sum(flagged_case()).cast(Integer), 0).label("flagged"),
+            *flag_kind_sums(),
         )
         .select_from(Submission)
         .join(Assignment, Assignment.id == Submission.assignment_id)
@@ -331,6 +334,7 @@ async def list_courses(
             func.coalesce(unit_counts.c.count, 0).label("unit_count"),
             func.coalesce(attention_counts.c.to_review, 0).label("to_review"),
             func.coalesce(attention_counts.c.flagged, 0).label("flagged"),
+            *(func.coalesce(attention_counts.c[n], 0).label(n) for n in FLAG_COUNT_NAMES.values()),
             next_due_counts.c.next_due_at,
         )
         .outerjoin(section_counts, section_counts.c.course_id == Course.id)
@@ -350,6 +354,9 @@ async def list_courses(
         "unit_count": r.unit_count,
         "to_review": r.to_review,
         "flagged": r.flagged,
+        # The flagged count by kind (api/core/flagged.py), so the course
+        # pills say "worth a look" apart from a photo or reading problem.
+        **{n: getattr(r, n) for n in FLAG_COUNT_NAMES.values()},
         "next_due_at": r.next_due_at.isoformat() if r.next_due_at else None,
         "created_at": r.Course.created_at.isoformat(),
     } for r in rows]}
@@ -556,6 +563,7 @@ async def get_course(
         "status": course.status, "created_at": course.created_at.isoformat(),
         "to_review": attention["to_review"],
         "flagged": attention["flagged"],
+        **{n: attention[n] for n in FLAG_COUNT_NAMES.values()},
         "next_due_at": attention["next_due_at"],
     }
 

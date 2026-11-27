@@ -448,6 +448,7 @@ async def test_flag_kind_keeps_a_check_apart_from_a_photo_problem(client: AsyncC
     blurry = await _add_submission(w, hw, student_id=await student())      # check couldn't read it
     misread = await _add_submission(w, hw, student_id=await student())     # student flagged the reading
     both = await _add_submission(w, hw, student_id=await student())        # worth a look AND misread
+    too_long = await _add_submission(w, hw, student_id=await student())    # grader ran out of room
     plain = await _add_submission(w, hw, student_id=await student())       # not flagged
     async with get_session_factory()() as s:
         s.add_all([
@@ -456,6 +457,8 @@ async def test_flag_kind_keeps_a_check_apart_from_a_photo_problem(client: AsyncC
             IntegrityCheckSubmission(submission_id=blurry, status="skipped_unreadable"),
             IntegrityCheckSubmission(submission_id=both, status="complete", disposition="flag_for_review"),
         ])
+        # Too long to grade is about the grader, not the photo.
+        s.add(SubmissionGrade(submission_id=too_long, ai_grading_status="skipped_too_long"))
         for sid in (misread, both):
             (await s.get(Submission, sid)).extraction_flagged_at = datetime.now(UTC)
         await s.commit()
@@ -463,11 +466,11 @@ async def test_flag_kind_keeps_a_check_apart_from_a_photo_problem(client: AsyncC
     by_sub = {i["submission_id"]: i for i in (await _get(w, client))["items"]}
     kinds = {k: by_sub[str(v)]["flag_kind"] for k, v in {
         "asked": asked, "no_verdict": no_verdict, "blurry": blurry,
-        "misread": misread, "both": both, "plain": plain,
+        "misread": misread, "both": both, "too_long": too_long, "plain": plain,
     }.items()}
     assert kinds == {
         "asked": "check", "no_verdict": "check", "blurry": "reading",
-        "misread": "reading", "both": "check", "plain": None,
+        "misread": "reading", "both": "check", "too_long": "too_long", "plain": None,
     }
     assert all(by_sub[str(v)]["flagged"] == (kinds[k] is not None) for k, v in {
         "asked": asked, "blurry": blurry, "plain": plain}.items())
