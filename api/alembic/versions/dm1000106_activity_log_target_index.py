@@ -5,14 +5,14 @@ submission and its homework (`target_type`, `target_id`); without an
 index that is a scan of the whole log per case opened.
 
 Revision ID: dm1000106
-Revises: di1000105
+Revises: dk1000107
 """
 from collections.abc import Sequence
 
 from alembic import op
 
 revision: str = "dm1000106"
-down_revision: str | None = "di1000105"
+down_revision: str | None = "dk1000107"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
