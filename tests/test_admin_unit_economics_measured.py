@@ -434,3 +434,56 @@ async def test_a_unit_begun_before_the_window_is_not_a_cheap_phantom(
     assert gen["n"] == 1
     fns = body["functions_by_unit"]["generation:unit"]
     assert sum(f["cost_per_unit"] for f in fns) == pytest.approx(gen["cost_mean"])
+
+
+# --------------------------------------------------------------------------
+# Review round 3 — the orphan spread counts the same units the costs do
+# --------------------------------------------------------------------------
+
+async def test_deleted_calls_spread_only_over_submissions_begun_in_the_window(
+    client: AsyncClient,
+) -> None:
+    w = await _seed(homework_submissions=6, test_submissions=0)
+    student = uuid.UUID(w.student_ids[0])
+    async with get_session_factory()() as s:
+        await s.execute(
+            update(Submission).where(Submission.student_id == student)
+            .values(submitted_at=datetime.now(UTC) - timedelta(days=10)),
+        )
+        await s.commit()
+    await _add_deleted_submission_calls(w, 2)
+
+    body = await _get(client, w.admin_id, days=7)
+    assert body["deleted_submissions"]["spread_over"] == 5
+    hw = _unit(body, "submission:homework")
+    assert hw["cost_median"] == pytest.approx(_hw_cost() + 2 * _deleted_call_cost() / 5)
+
+
+async def test_discarded_job_calls_spread_only_over_units_begun_in_the_window(
+    client: AsyncClient,
+) -> None:
+    w = await _seed(homework_submissions=6, generation_units=2)
+    async with get_session_factory()() as s:
+        first = (await s.execute(
+            select(QuestionBankGenerationJob)
+            .where(QuestionBankGenerationJob.unit_id == uuid.UUID(w.unit_ids[0])),
+        )).scalar_one()
+        s.add(QuestionBankGenerationJob(
+            course_id=first.course_id, unit_id=first.unit_id,
+            originating_assignment_id=first.originating_assignment_id,
+            created_by_id=first.created_by_id, mode="generate", status="done",
+            requested_count=5, created_at=datetime.now(UTC) - timedelta(days=10),
+        ))
+        s.add(LLMCall(
+            function="generate_questions", model="claude-sonnet-4-6",
+            input_tokens=5000, output_tokens=2000, latency_ms=1.0,
+            cost_usd=0.5, success=True, school_id=uuid.UUID(w.school_id),
+            user_id=uuid.UUID(w.teacher_id), generation_job_id=None,
+            call_metadata={"generation_job_id": str(uuid.uuid4())},
+            created_at=_WHEN,
+        ))
+        await s.commit()
+
+    body = await _get(client, w.admin_id, days=7)
+    assert body["deleted_generation_jobs"]["spread_over"] == 1
+    assert _unit(body, "generation:unit")["cost_median"] == pytest.approx(_gen_job_cost() + 0.5)
