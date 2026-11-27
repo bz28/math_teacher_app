@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 // The New Homework wizard's frame: its discard prompt, stepper and
 // problem source tabs.
 
-export type Mode = "generate" | "upload";
+export type Mode = "generate" | "upload" | "bank";
 
 // ── Discard-unsaved-work confirm ──
 //
@@ -180,6 +180,7 @@ export function ModeTabs({
   const tabs: { key: Mode; label: string }[] = [
     { key: "generate", label: "Generate" },
     { key: "upload", label: "Upload" },
+    { key: "bank", label: "From bank" },
   ];
   const onKeyDown = (e: React.KeyboardEvent, idx: number) => {
     if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;

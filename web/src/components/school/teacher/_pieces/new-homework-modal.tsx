@@ -35,6 +35,7 @@ import {
   useStagedFiles,
 } from "./homework-wizard-upload";
 import { WizardGradingLine } from "./wizard-grading-line";
+import { BankPicker, bankSelectionNote } from "../question-bank/bank-picker";
 import {
   GenerationParamsCustomize,
   persistGenerationParams,
@@ -97,6 +98,8 @@ export function NewHomeworkModal({
 
   const [step, setStep] = useState<Step>(1);
   const [mode, setMode] = useState<Mode>("generate");
+  // "From bank": approved questions picked in order, added as approved.
+  const [bankIds, setBankIds] = useState<string[]>([]);
 
   // Whether the "discard unsaved work?" prompt is stacked over the wizard.
   // While it's up the wizard itself is non-dismissible; the prompt owns
@@ -222,6 +225,7 @@ export function NewHomeworkModal({
     sectionIds.length > 0 ||
     latePolicy !== "none" ||
     stagedFiles.length > 0 ||
+    bankIds.length > 0 ||
     selectedDocs.size > 0 ||
     topicHint.trim().length > 0 ||
     scopeHint.trim().length > 0 ||
@@ -270,7 +274,7 @@ export function NewHomeworkModal({
   // the authored rubric. Sections + rubric are best-effort PATCHes
   // (both stay fully editable on the detail page), so a hiccup on
   // either doesn't strand the teacher with no homework at all.
-  const createDraft = async (): Promise<string> => {
+  const createDraft = async (bankItemIds?: string[]): Promise<string> => {
     const created = await teacher.createAssignment(courseId, {
       title: title.trim(),
       type: "homework",
@@ -278,6 +282,7 @@ export function NewHomeworkModal({
       late_policy: latePolicy,
       total_points: totalPoints,
       ...(dueAt ? { due_at: new Date(dueAt).toISOString() } : {}),
+      ...(bankItemIds?.length ? { bank_item_ids: bankItemIds } : {}),
     });
     if (sectionIds.length > 0) {
       try {
@@ -299,7 +304,17 @@ export function NewHomeworkModal({
 
   const onSaveDraft = () =>
     run(async () => {
-      const id = await createDraft();
+      // Picked bank questions aren't dropped by saving early.
+      const id = await createDraft(mode === "bank" ? bankIds : undefined);
+      onCreated(id, { startedGeneration: false });
+    });
+
+  // Bank questions were approved once already: they go straight onto the
+  // homework, no generation and no review queue.
+  const onCreateFromBank = () =>
+    run(async () => {
+      if (bankIds.length === 0) throw new Error("Pick at least one question");
+      const id = await createDraft(bankIds);
       onCreated(id, { startedGeneration: false });
     });
 
@@ -411,12 +426,16 @@ export function NewHomeworkModal({
         ? `Points must be a whole number from 1 to ${MAX_TOTAL_POINTS}`
       : step === 2 && mode === "upload" && validStagedCount === 0
         ? "Add at least one worksheet page to extract"
+      : step === 2 && mode === "bank" && bankIds.length === 0
+        ? "Pick at least one question to add"
         : null;
   // With nothing blocking, the last step says what happens next.
   const footerNote =
-    step === 2 && !blockReason
-      ? "Problems go to your review queue. Students see nothing until you publish."
-      : null;
+    step !== 2 || blockReason
+      ? null
+      : mode === "bank"
+        ? bankSelectionNote(bankIds.length)
+        : "Problems go to your review queue. Students see nothing until you publish.";
 
   return (
     <>
@@ -518,6 +537,14 @@ export function NewHomeworkModal({
                             disabled={busy}
                           />
                         }
+                      />
+                    ) : mode === "bank" ? (
+                      <BankPicker
+                        courseId={courseId}
+                        initialUnitId={unitIds[0] ?? null}
+                        selected={bankIds}
+                        onChange={setBankIds}
+                        disabled={busy}
                       />
                     ) : (
                       <UploadSection
@@ -626,6 +653,20 @@ export function NewHomeworkModal({
                 className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-[color:var(--color-surface-alt-2)] disabled:text-text-muted disabled:opacity-100"
               >
                 {busy ? "Creating…" : "Create & generate"}
+              </button>
+            ) : mode === "bank" ? (
+              <button
+                type="button"
+                onClick={onCreateFromBank}
+                disabled={busy || !detailsValid || !pointsValid || bankIds.length === 0}
+                aria-describedby={blockReason ? "hw-wizard-msg" : undefined}
+                className="rounded-[--radius-md] bg-primary px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-primary-dark disabled:cursor-not-allowed disabled:bg-[color:var(--color-surface-alt-2)] disabled:text-text-muted disabled:opacity-100"
+              >
+                {busy
+                  ? "Creating…"
+                  : bankIds.length === 0
+                    ? "Create with problems"
+                    : `Create with ${bankIds.length} problem${bankIds.length === 1 ? "" : "s"}`}
               </button>
             ) : (
               <button
