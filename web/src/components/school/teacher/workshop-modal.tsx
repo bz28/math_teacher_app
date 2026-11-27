@@ -19,7 +19,7 @@ import { ClickToEditText } from "@/components/school/shared/click-to-edit-text";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { GenerateSimilarDialog } from "./_pieces/generate-similar-dialog";
 import { InlineTitleEdit } from "./_pieces/inline-title-edit";
-import { PracticeVersionBanner } from "./_pieces/practice-version-banner";
+import { PracticeVersionBanner, type PracticeOrigin } from "./_pieces/practice-version-banner";
 import { SimilarJobStrip } from "./_pieces/similar-job-strip";
 import { AddStepButton, StepControls, StepDraft } from "./_pieces/step-editing";
 
@@ -65,8 +65,7 @@ export function WorkshopModal({
   onJobStarted,
   activeJob,
   onReviewVariations,
-  parentTitle,
-  onJumpToParent,
+  practiceOrigin,
   renderAsPage = false,
 }: {
   item?: BankItem;
@@ -82,14 +81,9 @@ export function WorkshopModal({
   // Receives the full BankItem so the parent can stash it for later
   // restoration regardless of which status tab is active.
   onReviewVariations?: (parent: BankItem) => void;
-  // When viewing a variation, the parent's title is shown in the
-  // banner so the teacher knows which problem this scaffolds. Looked
-  // up by the parent (QuestionBankTab) since this component doesn't
-  // fetch on its own.
-  parentTitle?: string;
-  // Click handler for the parent title link. When present, shown as a
-  // clickable link; teacher clicks → parent swaps in.
-  onJumpToParent?: () => void;
+  // A practice set's source homework, looked up by the review page so
+  // each version shows beside its original problem.
+  practiceOrigin?: PracticeOrigin;
   // When true, renders inline (no fixed overlay, no backdrop, no
   // click-outside-to-close). Used by the full-page review route
   // (`/courses/[id]/homework/[hwId]/review`) so teachers get the same
@@ -857,10 +851,8 @@ export function WorkshopModal({
             {/* Variation banner — shown only for items with a parent. */}
             {liveItem.parent_question_id && (
               <PracticeVersionBanner
-                parentTitle={parentTitle}
-                onJumpToParent={onJumpToParent}
-                isProposalPending={isProposalPending}
-                onBlocked={setError}
+                parentId={liveItem.parent_question_id}
+                origin={practiceOrigin}
               />
             )}
 

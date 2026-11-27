@@ -6,6 +6,10 @@ import { useRouter } from "next/navigation";
 import { teacher, type BankItem } from "@/lib/api";
 import { oldestFirst } from "@/lib/generation-progress";
 import { WorkshopModal } from "@/components/school/teacher/workshop-modal";
+import type {
+  OriginalProblem,
+  PracticeOrigin,
+} from "@/components/school/teacher/_pieces/practice-version-banner";
 import { PageErrorState } from "@/components/ui/page-error-state";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -26,6 +30,10 @@ import { Skeleton } from "@/components/ui/skeleton";
  * Variations (`parent_question_id` set) are filtered out — they're
  * practice scaffolding approved separately via "Make similar" on the
  * primary, not primary HW content.
+ *
+ * A practice set's queue is all versions of its source homework's
+ * problems, so for those the page also loads that homework: each
+ * version shows beside its original.
  */
 
 // Auto-append polling: refresh pending every few seconds while a
@@ -62,6 +70,7 @@ export default function HomeworkReviewPage({
   // Cached so the auto-append polling effect can re-run fetchPending
   // without re-fetching the assignment each tick.
   const [assignmentType, setAssignmentType] = useState<string | null>(null);
+  const [practiceOrigin, setPracticeOrigin] = useState<PracticeOrigin>();
 
   const fetchPending = useCallback(
     async (assignmentType: string): Promise<BankItem[]> => {
@@ -100,8 +109,14 @@ export default function HomeworkReviewPage({
         if (cancelled) return;
         setHwTitle(a.title);
         setAssignmentType(a.type);
-        const items = await fetchPending(a.type);
+        const [items, origin] = await Promise.all([
+          fetchPending(a.type),
+          a.type === "practice" && a.source_homework_id
+            ? loadOrigin(courseId, a, a.source_homework_id)
+            : undefined,
+        ]);
         if (cancelled) return;
+        setPracticeOrigin(origin);
         setPhase(items.length > 0 ? { kind: "ready", items } : { kind: "empty" });
       })
       .catch(() => {
@@ -111,7 +126,7 @@ export default function HomeworkReviewPage({
     return () => {
       cancelled = true;
     };
-  }, [assignmentId, fetchPending]);
+  }, [assignmentId, courseId, fetchPending]);
 
   useEffect(() => load(), [load, reloadKey]);
 
@@ -228,6 +243,7 @@ export default function HomeworkReviewPage({
         <div className="mt-3">
           <WorkshopModal
             queue={phase.items}
+            practiceOrigin={practiceOrigin}
             renderAsPage
             onClose={goBack}
             onChanged={() => {
@@ -240,6 +256,39 @@ export default function HomeworkReviewPage({
       )}
     </div>
   );
+}
+
+/**
+ * The homework a practice set was made from, for its versions' banner.
+ * A homework that's gone or won't load leaves the banner without it
+ * (the review itself still works), so this never throws.
+ */
+async function loadOrigin(
+  courseId: string,
+  set: { title: string; status: string },
+  homeworkId: string,
+): Promise<PracticeOrigin | undefined> {
+  try {
+    const hw = await teacher.assignment(homeworkId);
+    const content = hw.content as { problems?: (OriginalProblem & { bank_item_id: string })[] } | null;
+    const problems: Record<string, OriginalProblem> = {};
+    for (const p of content?.problems ?? []) {
+      problems[p.bank_item_id] = {
+        position: p.position,
+        question: p.question,
+        figure_svg: p.figure_svg ?? null,
+      };
+    }
+    return {
+      setTitle: set.title,
+      setPublished: set.status === "published",
+      homeworkTitle: hw.title,
+      homeworkHref: `/school/teacher/courses/${courseId}/homework/${homeworkId}`,
+      problems,
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 /**
