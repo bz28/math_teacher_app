@@ -31,6 +31,9 @@ export function GradeControls({
   /** "6.5/13 pts" for the current partial grade, or null before one exists. */
   earnedLabel: string | null;
 }) {
+  // The three choices sit together and the partial percent comes after
+  // them: with the percent chip between Partial and No credit, a row at a
+  // laptop width wrapped No credit onto a line of its own.
   return (
     <div className="mt-3 flex flex-wrap items-center gap-2">
       <GradeBtn
@@ -48,6 +51,14 @@ export function GradeControls({
         aiPick={aiStatus === "partial"}
       >
         Partial
+      </GradeBtn>
+      <GradeBtn
+        active={current === "zero"}
+        tone="red"
+        onClick={onZero}
+        aiPick={aiStatus === "zero"}
+      >
+        No credit
       </GradeBtn>
       {current === "partial" && (
         <div className="inline-flex items-center gap-1 rounded-[--radius-md] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] px-2 py-1 text-xs font-semibold text-[color:var(--color-warning-dark)]  dark:bg-[color:var(--color-warning)]/10 ">
@@ -77,14 +88,6 @@ export function GradeControls({
           )}
         </div>
       )}
-      <GradeBtn
-        active={current === "zero"}
-        tone="red"
-        onClick={onZero}
-        aiPick={aiStatus === "zero"}
-      >
-        No credit
-      </GradeBtn>
     </div>
   );
 }
