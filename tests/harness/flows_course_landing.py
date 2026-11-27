@@ -60,6 +60,31 @@ async def course_landing_flow(
         ("no-homework", f"{base}/{empty_id}", "Sections"),
     )
     async with browser.authed_page(seed.teacher_token, seed.teacher_refresh) as page:
+        # Clicked in from the shell, the tab comes from the course list
+        # the sidebar already holds — not after the course's own read,
+        # which is held back here to prove it.
+        await page.goto(f"{web_base.rstrip('/')}/school/teacher", wait_until="domcontentloaded",
+                        timeout=_TIMEOUT_MS)
+        link = page.locator(f'ul[aria-label="Your courses"] a[href$="/courses/{seed.course_id}"]')
+        held: list[object] = []
+
+        async def hold(route: object) -> None:
+            held.append(route)
+
+        detail = f"**/v1/teacher/courses/{seed.course_id}"
+        try:
+            await link.wait_for(timeout=_TIMEOUT_MS)
+            await page.route(detail, hold)
+            # A first-run welcome may cover home; the link still navigates
+            # client-side (the shell, and its list, stay mounted).
+            await link.evaluate("a => a.click()")
+            await page.locator('button[aria-current="page"]', has_text="Homework").wait_for(timeout=5000)
+        except PlaywrightTimeoutError:
+            issues.append("clicked in from the sidebar, the course waited on its own read to pick a tab")
+        finally:
+            # Releases the held read too: unroute passes pending requests on.
+            await page.unroute(detail)
+
         for label, url, want in cases:
             await page.goto(url, wait_until="domcontentloaded", timeout=_TIMEOUT_MS)
             current = page.locator('button[aria-current="page"]')

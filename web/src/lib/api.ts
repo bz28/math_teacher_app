@@ -1085,6 +1085,9 @@ export interface TeacherCourse {
   status: string;
   section_count: number;
   doc_count: number;
+  /** Any homework in the course, by any of its teachers: it then opens
+   *  on Homework rather than Sections. */
+  has_homework: boolean;
   /** Submissions waiting on the teacher across all published HWs in
    *  this course. Mirrors the math used by the Submissions tab inbox
    *  so the courses dashboard never disagrees with what's inside. */
@@ -1095,13 +1098,6 @@ export interface TeacherCourse {
    *  Null when nothing is upcoming (overdue is captured by to_review). */
   next_due_at: string | null;
   created_at: string;
-}
-
-/** One course, as its workspace reads it. */
-export interface TeacherCourseDetail extends TeacherCourse {
-  /** Any homework in the course, by any of its teachers: it then opens
-   *  on Homework rather than Sections. */
-  has_homework: boolean;
 }
 
 /** Per-course onboarding milestones driving the first-run "Set up your
@@ -1599,7 +1595,7 @@ export const teacher = {
     return apiFetch<{ courses: TeacherCourse[] }>("/teacher/courses");
   },
   course(id: string) {
-    return apiFetch<TeacherCourseDetail>(`/teacher/courses/${id}`);
+    return apiFetch<TeacherCourse>(`/teacher/courses/${id}`);
   },
   courseSetupStatus(id: string) {
     return apiFetch<CourseSetupStatus>(`/teacher/courses/${id}/setup-status`);

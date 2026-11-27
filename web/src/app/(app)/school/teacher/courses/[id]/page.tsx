@@ -4,7 +4,8 @@ import { Suspense, use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
-import { teacher, type BankJob, type TeacherCourse, type TeacherCourseDetail } from "@/lib/api";
+import { teacher, type BankJob, type TeacherCourse } from "@/lib/api";
+import { useTeacherCourses } from "@/components/school/teacher/teacher-courses";
 import { landingTab } from "./_lib/landing-tab";
 import {
   BANK_JOB_POLL_INTERVAL_MS,
@@ -70,21 +71,27 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [course, setCourse] = useState<TeacherCourseDetail | null>(null);
+  const [course, setCourse] = useState<TeacherCourse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   // Tab state lives in the URL (?tab=materials) so refresh, back/
-  // forward, and deep-linked URLs all land on the right tab. Unknown
-  // values fall back to the default.
+  // forward, and deep-linked URLs all land on the right tab.
   //
-  // Without one, the course opens on landingTab — decided once, from
-  // the first read of the course (null until then), so a reload of the
-  // course mid-visit (the first homework just made) never moves the
-  // teacher off the tab they're on.
+  // Without one (or with an unknown one), the course opens on
+  // landingTab, from whichever lands first: the shell's course list —
+  // already loaded when the teacher clicks in from anywhere in the
+  // portal, so the tab and its fetch start at once — or this page's own
+  // course read. Decided once, so a reload of the course mid-visit (the
+  // first homework just made) never moves the teacher off their tab.
   const tabParam = searchParams.get("tab");
+  const listed = useTeacherCourses()?.find((c) => c.id === id) ?? null;
   const [landing, setLanding] = useState<TabKey | null>(null);
-  if (landing === null && course) setLanding(landingTab(course));
+  // The list can be up to 30s old; it's trusted only to say "has
+  // homework" (a course rarely loses all of it), never to say "none" —
+  // that waits for the course read, so a first homework just made counts.
+  const known = listed?.has_homework ? listed : course;
+  if (landing === null && known) setLanding(landingTab(known));
   const tab: TabKey | null = ALL_TAB_KEYS.includes(tabParam as TabKey)
     ? (tabParam as TabKey)
     : landing;
@@ -258,7 +265,8 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
   useTourAction(TOUR_ACTIONS.gotoGrades, () => setTab("grades"));
 
   // While the course itself loads, only the header waits on it: the
-  // tab bar and the open tab render now, so a tab's own fetch starts
+  // tab bar and the open tab render as soon as the tab is known (at once
+  // with ?tab= or from the shell's list), so a tab's own fetch starts
   // alongside the course's instead of after it.
   if (!loading && (error || !course)) {
     return (
@@ -366,6 +374,7 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
           error, letting the teacher move on to a healthy tab. */}
       <div className="mt-6">
         <ErrorBoundary key={tab}>
+        {tab === null && <TabBodySkeleton />}
         {tab === "sections" && (
           <SectionsTab
             courseId={id}
@@ -615,5 +624,17 @@ function GearIcon() {
       <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
       <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
     </svg>
+  );
+}
+
+/** The tab body's placeholder on a cold open, before the landing tab is
+ *  known (the course and its list both still loading). */
+function TabBodySkeleton() {
+  return (
+    <div className="space-y-3" aria-hidden>
+      {[0, 1, 2].map((i) => (
+        <Skeleton key={i} className="h-16 w-full rounded-[--radius-lg]" />
+      ))}
+    </div>
   );
 }

@@ -1,4 +1,4 @@
-"""GET /v1/teacher/courses/{id} says whether the course has any homework,
+"""GET /v1/teacher/courses/{id} and the course list say whether the course has any homework,
 which picks the tab the course opens on (Homework once there is one,
 Sections before)."""
 
@@ -40,8 +40,14 @@ async def _world() -> dict:
 
 
 async def _has_homework(client: AsyncClient, w: dict, who: str = "owner") -> bool:
+    """The course detail's answer, checked against the course list's row
+    (the shell reads the list, so the two must agree)."""
     r = await client.get(f"/v1/teacher/courses/{w['course_id']}", headers=_auth(w[who]))
     assert r.status_code == 200, r.text
+    listed = await client.get("/v1/teacher/courses", headers=_auth(w[who]))
+    assert listed.status_code == 200, listed.text
+    row = next(c for c in listed.json()["courses"] if c["id"] == str(w["course_id"]))
+    assert row["has_homework"] == r.json()["has_homework"]
     return r.json()["has_homework"]
 
 

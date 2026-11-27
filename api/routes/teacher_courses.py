@@ -316,6 +316,15 @@ async def create_course(
     return {"id": str(course.id), "name": course.name, "status": course.status}
 
 
+def _has_homework(course_id: Any) -> Any:
+    """EXISTS: the course has homework — which tab it opens on (Homework
+    once there is any, Sections before). Any teacher's counts: it's the
+    course's. `course_id` is a value or the Course.id column."""
+    return select(Assignment.id).where(
+        Assignment.course_id == course_id, Assignment.type == "homework",
+    ).exists()
+
+
 @router.get("/courses")
 async def list_courses(
     current_user: CurrentUser = Depends(require_teacher),
@@ -400,6 +409,7 @@ async def list_courses(
             func.coalesce(attention_counts.c.to_review, 0).label("to_review"),
             func.coalesce(attention_counts.c.flagged, 0).label("flagged"),
             next_due_counts.c.next_due_at,
+            _has_homework(Course.id).label("has_homework"),
         )
         .outerjoin(section_counts, section_counts.c.course_id == Course.id)
         .outerjoin(doc_counts, doc_counts.c.course_id == Course.id)
@@ -416,6 +426,7 @@ async def list_courses(
         "grade_level": r.Course.grade_level, "status": r.Course.status,
         "section_count": r.section_count, "doc_count": r.doc_count,
         "unit_count": r.unit_count,
+        "has_homework": r.has_homework,
         "to_review": r.to_review,
         "flagged": r.flagged,
         "next_due_at": r.next_due_at.isoformat() if r.next_due_at else None,
@@ -550,13 +561,7 @@ async def get_course(
 ) -> dict[str, Any]:
     course = await get_teacher_course(db, course_id, current_user.user_id)
     attention = await _course_attention(db, current_user.user_id, course_id)
-    # Which tab the course opens on: its homework once there is any
-    # (a co-teacher's counts — it's the course's), its sections before.
-    has_homework = bool((await db.execute(select(
-        select(Assignment.id).where(
-            Assignment.course_id == course_id, Assignment.type == "homework",
-        ).exists(),
-    ))).scalar())
+    has_homework = bool((await db.execute(select(_has_homework(course_id)))).scalar())
     return {
         "id": str(course.id), "name": course.name, "subject": course.subject,
         "grade_level": course.grade_level,
