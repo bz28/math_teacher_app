@@ -123,13 +123,13 @@ Concrete inventory of **what exists today**, derived from
   section **visibility** controls, practice-activity analytics.
 
 ### Admin — `dashboard/`
-- **Sales/ops**: Leads + lead detail (notes, meetings), Schools + school detail,
+- **Ops**: Schools + school detail,
   Independent students, Independent teachers + teacher detail, Admins (invite), Audit logs.
 - **AI quality/diagnostics**: LLM calls, Teacher reports, Accuracy (extraction quality),
   Grading quality, per-submission trace.
 
 ### Public / marketing — web
-- Landing, `/for-districts`, `/demo` (request-a-demo → contact lead),
+- Landing, `/for-districts`, `/demo` (request-a-demo → emails the admins),
   `/subjects/{math,physics,chemistry}`, legal (`privacy` / `terms` / `support` / `trust`).
 
 ### Sales demo — `demo/` (standalone, no auth/API)
