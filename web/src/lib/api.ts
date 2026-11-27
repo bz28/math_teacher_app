@@ -1952,14 +1952,16 @@ export const teacher = {
    *  the class didn't get full credit, with the common reasons why), and
    *  the practice set made from it.
    *  Omit `assignmentId` to get the newest homework with counted grades. */
-  setPracticed(assignmentId: string) {
-    return apiFetch<SetPracticed>(`/teacher/assignments/${assignmentId}/practiced`);
-  },
   sectionInsights(courseId: string, sectionId: string, assignmentId?: string) {
     const q = assignmentId ? `?assignment_id=${encodeURIComponent(assignmentId)}` : "";
     return apiFetch<SectionInsightsResponse>(
       `/teacher/courses/${courseId}/sections/${sectionId}/insights${q}`,
     );
+  },
+  /** Who in each of a practice set's periods has practiced it, and how
+   *  many students answered each problem. Teacher-only; ungraded. */
+  setPracticed(assignmentId: string) {
+    return apiFetch<SetPracticed>(`/teacher/assignments/${assignmentId}/practiced`);
   },
   /** Replace the per-problem breakdown (and/or teacher notes) for a
    *  submission. Full replacement semantics — send every entry on
