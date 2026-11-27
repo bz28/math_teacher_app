@@ -38,7 +38,9 @@ export function ReteachReasons({
             const expanded = open === i;
             const listId = `reasons-${problem.bank_item_id}-${i}`;
             return (
-              <li key={r.label}>
+              // By position, like the open state: labels come from the
+              // model and two can match.
+              <li key={i}>
                 <button
                   type="button"
                   aria-expanded={expanded}
