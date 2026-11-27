@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { teacher, type BankJob } from "@/lib/api";
 import { jobNotices } from "@/lib/job-notice";
-import { generationJobsKey, generationProgress, withStartedJob } from "@/lib/generation-progress";
+import { generationJobsKey, generationProgress, startJobUpdate } from "@/lib/generation-progress";
 import {
   BANK_JOB_POLL_INTERVAL_MS,
   BANK_JOB_POLL_LIMIT_MS,
@@ -147,15 +147,18 @@ export function useGenerationJobs(
   // wizard's do, so the banner comes back if the teacher leaves and
   // returns while it runs, instead of an empty page inviting a second
   // (paid) generation.
-  const startJob = (job: BankJob) => {
-    const next = withStartedJob(activeJobs, job);
-    setActiveJobs(next);
-    try {
-      sessionStorage.setItem(generationJobsKey(assignmentId), JSON.stringify(next.map((j) => j.id)));
-    } catch {
-      // Storage full or blocked: the banner just won't survive a reload.
-    }
-  };
+  // Built from the latest state, not this render's: the modal calls it
+  // after awaiting the start, and a poll tick may have landed meanwhile.
+  const startJob = (job: BankJob) =>
+    setActiveJobs(
+      startJobUpdate(job, (ids) => {
+        try {
+          sessionStorage.setItem(generationJobsKey(assignmentId), JSON.stringify(ids));
+        } catch {
+          // Storage full or blocked: the banner just won't survive a reload.
+        }
+      }),
+    );
 
   const activeGenerating = activeJobs.some(
     (j) => j.status !== "done" && j.status !== "failed",

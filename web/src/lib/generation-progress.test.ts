@@ -7,6 +7,7 @@ import {
   generationJobsKey,
   generationProgress,
   oldestFirst,
+  startJobUpdate,
   withStartedJob,
 } from "./generation-progress.ts";
 
@@ -62,4 +63,16 @@ test("a started job is tracked with only the jobs still running", () => {
   assert.deepEqual(withStartedJob(next, j("e", "running")).map((x) => x.id), ["c", "d", "e"]);
   // The page restores from the key the wizard writes.
   assert.equal(generationJobsKey("hw1"), "hw-gen-hw1");
+});
+
+test("starting a job builds on the latest jobs, not the ones seen at click time", () => {
+  const j = (id: string, status: string, produced = 0) => ({
+    id, status, requested_count: 5, produced_count: produced,
+  });
+  const remembered: string[][] = [];
+  const update = startJobUpdate(j("b", "queued"), (ids) => remembered.push(ids));
+  // Clicked while "a" was running; a poll tick finished it before the start returned.
+  const latest = [j("a", "done", 5)];
+  assert.deepEqual(update(latest).map((x) => [x.id, x.status]), [["b", "queued"]]);
+  assert.deepEqual(remembered, [["b"]]);
 });

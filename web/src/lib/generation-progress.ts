@@ -61,6 +61,20 @@ export function withStartedJob<T extends ProgressJob & { id: string }>(jobs: T[]
   return [...jobs.filter((j) => running(j) && j.id !== job.id), job];
 }
 
+/** The state update for starting `job`: applied to the latest jobs (a poll
+ *  tick may have moved them since the start was clicked), handing the ids
+ *  now tracked to `remember` so they survive leaving the page. */
+export function startJobUpdate<T extends ProgressJob & { id: string }>(
+  job: T,
+  remember: (ids: string[]) => void,
+): (prev: T[]) => T[] {
+  return (prev) => {
+    const next = withStartedJob(prev, job);
+    remember(next.map((j) => j.id));
+    return next;
+  };
+}
+
 /** Where the homework page keeps the ids of the jobs feeding it, so they
  *  are picked up again after the teacher leaves and comes back (the
  *  wizard writes the same key). */
