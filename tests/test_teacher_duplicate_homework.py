@@ -217,3 +217,54 @@ async def test_refuses_a_course_or_section_that_isnt_the_teachers(
             select(Assignment.id).where(Assignment.title == "HW 1")
         )).scalars().all())
         assert n == 1  # nothing was half-made
+
+
+async def test_deleting_the_source_keeps_a_same_course_copys_problems(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """A same-course copy shares the source's questions, which cascade
+    with the homework that made them: deleting the source must hand them
+    (and their variations) to the copy, not take them with it."""
+    w = await _setup(world)
+    async with get_session_factory()() as s:
+        src = await s.get(Assignment, w["source_id"])
+        assert src is not None
+        src.status = "draft"
+        await s.commit()
+    r = await _duplicate(client, world, {})
+    assert r.status_code == 201, r.text
+    copy_id = uuid.UUID(r.json()["id"])
+    r = await client.delete(
+        f"/v1/teacher/assignments/{w['source_id']}", headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200, r.text
+    async with get_session_factory()() as s:
+        ids = [w["primary_id"], w["second_id"]]
+        items = (await s.execute(
+            select(QuestionBankItem).where(QuestionBankItem.id.in_(ids))
+        )).scalars().all()
+        assert len(items) == 2
+        assert {i.originating_assignment_id for i in items} == {copy_id}
+        variations = (await s.execute(
+            select(QuestionBankItem).where(QuestionBankItem.parent_question_id == w["primary_id"])
+        )).scalars().all()
+        assert len(variations) == 4
+        assert {v.originating_assignment_id for v in variations} == {copy_id}
+
+
+async def test_a_corrupt_problem_id_is_skipped_across_courses(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    w = await _setup(world)
+    async with get_session_factory()() as s:
+        src = await s.get(Assignment, w["source_id"])
+        assert src is not None
+        src.content = {"problem_ids": ["not-a-uuid", str(w["primary_id"])]}
+        src.problem_points = None
+        await s.commit()
+    r = await _duplicate(client, world, {"course_id": str(w["other_id"])})
+    assert r.status_code == 201, r.text
+    async with get_session_factory()() as s:
+        dup = await s.get(Assignment, uuid.UUID(r.json()["id"]))
+        assert dup is not None and dup.content is not None
+        assert len(dup.content["problem_ids"]) == 1

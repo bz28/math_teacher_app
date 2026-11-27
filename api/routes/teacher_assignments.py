@@ -80,6 +80,7 @@ from api.services.bank import (
     hydrate_assignment_content,
     problem_ids_in_content,
     recompute_bank_locks,
+    rehome_shared_bank_items,
     snapshot_bank_items,
 )
 
@@ -974,6 +975,9 @@ async def delete_assignment(
             detail="Unpublish before deleting",
         )
     # Drafts can't have locked any bank items, so no recompute needed.
+    # Problems another homework shares (a same-course duplicate, Add from
+    # bank) move to it rather than cascading away with this one.
+    await rehome_shared_bank_items(db, a)
     pages = await photo_store.pages_of_submissions(db, Submission.assignment_id == assignment_id)
     await db.delete(a)
     await db.commit()

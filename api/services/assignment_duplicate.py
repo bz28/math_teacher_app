@@ -208,9 +208,15 @@ async def duplicate_homework(
     )
 
     if cross_course:
+        valid_ids: list[uuid.UUID] = []
+        for raw in problem_ids:
+            try:
+                valid_ids.append(uuid.UUID(raw))
+            except (ValueError, TypeError):
+                continue  # corrupted content: skip rather than 500
         items = {str(i.id): i for i in (await db.execute(
             select(QuestionBankItem).where(
-                QuestionBankItem.id.in_([uuid.UUID(p) for p in problem_ids]),
+                QuestionBankItem.id.in_(valid_ids),
                 QuestionBankItem.course_id == source.course_id,
             )
         )).scalars().all()}

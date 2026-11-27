@@ -264,6 +264,39 @@ def problem_ids_in_content(content: Any) -> list[str]:
     return []
 
 
+async def rehome_shared_bank_items(db: AsyncSession, assignment: Assignment) -> int:
+    """Before `assignment` is deleted, hand the bank items it originated
+    that another homework in the course still uses (a same-course
+    duplicate, Add from bank) to that homework, with their variations.
+    `originating_assignment_id` cascades on delete, so without this the
+    other homework loses those problems. Returns how many items moved."""
+    owned = (await db.execute(
+        select(QuestionBankItem).where(QuestionBankItem.originating_assignment_id == assignment.id)
+    )).scalars().all()
+    if not owned:
+        return 0
+    others = (await db.execute(
+        select(Assignment.id, Assignment.content)
+        .where(Assignment.course_id == assignment.course_id, Assignment.id != assignment.id)
+        .order_by(Assignment.created_at.desc())
+    )).all()
+    # Newest homework first: the copy the teacher is working on now.
+    new_home: dict[str, uuid.UUID] = {}
+    for other_id, content in others:
+        for pid in problem_ids_in_content(content):
+            new_home.setdefault(pid, other_id)
+    moved = 0
+    for item in owned:
+        root = str(item.parent_question_id) if item.parent_question_id else str(item.id)
+        home = new_home.get(str(item.id)) or new_home.get(root)
+        if home is not None:
+            item.originating_assignment_id = home
+            moved += 1
+    if moved:
+        await db.flush()
+    return moved
+
+
 async def used_in_assignments_map(
     db: AsyncSession, course_id: uuid.UUID,
 ) -> dict[str, list[dict[str, Any]]]:
