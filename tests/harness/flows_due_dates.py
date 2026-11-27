@@ -7,6 +7,7 @@ import re
 import uuid
 from datetime import UTC, datetime, timedelta
 
+from playwright.async_api import Route
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from sqlalchemy import select
 
@@ -118,7 +119,19 @@ async def inline_due_then_dialog_flow(
         await s.commit()
         hw_id, names = hw.id, [sec.name for sec in sections]
     new_local = (datetime.now() + timedelta(days=6)).strftime("%Y-%m-%dT23:59")
+    first_local = (datetime.now() + timedelta(days=5)).strftime("%Y-%m-%dT23:59")
+    fail_next_read = {"on": False}
+
+    async def flaky_read(route: Route) -> None:
+        # The re-read after a save fails once: the save itself stood.
+        if route.request.method == "GET" and fail_next_read["on"]:
+            fail_next_read["on"] = False
+            await route.fulfill(status=500, body="{}")
+        else:
+            await route.continue_()
+
     async with browser.authed_page(seed.teacher_token, seed.teacher_refresh) as page:
+        await page.route(re.compile(rf"/teacher/assignments/{hw_id}$"), flaky_read)
         await page.goto(
             f"{web_base.rstrip('/')}/school/teacher/courses/{seed.course_id}/homework/{hw_id}",
             wait_until="domcontentloaded", timeout=_TIMEOUT_MS,
@@ -128,16 +141,28 @@ async def inline_due_then_dialog_flow(
             # Open when the homework has no problems yet; don't close it.
             if await config.get_attribute("aria-expanded", timeout=_TIMEOUT_MS) != "true":
                 await config.click(timeout=_TIMEOUT_MS)
-            await page.locator('input[type="datetime-local"]').first.fill(new_local, timeout=_TIMEOUT_MS)
+            picker = page.locator('input[type="datetime-local"]').first
+            fail_next_read["on"] = True
+            await picker.fill(first_local, timeout=_TIMEOUT_MS)
             await page.get_by_text("Saved").first.wait_for(timeout=_TIMEOUT_MS)
         except PlaywrightTimeoutError:
             issues.append("the Configuration date picker did not save a new date")
             return FlowResult(name, title, False, issues)
+        await page.wait_for_timeout(1500)  # the failing re-read has come back
+        if await page.get_by_text("Save failed").count() or await picker.input_value() != first_local:
+            issues.append("a failed re-read after the save undid a date the server kept")
+        await picker.fill(new_local, timeout=_TIMEOUT_MS)
+        await page.wait_for_timeout(1500)
         dialog = page.get_by_role("dialog", name="Due date")
         try:
             await page.get_by_role("button", name="Change", exact=True).first.click(timeout=_TIMEOUT_MS)
             await dialog.get_by_role("radio", name="Different per section").click(timeout=_TIMEOUT_MS)
             values = [await dialog.get_by_label(n).input_value(timeout=_TIMEOUT_MS) for n in names]
+            for _ in range(20):  # the re-read lands just after "Saved"
+                if values == [new_local, new_local]:
+                    break
+                await page.wait_for_timeout(250)
+                values = [await dialog.get_by_label(n).input_value(timeout=_TIMEOUT_MS) for n in names]
         except PlaywrightTimeoutError:
             issues.append("the due-date dialog did not list both sections")
             return FlowResult(name, title, False, issues)

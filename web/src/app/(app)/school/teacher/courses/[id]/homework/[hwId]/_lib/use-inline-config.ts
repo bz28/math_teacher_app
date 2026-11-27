@@ -74,6 +74,9 @@ export function useInlineConfig({
     applyOptimistic: () => void,
     applyRevert: () => void,
     request: () => Promise<void>,
+    /** Re-read server state the save changed. Runs only for the newest
+     *  call, after the save stands; its failure never undoes the save. */
+    afterSave?: (stillNewest: () => boolean) => Promise<void>,
   ) => {
     const callId = ++lastCallRef.current[field];
     applyOptimistic();
@@ -84,6 +87,9 @@ export function useInlineConfig({
       // If a newer call for this field superseded us, drop silently.
       if (lastCallRef.current[field] !== callId) return;
       setSaveStates((s) => ({ ...s, [field]: "saved" }));
+      if (afterSave) {
+        void afterSave(() => lastCallRef.current[field] === callId).catch(() => undefined);
+      }
     } catch (e) {
       if (lastCallRef.current[field] !== callId) return;
       applyRevert();
@@ -115,8 +121,9 @@ export function useInlineConfig({
   // A date or sections change moves the section rows on the server (and
   // the homework's own date with them): re-read both, so the due-date
   // dialog never starts from dates that are no longer there.
-  const refreshDueDates = async () => {
+  const refreshDueDates = async (stillNewest: () => boolean) => {
     const fresh = await teacher.assignment(assignmentId);
+    if (!stillNewest()) return;
     setHw((h) =>
       h ? { ...h, due_at: fresh.due_at, section_due_dates: fresh.section_due_dates } : h,
     );
@@ -135,7 +142,8 @@ export function useInlineConfig({
             assignmentId,
             next === null ? { clear_due_at: true } : { due_at: next },
           )
-          .then(refreshDueDates),
+          .then(() => undefined),
+      refreshDueDates,
     );
   };
 
@@ -175,7 +183,8 @@ export function useInlineConfig({
         setHw((h) =>
           h ? { ...h, section_ids: prev, section_names: prevNames } : h,
         ),
-      () => teacher.assignToSections(assignmentId, next).then(refreshDueDates),
+      () => teacher.assignToSections(assignmentId, next).then(() => undefined),
+      refreshDueDates,
     );
   };
 
