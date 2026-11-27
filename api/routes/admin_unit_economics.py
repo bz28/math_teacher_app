@@ -25,7 +25,6 @@ api/core/model_pricing.reprice for why that needs the tokenizer factor.
 """
 
 import uuid as uuid_lib
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -34,13 +33,7 @@ from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
-from api.core.model_pricing import (
-    CACHE_WRITE_MULT,
-    MODEL_CATALOG,
-    cost_usd,
-    price_for,
-    reprice,
-)
+from api.core.model_pricing import cost_usd, price_for
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
 from api.models.assignment import Assignment, Submission
@@ -48,10 +41,10 @@ from api.models.llm_call import LLMCall
 from api.models.question_bank import QuestionBankGenerationJob
 from api.models.user import User
 from api.routes.admin_helpers import INTERNAL_SCHOOL_SENTINEL
+from api.routes.admin_unit_economics_profiles import as_float, catalog, profile_rows
 
 router = APIRouter()
 
-_PER_MTOK = 1_000_000
 _DAYS_PER_MONTH = 30.0
 
 # Harness grading calls. They carry a real cost but no customer, and
@@ -83,11 +76,6 @@ def _median(col: Any) -> Any:
 
 def _p90(col: Any) -> Any:
     return func.percentile_cont(0.9).within_group(col.asc())
-
-
-def _f(value: Any) -> float:
-    """Coalesce a possibly-NULL aggregate to a float."""
-    return float(value) if value is not None else 0.0
 
 
 class _Scope:
@@ -207,93 +195,14 @@ async def _submission_units(db: AsyncSession, scope: _Scope) -> list[dict[str, A
                 "label": kind,
                 "denominator": "per student per submission",
                 "n": int(r.n) if r else 0,
-                "cost_median": _f(r.median) if r else None,
-                "cost_mean": _f(r.mean) if r else None,
-                "cost_p90": _f(r.p90) if r else None,
-                "cost_total": _f(r.total) if r else 0.0,
+                "cost_median": as_float(r.median) if r else None,
+                "cost_mean": as_float(r.mean) if r else None,
+                "cost_p90": as_float(r.p90) if r else None,
+                "cost_total": as_float(r.total) if r else 0.0,
             },
         )
     return out
 
-
-def _profile_rows(
-    rows: list[Any], key_of: Any, denominators: dict[str, float],
-) -> dict[str, list[dict[str, Any]]]:
-    """Collapse per-(unit, function, model) rows into one entry per function.
-
-    Keeps the DOMINANT model's token profile as the measurement to
-    reprice from — mixing two models' token counts would reprice from a
-    profile no single model ever produced.
-
-    `denominators` is the count of units of each KIND, measured once and
-    shared by every function. It must not be derived per function: a
-    feature that fires on only some units (integrity is per-assignment,
-    so the understanding check skips homeworks that disabled it) would
-    then be divided by its own smaller count, inflating it and breaking
-    the invariant the simulator depends on — that the per-function costs
-    sum to the measured unit cost.
-    """
-    grouped: dict[tuple[str, str], list[Any]] = {}
-    for r in rows:
-        grouped.setdefault((key_of(r), r.function), []).append(r)
-
-    out: dict[str, list[dict[str, Any]]] = {}
-    for (kind, function), group in grouped.items():
-        # By COST, not call count: a function with 1,000 cheap Haiku calls
-        # and 50 huge Opus ones would otherwise reprice all 1,050 from the
-        # cheap profile. Choosing by spend fails conservatively.
-        # Tie-broken on model id so identical requests return identical
-        # answers; a bare max() takes whichever row Postgres emitted first.
-        dominant = max(group, key=lambda r: (_f(r.cost), r.model))
-        calls = sum(int(r.calls) for r in group)
-        cost = sum(_f(r.cost) for r in group)
-        units = denominators.get(kind) or 1.0
-        tokens = {
-            "input": _f(dominant.avg_in),
-            "output": _f(dominant.avg_out),
-            "cache_read": _f(dominant.avg_cread),
-            "cache_write": _f(dominant.avg_cwrite),
-        }
-        calls_per_unit = calls / units
-        legs = [
-            _Leg(
-                model=r.model,
-                calls_per_unit=int(r.calls) / units,
-                input=_f(r.avg_in),
-                output=_f(r.avg_out),
-                cache_read=_f(r.avg_cread),
-                cache_write=_f(r.avg_cwrite),
-            )
-            for r in group
-        ]
-        out.setdefault(kind, []).append(
-            {
-                "function": function,
-                "models": sorted({r.model for r in group}),
-                "measured_model": dominant.model,
-                # The catalog entry that model id resolves to. A logged id
-                # can carry a -YYYYMMDD pin (settings.llm_model_haiku does),
-                # which matches no catalog id and no <option> value — the
-                # dashboard's model picker silently fell back to the first
-                # option when seeded from the raw id.
-                "measured_catalog_id": (
-                    measured.id if (measured := price_for(dominant.model)) else None
-                ),
-                "calls_per_unit": calls_per_unit,
-                "cost_per_unit": cost / units,
-                "tokens": tokens,
-                "reprice": _reprice_legs(legs),
-                # Every leg repriced onto the model it actually ran on.
-                # Equals cost_per_unit when the arithmetic is sound, which
-                # is what the dashboard's trust badge compares against —
-                # and unlike "reprice at the dominant model" it stays a
-                # true identity when a function spans several models.
-                "self_reprice": _self_reprice(legs),
-            },
-        )
-    for fns in out.values():
-        fns.sort(key=lambda f: f["cost_per_unit"], reverse=True)
-    return out
 
 
 # MEAN, not median. These columns reconstruct a COST: the repriced figure
@@ -375,7 +284,7 @@ async def _unit_functions(
         ).all()
     }
     out.update(
-        _profile_rows(
+        profile_rows(
             sub_rows,
             key_of=lambda r: f"submission:{r.kind}",
             denominators=sub_denoms,
@@ -412,7 +321,7 @@ async def _unit_functions(
         )
     ).scalar() or 1
     out.update(
-        _profile_rows(
+        profile_rows(
             gen_rows,
             key_of=lambda _r: "generation:unit",
             denominators={"generation:unit": float(gen_units)},
@@ -462,7 +371,7 @@ async def _unit_functions(
         ).all()
     }
     out.update(
-        _profile_rows(
+        profile_rows(
             res_rows,
             key_of=lambda r: f"residual:{r.role}",
             denominators=res_denoms,
@@ -470,66 +379,6 @@ async def _unit_functions(
     )
     return out
 
-
-@dataclass(frozen=True)
-class _Leg:
-    """One (function, model) slice of a unit's work."""
-
-    model: str
-    calls_per_unit: float
-    input: float
-    output: float
-    cache_read: float
-    cache_write: float
-
-
-def _reprice_legs(legs: list[_Leg]) -> dict[str, float | None]:
-    """What this function would cost per unit on each catalog model.
-
-    Each leg is repriced from ITS OWN measured profile and the result
-    summed. Repricing the group's total call count off a single model's
-    profile overstates any mixed-model group by the ratio between them.
-
-    None for a target we cannot price any leg from — an unknown source
-    model means there is no profile to rescale, and inventing one is how
-    a simulator starts lying.
-    """
-    out: dict[str, float | None] = {}
-    sources = [(leg, price_for(leg.model)) for leg in legs]
-    for target in MODEL_CATALOG:
-        total = 0.0
-        for leg, source in sources:
-            if source is None:
-                out[target.id] = None
-                break
-            total += leg.calls_per_unit * reprice(
-                source,
-                target,
-                input_tokens=leg.input,
-                output_tokens=leg.output,
-                cache_read_tokens=leg.cache_read,
-                cache_write_tokens=leg.cache_write,
-            )
-        else:
-            out[target.id] = total
-    return out
-
-
-def _self_reprice(legs: list[_Leg]) -> float | None:
-    """Every leg priced on the model it actually ran on."""
-    total = 0.0
-    for leg in legs:
-        source = price_for(leg.model)
-        if source is None:
-            return None
-        total += leg.calls_per_unit * cost_usd(
-            source,
-            input_tokens=leg.input,
-            output_tokens=leg.output,
-            cache_read_tokens=leg.cache_read,
-            cache_write_tokens=leg.cache_write,
-        )
-    return total
 
 
 async def _generation_unit(db: AsyncSession, scope: _Scope) -> dict[str, Any]:
@@ -566,10 +415,10 @@ async def _generation_unit(db: AsyncSession, scope: _Scope) -> dict[str, Any]:
         "label": "unit generation",
         "denominator": "per teaching unit",
         "n": int(r.n),
-        "cost_median": _f(r.median) if r.n else None,
-        "cost_mean": _f(r.mean) if r.n else None,
-        "cost_p90": _f(r.p90) if r.n else None,
-        "cost_total": _f(r.total),
+        "cost_median": as_float(r.median) if r.n else None,
+        "cost_mean": as_float(r.mean) if r.n else None,
+        "cost_p90": as_float(r.p90) if r.n else None,
+        "cost_total": as_float(r.total),
     }
 
 
@@ -644,7 +493,7 @@ async def _residual_units(db: AsyncSession, scope: _Scope) -> list[dict[str, Any
         r = by_role.get(role)
         d = dist.get(role)
         actives = int(r.actives) if r and r.actives else 0
-        total = _f(r.cost) if r else 0.0
+        total = as_float(r.cost) if r else 0.0
         per_month = (1.0 / months) if months > 0 else 0.0
         out.append(
             {
@@ -652,9 +501,9 @@ async def _residual_units(db: AsyncSession, scope: _Scope) -> list[dict[str, Any
                 "label": label,
                 "denominator": f"per active {role} per month",
                 "n": actives,
-                "cost_median": (_f(d.median) * per_month) if (d and actives) else None,
-                "cost_mean": (_f(d.mean) * per_month) if (d and actives) else None,
-                "cost_p90": (_f(d.p90) * per_month) if (d and actives) else None,
+                "cost_median": (as_float(d.median) * per_month) if (d and actives) else None,
+                "cost_mean": (as_float(d.mean) * per_month) if (d and actives) else None,
+                "cost_p90": (as_float(d.p90) * per_month) if (d and actives) else None,
                 "cost_total": total,
                 # A month's rate read off a few hours is not a measurement.
                 "window_too_short": scope.days < _MIN_RESIDUAL_DAYS,
@@ -695,14 +544,14 @@ async def _reconciliation(db: AsyncSession, scope: _Scope) -> dict[str, Any]:
 
     for r in rows:
         calls += int(r.calls)
-        recorded += _f(r.recorded)
+        recorded += as_float(r.recorded)
         price = price_for(r.model)
         if price is None:
             unpriced.append(r.model)
             # No invented figure: an unpriced model contributes its
             # recorded cost so the totals still balance, and is named so
             # the dashboard can say the comparison is incomplete.
-            recomputed += _f(r.recorded)
+            recomputed += as_float(r.recorded)
             model_recomputed = None
         else:
             # Summed tokens are exact for flat-rate models. Haiku 5.5's
@@ -710,17 +559,17 @@ async def _reconciliation(db: AsyncSession, scope: _Scope) -> dict[str, Any]:
             # needs to move per-row.
             model_recomputed = cost_usd(
                 price,
-                input_tokens=int(_f(r.in_t)),
-                output_tokens=int(_f(r.out_t)),
-                cache_read_tokens=int(_f(r.cread)),
-                cache_write_tokens=int(_f(r.cwrite)),
+                input_tokens=int(as_float(r.in_t)),
+                output_tokens=int(as_float(r.out_t)),
+                cache_read_tokens=int(as_float(r.cread)),
+                cache_write_tokens=int(as_float(r.cwrite)),
             )
             recomputed += model_recomputed
         per_model.append(
             {
                 "model": r.model,
                 "calls": int(r.calls),
-                "recorded_usd": _f(r.recorded),
+                "recorded_usd": as_float(r.recorded),
                 "recomputed_usd": model_recomputed,
                 "priced": price is not None,
             },
@@ -757,42 +606,6 @@ async def _teacher_student_ratio(
         "students_per_teacher": (students / teachers) if teachers else None,
     }
 
-
-def _catalog() -> list[dict[str, Any]]:
-    configured = {
-        settings.llm_model_opus,
-        settings.llm_model_sonnet,
-        settings.llm_model_haiku,
-    }
-    return [
-        {
-            "id": m.id,
-            "label": m.label,
-            "input_per_mtok": m.input_per_token * _PER_MTOK,
-            "output_per_mtok": m.output_per_token * _PER_MTOK,
-            "cache_read_mult": m.cache_read_mult,
-            "cache_write_mult": CACHE_WRITE_MULT,
-            "tokenizer_factor": m.tokenizer_factor,
-            "long_context_threshold": m.long_context_threshold,
-            "long_context_input_per_mtok": (
-                m.long_context_input_per_token * _PER_MTOK
-                if m.long_context_input_per_token is not None
-                else None
-            ),
-            "long_context_output_per_mtok": (
-                m.long_context_output_per_token * _PER_MTOK
-                if m.long_context_output_per_token is not None
-                else None
-            ),
-            # Resolve each configured id through the catalog rather than
-            # prefix-matching: "claude-opus-5-5".startswith("claude-opus-5")
-            # is True, which labelled Opus 5 as running at Opus 5.5's rates.
-            "is_configured": any(
-                (p := price_for(c)) is not None and p.id == m.id for c in configured
-            ),
-        }
-        for m in MODEL_CATALOG
-    ]
 
 
 @router.get("/unit-economics")
@@ -836,6 +649,6 @@ async def unit_economics(
         "functions_by_unit": await _unit_functions(db, scope),
         "reconciliation": await _reconciliation(db, scope),
         "teacher_student_ratio": await _teacher_student_ratio(db, school_id),
-        "model_catalog": _catalog(),
+        "model_catalog": catalog(),
         "min_sample": min_sample,
     }
