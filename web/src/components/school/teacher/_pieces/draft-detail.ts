@@ -1,17 +1,28 @@
 import type { DraftHomework } from "@/lib/api";
 
-/** A draft's one line under its title: course, due date, and what's
- *  left — generated problems waiting on the teacher's approval first,
- *  since that's what holds it back; else how many problems it has. */
-export function draftDetail(d: DraftHomework, due: string | null): string {
-  const parts = [d.course_name];
-  if (due) parts.push(`due ${due}`);
+/** A draft's due date as its line says it. A draft is unpublished, so a
+ *  date already behind it means students never saw it in time: said so,
+ *  for the error ink, rather than reading like a date still to come. */
+export function draftDue(
+  dueAt: string | null,
+  now: number,
+  format: (iso: string) => string,
+): { text: string; passed: boolean } | null {
+  if (!dueAt) return null;
+  const date = format(dueAt);
+  return new Date(dueAt).getTime() < now
+    ? { text: `due date passed (${date})`, passed: true }
+    : { text: `due ${date}`, passed: false };
+}
+
+/** What's left on a draft: generated problems waiting on the teacher's
+ *  approval first, since that's what holds it back; else how many
+ *  problems it has. */
+export function draftLeft(d: DraftHomework): string {
   if (d.pending_review > 0) {
-    parts.push(`${d.pending_review} problem${d.pending_review === 1 ? "" : "s"} need${d.pending_review === 1 ? "s" : ""} your approval`);
-  } else if (d.problem_count > 0) {
-    parts.push(`${d.problem_count} problem${d.problem_count === 1 ? "" : "s"}`);
-  } else {
-    parts.push("no problems yet");
+    const n = d.pending_review;
+    return `${n} problem${n === 1 ? "" : "s"} need${n === 1 ? "s" : ""} your approval`;
   }
-  return parts.join(" · ");
+  if (d.problem_count > 0) return `${d.problem_count} problem${d.problem_count === 1 ? "" : "s"}`;
+  return "no problems yet";
 }

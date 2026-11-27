@@ -1,33 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { teacher, type DraftHomework } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
-import { draftDetail } from "./draft-detail";
+import type { Drafts } from "@/lib/api";
+import { draftDue, draftLeft } from "./draft-detail";
 
 /** Home's quiet line under "Needs you today": homework the teacher
  *  started and hasn't published, one click back in. Nothing when there's
- *  none, and nothing if the read fails — the queue above is what home is
- *  for, and every draft is still in its course's Homework tab. */
-export function DraftsInProgress() {
-  const [data, setData] = useState<{ drafts: DraftHomework[]; total: number } | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    teacher
-      .drafts()
-      .then((res) => {
-        if (!cancelled) setData(res);
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (!data || data.drafts.length === 0) return null;
-  const more = data.total - data.drafts.length;
+ *  none (the page leaves it out if the read fails — every draft is still
+ *  in its course's Homework tab). */
+export function DraftsInProgress({ drafts, total }: Drafts) {
+  const [now] = useState(() => Date.now());
+  if (drafts.length === 0) return null;
+  const more = total - drafts.length;
   return (
     <section className="mt-8" aria-labelledby="drafts-in-progress">
       <h2
@@ -37,7 +23,9 @@ export function DraftsInProgress() {
         Drafts in progress
       </h2>
       <ul className="mt-3 overflow-hidden rounded-[--radius-md] border border-border-light bg-surface">
-        {data.drafts.map((d) => (
+        {drafts.map((d) => {
+          const due = draftDue(d.due_at, now, (iso) => formatDate(iso) ?? iso);
+          return (
           <li
             key={d.assignment_id}
             className="flex flex-col gap-2 border-b border-border-light px-4 py-3 last:border-b-0 sm:flex-row sm:items-center sm:gap-4"
@@ -45,7 +33,15 @@ export function DraftsInProgress() {
             <div className="min-w-0 flex-1">
               <p className="break-words text-[14.5px] font-semibold text-text-primary">{d.title}</p>
               <p className="mt-0.5 text-[12.5px] text-text-secondary">
-                {draftDetail(d, d.due_at ? formatDate(d.due_at) : null)}
+                {d.course_name}
+                {due && (
+                  <span className={due.passed ? "text-[color:var(--color-error)]" : undefined}>
+                    {" · "}
+                    {due.text}
+                  </span>
+                )}
+                {" · "}
+                {draftLeft(d)}
               </p>
             </div>
             <Link
@@ -56,7 +52,8 @@ export function DraftsInProgress() {
               Continue
             </Link>
           </li>
-        ))}
+          );
+        })}
       </ul>
       {more > 0 && (
         <p className="mt-2 text-xs text-text-muted">
