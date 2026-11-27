@@ -1177,8 +1177,8 @@ export interface TeacherAssignment {
   status: string;
   due_at: string | null;
   late_policy: string;
-  /** For practice assignments cloned from a homework, the source HW's
-   *  id. Null for scratch-built practice and for homework itself. */
+  /** The homework this was made from: the source of a practice set, or
+   *  of a homework duplicated from another course. Null otherwise. */
   source_homework_id: string | null;
   section_ids: string[];
   section_names: string[];
@@ -1756,6 +1756,18 @@ export const teacher = {
   },
   allAssignments() {
     return apiFetch<{ assignments: TeacherAssignment[] }>("/teacher/assignments");
+  },
+  /** A new draft copy of a homework, in its course or another of the
+   *  teacher's: problems, grading rules, points and instructions, due
+   *  when and for the sections picked here (never the source's). */
+  duplicateAssignment(
+    id: string,
+    body: { course_id?: string; due_at?: string; section_ids?: string[] },
+  ) {
+    return apiFetch<{ id: string; title: string; status: string; course_id: string }>(
+      `/teacher/assignments/${id}/duplicate`,
+      { method: "POST", body: JSON.stringify(body) },
+    );
   },
   /** Assignments that already have a non-empty grading rubric, for the
    *  "Copy grading setup from another homework" picker. Lean projection

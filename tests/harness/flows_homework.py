@@ -263,3 +263,55 @@ async def _practice_has_no_list_edits(browser: HarnessBrowser, web_base: str, se
             if await page.get_by_role("button", name=label).count():
                 issues.append(f"a practice set offers {label}, which can't work there")
     return issues
+
+
+async def duplicate_homework_flow(
+    browser: HarnessBrowser, web_base: str, api_base: str, seed: Seed,
+) -> FlowResult:
+    """New homework -> Copy a past homework -> Duplicate the seeded homework
+    with a due chip -> a new draft opens holding the same problems, due on
+    the picked day; the source is untouched."""
+    name, title = "duplicate_homework", "Teacher duplicates a past homework"
+    issues: list[str] = []
+    problem_ids = await _seed_bank(seed)
+    async with get_session_factory()() as s:
+        source = await s.get(Assignment, uuid.UUID(seed.assignment_id))
+        assert source is not None
+        source.content = {"problem_ids": problem_ids}
+        source_title = source.title
+        await s.commit()
+    async with browser.authed_page(seed.teacher_token, seed.teacher_refresh) as page:
+        await page.goto(
+            f"{web_base.rstrip('/')}/school/teacher/courses/{seed.course_id}?tab=homework",
+            wait_until="domcontentloaded", timeout=_TIMEOUT_MS,
+        )
+        try:
+            await page.get_by_role("button", name="New homework").first.click(timeout=_TIMEOUT_MS)
+            await page.get_by_role("button", name="Copy a past homework →").click(timeout=_TIMEOUT_MS)
+            await page.get_by_role("button", name=f"Duplicate {source_title}").click(timeout=_TIMEOUT_MS)
+            dup = page.get_by_role("dialog", name=re.compile(r"^Duplicate"))
+            await dup.get_by_text("Copies 2 problems").wait_for(timeout=_TIMEOUT_MS)
+        except PlaywrightTimeoutError:
+            issues.append("Copy a past homework did not open the Duplicate dialog for it")
+            return FlowResult(name, title, False, issues)
+        try:
+            await dup.get_by_role("button", name=re.compile(r"^Tomorrow")).click(timeout=_TIMEOUT_MS)
+            await dup.get_by_role("button", name="Duplicate as draft").click(timeout=_TIMEOUT_MS)
+            await page.wait_for_url(
+                re.compile(rf"/homework/(?!{seed.assignment_id})[0-9a-f-]{{36}}"), timeout=_TIMEOUT_MS)
+        except PlaywrightTimeoutError:
+            issues.append("Duplicate as draft did not open the new copy")
+            return FlowResult(name, title, False, issues)
+        copy_id = re.search(r"/homework/([0-9a-f-]{36})", page.url).group(1)  # type: ignore[union-attr]
+    async with get_session_factory()() as s:
+        dup_hw = await s.get(Assignment, uuid.UUID(copy_id))
+        src = await s.get(Assignment, uuid.UUID(seed.assignment_id))
+    if dup_hw is None or dup_hw.status != "draft":
+        issues.append("the copy is not a draft")
+    elif problem_ids_in_content(dup_hw.content) != problem_ids:
+        issues.append("the copy does not hold the source's problems in order")
+    elif dup_hw.due_at is None:
+        issues.append("the copy has no due date after picking Tomorrow")
+    if src is None or src.status != "published" or problem_ids_in_content(src.content) != problem_ids:
+        issues.append("duplicating changed the source homework")
+    return FlowResult(name, title, not issues, issues)

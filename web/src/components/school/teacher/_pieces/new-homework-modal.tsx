@@ -36,6 +36,7 @@ import {
 } from "./homework-wizard-upload";
 import { WizardGradingLine } from "./wizard-grading-line";
 import { BankPicker, bankSelectionNote } from "../question-bank/bank-picker";
+import { CopyPastHomeworkDialog } from "./past-homework-list";
 import {
   GenerationParamsCustomize,
   persistGenerationParams,
@@ -105,6 +106,7 @@ export function NewHomeworkModal({
   // While it's up the wizard itself is non-dismissible; the prompt owns
   // its own Escape / backdrop handling.
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+  const [copyOpen, setCopyOpen] = useState(false);
 
   // ── Step 1 — Details ──
   const [title, setTitle] = useState("");
@@ -406,7 +408,7 @@ export function NewHomeworkModal({
   // instead of closing outright.
   const { panelRef, requestClose } = useDialogDismiss({
     onClose,
-    dismissible: dismissible && !isUpgradeOpen && !confirmingDiscard,
+    dismissible: dismissible && !isUpgradeOpen && !confirmingDiscard && !copyOpen,
     confirmClose: () => isDirty,
     onConfirmClose: () => setConfirmingDiscard(true),
   });
@@ -465,6 +467,14 @@ export function NewHomeworkModal({
                 Step {step} of {STEPS.length} · {current.label}
               </span>
             </div>
+            <button
+              type="button"
+              onClick={() => setCopyOpen(true)}
+              disabled={busy}
+              className="ml-auto text-xs font-semibold text-primary hover:underline disabled:opacity-50"
+            >
+              Copy a past homework →
+            </button>
             <button
               type="button"
               onClick={requestClose}
@@ -688,6 +698,9 @@ export function NewHomeworkModal({
         </div>
       </div>
       {UpgradeModal}
+      {copyOpen && (
+        <CopyPastHomeworkDialog intoCourseId={courseId} onClose={() => setCopyOpen(false)} />
+      )}
       {confirmingDiscard && (
         <DiscardConfirmDialog
           onKeepEditing={() => setConfirmingDiscard(false)}
