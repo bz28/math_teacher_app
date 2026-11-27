@@ -559,10 +559,14 @@ export interface paths {
          *
          *       * A **teacher's** cost follows the one whose-call rule
          *         (api/core/llm_attribution.py): their own calls plus every call
-         *         on a submission to their homework — the same number their own
-         *         page and the Users list show.
+         *         on a submission to their homework — counting only calls stamped
+         *         with THIS school and leaving out preview work, the rule Costs
+         *         scoped to the school applies. The Users list counts a teacher's
+         *         calls wherever they were stamped, so for a teacher with unstamped
+         *         calls (admin contexts, pre-backfill rows) the two can differ.
          *       * A **section's** cost is the calls on submissions handed in to
-         *         it (LLMCall.submission_id → submission → section).
+         *         it (LLMCall.submission_id → submission → section), by the same
+         *         school and preview rule.
          *
          *     All aggregation is done with grouped subqueries assembled in Python
          *     (no per-teacher / per-section follow-up queries), so a large school
@@ -622,6 +626,23 @@ export interface paths {
         };
         /** School Overview */
         get: operations["school_overview_v1_admin_schools__school_id__overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/spend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Spend */
+        get: operations["spend_v1_admin_spend_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -8760,6 +8781,46 @@ export interface operations {
                 /** @description School UUID or 'internal' */
                 school_id: string;
             };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    spend_v1_admin_spend_get: {
+        parameters: {
+            query?: {
+                group_by?: "school" | "teacher" | "student" | "function" | "model";
+                bucket?: "day" | "week" | "month";
+                hours?: number;
+                from?: string | null;
+                to?: string | null;
+                school_id?: string | null;
+                /** @description Include internal calls (no school) and teachers' preview-as-student work. Off by default: neither is customer usage. */
+                include_internal?: boolean;
+            };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;

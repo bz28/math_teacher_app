@@ -11264,7 +11264,7 @@
         ]
       },
       "get": {
-        "description": "School deep page: the teacher \u2192 section \u2192 student hierarchy.\n\nThe unit is teacher\u2192class, not a flat school-wide roster. We return\nevery teacher, their sections (class periods), and each section's\nenrolled students \u2014 with cost at two levels:\n\n  * A **teacher's** cost follows the one whose-call rule\n    (api/core/llm_attribution.py): their own calls plus every call\n    on a submission to their homework \u2014 the same number their own\n    page and the Users list show.\n  * A **section's** cost is the calls on submissions handed in to\n    it (LLMCall.submission_id \u2192 submission \u2192 section).\n\nAll aggregation is done with grouped subqueries assembled in Python\n(no per-teacher / per-section follow-up queries), so a large school\nstill resolves in a fixed number of round trips.",
+        "description": "School deep page: the teacher \u2192 section \u2192 student hierarchy.\n\nThe unit is teacher\u2192class, not a flat school-wide roster. We return\nevery teacher, their sections (class periods), and each section's\nenrolled students \u2014 with cost at two levels:\n\n  * A **teacher's** cost follows the one whose-call rule\n    (api/core/llm_attribution.py): their own calls plus every call\n    on a submission to their homework \u2014 counting only calls stamped\n    with THIS school and leaving out preview work, the rule Costs\n    scoped to the school applies. The Users list counts a teacher's\n    calls wherever they were stamped, so for a teacher with unstamped\n    calls (admin contexts, pre-backfill rows) the two can differ.\n  * A **section's** cost is the calls on submissions handed in to\n    it (LLMCall.submission_id \u2192 submission \u2192 section), by the same\n    school and preview rule.\n\nAll aggregation is done with grouped subqueries assembled in Python\n(no per-teacher / per-section follow-up queries), so a large school\nstill resolves in a fixed number of round trips.",
         "operationId": "get_school_v1_admin_schools__school_id__get",
         "parameters": [
           {
@@ -11543,6 +11543,152 @@
           }
         ],
         "summary": "School Overview",
+        "tags": [
+          "admin"
+        ]
+      }
+    },
+    "/v1/admin/spend": {
+      "get": {
+        "operationId": "spend_v1_admin_spend_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "group_by",
+            "required": false,
+            "schema": {
+              "default": "function",
+              "enum": [
+                "school",
+                "teacher",
+                "student",
+                "function",
+                "model"
+              ],
+              "title": "Group By",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "bucket",
+            "required": false,
+            "schema": {
+              "default": "week",
+              "enum": [
+                "day",
+                "week",
+                "month"
+              ],
+              "title": "Bucket",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "hours",
+            "required": false,
+            "schema": {
+              "default": 720,
+              "maximum": 8760,
+              "minimum": 1,
+              "title": "Hours",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To"
+            }
+          },
+          {
+            "in": "query",
+            "name": "school_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "School Id"
+            }
+          },
+          {
+            "description": "Include internal calls (no school) and teachers' preview-as-student work. Off by default: neither is customer usage.",
+            "in": "query",
+            "name": "include_internal",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Include internal calls (no school) and teachers' preview-as-student work. Off by default: neither is customer usage.",
+              "title": "Include Internal",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Spend V1 Admin Spend Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Spend",
         "tags": [
           "admin"
         ]

@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
 from api.core.email import send_email
-from api.core.llm_attribution import call_owners
+from api.core.llm_attribution import call_owners, not_preview
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
 from api.models.activity_log import ActivityLog
@@ -138,7 +138,8 @@ async def list_schools(
 
     # Cost in the last 30 days per school. LLMCall.school_id is the
     # denormalized column populated when a submission is processed —
-    # exactly what we want for "what is each school costing us".
+    # exactly what we want for "what is each school costing us". Preview-
+    # as-student work is left out, as on the school's page and Costs.
     cost_30d_q = (
         select(
             LLMCall.school_id,
@@ -146,6 +147,7 @@ async def list_schools(
         )
         .where(
             LLMCall.school_id.isnot(None),
+            not_preview(),
             cost_window.covers(LLMCall.created_at),
         )
         .group_by(LLMCall.school_id)
@@ -161,6 +163,7 @@ async def list_schools(
         )
         .where(
             LLMCall.school_id.isnot(None),
+            not_preview(),
             prev_window.covers(LLMCall.created_at),
         )
         .group_by(LLMCall.school_id)
@@ -299,10 +302,14 @@ async def get_school(
 
       * A **teacher's** cost follows the one whose-call rule
         (api/core/llm_attribution.py): their own calls plus every call
-        on a submission to their homework — the same number their own
-        page and the Users list show.
+        on a submission to their homework — counting only calls stamped
+        with THIS school and leaving out preview work, the rule Costs
+        scoped to the school applies. The Users list counts a teacher's
+        calls wherever they were stamped, so for a teacher with unstamped
+        calls (admin contexts, pre-backfill rows) the two can differ.
       * A **section's** cost is the calls on submissions handed in to
-        it (LLMCall.submission_id → submission → section).
+        it (LLMCall.submission_id → submission → section), by the same
+        school and preview rule.
 
     All aggregation is done with grouped subqueries assembled in Python
     (no per-teacher / per-section follow-up queries), so a large school
@@ -315,8 +322,13 @@ async def get_school(
     window = last_days(30)
 
     # ── Teachers + their spend (the one whose-call rule) ────────────
+    # Only calls stamped with this school: a teacher's calls with no
+    # school (an admin context, pre-backfill rows) aren't this school's
+    # spend, the same rule Costs scoped to it applies.
     owners = call_owners(
         window.covers(LLMCall.created_at),
+        not_preview(),
+        LLMCall.school_id == school.id,
         owners_in=select(User.id).where(User.school_id == school.id, User.role == "teacher"),
     )
     teacher_stats_sq = (
@@ -406,7 +418,10 @@ async def get_school(
         .join(Submission, Submission.id == LLMCall.submission_id)
         .join(Section, Section.id == Submission.section_id)
         .join(Course, Course.id == Section.course_id)
-        .where(Course.school_id == school.id, window.covers(LLMCall.created_at))
+        .where(
+            Course.school_id == school.id, LLMCall.school_id == school.id,
+            window.covers(LLMCall.created_at), not_preview(),
+        )
         .group_by(Submission.section_id)
     )).all()
     section_cost = {r.section_id: float(r.cost) for r in cost_rows}

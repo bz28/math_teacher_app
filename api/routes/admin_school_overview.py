@@ -27,7 +27,6 @@ submissions exist outside a school context; cost + failed-call tiles
 still work.
 """
 
-import calendar
 import uuid as uuid_lib
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -36,7 +35,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.llm_attribution import school_calls
+from api.core.llm_attribution import not_preview, school_calls
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
 from api.models.activity_log import ActivityLog
@@ -45,27 +44,10 @@ from api.models.course import Course
 from api.models.llm_call import LLMCall
 from api.models.school import School
 from api.models.section import Section
-from api.routes.admin_helpers import INTERNAL_SCHOOL_SENTINEL, last_days
+from api.routes.admin_helpers import INTERNAL_SCHOOL_SENTINEL
+from api.routes.admin_spend import spend_headline, spend_series
 
 router = APIRouter()
-
-
-def _month_window(now: datetime) -> tuple[datetime, datetime, datetime]:
-    """Return (this_month_start, last_month_start, this_month_end_exclusive)."""
-    this_month_start = now.replace(
-        day=1, hour=0, minute=0, second=0, microsecond=0,
-    )
-    if this_month_start.month == 1:
-        last_month_start = this_month_start.replace(
-            year=this_month_start.year - 1, month=12,
-        )
-    else:
-        last_month_start = this_month_start.replace(
-            month=this_month_start.month - 1,
-        )
-    days_in_month = calendar.monthrange(now.year, now.month)[1]
-    this_month_end = this_month_start + timedelta(days=days_in_month)
-    return this_month_start, last_month_start, this_month_end
 
 
 @router.get("/schools/{school_id}/overview")
@@ -100,64 +82,19 @@ async def school_overview(
         school_name = row.name
 
     now = datetime.now(UTC)
-    this_month_start, last_month_start, this_month_end = _month_window(now)
     llm_school = school_calls(None if is_internal else school_id)
 
     # ---------- Cost ----------
-    this_month_cost = (await db.execute(
-        select(func.coalesce(func.sum(LLMCall.cost_usd), 0.0)).where(
-            llm_school,
-            LLMCall.created_at >= this_month_start,
-        )
-    )).scalar() or 0.0
-
-    last_month_cost = (await db.execute(
-        select(func.coalesce(func.sum(LLMCall.cost_usd), 0.0)).where(
-            llm_school,
-            LLMCall.created_at >= last_month_start,
-            LLMCall.created_at < this_month_start,
-        )
-    )).scalar() or 0.0
-
-    # Rolling 30d cost (+ prior 30d) — the SAME window the Schools list
-    # shows, so a school's KPI strip matches the number the operator
-    # clicked in from. Distinct from the calendar-month breakdown below.
-    cost_window = last_days(30, now)
-    cost_30d = (await db.execute(
-        select(func.coalesce(func.sum(LLMCall.cost_usd), 0.0)).where(
-            llm_school,
-            cost_window.covers(LLMCall.created_at),
-        )
-    )).scalar() or 0.0
-    cost_prev_30d = (await db.execute(
-        select(func.coalesce(func.sum(LLMCall.cost_usd), 0.0)).where(
-            llm_school,
-            cost_window.previous().covers(LLMCall.created_at),
-        )
-    )).scalar() or 0.0
-
-    # Linear projection — this-month / days-elapsed × days-in-month.
-    # Crude on day 1; the dashboard reads it as "if usage stays flat
-    # for the rest of the month".
-    days_elapsed = max((now - this_month_start).days + 1, 1)
-    days_in_month = (this_month_end - this_month_start).days
-    projected_month_end = this_month_cost / days_elapsed * days_in_month
-
-    # 12-week sparkline. Buckets are stamped to the Monday of each
-    # ISO week so the labels are stable across years.
-    twelve_weeks_ago = (
-        now - timedelta(days=now.weekday() + 7 * 11)
-    ).replace(hour=0, minute=0, second=0, microsecond=0)
-    week_bucket = func.date_trunc("week", LLMCall.created_at).label("week")
-    weekly_rows = (await db.execute(
-        select(
-            week_bucket,
-            func.coalesce(func.sum(LLMCall.cost_usd), 0.0).label("cost"),
-        )
-        .where(llm_school, LLMCall.created_at >= twelve_weeks_ago)
-        .group_by("week")
-        .order_by("week")
-    )).all()
+    # The same month, projection and trend the Costs page shows, from the
+    # one place the console computes them. The rolling 30d pair is the
+    # window the Schools list shows, so a school's KPI strip matches the
+    # number the operator clicked in from.
+    # Preview-as-student work is left out, as the Costs page and the
+    # Schools list leave it out: a teacher rehearsing their own homework
+    # isn't the school's usage.
+    spend = [llm_school] if is_internal else [llm_school, not_preview()]
+    headline = await spend_headline(db, spend, now)
+    weekly = await spend_series(db, spend, "week", now)
 
     # ---------- Health (failed calls — works for both scopes) ----------
     failed_24h = (await db.execute(
@@ -213,17 +150,15 @@ async def school_overview(
         # teacher grade/publish actions that leave no student submission.
         "last_active_at": last_active_at.isoformat() if last_active_at else None,
         "cost": {
-            "this_month": round(this_month_cost, 4),
-            "last_month": round(last_month_cost, 4),
-            "cost_30d": round(cost_30d, 4),
-            "cost_prev_30d": round(cost_prev_30d, 4),
-            "projected_month_end": round(projected_month_end, 4),
+            **{
+                k: headline[k]
+                for k in (
+                    "this_month", "last_month", "cost_30d", "cost_prev_30d",
+                    "projected_month_end", "projected_low", "projected_high",
+                )
+            },
             "trend_12_weeks": [
-                {
-                    "week_start": r.week.date().isoformat() if r.week else None,
-                    "cost": round(r.cost, 4),
-                }
-                for r in weekly_rows
+                {"week_start": w["start"], "cost": w["cost"]} for w in weekly
             ],
         },
         "activity": {
