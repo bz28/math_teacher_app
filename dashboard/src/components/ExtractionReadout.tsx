@@ -172,8 +172,12 @@ export default function ExtractionReadout({
   detail,
   targetProblem = null,
   showStudent = true,
+  anchorId = problemAnchor,
 }: {
   detail: ExtractionDetail;
+  /** The id a problem's first row carries. Defaults to `p{n}`; a page
+   *  whose own per-problem table owns that id passes another. */
+  anchorId?: (position: number) => string;
   /** Passed to each row — see `ReadRow`. */
   showStudent?: boolean;
   /** Problem a `#p{n}` link pointed at: its rows are marked, and its
@@ -186,7 +190,7 @@ export default function ExtractionReadout({
   const anchorFor = (pos: number | null) => {
     if (pos === null || anchored.has(pos)) return undefined;
     anchored.add(pos);
-    return problemAnchor(pos);
+    return anchorId(pos);
   };
   return (
     <div className="xq-detail">

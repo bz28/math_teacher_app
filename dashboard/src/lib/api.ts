@@ -1,3 +1,4 @@
+import type { BlockedSubmissionsData, SubmissionCase } from "./caseFile";
 const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:8000/v1";
 
 // ── Network error + API health pub/sub ─────────────────────────────
@@ -490,6 +491,12 @@ export const api = {
     request<ExtractionQualityData>("/admin/extraction-quality", params),
   extractionDetail: (submissionId: string) =>
     request<ExtractionDetail>(`/admin/extraction-quality/${submissionId}`),
+  /** The per-problem case file (grade, reader, understanding check). */
+  submissionCase: (submissionId: string) =>
+    request<SubmissionCase>(`/admin/submissions/${submissionId}/case`),
+  /** Students the platform refused a homework upload from. */
+  blockedSubmissions: (params?: Record<string, string>) =>
+    request<BlockedSubmissionsData>("/admin/blocked-submissions", params),
   studentDetail: (studentId: string) =>
     request<StudentDetailData>(`/admin/students/${studentId}`),
   studentSubmissions: (studentId: string, params?: Record<string, string>) =>
