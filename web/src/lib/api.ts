@@ -1085,6 +1085,9 @@ export interface TeacherCourse {
   status: string;
   section_count: number;
   doc_count: number;
+  /** Any homework in the course, by any of its teachers: it then opens
+   *  on Homework rather than Sections. */
+  has_homework: boolean;
   /** Submissions waiting on the teacher across all published HWs in
    *  this course. Mirrors the math used by the Submissions tab inbox
    *  so the courses dashboard never disagrees with what's inside. */
