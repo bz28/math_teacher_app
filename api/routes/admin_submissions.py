@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -33,6 +33,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.audit_log import log_student_record_access
+from api.core.extraction_edits import apply_extraction_edits
 from api.core.integrity_pipeline import (
     DIAGNOSIS_KIND_BLANK,
     DIAGNOSIS_KIND_ERROR,
@@ -54,6 +55,7 @@ from api.models.assignment import Assignment, Submission, SubmissionGrade
 from api.models.course import Course
 from api.models.integrity_check import IntegrityCheckProblem
 from api.models.user import User
+from api.routes.admin_helpers import last_days
 from api.routes.integrity_check import (
     IntegrityActivitySummary,
     load_check_for_submission,
@@ -128,10 +130,10 @@ async def blocked_submissions(
     current_user: CurrentUser = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> BlockedSubmissionsResponse:
-    since = datetime.now(UTC) - timedelta(days=days)
+    window = last_days(days)
     filters = [
         ActivityLog.action == "submission.rejected",
-        ActivityLog.performed_at >= since,
+        window.covers(ActivityLog.performed_at),
     ]
     if school_id is not None:
         filters.append(ActivityLog.school_id == school_id)
@@ -240,7 +242,7 @@ async def blocked_submissions(
     unattributed_rows.sort(key=lambda s: -s.attempts)
 
     return BlockedSubmissionsResponse(
-        days=days, since=since, students=students, unattributed=unattributed_rows,
+        days=days, since=window.start, students=students, unattributed=unattributed_rows,
     )
 
 
@@ -259,7 +261,8 @@ class CaseGrade(BaseModel):
 
 class CaseFinal(BaseModel):
     """The grade as it stands now — the AI's draft until a teacher
-    edits it. `differs_from_ai` is the override signal."""
+    edits it. `differs_from_ai` is the override signal: the final
+    percent or status is not the AI's call on this problem."""
     score_status: str
     percent: float
     feedback: str | None
@@ -291,11 +294,29 @@ class CaseIntegrityProblem(BaseModel):
     teacher_dismissal_reason: str | None
 
 
+class CaseReadingLine(BaseModel):
+    latex: str
+    plain: str
+
+
+class CaseReading(BaseModel):
+    """What the reader got for one problem, as the grader received it:
+    the photo's read with the student's confirm-screen corrections laid
+    over (`apply_extraction_edits`). Steps and the answer are raw — a
+    step's `latex` undelimited, `plain` prose."""
+    steps: list[CaseReadingLine]
+    final_answer: CaseReadingLine | None
+    # The student changed this problem's read before confirming.
+    student_edited: bool
+
+
 class CaseProblem(BaseModel):
     position: int
     bank_item_id: str
     question: str
     answer_key: str | None
+    # Null when the reader never ran on this submission.
+    reading: CaseReading | None
     grade: CaseGrade | None
     final: CaseFinal | None
     integrity: CaseIntegrityProblem | None
@@ -323,6 +344,9 @@ class CaseTurn(BaseModel):
     # The call's arguments, parsed, on tool_call rows; null elsewhere.
     tool_input: dict[str, Any] | None
     seconds_on_turn: int | None
+    # The agent's read of a student reply: answering / honest_confusion
+    # / not_trying. Null on other roles and when it didn't label it.
+    engagement: str | None
     telemetry: dict[str, Any] | None
     created_at: datetime
 
@@ -331,6 +355,9 @@ class CaseIntegrity(BaseModel):
     check_id: str
     status: str
     disposition: str | None
+    # Why a complete check has no disposition: not_started / left_partway
+    # (the student walked away) or turn_cap (inconclusive).
+    incomplete_reason: str | None
     headline: str | None
     overall_summary: str | None
     probe_selection_reason: str | None
@@ -355,6 +382,13 @@ class SubmissionCase(BaseModel):
     student_name: str | None
     assignment_id: str
     assignment_title: str
+    # The reader's whole-page confidence; untrusted model output, so
+    # null unless it's a number.
+    extraction_confidence: float | None
+    # Read lines the reader couldn't place on one of this homework's
+    # problems — handed to the grader as "other work". Empty when the
+    # reader never ran.
+    unplaced_reading: list[CaseReadingLine]
     problems: list[CaseProblem]
     grade: CaseGradeSummary | None
     integrity: CaseIntegrity | None
@@ -390,6 +424,54 @@ def _ai_grades_by_position(raw: Any) -> dict[int, dict[str, Any]]:
         if isinstance(g, dict) and isinstance(g.get("problem_position"), int):
             out[g["problem_position"]] = g
     return out
+
+
+def _line(latex: Any, plain: Any) -> CaseReadingLine:
+    return CaseReadingLine(latex=str(latex or "").strip(), plain=str(plain or "").strip())
+
+
+def _readings_by_position(sub: Submission) -> dict[int | None, CaseReading] | None:
+    """Each position's read, as `CaseReading`s. None when the reader
+    never ran. Positions are model output: a read with no real int
+    position goes under None — the "other work" the grader also gets."""
+    overlaid = apply_extraction_edits(sub.extraction, sub.extraction_edits)
+    if not isinstance(overlaid, dict):
+        return None
+    edits = sub.extraction_edits or {}
+    out: dict[int | None, CaseReading] = {}
+
+    def reading(raw_pos: Any) -> CaseReading:
+        pos = raw_pos if isinstance(raw_pos, int) and not isinstance(raw_pos, bool) else None
+        if pos not in out:
+            out[pos] = CaseReading(
+                steps=[], final_answer=None,
+                student_edited=pos is not None
+                and any(str(k).startswith(f"{pos}:") for k in edits),
+            )
+        return out[pos]
+
+    for step in overlaid.get("steps") or []:
+        if isinstance(step, dict):
+            reading(step.get("problem_position")).steps.append(
+                _line(step.get("latex"), step.get("plain_english")),
+            )
+    for fa in overlaid.get("final_answers") or []:
+        if not isinstance(fa, dict):
+            continue
+        r = reading(fa.get("problem_position"))
+        line = _line(fa.get("answer_latex"), fa.get("answer_plain"))
+        # Duplicates are possible (the schema doesn't enforce one per
+        # position); the first non-empty read is the one the teacher sees.
+        if r.final_answer is None and (line.latex or line.plain):
+            r.final_answer = line
+    return out
+
+
+def _confidence(extraction: Any) -> float | None:
+    raw = extraction.get("confidence") if isinstance(extraction, dict) else None
+    if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+        return float(raw)
+    return None
 
 
 def _parse_tool_input(turn_role: str, content: str) -> dict[str, Any] | None:
@@ -451,6 +533,7 @@ async def submission_case(
             check_id=str(check.id),
             status=check.status,
             disposition=check.disposition,
+            incomplete_reason=check.incomplete_reason,
             headline=check.headline,
             overall_summary=check.overall_summary,
             probe_selection_reason=check.probe_selection_reason,
@@ -473,6 +556,7 @@ async def submission_case(
                     tool_use_id=t.tool_use_id,
                     tool_input=_parse_tool_input(t.role, t.content),
                     seconds_on_turn=t.seconds_on_turn,
+                    engagement=t.engagement,
                     telemetry=t.telemetry,
                     created_at=t.created_at,
                 )
@@ -486,14 +570,35 @@ async def submission_case(
     # grader keyed `ai_breakdown` on, Vision attributed steps to, and
     # the integrity pipeline briefed the agent with (`load_hw_positions`
     # in the teacher endpoint walks the same ids the same way).
+    # The AI's per-problem call by bank item — every problem it scored,
+    # including the zero it stamps on one it returned no grade for
+    # ("No gradeable work found"), which has no `grades` entry.
+    ai_percents: dict[str, Any] = {}
+    if grade and isinstance(grade.ai_breakdown, dict):
+        raw_percents = grade.ai_breakdown.get("problem_percents")
+        if isinstance(raw_percents, dict):
+            ai_percents = raw_percents
+    readings = _readings_by_position(sub)
     problems_out: list[CaseProblem] = []
-    for item in await load_problems_for_assignment(db, assignment):
+    hw_items = await load_problems_for_assignment(db, assignment)
+    hw_positions = {item["position"] for item in hw_items}
+    unplaced: list[CaseReadingLine] = []
+    for pos, r in (readings or {}).items():
+        if pos is None or pos not in hw_positions:
+            unplaced.extend(r.steps)
+            if r.final_answer is not None:
+                unplaced.append(r.final_answer)
+    for item in hw_items:
         position: int = item["position"]
         ai = ai_by_pos.get(position)
         final = final_by_bid.get(item["bank_item_id"])
         ip = integrity_by_bid.get(uuid.UUID(item["bank_item_id"]))
         differs = False
-        if ai and final:
+        ai_percent = ai_percents.get(item["bank_item_id"])
+        if final and isinstance(ai_percent, (int, float)):
+            differs = round(float(final.get("percent") or 0.0)) != round(float(ai_percent))
+        elif ai and final:
+            # Grades from before `problem_percents` was stored.
             differs = (
                 final.get("score_status") != ai.get("score_status")
                 or round(float(final.get("percent") or 0.0))
@@ -504,6 +609,10 @@ async def submission_case(
             bank_item_id=item["bank_item_id"],
             question=item["question"],
             answer_key=item["final_answer"],
+            reading=(
+                readings.get(position)
+                or CaseReading(steps=[], final_answer=None, student_edited=False)
+            ) if readings is not None else None,
             grade=CaseGrade(
                 score_status=str(ai.get("score_status") or "zero"),
                 percent=float(ai.get("percent") or 0.0),
@@ -538,6 +647,8 @@ async def submission_case(
         student_name=student_name,
         assignment_id=str(assignment.id),
         assignment_title=assignment.title,
+        extraction_confidence=_confidence(sub.extraction),
+        unplaced_reading=unplaced,
         problems=problems_out,
         grade=CaseGradeSummary(
             ai_score=grade.ai_score,

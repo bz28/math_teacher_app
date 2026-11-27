@@ -29,7 +29,7 @@ from api.models.integrity_check import IntegrityCheckProblem, IntegrityCheckSubm
 from api.models.student_record_access_log import StudentRecordAccessLog
 from api.models.user import User
 from api.routes.school_student_practice import drain_integrity_background_tasks
-from tests.conftest import TINY_PNG, auth_headers, make_text, make_tool_use, set_agent_script
+from tests.conftest import PAGE_PNG, auth_headers, make_text, make_tool_use, set_agent_script
 
 
 @pytest.fixture
@@ -48,7 +48,7 @@ async def _submit_and_confirm(client: AsyncClient, world: dict[str, Any]) -> str
     r = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=auth_headers(world["student_token"]),
-        json={"files": [TINY_PNG]},
+        json={"files": [PAGE_PNG]},
     )
     assert r.status_code == 200, r.text
     submission_id: str = r.json()["submission_id"]
@@ -198,7 +198,7 @@ async def test_case_joins_grade_and_integrity_per_problem(
         s.add(SubmissionGrade(
             submission_id=uuid.UUID(submission_id),
             ai_score=100.0, final_score=60.0,
-            ai_breakdown={"grades": [{
+            ai_breakdown={"problem_percents": {str(world["primary_id"]): 100.0}, "grades": [{
                 "problem_position": 1, "student_answer": "x = 2 or x = 3",
                 "score_status": "full", "percent": 100, "confidence": 0.91,
                 "reasoning": "Factored correctly and stated both roots.",
@@ -264,6 +264,11 @@ async def test_case_joins_grade_and_integrity_per_problem(
     assert p["bank_item_id"] == str(world["primary_id"])
     assert p["question"] == "Solve x^2 - 5x + 6 = 0"
     assert p["answer_key"] == "x = 2 or x = 3"
+    # The mocked reader placed nothing on problem 1: its one step is
+    # unattributed, so it's "other work" — what the grader got too.
+    assert p["reading"] == {"steps": [], "final_answer": None, "student_edited": False}
+    assert case["unplaced_reading"] == [{"latex": "mock", "plain": "mocked extraction"}]
+    assert case["extraction_confidence"] == 0.9
     assert p["grade"]["score_status"] == "full"
     assert p["grade"]["confidence"] == 0.91
     assert p["grade"]["reasoning"].startswith("Factored correctly")
@@ -284,6 +289,7 @@ async def test_case_joins_grade_and_integrity_per_problem(
 
     integ = case["integrity"]
     assert integ["status"] == "complete"
+    assert integ["incomplete_reason"] is None
     assert integ["disposition"] == "flag_for_review"
     assert integ["headline"] == "Review — correct work but couldn't explain it"
     # One unattributed step is below the attempted-work threshold, so
@@ -301,10 +307,11 @@ async def test_case_joins_grade_and_integrity_per_problem(
     roles = [t["role"] for t in integ["turns"]]
     assert roles == [
         "agent", "student", "agent", "tool_call", "tool_result",
-        "tool_call", "tool_result", "agent",
+        "tool_call", "tool_result",
     ]
     student_turn = integ["turns"][1]
     assert student_turn["seconds_on_turn"] == 97
+    assert student_turn["engagement"] is None  # the scripted agent didn't label it
     assert student_turn["telemetry"]["focus_blur_events"][0]["duration_ms"] == 34059
     verdict = integ["turns"][3]
     assert verdict["tool_name"] == "submit_problem_verdict"
@@ -337,7 +344,7 @@ async def test_case_before_any_ai_ran_is_all_nulls(
     r = await client.post(
         f"/v1/school/student/homework/{world['assignment_id']}/submit",
         headers=auth_headers(world["student_token"]),
-        json={"files": [TINY_PNG]},
+        json={"files": [PAGE_PNG]},
     )
     submission_id = r.json()["submission_id"]
     await drain_integrity_background_tasks()
@@ -366,3 +373,78 @@ async def test_case_404s_and_requires_admin(
         f"/v1/admin/submissions/{uuid.uuid4()}/case", headers=auth_headers(world["teacher_token"]),
     )
     assert r.status_code == 403
+
+
+async def test_case_reads_the_problem_as_the_grader_got_it(
+    client: AsyncClient, world: dict[str, Any], admin_token: str,
+) -> None:
+    """The reader's per-problem read with the student's corrections laid
+    over, and the override signal read off the AI's stored per-problem
+    call — including the zero it stamps on a problem it returned no
+    grade for, which has no `grades` entry to compare against."""
+    from api.models.assignment import Submission
+
+    r = await client.post(
+        f"/v1/school/student/homework/{world['assignment_id']}/submit",
+        headers=auth_headers(world["student_token"]),
+        json={"files": [PAGE_PNG]},
+    )
+    submission_id = uuid.UUID(r.json()["submission_id"])
+    await drain_integrity_background_tasks()
+    bid = str(world["primary_id"])
+    async with get_session_factory()() as s:
+        sub = await s.get(Submission, submission_id)
+        assert sub is not None
+        sub.extraction = {
+            "steps": [
+                {"step_num": 1, "problem_position": 1, "latex": "(x-2)(x-3)=0", "plain_english": ""},
+                {"step_num": 2, "problem_position": 1, "latex": "x=2", "plain_english": ""},
+                {"step_num": 3, "problem_position": 7, "latex": "y", "plain_english": ""},
+            ],
+            "final_answers": [
+                {"problem_position": 1, "answer_latex": "x=2", "answer_plain": ""},
+                {"problem_position": 1, "answer_latex": "x=9", "answer_plain": ""},
+            ],
+            "confidence": "high",  # not a number: reported as null
+        }
+        # The student fixed step 2 and the answer on the confirm screen.
+        sub.extraction_edits = {"1:2": "x=2 or x=3", "1:final": "x=2, 3"}
+        s.add(SubmissionGrade(
+            submission_id=submission_id, ai_score=0.0, final_score=0.0,
+            # The model returned no grade for problem 1; the grader
+            # stamped it zero, recorded only in problem_percents.
+            ai_breakdown={"grades": [], "problem_percents": {bid: 0.0}},
+            breakdown=[{"problem_id": bid, "score_status": "zero", "percent": 0.0,
+                        "feedback": "No gradeable work found."}],
+        ))
+        await s.commit()
+
+    async def problem() -> dict[str, Any]:
+        r = await client.get(
+            f"/v1/admin/submissions/{submission_id}/case", headers=auth_headers(admin_token),
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["extraction_confidence"] is None
+        assert body["unplaced_reading"] == [{"latex": "y", "plain": ""}]
+        result: dict[str, Any] = body["problems"][0]
+        return result
+
+    p = await problem()
+    assert p["reading"] == {
+        "steps": [{"latex": "(x-2)(x-3)=0", "plain": ""}, {"latex": "x=2 or x=3", "plain": ""}],
+        # An edit to a latex answer stays latex (apply_extraction_edits);
+        # the first of the duplicate reads is the one shown.
+        "final_answer": {"latex": "x=2, 3", "plain": ""},
+        "student_edited": True,
+    }
+    assert p["grade"] is None
+    assert p["final"]["differs_from_ai"] is False
+
+    async with get_session_factory()() as s:
+        g = (await s.execute(
+            select(SubmissionGrade).where(SubmissionGrade.submission_id == submission_id)
+        )).scalar_one()
+        g.breakdown = [{"problem_id": bid, "score_status": "partial", "percent": 50.0, "feedback": ""}]
+        await s.commit()
+    assert (await problem())["final"]["differs_from_ai"] is True

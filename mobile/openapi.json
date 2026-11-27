@@ -322,7 +322,7 @@
         "type": "object"
       },
       "CaseFinal": {
-        "description": "The grade as it stands now \u2014 the AI's draft until a teacher\nedits it. `differs_from_ai` is the override signal.",
+        "description": "The grade as it stands now \u2014 the AI's draft until a teacher\nedits it. `differs_from_ai` is the override signal: the final\npercent or status is not the AI's call on this problem.",
         "properties": {
           "differs_from_ai": {
             "title": "Differs From Ai",
@@ -562,6 +562,17 @@
             ],
             "title": "Headline"
           },
+          "incomplete_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Incomplete Reason"
+          },
           "inline_variant_result": {
             "anyOf": [
               {
@@ -655,6 +666,7 @@
           "check_id",
           "status",
           "disposition",
+          "incomplete_reason",
           "headline",
           "overall_summary",
           "probe_selection_reason",
@@ -829,6 +841,16 @@
           "question": {
             "title": "Question",
             "type": "string"
+          },
+          "reading": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CaseReading"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -836,11 +858,63 @@
           "bank_item_id",
           "question",
           "answer_key",
+          "reading",
           "grade",
           "final",
           "integrity"
         ],
         "title": "CaseProblem",
+        "type": "object"
+      },
+      "CaseReading": {
+        "description": "What the reader got for one problem, as the grader received it:\nthe photo's read with the student's confirm-screen corrections laid\nover (`apply_extraction_edits`). Steps and the answer are raw \u2014 a\nstep's `latex` undelimited, `plain` prose.",
+        "properties": {
+          "final_answer": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CaseReadingLine"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/CaseReadingLine"
+            },
+            "title": "Steps",
+            "type": "array"
+          },
+          "student_edited": {
+            "title": "Student Edited",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "steps",
+          "final_answer",
+          "student_edited"
+        ],
+        "title": "CaseReading",
+        "type": "object"
+      },
+      "CaseReadingLine": {
+        "properties": {
+          "latex": {
+            "title": "Latex",
+            "type": "string"
+          },
+          "plain": {
+            "title": "Plain",
+            "type": "string"
+          }
+        },
+        "required": [
+          "latex",
+          "plain"
+        ],
+        "title": "CaseReadingLine",
         "type": "object"
       },
       "CaseTurn": {
@@ -854,6 +928,17 @@
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "engagement": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Engagement"
           },
           "ordinal": {
             "title": "Ordinal",
@@ -929,6 +1014,7 @@
           "tool_use_id",
           "tool_input",
           "seconds_on_turn",
+          "engagement",
           "telemetry",
           "created_at"
         ],
@@ -5434,6 +5520,17 @@
             "title": "Assignment Title",
             "type": "string"
           },
+          "extraction_confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extraction Confidence"
+          },
           "grade": {
             "anyOf": [
               {
@@ -5479,6 +5576,13 @@
           "submission_id": {
             "title": "Submission Id",
             "type": "string"
+          },
+          "unplaced_reading": {
+            "items": {
+              "$ref": "#/components/schemas/CaseReadingLine"
+            },
+            "title": "Unplaced Reading",
+            "type": "array"
           }
         },
         "required": [
@@ -5487,6 +5591,8 @@
           "student_name",
           "assignment_id",
           "assignment_title",
+          "extraction_confidence",
+          "unplaced_reading",
           "problems",
           "grade",
           "integrity"
