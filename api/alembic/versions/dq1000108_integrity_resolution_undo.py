@@ -1,6 +1,6 @@
 """remember the resolution a teacher's last resolve replaced, for Undo
 
-Revision ID: dk1000107
+Revision ID: dq1000108
 Revises: dj1000106
 Create Date: 2026-11-26 00:00:00.000000
 
@@ -22,7 +22,7 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "dk1000107"
+revision: str = "dq1000108"
 down_revision: str | None = "dj1000106"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
