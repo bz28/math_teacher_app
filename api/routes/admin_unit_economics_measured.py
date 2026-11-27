@@ -70,10 +70,6 @@ async def measured_rates(
         await db.execute(select(func.count(func.distinct(handed_in.c.student_id))))
     ).scalar() or 0
 
-    def per_student_month(kind: str) -> float | None:
-        if not active or months <= 0:
-            return None
-        return by_kind.get(kind, 0) / active / months
 
     roles = {
         r.role: int(r.n)
@@ -91,9 +87,12 @@ async def measured_rates(
         "window_too_short": days < MIN_RATE_DAYS,
         "active_students": int(active),
         "submissions": {k: by_kind.get(k, 0) for k in SUBMISSION_KINDS},
-        "submissions_per_student_month": {
-            k: per_student_month(k) for k in SUBMISSION_KINDS
-        },
+        # Unknown as a whole when no one handed anything in — not four
+        # measured zeros, which would read as a free month.
+        "submissions_per_student_month": (
+            {k: by_kind.get(k, 0) / active / months for k in SUBMISSION_KINDS}
+            if active and months > 0 else None
+        ),
         "teachers": teachers,
         "students": students,
         # Divides every teacher-side cost.

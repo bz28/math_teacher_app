@@ -77,7 +77,11 @@ class Scope:
         """A teaching unit with no generation job before the window (needs
         QuestionBankGenerationJob joined). The same phantom as above: a
         unit built last month that gets one more job today is not one
-        whole cheap unit."""
+        whole cheap unit.
+
+        Only surviving jobs count as "earlier": a job deleted with its
+        draft leaves no trace, so a unit whose only earlier run went that
+        way reads as begun in the window. Unrecoverable from the data."""
         earlier = aliased(QuestionBankGenerationJob)
         return ~exists().where(
             earlier.unit_id == QuestionBankGenerationJob.unit_id,

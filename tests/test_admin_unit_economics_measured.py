@@ -218,7 +218,7 @@ async def test_no_submissions_is_null_not_zero(client: AsyncClient) -> None:
     w = await _seed(homework_submissions=6, test_submissions=0)
     m = (await _get(client, w.admin_id, days=1))["measured"]
     assert m["active_students"] == 0
-    assert m["submissions_per_student_month"]["homework"] is None
+    assert m["submissions_per_student_month"] is None
 
 
 # --------------------------------------------------------------------------
@@ -261,6 +261,53 @@ async def test_models_in_use_follows_spend_not_call_count(
 
     used = (await _get(client, w.admin_id, days=30))["models_in_use"]
     assert used["grading"]["catalog_id"] == "claude-sonnet-4-6"
+
+
+async def test_one_model_logged_two_ways_pools_its_spend(
+    client: AsyncClient,
+) -> None:
+    """$6 + $5 of grading on Haiku, half under its dated id, beats $8 on
+    Sonnet: it's one model."""
+    w = await _seed(homework_submissions=6, test_submissions=0)
+    async with get_session_factory()() as s:
+        await s.execute(update(LLMCall).where(LLMCall.function == "ai_grading").values(cost_usd=0.0))
+        for model, cost in (
+            ("claude-haiku-4-5", 6.0), ("claude-haiku-4-5-20251001", 5.0), ("claude-sonnet-4-6", 8.0),
+        ):
+            s.add(LLMCall(
+                function="ai_grading", model=model, input_tokens=10, output_tokens=5,
+                latency_ms=1.0, cost_usd=cost, success=True,
+                school_id=uuid.UUID(w.school_id), user_id=uuid.UUID(w.student_ids[0]),
+                created_at=_WHEN,
+            ))
+        await s.commit()
+    used = (await _get(client, w.admin_id, days=30))["models_in_use"]
+    assert used["grading"]["catalog_id"] == "claude-haiku-4-5"
+    assert used["grading"]["cost_usd"] == pytest.approx(11.0)
+
+
+async def test_models_in_use_ties_go_to_the_lowest_id_and_free_calls_still_ran(
+    client: AsyncClient,
+) -> None:
+    w = await _seed(homework_submissions=6, test_submissions=0)
+    async with get_session_factory()() as s:
+        await s.execute(update(LLMCall).where(LLMCall.function == "ai_grading").values(cost_usd=0.0))
+        for model, fn in (
+            ("claude-sonnet-4-6", "ai_grading"), ("claude-haiku-4-5", "ai_grading"),
+            ("claude-haiku-4-5", "step_chat"),
+        ):
+            s.add(LLMCall(
+                function=fn, model=model, input_tokens=10, output_tokens=5,
+                latency_ms=1.0, cost_usd=2.0 if fn == "ai_grading" else 0.0, success=True,
+                school_id=uuid.UUID(w.school_id), user_id=uuid.UUID(w.student_ids[0]),
+                created_at=_WHEN,
+            ))
+        await s.commit()
+    used = (await _get(client, w.admin_id, days=30))["models_in_use"]
+    # Equal $2 + the seed's zeroed grading: the lower id wins, every time.
+    assert used["grading"]["catalog_id"] == "claude-haiku-4-5"
+    # A stage whose only call cost nothing still ran on something.
+    assert used["tutoring"]["catalog_id"] == "claude-haiku-4-5"
 
 
 async def test_each_function_names_its_stage(client: AsyncClient) -> None:

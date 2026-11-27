@@ -306,6 +306,8 @@ async def test_generation_groups_by_teaching_unit_not_by_job(
     assert gen["n"] == 2, "two units, four jobs"
     # Two jobs per unit, so one unit costs two generations.
     assert gen["cost_median"] == pytest.approx(2 * _gen_job_cost())
+    # And says so: two runs went into each unit.
+    assert gen["runs_per_unit"] == pytest.approx(2.0)
 
 
 # --------------------------------------------------------------------------

@@ -338,14 +338,16 @@ async def _generation_unit(
 ) -> dict[str, Any]:
     """Cost of generating one teaching unit's problems.
 
-    Grouped by the job's `unit_id`, not by job: a teacher may run several
-    generation jobs while building one unit, and the thing that amortises
-    over a class is the unit, not an individual job.
+    Grouped by the job's `unit_id`, not by job: one unit's cost is every
+    generation run for it in the window, regenerations included — that is
+    what building it costs, and what amortises over a class. `runs_per_unit`
+    says how many runs that took, so a regeneration-heavy unit reads as one.
     """
     per_unit = scope.apply(
         select(
             QuestionBankGenerationJob.unit_id.label("unit"),
             func.sum(LLMCall.cost_usd).label("cost"),
+            func.count(func.distinct(QuestionBankGenerationJob.id)).label("runs"),
         ).join(
             QuestionBankGenerationJob,
             QuestionBankGenerationJob.id == LLMCall.generation_job_id,
@@ -362,6 +364,7 @@ async def _generation_unit(
                 func.avg(per_unit.c.cost).label("mean"),
                 _p90(per_unit.c.cost).label("p90"),
                 func.sum(per_unit.c.cost).label("total"),
+                func.avg(per_unit.c.runs).label("runs"),
             ),
         )
     ).one()
@@ -378,6 +381,7 @@ async def _generation_unit(
         "cost_mean": as_float(r.mean) + extra if r.n else None,
         "cost_p90": as_float(r.p90) + extra if r.n else None,
         "cost_total": as_float(r.total) + extra * int(r.n),
+        "runs_per_unit": as_float(r.runs) if r.n else None,
     }
 
 
@@ -560,11 +564,14 @@ async def _models_in_use(db: AsyncSession, scope: Scope) -> dict[str, Any]:
             ).group_by(LLMCall.function, LLMCall.model, "in_generation"),
         )
     ).all()
+    # Keyed by catalog model, so a dated id and its plain id (one model,
+    # logged two ways across a config change) pool their spend.
     spend: dict[tuple[str, str], float] = {}
     for r in rows:
         family = family_for(r.function, bool(r.in_generation))
         if family != "other":
-            key = (family, r.model)
+            price = price_for(r.model)
+            key = (family, price.id if price else r.model)
             spend[key] = spend.get(key, 0.0) + as_float(r.cost)
     # Every stage, in the picker's order, so the dashboard names stages
     # from here rather than a copy; one that didn't run has no model.
