@@ -3,16 +3,18 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { teacher, type NeedsAttentionItem, type NeedsAttentionReason } from "@/lib/api";
+import { teacher, type NeedsAttentionItem } from "@/lib/api";
 import { Skeleton } from "@/components/ui";
 import { StatusPill } from "./status-pill";
 import { SubjectChip } from "./subject-chip";
 import {
   groupNeedsYou,
   groupReviewHref,
+  studentChip,
   studentCount,
   studentReviewHref,
   type NeedsYouGroup,
+  type StudentChip,
 } from "./needs-you-groups";
 
 // How many homework × section rows show before the "Show N more"
@@ -24,14 +26,17 @@ const INITIAL_VISIBLE = 5;
 // Reason → chip. Mirrors the dashboard's StatusPill vocabulary so the
 // queue reads the same as the per-course pills: red = integrity, amber
 // = grading work, info = a published grade the teacher edited since.
-const REASON_CHIP: Record<
-  NeedsAttentionReason,
-  { tone: "red" | "amber" | "info"; label: string; icon?: string }
+const CHIP: Record<
+  StudentChip,
+  { tone: "red" | "amber" | "info" | "muted"; label: string; icon?: string }
 > = {
   flagged: { tone: "red", label: "Flagged", icon: "⚑" },
+  to_approve: { tone: "amber", label: "To approve" },
+  to_publish: { tone: "info", label: "To publish" },
+  republish: { tone: "info", label: "Republish", icon: "↻" },
+  cant_ai_grade: { tone: "muted", label: "Can’t AI-grade" },
   overdue: { tone: "amber", label: "Overdue", icon: "‼" },
-  ungraded: { tone: "amber", label: "Ungraded" },
-  dirty: { tone: "info", label: "Republish", icon: "↻" },
+  ungraded: { tone: "muted", label: "Not graded" },
 };
 
 /** A due-date hint that's honest about overdue work. `formatDueRelative`
@@ -307,7 +312,7 @@ function GroupRow({ group, first }: { group: NeedsYouGroup; first: boolean }) {
 }
 
 function StudentRow({ item }: { item: NeedsAttentionItem }) {
-  const chip = REASON_CHIP[item.reason];
+  const chip = CHIP[studentChip(item)];
   return (
     <Link
       href={studentReviewHref(item)}

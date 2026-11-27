@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { NeedsAttentionItem } from "@/lib/api";
-import { groupNeedsYou, groupReviewHref, studentCount } from "./needs-you-groups.ts";
+import { groupNeedsYou, groupReviewHref, studentChip, studentCount } from "./needs-you-groups.ts";
 
 function item(o: Partial<NeedsAttentionItem>): NeedsAttentionItem {
   return {
@@ -88,4 +88,16 @@ test("students are counted once across homeworks", () => {
     ]),
     2,
   );
+});
+
+test("a student's chip agrees with the row's counts", () => {
+  // The server's `reason` says "ungraded" for anything unreleased; the
+  // chip reads the same flags the counts do.
+  assert.equal(studentChip(item({ reason: "ungraded", to_publish: true })), "to_publish");
+  assert.equal(studentChip(item({ reason: "overdue", to_approve: true })), "to_approve");
+  assert.equal(studentChip(item({ reason: "flagged", flagged: true, to_approve: true })), "flagged");
+  assert.equal(studentChip(item({ reason: "dirty", to_publish: true })), "republish");
+  assert.equal(studentChip(item({ reason: "ungraded", cant_ai_grade: true })), "cant_ai_grade");
+  assert.equal(studentChip(item({ reason: "overdue" })), "overdue");
+  assert.equal(studentChip(item({})), "ungraded");
 });

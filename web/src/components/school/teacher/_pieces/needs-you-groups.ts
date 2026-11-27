@@ -86,3 +86,17 @@ export function studentReviewHref(item: NeedsAttentionItem): string {
     `?student=${item.student_id}`
   );
 }
+
+export type StudentChip = "flagged" | "republish" | "to_approve" | "to_publish" | "cant_ai_grade" | "overdue" | "ungraded";
+
+/** The one chip a student gets in an expanded row, from the same facts
+ *  the row's counts are summed from — so a "1 to publish" row never
+ *  lists its student as "Ungraded". Flagged first, as on the server. */
+export function studentChip(item: NeedsAttentionItem): StudentChip {
+  if (item.flagged) return "flagged";
+  if (item.reason === "dirty") return "republish";
+  if (item.to_approve) return "to_approve";
+  if (item.to_publish) return "to_publish";
+  if (item.cant_ai_grade) return "cant_ai_grade";
+  return item.reason === "overdue" ? "overdue" : "ungraded";
+}
