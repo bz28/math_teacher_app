@@ -1,18 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { Breadcrumbs } from "@/components/school/teacher/breadcrumbs";
+import { useCourseName } from "@/components/school/teacher/teacher-courses";
 import { formatDue, sectionTargetLabel, sectionToneClass } from "@/lib/utils";
 import type { TeacherSection } from "@/lib/api";
 import type { HomeworkDetail } from "../_lib/types";
 
 /**
- * The top of the homework page: the back link, the status chips and the
+ * The top of the homework page: the breadcrumb (course › homework; the
+ * course crumb goes back to its Homework or Practice tab), the status chips and the
  * click-to-edit title, and the read-only scan line (due · sections ·
  * problem count). The title edit is local until Save; `onSaveTitle`
  * calls `done` once the edit should close.
  */
 export function HomeworkHeader({
+  courseId,
   hw,
   backHref,
   problemCount,
@@ -21,6 +24,7 @@ export function HomeworkHeader({
   busy,
   onSaveTitle,
 }: {
+  courseId: string;
   hw: HomeworkDetail | null;
   backHref: string;
   problemCount: number;
@@ -32,19 +36,18 @@ export function HomeworkHeader({
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const isPublished = hw?.status === "published";
+  const courseName = useCourseName(courseId);
   return (
     <>
-        {/* Breadcrumb */}
-        <div className="pt-3">
-          <Link
-            href={backHref}
-            className="inline-flex items-center gap-1 text-xs font-semibold text-text-muted hover:text-primary"
-          >
-            ← Back to {hw?.type === "practice" ? "practice" : "homework"}
-          </Link>
-        </div>
+        <Breadcrumbs
+      className="pt-3"
+      items={[
+        { label: courseName ?? "", href: backHref },
+        { label: hw?.title ?? "" },
+      ]}
+    />
 
-        {/* Hero header row: status + title. Publish lives in the sticky
+    {/* Hero header row: status + title. Publish lives in the sticky
             action bar at the viewport bottom so it stays reachable even
             on long HWs with many problems below. */}
         <header className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">

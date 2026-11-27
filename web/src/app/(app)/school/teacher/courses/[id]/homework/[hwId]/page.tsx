@@ -313,6 +313,7 @@ export default function HomeworkDetailPage({
     )}
     <div className="mx-auto max-w-4xl px-4 pb-32">
       <HomeworkHeader
+        courseId={courseId}
         hw={hw}
         backHref={backHref}
         problemCount={problems.length}

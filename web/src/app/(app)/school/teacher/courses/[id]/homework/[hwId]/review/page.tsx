@@ -1,6 +1,8 @@
 "use client";
 
 import { use, useCallback, useEffect, useState } from "react";
+import { Breadcrumbs } from "@/components/school/teacher/breadcrumbs";
+import { useCourseName } from "@/components/school/teacher/teacher-courses";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { teacher, type BankItem } from "@/lib/api";
@@ -50,6 +52,7 @@ export default function HomeworkReviewPage({
   const router = useRouter();
   const backHref = `/school/teacher/courses/${courseId}/homework/${assignmentId}`;
   const goBack = useCallback(() => router.push(backHref), [router, backHref]);
+  const courseName = useCourseName(courseId);
 
   const [phase, setPhase] = useState<Phase>({ kind: "loading" });
   const [hwTitle, setHwTitle] = useState<string>("");
@@ -178,12 +181,13 @@ export default function HomeworkReviewPage({
   return (
     <div className="min-h-screen">
       <div className="mx-auto max-w-6xl px-4 pt-3">
-        <Link
-          href={backHref}
-          className="inline-flex items-center gap-1 font-sans text-[11px] font-semibold uppercase tracking-[0.12em] text-text-muted transition-colors hover:text-text-primary"
-        >
-          ← Back to homework
-        </Link>
+        <Breadcrumbs
+          items={[
+            { label: courseName ?? "", href: `/school/teacher/courses/${courseId}?tab=homework` },
+            { label: hwTitle, href: backHref },
+            { label: "Review problems" },
+          ]}
+        />
         {hwTitle && (
           <h1 className="mt-2 font-serif text-[32px] leading-tight tracking-[-0.015em] text-text-primary">
             {hwTitle}
