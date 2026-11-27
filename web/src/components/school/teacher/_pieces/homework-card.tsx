@@ -69,8 +69,7 @@ export function HomeworkCard({
   // Submitted-vs-enrolled context, shown ahead of every review/publish
   // state so "ready to publish" or a published pill never reads as
   // class-complete while students still owe work (a 3-of-28 HW is not
-  // "done"). In needsGrading a fully-published HW is always partial — a
-  // complete one is routed to the completed bucket.
+  // "done").
   const submittedLabel =
     hw.submitted >= hw.total_students
       ? `all ${hw.submitted} submitted`
@@ -147,10 +146,9 @@ export function HomeworkCard({
             SubmissionGrade lifecycle flags instead. Every branch leads
             with submitted-vs-enrolled so a partial HW never reads as
             class-complete:
-              - published === submitted, some edited since → "N to
-                republish".
-              - published === submitted → all grades released to students
-                ("Grades published" pill).
+              - published === submitted → some were edited since (a
+                fully released, unedited HW is Completed, not here):
+                "N to republish".
               - to_review > 0 → submissions still awaiting the teacher's
                 review (reviewed_at IS NULL).
               - else → everything reviewed, ready for the teacher to
@@ -158,14 +156,10 @@ export function HomeworkCard({
         {bucket === "needsGrading" && hw.submitted > 0 && (
           <span className="ml-1 font-semibold text-text-secondary">
             · {submittedLabel}
-            {hw.published === hw.submitted && hw.republish > 0 ? (
+            {hw.published === hw.submitted ? (
               // Released, but edited since: the students still see the
               // old grade until the teacher republishes.
               <> · {hw.republish} to republish</>
-            ) : hw.published === hw.submitted ? (
-              <span className="ml-1.5 align-middle">
-                <StatusPill tone="green" label="Grades published" />
-              </span>
             ) : hw.to_review > 0 ? (
               <> · {hw.to_review} to review</>
             ) : (
