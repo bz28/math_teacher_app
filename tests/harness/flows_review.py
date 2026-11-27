@@ -232,7 +232,17 @@ async def review_integrity_flow(
             await step("opening the evidence did not show the pasted answer",
                        evidence.first.get_by_text(rs.pasted_answer)
                        .wait_for(timeout=_TIMEOUT_MS))
+            if await evidence.first.locator("li").count() != 1:
+                issues.append("the evidence repeats the quoted last answer "
+                              "(expected only the earlier pasted turn)")
             await shot("01b-evidence-open")
+        # The last answer was pasted too: quoted in full with its reason,
+        # never clamped (the evidence leaves it out).
+        quoted = page.locator("figure:visible", has_text="Their last answer").first
+        if not await quoted.get_by_text(re.compile(r"pasted \d+ chars")).count():
+            issues.append("the quoted last answer doesn't say it was pasted")
+        if await quoted.locator("blockquote").count():
+            issues.append("the pasted last answer is clamped like a plain quote")
         # The card's live region is the verdict line only — the quote
         # inside it would be read out on every student switch.
         if await page.locator("[role=status]:visible", has_text=rs.last_answer).count():

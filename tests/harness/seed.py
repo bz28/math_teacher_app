@@ -734,10 +734,13 @@ async def seed_review_integrity(seed: Seed) -> IntegrityReviewSeed:
             overall_summary="Restated the answer and couldn't solve a sign-flipped variant.",
             resolution="unresolved",
             activity_summary={
-                "totals": {"tab_out_count": 0, "tab_out_total_ms": 0, "paste_count": 1,
-                           "paste_total_chars": len(pasted_answer),
+                "totals": {"tab_out_count": 0, "tab_out_total_ms": 0, "paste_count": 2,
+                           "paste_total_chars": len(pasted_answer) + len(last_answer),
                            "paste_largest_chars": len(pasted_answer)},
-                "notable_turns": [{"ordinal": 1, "reasons": ["full_paste"]}],
+                # The last answer (3) is marked too: the card quotes it
+                # with its reason instead of repeating it as evidence.
+                "notable_turns": [{"ordinal": 1, "reasons": ["full_paste"]},
+                                  {"ordinal": 3, "reasons": ["full_paste"]}],
             },
         )
         s.add(check)
@@ -757,7 +760,7 @@ async def seed_review_integrity(seed: Seed) -> IntegrityReviewSeed:
             s.add(IntegrityConversationTurn(
                 integrity_check_submission_id=check.id, ordinal=o, role=role,
                 content=text, seconds_on_turn=None if role == "agent" else 12,
-                telemetry=None if o != 1 else {
+                telemetry=None if role != "student" else {
                     "focus_blur_events": [],
                     "paste_events": [{"at": now.isoformat(), "byte_count": len(text)}],
                     "typing_cadence": {"total_ms": 0, "pauses_over_3s": 0},

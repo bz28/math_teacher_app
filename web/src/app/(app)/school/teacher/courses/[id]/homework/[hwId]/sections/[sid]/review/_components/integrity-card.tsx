@@ -327,18 +327,27 @@ function FlaggedTurnsEvidence({ turns }: { turns: FlaggedTurn[] }) {
             <p className="text-[10px] font-semibold uppercase tracking-[0.06em] text-text-muted">
               {reasons.map((r) => activityReasonText(r, turn)).join(" · ")}
             </p>
-            {/* Focusable so a long paste scrolls from the keyboard too. */}
-            <div
-              tabIndex={0}
-              aria-label="Text sent on this turn"
-              className="mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary border-l-2 border-text-muted/40 pl-2.5 text-xs leading-snug text-text-primary"
-            >
-              <MathText text={turn.content} />
-            </div>
+            <EvidenceText className="mt-1 text-xs" text={turn.content} />
           </li>
         ))}
       </ul>
     </details>
+  );
+}
+
+/** Text a student sent on a paste / tab-out turn, in full: a capped
+ *  box that scrolls, focusable so a long paste scrolls from the
+ *  keyboard too. */
+function EvidenceText({ text, className }: { text: string; className: string }) {
+  return (
+    <div
+      role="group"
+      tabIndex={0}
+      aria-label="Text the student sent"
+      className={`${className} max-h-40 overflow-y-auto whitespace-pre-wrap border-l-2 border-text-muted/40 pl-2.5 leading-snug text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary`}
+    >
+      <MathText text={text} />
+    </div>
   );
 }
 
@@ -357,9 +366,15 @@ function QuotedAnswerExcerpt({ quote }: { quote: QuotedAnswer }) {
           <MathText text={quote.question} />
         </p>
       )}
-      <blockquote className="mt-1.5 line-clamp-3 border-l-2 border-text-muted/40 pl-2.5 text-[13px] leading-snug text-text-primary">
-        <MathText text={quote.turn.content} />
-      </blockquote>
+      {quote.reasons.length > 0 ? (
+        // A pasted / tabbed-out last answer is the evidence itself (the
+        // disclosure leaves it out), so it's never clamped: it scrolls.
+        <EvidenceText className="mt-1.5 text-[13px]" text={quote.turn.content} />
+      ) : (
+        <blockquote className="mt-1.5 line-clamp-3 border-l-2 border-text-muted/40 pl-2.5 text-[13px] leading-snug text-text-primary">
+          <MathText text={quote.turn.content} />
+        </blockquote>
+      )}
     </figure>
   );
 }
