@@ -81,6 +81,11 @@ export interface MarginResult {
   trustUncheckedLegs: number;
   anyThin: boolean;
   anyUnpriced: boolean;
+  /** Submission kinds in use with no measured cost at all in this scope:
+   *  they add $0, so the margin leaves out their grading, reading and
+   *  integrity work. A scope on the platform-average rate with no
+   *  submissions of its own is exactly this. */
+  uncosted: string[];
 }
 
 const SUBMISSION_KINDS = ["homework", "quiz", "test", "practice"] as const;
@@ -132,6 +137,7 @@ export function computeMargin(
   const lines: CostLine[] = [];
   let anyUnpriced = false;
   let anyThin = false;
+  const uncosted: string[] = [];
   const idle = new Set<string>();
 
   // 1. Per-submission work — paid for every student, every time.
@@ -153,6 +159,7 @@ export function computeMargin(
     // than let a missing bucket read as "free".
     const thin = !unit || !unit.sufficient;
     if (perMonth <= 0) idle.add(`submission:${kind}`);
+    else if (!unit || unit.n === 0) uncosted.push(kind);
     if (perMonth > 0 && (unpriced || thin)) {
       anyUnpriced = anyUnpriced || unpriced;
       anyThin = anyThin || thin;
@@ -204,7 +211,9 @@ export function computeMargin(
   lines.push({
     key: "residual:teacher",
     label: "teacher-side AI",
-    perStudentMonth: perTeacherMonth / Math.max(s.studentsPerTeacher, 1),
+    // Floored at a tenth, not 1: a pilot measuring 0.5 students per
+    // teacher spreads each teacher's cost over half a student.
+    perStudentMonth: perTeacherMonth / Math.max(s.studentsPerTeacher, 0.1),
     thin: !teacher || !teacher.sufficient,
     shortWindow: Boolean(teacher?.window_too_short),
     unpriced: teacherCost.unpriced,
@@ -333,6 +342,7 @@ export function computeMargin(
     trustUncheckedLegs: unchecked,
     anyThin,
     anyUnpriced,
+    uncosted,
   };
 }
 

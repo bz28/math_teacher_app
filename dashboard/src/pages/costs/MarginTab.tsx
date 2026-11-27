@@ -10,6 +10,7 @@ import {
 } from "./marginScenario";
 import PricingPanel from "./PricingPanel";
 import { usd } from "./spendFormat";
+import { useSchoolScope } from "../../lib/useSelectedSchool";
 
 /**
  * Margin — what the measured unit costs mean at a price. Every usage rate
@@ -66,7 +67,12 @@ export default function MarginTab({ data, modelLabel }: Props) {
     const raw = params.get(k);
     return raw !== null && raw !== "" && Number.isFinite(Number(raw)) ? Number(raw) : defaults[k].value;
   };
-  const setNum = (k: NumKey, v: string) => set(k, v === "" || Number(v) === defaults[k].value ? null : v);
+  // Clamped at the field's floor (subjects ≥ 1, everything else ≥ 0), so
+  // the field, the URL and the arithmetic all hold the same number.
+  const setNum = (k: NumKey, v: string) => {
+    const n = v === "" ? NaN : Math.max(Number(v), k === "subjects" ? 1 : 0);
+    set(k, Number.isNaN(n) || n === defaults[k].value ? null : String(n));
+  };
 
   const models: ModelChoice = { ...seeded };
   for (const s of STAGES) {
@@ -75,7 +81,8 @@ export default function MarginTab({ data, modelLabel }: Props) {
   }
   const setModel = (s: Stage, id: string) => set(`m_${s}`, id === seeded[s] ? null : id);
   const unknown = unknownModels(models, data.model_catalog);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"yes" | "failed" | null>(null);
+  const school = useSchoolScope();
 
   const rateCard = readRateCard(params.get("rates"));
   const nums = Object.fromEntries(
@@ -90,12 +97,16 @@ export default function MarginTab({ data, modelLabel }: Props) {
   const platformRates = RATE_KEYS.some((k) => defaults[k].source === "platform" && params.get(k) === null);
 
   const copyLink = () => {
-    const q = snapshotParams(params, nums, models, rateCard);
+    const q = snapshotParams(params, nums, models, rateCard, school);
     const url = `${window.location.origin}${window.location.pathname}?${q.toString()}`;
-    void navigator.clipboard.writeText(url).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
+    const done = (r: "yes" | "failed") => {
+      setCopied(r);
+      setTimeout(() => setCopied(null), 2000);
+    };
+    // No clipboard (insecure context) or permission denied: say so.
+    Promise.resolve()
+      .then(() => navigator.clipboard.writeText(url))
+      .then(() => done("yes"), () => done("failed"));
   };
 
   return (
@@ -122,7 +133,11 @@ export default function MarginTab({ data, modelLabel }: Props) {
 
       <div className="costs-margin-actions">
         <button type="button" className="link-btn" onClick={copyLink}>
-          {copied ? "Copied — every input pinned" : "Copy link to this scenario"}
+          {copied === "yes"
+            ? "Copied: every input pinned"
+            : copied === "failed"
+              ? "Couldn't copy: the browser blocked the clipboard"
+              : "Copy link to this scenario"}
         </button>
       </div>
 
@@ -138,6 +153,14 @@ export default function MarginTab({ data, modelLabel }: Props) {
           This link names a model the catalog doesn&rsquo;t price for{" "}
           {unknown.map((s) => data.models_in_use[s].label).join(", ")} ({unknown.map((s) => models[s]).join(", ")}),
           so that stage keeps its measured cost.
+        </div>
+      )}
+
+      {!noRates && r.uncosted.length > 0 && (
+        <div className="costs-note warn" role="note">
+          No {r.uncosted.length > 1 ? `${r.uncosted.slice(0, -1).join(", ")} or ${r.uncosted.at(-1)}` : r.uncosted[0]} cost was measured for this scope in this window, so{" "}
+          {r.uncosted.length === 1 ? "it adds" : "they add"} $0 and the margin leaves out their grading, reading and
+          integrity cost. Widen the scope or the window before reading it.
         </div>
       )}
 

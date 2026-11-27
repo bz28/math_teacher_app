@@ -80,16 +80,20 @@ export function ratesUnmeasured(d: UnitEconomicsData): boolean {
   );
 }
 
-/** A link that reproduces this scenario: every input pinned, so it reads
- *  the same tomorrow when the measured defaults have moved. A bare page
- *  URL carries only what was moved and keeps following the data. */
+/** A link that pins this scenario's inputs — every knob, model, the rate
+ *  card and the school scope (which otherwise lives in the opener's own
+ *  storage) — so the measured defaults moving doesn't move them. The unit
+ *  costs it prices them at are still live, as is a "since cutover"
+ *  window. A bare page URL carries only what was moved. */
 export function snapshotParams(
   base: URLSearchParams,
   nums: Record<NumKey, number>,
   models: ModelChoice,
   rateCard: number[][],
+  school: string | null,
 ): URLSearchParams {
   const out = new URLSearchParams(base);
+  if (school) out.set("school", school);
   for (const [k, v] of Object.entries(nums)) out.set(k, String(v));
   for (const s of STAGES) {
     const id = models[s];

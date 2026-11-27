@@ -147,7 +147,11 @@ test("students per teacher keeps its tenth: a small pilot isn't 0", () => {
 test("a copied link pins every input; a bare one carries only what moved", () => {
   const base = new URLSearchParams("tab=margin&homework=3");
   const nums = { ...Object.fromEntries(Object.entries(scenarioDefaults(data())).map(([k, v]) => [k, v.value])), homework: 3 };
-  const q = snapshotParams(base, nums as never, { vision: "claude-opus-5-5", grading: "claude-haiku-4-5" }, DEFAULT_RATE_CARD);
+  const q = snapshotParams(
+    base, nums as never, { vision: "claude-opus-5-5", grading: "claude-haiku-4-5" }, DEFAULT_RATE_CARD, "school-a",
+  );
+  // The scope lives in the opener's storage; the link has to carry it.
+  assert.equal(q.get("school"), "school-a");
   assert.equal(q.get("tab"), "margin");
   assert.equal(q.get("homework"), "3");
   assert.equal(q.get("quiz"), "0.1", "an untouched input is pinned at its value now");

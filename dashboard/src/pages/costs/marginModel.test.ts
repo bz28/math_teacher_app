@@ -382,3 +382,24 @@ test("a measured unit with no function profile holds its median, never $0", () =
   assert.equal(hw.perStudentMonth, 0.6, "0.3 median × 2 a month");
   assert.equal(hw.unpriced, true, "and says it couldn't be repriced");
 });
+
+
+test("a kind in use with no measured cost says the margin leaves it out", () => {
+  // A school with no submissions of its own, on the platform-average rate:
+  // its units are all n=0, so homework would add $0 without a word.
+  const d = data();
+  d.units = d.units.map((u) => (u.kind === "submission:homework" ? unit(u.kind, { n: 0, cost_median: null, cost_mean: null, sufficient: false }) : u));
+  d.functions_by_unit = {};
+  const r = computeMargin(d, scenario({ homework: 2.5, quiz: 0 }));
+  assert.deepEqual(r.uncosted, ["homework"]);
+  // Measured kinds, and kinds not in use, aren't listed.
+  assert.deepEqual(computeMargin(data(), scenario({ homework: 2, quiz: 0 })).uncosted, []);
+});
+
+test("a fractional students-per-teacher divides by itself, not by 1", () => {
+  const d = data();
+  d.units = d.units.map((u) => (u.kind === "residual:teacher" ? unit(u.kind, { cost_mean: 1 }) : u));
+  const line = (spt: number) =>
+    computeMargin(d, scenario({ studentsPerTeacher: spt })).lines.find((l) => l.key === "residual:teacher")!;
+  assert.equal(line(0.5).perStudentMonth, 2 * line(1).perStudentMonth);
+});
