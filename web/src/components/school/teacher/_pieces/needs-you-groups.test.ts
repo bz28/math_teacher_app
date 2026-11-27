@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { NeedsAttentionItem } from "@/lib/api";
-import { groupNeedsYou, groupReviewHref } from "./needs-you-groups.ts";
+import { groupNeedsYou, groupReviewHref, studentCount } from "./needs-you-groups.ts";
 
 function item(o: Partial<NeedsAttentionItem>): NeedsAttentionItem {
   return {
@@ -21,6 +21,7 @@ function item(o: Partial<NeedsAttentionItem>): NeedsAttentionItem {
     due_at: null,
     reason: "ungraded",
     to_approve: false,
+    to_publish: false,
     flagged: false,
     cant_ai_grade: false,
     ...o,
@@ -51,10 +52,13 @@ test("counts mirror the review page; the remainder is ungraded", () => {
     item({ submission_id: "3", flagged: true, cant_ai_grade: true }),
     item({ submission_id: "4", flagged: true }),
     item({ submission_id: "5" }),
+    item({ submission_id: "6", to_publish: true }),
   ]);
   // A graded-and-flagged submission is in both counts, as on the review
   // page (it's in the Publish count and the Flagged chip).
   assert.equal(g.toApprove, 2);
+  // Approved but unreleased — only Publish left, never "to approve".
+  assert.equal(g.toPublish, 1);
   assert.equal(g.flagged, 3);
   assert.equal(g.cantAiGrade, 1);
   assert.equal(g.ungraded, 1);
@@ -73,4 +77,15 @@ test("Review opens on the group's first (most urgent) student", () => {
 
 test("empty queue → no rows", () => {
   assert.deepEqual(groupNeedsYou([]), []);
+});
+
+test("students are counted once across homeworks", () => {
+  assert.equal(
+    studentCount([
+      item({ submission_id: "1", student_id: "a" }),
+      item({ submission_id: "2", student_id: "a", assignment_id: "hw2" }),
+      item({ submission_id: "3", student_id: "b" }),
+    ]),
+    2,
+  );
 });

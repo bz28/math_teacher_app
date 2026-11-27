@@ -385,8 +385,10 @@ async def test_row_counts_match_review_page_predicates(client: AsyncClient) -> N
 
     reading = {"steps": [], "confidence": 0.93}
     now = datetime.now(UTC)
-    # Graded, not released → to approve.
+    # Graded, not released, never approved → to approve.
     drafted = await _add_submission(w, hw)
+    # Graded and approved (or hand-graded), not released → to publish only.
+    approved = await _add_submission(w, hw, student_id=await student())
     # Reading flagged by the student → flagged (never AI-graded).
     misread = await _add_submission(w, hw, student_id=await student())
     # AI skipped it as unreadable → flagged AND can't be AI-graded.
@@ -394,27 +396,31 @@ async def test_row_counts_match_review_page_predicates(client: AsyncClient) -> N
     # Read and confirmed, waiting on the grader → none of the three.
     waiting = await _add_submission(w, hw, student_id=await student())
     async with get_session_factory()() as s:
-        for sid in (drafted, misread, unreadable, waiting):
+        for sid in (drafted, approved, misread, unreadable, waiting):
             sub = await s.get(Submission, sid)
             sub.extraction = reading
             sub.submitted_at = now - timedelta(hours=2)
             sub.extraction_confirmed_at = now - timedelta(hours=1)
         (await s.get(Submission, misread)).extraction_flagged_at = now
         s.add(SubmissionGrade(submission_id=drafted, final_score=80.0, breakdown=[]))
+        s.add(SubmissionGrade(
+            submission_id=approved, final_score=90.0, breakdown=[], reviewed_at=now,
+        ))
         s.add(SubmissionGrade(submission_id=unreadable, ai_grading_status="skipped_unreadable"))
         await s.commit()
 
     by_sub = {i["submission_id"]: i for i in (await _get(w, client))["items"]}
     facts = {
-        k: (by_sub[str(v)]["to_approve"], by_sub[str(v)]["flagged"], by_sub[str(v)]["cant_ai_grade"])
+        k: tuple(by_sub[str(v)][f] for f in ("to_approve", "to_publish", "flagged", "cant_ai_grade"))
         for k, v in {
-            "drafted": drafted, "misread": misread,
+            "drafted": drafted, "approved": approved, "misread": misread,
             "unreadable": unreadable, "waiting": waiting,
         }.items()
     }
     assert facts == {
-        "drafted": (True, False, False),
-        "misread": (False, True, False),
-        "unreadable": (False, True, True),
-        "waiting": (False, False, False),
+        "drafted": (True, False, False, False),
+        "approved": (False, True, False, False),
+        "misread": (False, False, True, False),
+        "unreadable": (False, False, True, True),
+        "waiting": (False, False, False, False),
     }

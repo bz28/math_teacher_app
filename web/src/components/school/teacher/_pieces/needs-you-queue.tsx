@@ -10,6 +10,7 @@ import { SubjectChip } from "./subject-chip";
 import {
   groupNeedsYou,
   groupReviewHref,
+  studentCount,
   studentReviewHref,
   type NeedsYouGroup,
 } from "./needs-you-groups";
@@ -76,6 +77,7 @@ export function NeedsYouQueue() {
   const [expanded, setExpanded] = useState(false);
   const reduceMotion = useReducedMotion();
   const groups = useMemo(() => (items ? groupNeedsYou(items) : null), [items]);
+  const students = useMemo(() => (items ? studentCount(items) : 0), [items]);
 
   // Monotonic request id: only the newest attempt is allowed to write
   // state. Guards both the mount fetch and every Retry with one
@@ -134,8 +136,8 @@ export function NeedsYouQueue() {
         </h2>
         {groups !== null && groups.length > 0 && (
           <span className="font-mono text-[12px] tabular-nums text-text-muted">
-            {groups.length} to review · {items!.length} student
-            {items!.length === 1 ? "" : "s"}
+            {groups.length} to review · {students} student
+            {students === 1 ? "" : "s"}
           </span>
         )}
       </div>
@@ -200,7 +202,7 @@ function QueueList({
 
 /** The counts a row carries, in the review page's words. Flagged leads
  *  (integrity is what a teacher wants to see first), then the grades
- *  waiting on her; what she'll grade from the photo and work the AI
+ *  waiting on her (to approve, then approved and only to publish); what she'll grade from the photo and work the AI
  *  hasn't reached yet follow as quiet text — true, but not a call to act. */
 function GroupCounts({ group }: { group: NeedsYouGroup }) {
   const quiet = [
@@ -214,6 +216,9 @@ function GroupCounts({ group }: { group: NeedsYouGroup }) {
       )}
       {group.toApprove > 0 && (
         <StatusPill tone="amber" label={`${group.toApprove} to approve`} />
+      )}
+      {group.toPublish > 0 && (
+        <StatusPill tone="info" label={`${group.toPublish} to publish`} />
       )}
       {quiet.length > 0 && (
         <span className="text-[12px] text-text-muted">{quiet.join(" · ")}</span>

@@ -8,6 +8,7 @@ from pydantic import AfterValidator, BaseModel
 from sqlalchemy import Integer, and_, case, func, or_, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from api.core import photo_store
 from api.core.class_rubric import (
@@ -484,10 +485,26 @@ async def needs_attention(
             _to_review_case().label("to_review"),
             # The ORM rows feed `ai_grade_block` — the review page's own
             # rule for "can't be AI-graded" — so the two can't drift.
-            # `files` (the photos) is deferred on the model.
+            # Loaded with only the columns that rule reads (see options
+            # below), so the home page doesn't haul answer keys and
+            # rubric snapshots once per row.
             Submission,
             SubmissionGrade,
             Assignment,
+        )
+        .options(
+            load_only(
+                Submission.id, Submission.extraction, Submission.extraction_flagged_at,
+                Submission.submitted_at, Submission.extraction_confirmed_at,
+            ),
+            load_only(
+                SubmissionGrade.id, SubmissionGrade.final_score, SubmissionGrade.ai_score,
+                SubmissionGrade.ai_breakdown, SubmissionGrade.teacher_score,
+                SubmissionGrade.breakdown, SubmissionGrade.graded_at,
+                SubmissionGrade.reviewed_at, SubmissionGrade.published_final_score,
+                SubmissionGrade.published_breakdown, SubmissionGrade.ai_grading_status,
+            ),
+            load_only(Assignment.id, Assignment.ai_grading_enabled),
         )
         .select_from(Submission)
         .join(Assignment, Assignment.id == Submission.assignment_id)
@@ -529,6 +546,11 @@ async def needs_attention(
             # Belt-and-suspenders: the WHERE clause already excludes
             # clean-published rows, but never emit one if it slips through.
             continue
+        unreleased = bool(
+            r.to_review
+            and r.SubmissionGrade is not None
+            and r.SubmissionGrade.final_score is not None,
+        )
         items.append({
             "submission_id": str(r.submission_id),
             "student_id": str(r.student_id),
@@ -544,17 +566,20 @@ async def needs_attention(
             "reason": reason,
             # Per-row facts the home queue sums per (homework × section),
             # each the review page's own predicate for the same count:
-            #   flagged         — its Flagged chip (`flagged_case` ⇔ `isFlagged`)
-            #   to_approve      — a grade drafted and not yet released, the
-            #                     section's share of its "Publish N grades"
-            #   cant_ai_grade   — its "N can't be AI-graded" note
-            #                     (`ai_grade_block` unreadable / no_extraction)
+            #   flagged       — its Flagged chip (`flagged_case` ⇔ `isFlagged`)
+            #   to_approve    — a grade not yet released that still wants
+            #                   Approve ✓ (no `reviewed_at`: an AI grade
+            #                   nobody approved)
+            #   to_publish    — a grade not yet released that's already
+            #                   approved (hand grades approve themselves;
+            #                   an edit keeps the approval) — only Publish
+            #                   is left. The two together are the section's
+            #                   share of its "Publish N grades".
+            #   cant_ai_grade — its "N can't be AI-graded" note
+            #                   (`ai_grade_block` unreadable / no_extraction)
             "flagged": bool(r.flagged),
-            "to_approve": bool(
-                r.to_review
-                and r.SubmissionGrade is not None
-                and r.SubmissionGrade.final_score is not None,
-            ),
+            "to_approve": unreleased and r.SubmissionGrade.reviewed_at is None,
+            "to_publish": unreleased and r.SubmissionGrade.reviewed_at is not None,
             "cant_ai_grade": ai_grade_block(
                 r.Submission, r.SubmissionGrade, r.Assignment,
             ) in (BLOCK_UNREADABLE, BLOCK_NO_EXTRACTION),
