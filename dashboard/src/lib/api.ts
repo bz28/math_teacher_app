@@ -224,7 +224,7 @@ async function withAuth<T>(
   return parseBody(res);
 }
 
-async function request<T>(path: string, params?: Record<string, string>): Promise<T> {
+export async function request<T>(path: string, params?: Record<string, string>): Promise<T> {
   return withAuth(
     (token) => {
       const url = new URL(`${API_BASE}${path}`);
@@ -1103,7 +1103,8 @@ export interface SchoolOverviewData {
     cost_30d: number;
     cost_prev_30d: number;
     projected_month_end: number;
-    trend_12_weeks: { week_start: string | null; cost: number }[];
+    projected_low: number;
+    projected_high: number;
   };
   activity: {
     this_week: ActivityCounts;

@@ -4,6 +4,7 @@ import { apiHealth, getToken, setToken } from "../lib/api";
 import SchoolSwitcher from "./SchoolSwitcher";
 import { setSchoolScope, useSelectedSchool, type SelectedSchool } from "../lib/useSelectedSchool";
 import { pageScope, schoolLabel, isInternalOnly } from "../lib/pageScope";
+import { urlSchoolParam } from "../lib/urlScope";
 
 interface NavItem {
   to: string;
@@ -14,9 +15,8 @@ interface NavItem {
 //
 // DEBUG is the daily work: start from the calls, drill school → teacher →
 // student → submission, or come in from a teacher's report or an accuracy
-// case. MONEY joins below it as its pages land — a group pointing at an
-// unbuilt page is worse than no group. Users and Audit log are consulted,
-// not worked in, so they sit in the foot.
+// case. MONEY is what we spend and what one of each thing costs. Users and
+// Audit log are consulted, not worked in, so they sit in the foot.
 //
 // Leads is still routed (old links keep working) but has no slot here: it
 // is on its way out of the console.
@@ -28,6 +28,10 @@ const DEBUG: NavItem[] = [
   { to: "/schools", label: "Schools" },
   { to: "/reports", label: "Teacher reports" },
   { to: "/accuracy", label: "Accuracy" },
+];
+
+const MONEY: NavItem[] = [
+  { to: "/costs", label: "Costs" },
 ];
 
 const FOOT: NavItem[] = [
@@ -109,14 +113,6 @@ function ScopeLine({ school }: { school: SelectedSchool }) {
   );
 }
 
-/** A school named in a scoped page's URL — `?school=` (LLM calls' old
- *  deep links) or `?school_id=` (Audit log's) — or null. UUIDs only, so
- *  a mangled link can't scope every page to nothing. */
-function urlSchoolParam(params: URLSearchParams): string | null {
-  const v = params.get("school") ?? params.get("school_id");
-  return v && UUID_RE.test(v) ? v : null;
-}
-
 export default function Layout() {
   // Mirror the global API-health flag onto a rail-foot status dot so the
   // operator always sees at a glance whether the backend is reachable.
@@ -147,7 +143,7 @@ export default function Layout() {
     const params = new URLSearchParams(search);
     const fromUrl = urlSchoolParam(params);
     if (!fromUrl || pageScope(pathname, search) !== "school") return;
-    setSchoolScope(fromUrl);
+    setSchoolScope(fromUrl.school);
     params.delete("school");
     params.delete("school_id");
     navigate({ pathname, search: params.toString() }, { replace: true });
@@ -166,6 +162,21 @@ export default function Layout() {
         <div className="nav-section-label">Debug</div>
         <div className="nav-primary">
           {DEBUG.map((n) => (
+            <NavLink
+              key={n.to}
+              to={n.to}
+              className={({ isActive }) =>
+                `nav-link nav-link-primary ${isActive ? "active" : ""}`
+              }
+            >
+              {n.label}
+            </NavLink>
+          ))}
+        </div>
+
+        <div className="nav-section-label">Money</div>
+        <div className="nav-primary">
+          {MONEY.map((n) => (
             <NavLink
               key={n.to}
               to={n.to}

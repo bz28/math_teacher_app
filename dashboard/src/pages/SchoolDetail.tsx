@@ -1,9 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
-  AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip,
-} from "recharts";
-import {
   api,
   type SchoolDetail as SchoolDetailData,
   type SchoolOverviewData,
@@ -16,6 +13,7 @@ import { useConfirm } from "../lib/confirm";
 import { confirmAndDeleteUser } from "../lib/deleteUserFlow";
 import { useToast } from "../lib/toast";
 import CallsPanel from "../components/CallsPanel";
+import SchoolCostLine from "../components/SchoolCostLine";
 import StatTile from "../components/StatTile";
 import StatusPill from "../components/StatusPill";
 import BlockedUploads from "../components/BlockedUploads";
@@ -299,15 +297,6 @@ export default function SchoolDetail() {
     setTimeout(() => setCopied(false), 1500);
   };
 
-  const trendChartData = useMemo(
-    () =>
-      overview?.cost.trend_12_weeks.map((p) => ({
-        week: p.week_start ?? "",
-        cost: p.cost,
-      })) ?? [],
-    [overview],
-  );
-
   // Distinct enrolled students across every section — a student in
   // multiple sections counts once here (but appears under each section
   // in the breakdown below). Memoized off the payload.
@@ -340,12 +329,7 @@ export default function SchoolDetail() {
 
   if (!detail || !overview) return <p className="loading">Loading…</p>;
 
-  const monthDeltaPct =
-    overview.cost.last_month > 0
-      ? ((overview.cost.this_month - overview.cost.last_month) /
-          overview.cost.last_month) *
-        100
-      : null;
+  const teacherCount = detail.teachers.length;
 
   // Rolling-30d cost delta for the KPI strip — same window the Schools
   // list shows, so the number matches what the operator clicked in on.
@@ -356,11 +340,6 @@ export default function SchoolDetail() {
         100
       : null;
 
-  // Unit economics — cost per active seat. Cheap, and the first thing a
-  // buyer-facing founder wants for pricing. Guard divide-by-zero.
-  const teacherCount = detail.teachers.length;
-  const costPerStudent = studentCount > 0 ? overview.cost.cost_30d / studentCount : null;
-  const costPerTeacher = teacherCount > 0 ? overview.cost.cost_30d / teacherCount : null;
 
   const statusPill = detail.is_active
     ? activityPill(activityStatus(overview.last_active_at))
@@ -538,70 +517,13 @@ export default function SchoolDetail() {
           </Link>
         }
       >
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 32, marginBottom: 28 }}>
-          <DataBlock
-            label="This month"
-            value={`$${overview.cost.this_month.toFixed(2)}`}
-            sub={
-              monthDeltaPct === null
-                ? "first month of data"
-                : `${monthDeltaPct > 0 ? "↑" : monthDeltaPct < 0 ? "↓" : "→"} ${Math.abs(monthDeltaPct).toFixed(0)}% vs last month`
-            }
-            subColor={
-              monthDeltaPct === null
-                ? "var(--muted)"
-                : monthDeltaPct > 0
-                  ? "var(--accent)"
-                  : monthDeltaPct < 0
-                    ? "var(--ok)"
-                    : "var(--muted)"
-            }
-          />
-          <DataBlock
-            label="Last month"
-            value={`$${overview.cost.last_month.toFixed(2)}`}
-          />
-          <DataBlock
-            label="Projected end of month"
-            value={`$${overview.cost.projected_month_end.toFixed(2)}`}
-            sub="if usage stays flat"
-          />
-        </div>
-
-        {/* Unit economics — cost per active seat over the rolling 30d. */}
-        {(costPerStudent !== null || costPerTeacher !== null) && (
-          <div style={{ display: "flex", gap: 40, flexWrap: "wrap", borderTop: "1px solid var(--rule)", paddingTop: 18, marginBottom: trendChartData.some((p) => p.cost > 0) ? 28 : 0 }}>
-            {costPerStudent !== null && (
-              <UnitEcon label={`Cost / student · ${costWindowLabel()}`} value={fmtCost(costPerStudent)} sub={`${studentCount.toLocaleString()} enrolled`} />
-            )}
-            {costPerTeacher !== null && (
-              <UnitEcon label={`Cost / teacher · ${costWindowLabel()}`} value={fmtCost(costPerTeacher)} sub={`${teacherCount} teacher${teacherCount === 1 ? "" : "s"}`} />
-            )}
-          </div>
-        )}
-
-        {trendChartData.some((p) => p.cost > 0) && (
-          <div style={{ borderTop: "1px solid var(--rule)", paddingTop: 18 }}>
-            <h3 style={{ marginBottom: 10 }}>12-week trend</h3>
-            <ResponsiveContainer width="100%" height={120}>
-              <AreaChart data={trendChartData}>
-                <XAxis dataKey="week" tick={{ fontSize: 10 }} />
-                <YAxis hide />
-                <Tooltip
-                  formatter={(v) => `$${Number(v).toFixed(2)}`}
-                  labelFormatter={(l) => `Week of ${l}`}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="cost"
-                  stroke="var(--accent)"
-                  fill="var(--accent-soft)"
-                  strokeWidth={1.5}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        )}
+        <SchoolCostLine
+          schoolId={detail.id}
+          thisMonth={overview.cost.this_month}
+          projected={overview.cost.projected_month_end}
+          low={overview.cost.projected_low}
+          high={overview.cost.projected_high}
+        />
       </Section>
 
       {/* Blocked uploads — the work students couldn't hand in (failed
@@ -1103,75 +1025,6 @@ function Section({
       </div>
       {children}
     </section>
-  );
-}
-
-function DataBlock({
-  label,
-  value,
-  sub,
-  subColor,
-}: {
-  label: string;
-  value: React.ReactNode;
-  sub?: string;
-  subColor?: string;
-}) {
-  return (
-    <div>
-      <div
-        style={{
-          fontFamily: "var(--font-sans)",
-          fontSize: 10,
-          fontWeight: 600,
-          textTransform: "uppercase",
-          letterSpacing: 1.6,
-          color: "var(--muted)",
-          marginBottom: 10,
-        }}
-      >
-        {label}
-      </div>
-      <div
-        style={{
-          fontFamily: "var(--font-mono)",
-          fontSize: 32,
-          color: "var(--ink)",
-          letterSpacing: -0.5,
-          lineHeight: 1,
-        }}
-      >
-        {value}
-      </div>
-      {sub && (
-        <div
-          style={{
-            fontFamily: "var(--font-sans)",
-            fontSize: 12,
-            color: subColor ?? "var(--muted)",
-            marginTop: 8,
-          }}
-        >
-          {sub}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function UnitEcon({ label, value, sub }: { label: string; value: string; sub: string }) {
-  return (
-    <div>
-      <div style={{ fontFamily: "var(--font-sans)", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1.4, color: "var(--muted)", marginBottom: 8 }}>
-        {label}
-      </div>
-      <div style={{ fontFamily: "var(--font-mono)", fontSize: 22, color: "var(--ink)", letterSpacing: -0.3, lineHeight: 1 }}>
-        {value}
-      </div>
-      <div style={{ fontFamily: "var(--font-sans)", fontSize: 11.5, color: "var(--muted)", marginTop: 6 }}>
-        {sub}
-      </div>
-    </div>
   );
 }
 
