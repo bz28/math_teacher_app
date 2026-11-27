@@ -331,7 +331,11 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # 22, not 20: the dashboard unit tests are plain `node --test`
+          # over .ts files, which needs native type-stripping (>=22.6) —
+          # the same reason the web job pins 22. Nothing here pins a Node
+          # version for the deployed build.
+          node-version: "22"
           cache: "npm"
           cache-dependency-path: dashboard/package-lock.json
 
@@ -342,6 +346,13 @@ jobs:
       - name: Lint
         working-directory: dashboard
         run: npm run lint
+
+      # The Costs pages' pure pieces (drill targets, money formats, and
+      # the margin arithmetic) land in pricing conversations; nothing in
+      # CI failed when they broke.
+      - name: Test
+        working-directory: dashboard
+        run: npm test
 
       - name: Build
         working-directory: dashboard

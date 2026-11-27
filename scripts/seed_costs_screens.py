@@ -20,7 +20,9 @@ import uuid
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import text
+from sqlalchemy.engine import make_url
 
+from api.config import settings
 from api.core.auth import hash_password
 from api.core.model_pricing import cost_usd, price_for
 from api.database import get_session_factory
@@ -124,7 +126,15 @@ async def homework(s, w: dict, week_start: datetime, rate: float) -> None:  # ty
                        jitter(2600), school_id=w["school"].id, user_id=kid.id, submission_id=None))
 
 
+def _refuse_unless_local() -> None:
+    """It TRUNCATEs users and schools: never against anything but a local DB."""
+    host = make_url(settings.database_url).host
+    if host not in ("localhost", "127.0.0.1", "::1", None):
+        raise SystemExit(f"refusing to seed {host!r}: this script wipes the database")
+
+
 async def main() -> None:
+    _refuse_unless_local()
     async with get_session_factory()() as s:
         await s.execute(text(
             "TRUNCATE TABLE teacher_reports, llm_calls, sessions, submission_grades, "

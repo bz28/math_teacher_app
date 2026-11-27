@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import StatTile from "../../components/StatTile";
 import ErrorState from "../../components/ErrorState";
 import { costsApi, type SpendBucket, type SpendData, type SpendGroup, type SpendRow } from "../../lib/costsApi";
+import { BREAKDOWN_HOURS, barValue, bucketLabel, drillTo, isConcentrated, monthName, perCall, usd } from "./spendFormat";
 
 /**
  * Spend — what we actually paid, where it went, and where the month is
@@ -27,40 +28,6 @@ const BUCKETS: { key: SpendBucket; label: string }[] = [
 // Past this many rows the tail folds into "everything else", which opens
 // on click — a table of forty $0.01 students buries the five that matter.
 const VISIBLE_ROWS = 8;
-
-const BREAKDOWN_HOURS = 720;
-
-function usd(n: number, digits = 2): string {
-  return `$${n.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits })}`;
-}
-
-function perCall(n: number | null): string {
-  if (n === null) return "—";
-  return n >= 1 ? usd(n) : `$${n.toFixed(3)}`;
-}
-
-function monthName(iso: string, style: "long" | "short" = "short"): string {
-  return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", { month: style, timeZone: "UTC" });
-}
-
-function bucketLabel(iso: string, bucket: SpendBucket): string {
-  const d = new Date(`${iso}T00:00:00Z`);
-  if (bucket === "month") return d.toLocaleDateString("en-US", { month: "short", year: "2-digit", timeZone: "UTC" });
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-}
-
-/** Where a row drills to: the debug level it names. */
-function drillTo(row: SpendRow, group: SpendGroup): string | null {
-  if (row.key === null) return null;
-  const key = encodeURIComponent(row.key);
-  switch (group) {
-    case "school": return `/schools/${key}`;
-    case "teacher": return `/teachers/${key}`;
-    case "student": return `/students/${key}`;
-    case "function": return `/llm-calls?function=${key}&hours=${BREAKDOWN_HOURS}`;
-    case "model": return `/llm-calls?model=${key}&hours=${BREAKDOWN_HOURS}`;
-  }
-}
 
 interface Props {
   scopeParams: Record<string, string>;
@@ -122,8 +89,12 @@ export default function SpendTab({ scopeParams, includeInternal }: Props) {
   const lastMonthLabel = monthName(
     new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1)).toISOString().slice(0, 10),
   );
+  // Render from what the response says it is, not the toggles: until a
+  // new breakdown lands, the old rows must keep their own labels and links.
+  const shownBucket = data.bucket;
+  const shownGroup = data.group_by;
   const c = data.concentration;
-  const concentrated = c.top_school_share !== null && (c.schools_with_spend <= 2 || c.top_school_share >= 0.8);
+  const concentrated = isConcentrated(c, "school_id" in scopeParams);
   const peak = Math.max(...data.series.map((p) => p.cost), 0);
 
   return (
@@ -160,7 +131,7 @@ export default function SpendTab({ scopeParams, includeInternal }: Props) {
 
       <section className="costs-section">
         <div className="costs-section-head">
-          <h3>Spend per {bucket} · USD</h3>
+          <h3>Spend per {shownBucket} · USD</h3>
           <div className="costs-toggle" role="group" aria-label="Bucket">
             {BUCKETS.map((b) => (
               <button
@@ -175,21 +146,21 @@ export default function SpendTab({ scopeParams, includeInternal }: Props) {
             ))}
           </div>
         </div>
-        <div className="costs-bars" role="img" aria-label={`Spend per ${bucket}`}>
+        <div className="costs-bars" role="img" aria-label={`Spend per ${shownBucket}`}>
           {data.series.map((p) => (
             <div
               key={p.start}
               className={`costs-bar${p.partial ? " partial" : ""}${p.cost === peak && peak > 0 ? " peak" : ""}`}
-              title={`${bucketLabel(p.start, bucket)}: ${usd(p.cost)} · ${p.calls.toLocaleString()} calls${p.partial ? " (so far)" : ""}`}
+              title={`${bucketLabel(p.start, shownBucket)}: ${usd(p.cost)} · ${p.calls.toLocaleString()} calls${p.partial ? " (so far)" : ""}`}
             >
-              <span className="costs-bar-value">{p.cost ? p.cost.toFixed(2) : ""}</span>
+              <span className="costs-bar-value">{barValue(p.cost)}</span>
               <div className="costs-bar-fill" style={{ height: `${peak ? (p.cost / peak) * 100 : 0}%` }} />
             </div>
           ))}
         </div>
         <div className="costs-bar-axis">
           {data.series.map((p) => (
-            <span key={p.start}>{bucketLabel(p.start, bucket)}{p.partial ? "*" : ""}</span>
+            <span key={p.start}>{bucketLabel(p.start, shownBucket)}{p.partial ? "*" : ""}</span>
           ))}
         </div>
         <p className="costs-foot">* still filling.</p>
@@ -218,7 +189,7 @@ export default function SpendTab({ scopeParams, includeInternal }: Props) {
           <table className="costs-table">
             <thead>
               <tr>
-                <th>{GROUPS.find((g) => g.key === group)?.label}</th>
+                <th>{GROUPS.find((g) => g.key === shownGroup)?.label}</th>
                 <th className="num">Calls</th>
                 <th className="num">Spend</th>
                 <th className="num">Share</th>
@@ -227,17 +198,17 @@ export default function SpendTab({ scopeParams, includeInternal }: Props) {
             </thead>
             <tbody>
               {rows.shown.map((r) => {
-                const to = drillTo(r, group);
+                const to = drillTo(r, shownGroup);
                 return (
+                  // The link is the keyboard and screen-reader target; the
+                  // row's click just widens it for the mouse.
                   <tr
                     key={r.key ?? r.label}
                     className={to ? "drill" : "muted"}
                     onClick={to ? () => navigate(to) : undefined}
-                    tabIndex={to ? 0 : undefined}
-                    onKeyDown={to ? (e) => { if (e.key === "Enter") navigate(to); } : undefined}
                   >
-                    <td className={group === "function" || group === "model" ? "mono" : ""}>
-                      {r.label}
+                    <td className={shownGroup === "function" || shownGroup === "model" ? "mono" : ""}>
+                      {to ? <Link to={to} onClick={(e) => e.stopPropagation()}>{r.label}</Link> : r.label}
                     </td>
                     <td className="num">{r.calls.toLocaleString()}</td>
                     <td className="num">{usd(r.cost)}</td>
@@ -247,9 +218,13 @@ export default function SpendTab({ scopeParams, includeInternal }: Props) {
                 );
               })}
               {rows.rest && (
-                <tr className="drill" onClick={() => setShowAll(true)} tabIndex={0}
-                  onKeyDown={(e) => { if (e.key === "Enter") setShowAll(true); }}>
-                  <td className="mono">{rows.rest.label}</td>
+                <tr className="drill" onClick={() => setShowAll(true)}>
+                  <td>
+                    <button type="button" className="costs-rest" aria-expanded={false}
+                      onClick={(e) => { e.stopPropagation(); setShowAll(true); }}>
+                      {rows.rest.label}
+                    </button>
+                  </td>
                   <td className="num">{rows.rest.calls.toLocaleString()}</td>
                   <td className="num">{usd(rows.rest.cost)}</td>
                   <td className="num">{Math.round(rows.rest.share * 100)}%</td>
@@ -259,7 +234,7 @@ export default function SpendTab({ scopeParams, includeInternal }: Props) {
             </tbody>
           </table>
         )}
-        {(group === "teacher" || group === "student") && (
+        {(shownGroup === "teacher" || shownGroup === "student") && (
           <p className="costs-foot">
             A student&rsquo;s graded work counts for the student and for their teacher, so these rows
             can add up to more than {usd(data.total_cost)}.

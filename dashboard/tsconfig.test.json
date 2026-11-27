@@ -1,0 +1,25 @@
+{
+  // Typechecks the unit tests, which the app config deliberately cannot.
+  //
+  // `node --experimental-strip-types` STRIPS types; it does not check
+  // them. Excluding tests from tsconfig.app.json without this left them
+  // checked by nothing at all: a test could assert against a fixture
+  // missing half its required fields, stay green, and keep passing
+  // against a shape the app never receives. That is exactly how a
+  // backend field addition (window_too_short) would slip past.
+  //
+  // Separate from the app project because tests import node: builtins,
+  // and the browser bundle must not carry Node types.
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "types": ["node", "vite/client"],
+    "noEmit": true,
+    "composite": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo"
+  },
+  // All of src, because a composite project must list every file it
+  // pulls in and the tests import app modules. Harmless duplication:
+  // this project emits nothing, it only checks.
+  "include": ["src"],
+  "exclude": []
+}
