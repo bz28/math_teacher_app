@@ -11,6 +11,7 @@ $0 and deterministic: no AI runs (the homework dialog is only opened).
 
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 import uuid
@@ -106,16 +107,17 @@ async def course_setup_flow(
         # A click outside while the sections are being made mustn't close
         # the form: a failure partway has to stay on screen.
         async def slow(route) -> None:  # type: ignore[no-untyped-def]
-            await page.wait_for_timeout(800)
+            if route.request.method == "POST":
+                await asyncio.sleep(0.8)
             await route.continue_()
         await page.route(re.compile(r"/sections$"), slow)
         await create.click()
         await page.mouse.click(5, 5)
         if not await names.is_visible():
             issues.append("a click outside closed New section while it was creating")
-        await page.unroute(re.compile(r"/sections$"))
         await step("the checklist didn't tick sections off (1 of 3)",
                    checklist.get_by_text("1 of 3 done").wait_for(timeout=_TIMEOUT_MS))
+        await page.unroute(re.compile(r"/sections$"))
         for period in ("Period 1", "Period 3"):
             await step(f"{period} wasn't created",
                        page.get_by_text(period, exact=True).first.wait_for(timeout=_TIMEOUT_MS))
