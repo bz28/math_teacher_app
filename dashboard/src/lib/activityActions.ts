@@ -315,8 +315,9 @@ export const ACTIVITY_ACTIONS: Record<ActivityFamily, ActivityAction[]> = {
     },
     {
       // The upload the platform turned away. Recorded from the handler
-      // (bad file, over a cap) and from the request-size middleware,
-      // where it may carry no actor at all — the row still counts.
+      // (bad file, over a cap) and from the request-size middleware —
+      // always for a signed-in student; the actor is null only once the
+      // account is deleted.
       // Reasons: api/core/submission_rejections.py.
       action: "submission.rejected",
       label: "Upload rejected",

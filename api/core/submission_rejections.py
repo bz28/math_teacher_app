@@ -159,17 +159,37 @@ def _student_from_bearer(request: Request) -> uuid.UUID | None:
         return None
 
 
-async def _assignment_of_submission(
-    submission_id: uuid.UUID, student_id: uuid.UUID,
+async def _turn_in_assignment(
+    student_id: uuid.UUID,
+    *,
+    assignment_id: uuid.UUID | None = None,
+    retake_of: uuid.UUID | None = None,
 ) -> uuid.UUID | None:
-    """The homework a retake is for — only when the submission is the
-    student's own, as the route itself requires."""
+    """The homework this student may turn in at the refused route — the
+    route's own gate, so a refusal is recorded exactly when the route
+    would have let the student in: an existing, published homework sent
+    to a section they're in (`_load_assignment_for_student`, which both
+    submit and retake run first), and for a retake, their own submission.
+    None otherwise: an id the route would 404 is not a blocked student."""
+    # Imported here: the route module imports this one.
+    from fastapi import HTTPException
+
+    from api.routes.school_student_practice import _load_assignment_for_student
+
     async with get_session_factory()() as db:
-        return (await db.execute(
-            select(Submission.assignment_id).where(
-                Submission.id == submission_id, Submission.student_id == student_id,
-            )
-        )).scalar_one_or_none()
+        if retake_of is not None:
+            assignment_id = (await db.execute(
+                select(Submission.assignment_id).where(
+                    Submission.id == retake_of, Submission.student_id == student_id,
+                )
+            )).scalar_one_or_none()
+        user = await db.get(User, student_id)
+        if assignment_id is None or user is None:
+            return None
+        try:
+            return (await _load_assignment_for_student(db, assignment_id, user)).id
+        except HTTPException:
+            return None
 
 
 async def note_transport_rejection(scope: MutableMapping[str, Any], request_bytes: int) -> None:
@@ -191,18 +211,15 @@ async def note_transport_rejection(scope: MutableMapping[str, Any], request_byte
     student_id = _student_from_bearer(request)
     if student_id is None:
         return
-    assignment_id: uuid.UUID | None
-    if submit is not None:
-        assignment_id = uuid.UUID(submit.group("assignment_id"))
-    else:
-        assert retake is not None
-        try:
-            assignment_id = await _assignment_of_submission(
-                uuid.UUID(retake.group("submission_id")), student_id,
-            )
-        except Exception:
-            logger.exception("Couldn't resolve the retaken submission's assignment")
-            return
+    try:
+        assignment_id = await _turn_in_assignment(
+            student_id,
+            assignment_id=uuid.UUID(submit.group("assignment_id")) if submit else None,
+            retake_of=uuid.UUID(retake.group("submission_id")) if retake else None,
+        )
+    except Exception:
+        logger.exception("Couldn't resolve the refused turn-in's homework")
+        return
     if assignment_id is None:
         return
     await record_submission_rejection(

@@ -138,6 +138,9 @@ async def test_a_refused_retake_is_recorded_against_its_homework(
     )
     assert r.status_code == 200, r.text
     sid = r.json()["submission_id"]
+    # The reading has to land before it can be flagged.
+    from api.routes.school_student_practice import drain_integrity_background_tasks
+    await drain_integrity_background_tasks()
     r = await client.post(
         f"/v1/school/student/submissions/{sid}/flag-extraction",
         headers=auth_headers(world["student_token"]), json={"note": "sideways"},
@@ -242,6 +245,29 @@ async def test_a_retake_of_someone_elses_submission_is_not_recorded(
     assert len(await _rejections()) == before
 
 
+async def test_a_homework_the_route_would_refuse_is_not_recorded(
+    world: dict[str, Any],
+) -> None:
+    """The route 404s a homework that doesn't exist or wasn't sent to the
+    student's section before it reads any file; a refusal there is not a
+    blocked student, and recording it would let one student file rows
+    against any id — another school's included."""
+    before = len(await _rejections())
+    await note_transport_rejection(
+        _scope(f"/v1/school/student/homework/{uuid.uuid4()}/submit", token=world["student_token"]),
+        12_000_000,
+    )
+    # The outsider isn't in a section this homework was sent to.
+    await note_transport_rejection(
+        _scope(
+            f"/v1/school/student/homework/{world['assignment_id']}/submit",
+            token=create_access_token(str(world["outsider_id"]), "student"),
+        ),
+        12_000_000,
+    )
+    assert len(await _rejections()) == before
+
+
 async def test_transport_rejection_ignores_every_other_route(
     world: dict[str, Any],
 ) -> None:
@@ -340,6 +366,19 @@ async def test_preview_student_rejection_is_flagged(
             grade_level=8, role="student", name="Preview", is_preview=True,
         )
         s.add(preview)
+        await s.flush()
+        # Seated in the student's section: the route (and so the record)
+        # only takes a homework sent to a section the shadow sits in.
+        from sqlalchemy import select as _select
+
+        from api.models.section_enrollment import SectionEnrollment
+        seat = (await s.execute(
+            _select(SectionEnrollment.section_id, SectionEnrollment.course_id)
+            .where(SectionEnrollment.student_id == world["student_id"]).limit(1)
+        )).one()
+        s.add(SectionEnrollment(
+            section_id=seat.section_id, course_id=seat.course_id, student_id=preview.id,
+        ))
         await s.commit()
         preview_id = preview.id
     await note_transport_rejection(
