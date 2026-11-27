@@ -3446,6 +3446,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/teacher/courses/{course_id}/sections/{section_id}/students/{student_id}/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Student Context */
+        get: operations["get_student_context_v1_teacher_courses__course_id__sections__section_id__students__student_id__context_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teacher/courses/{course_id}/sections/{section_id}/students/{student_id}/grades": {
         parameters: {
             query?: never;
@@ -5617,6 +5634,23 @@ export interface components {
             /** Body */
             body: string;
         };
+        /** OtherCourse */
+        OtherCourse: {
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Course Name */
+            course_name: string;
+            /**
+             * Section Id
+             * Format: uuid
+             */
+            section_id: string;
+            /** Section Name */
+            section_name: string;
+        };
         /** PageOrientationRequest */
         PageOrientationRequest: {
             /** Image */
@@ -6074,6 +6108,13 @@ export interface components {
             section_id: string;
             /** Section Name */
             section_name: string;
+        };
+        /** StudentContext */
+        StudentContext: {
+            /** Other Courses */
+            other_courses: components["schemas"]["OtherCourse"][];
+            /** Understanding Checks */
+            understanding_checks: components["schemas"]["UnderstandingCheck"][];
         };
         /** StudentDashboardResponse */
         StudentDashboardResponse: {
@@ -6925,6 +6966,28 @@ export interface components {
             pauses_over_3s: number;
             /** Total Ms */
             total_ms: number;
+        };
+        /** UnderstandingCheck */
+        UnderstandingCheck: {
+            /**
+             * Assignment Id
+             * Format: uuid
+             */
+            assignment_id: string;
+            /** Assignment Title */
+            assignment_title: string;
+            /**
+             * Section Id
+             * Format: uuid
+             */
+            section_id: string;
+            /**
+             * Submitted At
+             * Format: date-time
+             */
+            submitted_at: string;
+            /** Summary */
+            summary: string;
         };
         /** UpdateAssignmentRequest */
         UpdateAssignmentRequest: {
@@ -13173,6 +13236,39 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_student_context_v1_teacher_courses__course_id__sections__section_id__students__student_id__context_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                course_id: string;
+                section_id: string;
+                student_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudentContext"];
                 };
             };
             /** @description Validation Error */

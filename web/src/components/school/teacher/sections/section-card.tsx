@@ -366,6 +366,8 @@ export function SectionCard({
 
               <div>
                 <SectionRoster
+                  courseId={courseId}
+                  sectionId={section.id}
                   sectionName={section.name}
                   students={detail.students}
                   invites={detail.pending_invites}
