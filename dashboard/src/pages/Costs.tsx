@@ -1,6 +1,7 @@
+import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Checkbox } from "../components/Checkbox";
-import { scopeParams, useSchoolScope } from "../lib/useSelectedSchool";
+import { scopeParams, setSchoolScope, useSchoolScope } from "../lib/useSelectedSchool";
 import SpendTab from "./costs/SpendTab";
 import "./costs/costs.css";
 
@@ -23,7 +24,21 @@ export default function Costs() {
   // Excluded unless the URL says otherwise: internal calls and preview
   // work aren't a customer's usage.
   const includeInternal = params.get("internal") === "1";
-  const scope = useSchoolScope();
+  // `?school=<id>` (a school page's cost line links here with it) scopes
+  // the console to that school — in the URL, so a middle-click, a new tab
+  // or a pasted link lands scoped too, not only a plain click. Read at
+  // once so the first fetch is already scoped, then handed to the rail's
+  // scope and dropped from the URL.
+  const linked = params.get("school");
+  const stored = useSchoolScope();
+  const scope = linked ?? stored;
+  useEffect(() => {
+    if (!linked) return;
+    setSchoolScope(linked);
+    const next = new URLSearchParams(params);
+    next.delete("school");
+    setParams(next, { replace: true });
+  }, [linked, params, setParams]);
 
   const set = (key: string, value: string | null) => {
     const next = new URLSearchParams(params);

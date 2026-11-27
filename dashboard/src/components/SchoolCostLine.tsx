@@ -1,5 +1,4 @@
 import { Link } from "react-router-dom";
-import { setSchoolScope } from "../lib/useSelectedSchool";
 
 /**
  * A school's spend in one line, pointing at where spend lives: the Costs
@@ -33,7 +32,7 @@ export default function SchoolCostLine({ schoolId, thisMonth, projected, low, hi
         <strong style={{ fontFamily: "var(--font-mono)", fontWeight: 500, color: "var(--ink)" }}>{usd(projected)}</strong>
         <span style={{ color: "var(--muted)" }}>{range}</span>
       </span>
-      <Link to="/costs" className="link-btn" style={{ fontSize: 13 }} onClick={() => setSchoolScope(schoolId)}>
+      <Link to={`/costs?school=${encodeURIComponent(schoolId)}`} className="link-btn" style={{ fontSize: 13 }}>
         Spend by teacher, function and model on Costs →
       </Link>
     </p>
