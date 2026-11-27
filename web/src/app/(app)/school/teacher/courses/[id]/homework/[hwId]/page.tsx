@@ -26,6 +26,7 @@ import { GenerationStalledBanner, PendingReviewLink } from "./_components/proble
 import { ProblemsSection } from "./_components/problems-section";
 import { RemoveProblemsView } from "./_components/remove-problems-view";
 import { SubmissionStrip } from "./_components/submission-strip";
+import { rememberGenerationJob } from "./_lib/generation-jobs";
 import { SectionReviewBand, hasTurnedInWork } from "./_components/section-review-band";
 import {
   missingForPublishOf,
@@ -295,6 +296,9 @@ export default function HomeworkDetailPage({
             ...prev.filter((j) => j.status !== "done" && j.status !== "failed"),
             job,
           ]);
+          // So the question review page holds Publish (and grows its
+          // queue) for this job too, not just the wizard's.
+          rememberGenerationJob(assignmentId, job.id);
           setShowGenerate(false);
         }}
       />
