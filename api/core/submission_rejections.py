@@ -33,6 +33,7 @@ import logging
 import re
 import uuid
 from collections.abc import MutableMapping
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -42,7 +43,7 @@ from api.core.audit_log import client_ip
 from api.core.auth import decode_access_token
 from api.database import get_session_factory
 from api.models.activity_log import ActivityLog
-from api.models.assignment import Assignment, Submission
+from api.models.assignment import Assignment
 from api.models.course import Course
 from api.models.user import User
 
@@ -165,29 +166,29 @@ async def _turn_in_assignment(
     assignment_id: uuid.UUID | None = None,
     retake_of: uuid.UUID | None = None,
 ) -> uuid.UUID | None:
-    """The homework this student may turn in at the refused route — the
-    route's own gate, so a refusal is recorded exactly when the route
-    would have let the student in: an existing, published homework sent
-    to a section they're in (`_load_assignment_for_student`, which both
-    submit and retake run first), and for a retake, their own submission.
-    None otherwise: an id the route would 404 is not a blocked student."""
+    """The homework this student was turning in at the refused route, when
+    the route would have let them as far as the photos — an active
+    account, then the route's own gates (`_submit_gate`: the homework's
+    gate, one-shot, closed; `_retake_gate`: their own submission, the
+    homework's gate, `_retake_block`). The handler records a refusal only
+    after those, so this records exactly what the handler would. None
+    otherwise: a student the route turns away is not one the platform
+    blocked."""
     # Imported here: the route module imports this one.
     from fastapi import HTTPException
 
-    from api.routes.school_student_practice import _load_assignment_for_student
+    from api.routes.school_student_practice import _retake_gate, _submit_gate
 
     async with get_session_factory()() as db:
-        if retake_of is not None:
-            assignment_id = (await db.execute(
-                select(Submission.assignment_id).where(
-                    Submission.id == retake_of, Submission.student_id == student_id,
-                )
-            )).scalar_one_or_none()
         user = await db.get(User, student_id)
-        if assignment_id is None or user is None:
+        if user is None or not user.is_active:
             return None
         try:
-            return (await _load_assignment_for_student(db, assignment_id, user)).id
+            if retake_of is not None:
+                return (await _retake_gate(db, retake_of, user))[1].id
+            if assignment_id is None:
+                return None
+            return (await _submit_gate(db, assignment_id, user, datetime.now(UTC))).assignment.id
         except HTTPException:
             return None
 

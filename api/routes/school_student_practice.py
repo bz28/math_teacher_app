@@ -30,7 +30,7 @@ import logging
 import uuid
 from collections.abc import Coroutine
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -2411,28 +2411,23 @@ async def _resubmit_reopened(
     return SubmitHomeworkResponse(submission_id=str(submission_id), submitted_at=now, is_late=is_late)
 
 
-@router.post("/homework/{assignment_id}/submit")
-async def submit_homework(
-    assignment_id: uuid.UUID,
-    body: SubmitHomeworkRequest,
-    request: Request,
-    user: User = Depends(get_current_user_full),
-    db: AsyncSession = Depends(get_db),
-) -> SubmitHomeworkResponse:
-    """Insert a submission for this student/HW. One-shot — a second call
-    returns 409 — unless the teacher reopened the homework for this
-    student after they turned it in (`Submission.reopened_at`): then this
-    turns it in once more (`_resubmit_reopened`). A late turn-in is
-    accepted and marked late, unless the homework's late policy closes it
-    at the student's due date (`no_credit`), which refuses it with a 403 —
-    except for a teacher's preview, which always goes through.
-    """
-    assignment = await _load_assignment_for_student(db, assignment_id, user)
-    # One instant for "when was this turned in": the closed check, is_late
-    # and the late penalty (measured off submitted_at) must all agree.
-    now = datetime.now(UTC)
-    due_at = await effective_due_at(db, assignment, user.id)
+class _SubmitGate(NamedTuple):
+    assignment: Assignment
+    due_at: datetime | None
+    existing: uuid.UUID | None
+    reopened: bool
 
+
+async def _submit_gate(
+    db: AsyncSession, assignment_id: uuid.UUID, user: User, now: datetime,
+) -> _SubmitGate:
+    """Every refusal submit makes before it looks at the photos: the
+    homework's own gate, one-shot (409 unless the teacher reopened it),
+    and a closed homework (403). Shared with the size-refusal recorder
+    (api/core/submission_rejections.py), so a refusal is logged exactly
+    when the route would have let the student this far."""
+    assignment = await _load_assignment_for_student(db, assignment_id, user)
+    due_at = await effective_due_at(db, assignment, user.id)
     # Already submitted? One-shot enforcement.
     existing_row = (await db.execute(
         select(Submission.id, Submission.reopened_at).where(
@@ -2449,6 +2444,29 @@ async def submit_homework(
     # submitted", not "closed"; before the preview's rehearsal is cleared.
     if not user.is_preview and is_closed(assignment.late_policy, due_at, now):
         raise HTTPException(status_code=403, detail=HOMEWORK_CLOSED_DETAIL)
+    return _SubmitGate(assignment, due_at, existing, reopened)
+
+
+@router.post("/homework/{assignment_id}/submit")
+async def submit_homework(
+    assignment_id: uuid.UUID,
+    body: SubmitHomeworkRequest,
+    request: Request,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> SubmitHomeworkResponse:
+    """Insert a submission for this student/HW. One-shot — a second call
+    returns 409 — unless the teacher reopened the homework for this
+    student after they turned it in (`Submission.reopened_at`): then this
+    turns it in once more (`_resubmit_reopened`). A late turn-in is
+    accepted and marked late, unless the homework's late policy closes it
+    at the student's due date (`no_credit`), which refuses it with a 403 —
+    except for a teacher's preview, which always goes through.
+    """
+    # One instant for "when was this turned in": the closed check, is_late
+    # and the late penalty (measured off submitted_at) must all agree.
+    now = datetime.now(UTC)
+    assignment, due_at, existing, reopened = await _submit_gate(db, assignment_id, user, now)
     if existing is not None and reopened and not user.is_preview:
         return await _resubmit_reopened(db, request, user, assignment, existing, body, now, due_at)
     replaced_pages: list[dict[str, Any]] = []
@@ -2891,6 +2909,29 @@ async def _retake_block(db: AsyncSession, sub: Submission) -> str | None:
     return None
 
 
+async def _retake_gate(
+    db: AsyncSession, submission_id: uuid.UUID, user: User,
+) -> tuple[Submission, Assignment]:
+    """Every refusal retake makes before it looks at the photos: the
+    student's own submission, submit's homework gate, and
+    `_retake_block`. Shared with the size-refusal recorder, like
+    `_submit_gate`."""
+    sub = (await db.execute(
+        select(Submission).where(Submission.id == submission_id)
+    )).scalar_one_or_none()
+    if sub is None:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    if sub.student_id != user.id:
+        raise HTTPException(status_code=403, detail="Not your submission")
+    # Same gate as submit: published (or the teacher's preview), and the
+    # student is still in a section it was assigned to.
+    assignment = await _load_assignment_for_student(db, sub.assignment_id, user)
+    block = await _retake_block(db, sub)
+    if block is not None:
+        raise HTTPException(status_code=409, detail=block)
+    return sub, assignment
+
+
 @router.post("/submissions/{submission_id}/retake")
 async def retake_submission(
     submission_id: uuid.UUID,
@@ -2922,19 +2963,7 @@ async def retake_submission(
     takes turn-ins), 409 when a retake isn't allowed (with why), and
     submit's 400 / 413 for the files themselves.
     """
-    sub = (await db.execute(
-        select(Submission).where(Submission.id == submission_id)
-    )).scalar_one_or_none()
-    if sub is None:
-        raise HTTPException(status_code=404, detail="Submission not found")
-    if sub.student_id != user.id:
-        raise HTTPException(status_code=403, detail="Not your submission")
-    # Same gate as submit: published (or the teacher's preview), and the
-    # student is still in a section it was assigned to.
-    assignment = await _load_assignment_for_student(db, sub.assignment_id, user)
-    block = await _retake_block(db, sub)
-    if block is not None:
-        raise HTTPException(status_code=409, detail=block)
+    sub, assignment = await _retake_gate(db, submission_id, user)
 
     validated_files = await _validated_or_recorded(request, user, sub.assignment_id, body)
     stored_files = await _store_photos(submission_id, validated_files)

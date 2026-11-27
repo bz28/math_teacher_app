@@ -17,13 +17,14 @@ from typing import Any
 
 from httpx import AsyncClient
 from PIL import Image
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from api.core.auth import create_access_token
 from api.core.submission_rejections import note_transport_rejection
 from api.database import get_session_factory
 from api.middleware.security import RequestSizeLimitMiddleware
 from api.models.activity_log import ActivityLog
+from api.models.user import User
 from tests.conftest import PAGE_PNG, auth_headers
 
 _JPEG_HEADER = b"\xff\xd8\xff\xe0\x00\x10JFIF"
@@ -264,6 +265,42 @@ async def test_a_homework_the_route_would_refuse_is_not_recorded(
             token=create_access_token(str(world["outsider_id"]), "student"),
         ),
         12_000_000,
+    )
+    assert len(await _rejections()) == before
+
+
+async def test_a_student_the_route_turns_away_first_is_not_recorded(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """The middleware refuses before any gate runs, so it has to ask the
+    route's own: a deactivated account, a second turn-in (one-shot), and
+    a retake `_retake_block` refuses are all turned away before the
+    photos are looked at — under the size cap they'd write no row, so
+    over it they mustn't either."""
+    hw = world["assignment_id"]
+    submit = f"/v1/school/student/homework/{hw}/submit"
+    before = len(await _rejections())
+
+    async with get_session_factory()() as db:
+        await db.execute(update(User).where(User.id == world["student_id"]).values(is_active=False))
+        await db.commit()
+    await note_transport_rejection(_scope(submit, token=world["student_token"]), 12_000_000)
+    async with get_session_factory()() as db:
+        await db.execute(update(User).where(User.id == world["student_id"]).values(is_active=True))
+        await db.commit()
+    assert len(await _rejections()) == before
+
+    r = await client.post(
+        submit, headers=auth_headers(world["student_token"]), json={"files": [PAGE_PNG]},
+    )
+    assert r.status_code == 200, r.text
+    sid = r.json()["submission_id"]
+    # Already turned in, not reopened: the route 409s.
+    await note_transport_rejection(_scope(submit, token=world["student_token"]), 12_000_000)
+    # Never flagged: `_retake_block` 409s.
+    await note_transport_rejection(
+        _scope(f"/v1/school/student/submissions/{sid}/retake", token=world["student_token"]),
+        90_000_000,
     )
     assert len(await _rejections()) == before
 
