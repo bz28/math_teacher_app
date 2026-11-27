@@ -8,6 +8,11 @@ os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("SENTRY_DSN", "")
 os.environ.setdefault("JWT_REFRESH_GRACE_PERIOD_SECONDS", "0")
 
+from tests.xdist_db import worker_database_url
+
+# Under pytest-xdist each worker gets a database of its own (see the module).
+os.environ["DATABASE_URL"] = worker_database_url(os.environ["DATABASE_URL"])
+
 import asyncio
 import base64
 import io
