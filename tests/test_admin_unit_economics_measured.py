@@ -235,6 +235,11 @@ async def test_models_in_use_is_what_ran_per_stage(client: AsyncClient) -> None:
     assert used["vision"]["catalog_id"] == "claude-opus-5-5"
     assert used["grading"]["catalog_id"] == "claude-sonnet-4-6"
     assert "other" not in used
+    # Every stage is listed, in picker order; one that didn't run has no model.
+    assert list(used) == ["vision", "grading", "integrity", "generation", "tutoring"]
+    assert used["tutoring"] == {
+        "label": "Tutor + chat", "model": None, "catalog_id": None, "cost_usd": 0.0,
+    }
 
 
 async def test_models_in_use_follows_spend_not_call_count(

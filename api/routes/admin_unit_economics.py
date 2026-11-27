@@ -543,7 +543,8 @@ async def _reconciliation(db: AsyncSession, scope: Scope) -> dict[str, Any]:
 
 async def _models_in_use(db: AsyncSession, scope: Scope) -> dict[str, Any]:
     """The model each stage actually ran on in the window — the one that
-    took the most spend — so every model picker defaults to reality."""
+    took the most spend — so every model picker defaults to reality.
+    Every stage is listed; one that didn't run has model None."""
     rows = (
         await db.execute(
             scope.apply(
@@ -565,18 +566,19 @@ async def _models_in_use(db: AsyncSession, scope: Scope) -> dict[str, Any]:
         if family != "other":
             key = (family, r.model)
             spend[key] = spend.get(key, 0.0) + as_float(r.cost)
-    out: dict[str, Any] = {}
+    # Every stage, in the picker's order, so the dashboard names stages
+    # from here rather than a copy; one that didn't run has no model.
+    out: dict[str, Any] = {
+        family: {"label": label, "model": None, "catalog_id": None, "cost_usd": 0.0}
+        for family, label in FAMILY_LABELS.items()
+    }
     # Ties broken on model id so identical requests answer identically.
     for (family, model), cost in sorted(spend.items()):
-        best = out.get(family)
-        if best is None or cost > best["cost_usd"]:
+        if out[family]["model"] is None or cost > out[family]["cost_usd"]:
             price = price_for(model)
-            out[family] = {
-                "label": FAMILY_LABELS[family],
-                "model": model,
-                "catalog_id": price.id if price else None,
-                "cost_usd": cost,
-            }
+            out[family].update(
+                model=model, catalog_id=price.id if price else None, cost_usd=cost,
+            )
     return out
 
 
