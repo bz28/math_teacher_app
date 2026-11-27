@@ -3,7 +3,7 @@
  *
  * Used by pages that gate their whole render behind a single fetch
  * (LLMCalls) and by pages whose empty state is
- * otherwise indistinguishable from a failed load (Leads). Without
+ * otherwise indistinguishable from a failed load. Without
  * this, a 4xx/5xx either freezes on "Loading…" forever or masquerades
  * as an empty result — this makes the failure honest and recoverable
  * without a full page reload.

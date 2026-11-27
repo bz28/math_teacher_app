@@ -17,9 +17,6 @@ interface NavItem {
 // student → submission, or come in from a teacher's report or an accuracy
 // case. MONEY is what we spend and what one of each thing costs. Users and
 // Audit log are consulted, not worked in, so they sit in the foot.
-//
-// Leads is still routed (old links keep working) but has no slot here: it
-// is on its way out of the console.
 
 const DEBUG: NavItem[] = [
   { to: "/llm-calls", label: "Calls" },

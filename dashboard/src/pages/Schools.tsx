@@ -18,7 +18,7 @@ import ErrorState from "../components/ErrorState";
 
 const USAGE_WINDOW = "7d";
 
-// Table filter tabs, mirroring the Leads all/active/stale pattern.
+// Table filter tabs.
 type SchoolFilter = "all" | "active" | "at-risk";
 
 // Per-school risk rank for the default ordering — the whole point of

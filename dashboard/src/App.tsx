@@ -8,8 +8,6 @@ import Login from "./pages/Login";
 import LLMCalls from "./pages/LLMCalls";
 import Accuracy from "./pages/Accuracy";
 import Users from "./pages/Users";
-import LeadDetail from "./pages/LeadDetail";
-import Leads from "./pages/Leads";
 import ReportDetail from "./pages/ReportDetail";
 import Reports from "./pages/Reports";
 import Schools from "./pages/Schools";
@@ -46,8 +44,6 @@ export default function App() {
           <Route path="/" element={<Navigate to="/llm-calls" replace />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/reports/:reportId" element={<ReportDetail />} />
-          <Route path="/leads" element={<Leads />} />
-          <Route path="/leads/:leadId" element={<LeadDetail />} />
           <Route path="/schools" element={<Schools />} />
           <Route path="/schools/:schoolId" element={<SchoolDetail />} />
           <Route path="/students/:studentId" element={<StudentDetail />} />
