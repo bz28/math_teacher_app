@@ -1378,9 +1378,12 @@ export interface SubmissionsInboxRow {
   due_at: string | null;
   total_students: number;
   submitted: number;
-  /** Submissions whose integrity check flagged them
-   *  (uncertain / unlikely / unreadable). */
+  /** Flagged submissions, every kind (api/core/flagged.py). */
   flagged: number;
+  /** The flagged count by kind; they add up to `flagged`. */
+  worth_a_look: number;
+  photo_problems: number;
+  too_long: number;
   /** Graded but not yet published to students. */
   to_grade: number;
   /** Already published, but the teacher has edited the grade since.

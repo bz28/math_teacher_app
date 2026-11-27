@@ -11,7 +11,7 @@ from sqlalchemy import Integer, and_, case, func, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.flagged import flagged_case
+from api.core.flagged import FLAG_COUNT_NAMES, flag_kind_sums, flagged_case
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
 from api.models.assignment import Assignment, AssignmentSection, Submission, SubmissionGrade
@@ -39,8 +39,8 @@ async def submissions_inbox(
 
     Row shape:
       { assignment_id, assignment_title, section_id, section_name,
-        due_at, total_students, submitted, flagged, to_grade, dirty,
-        published }
+        due_at, total_students, submitted, flagged, worth_a_look,
+        photo_problems, too_long, to_grade, dirty, published }
 
     Sort + client-side: the frontend orders by urgency or due date and
     renders pills per count.
@@ -153,6 +153,7 @@ async def submissions_inbox(
             dirty_expr,
             published_expr,
             flagged_expr,
+            *flag_kind_sums(),
         )
         .select_from(Submission)
         .outerjoin(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
@@ -181,6 +182,7 @@ async def submissions_inbox(
             "dirty": int(r.dirty or 0),
             "published": int(r.published or 0),
             "flagged": int(r.flagged or 0),
+            **{n: int(getattr(r, n) or 0) for n in FLAG_COUNT_NAMES.values()},
         }
         for r in agg_rows
     }
@@ -197,6 +199,9 @@ async def submissions_inbox(
             "total_students": roster.get(sid, 0),
             "submitted": counts.get("submitted", 0),
             "flagged": counts.get("flagged", 0),
+            # The flagged count by kind, so the tab says "worth a look"
+            # apart from a photo or reading problem (api/core/flagged.py).
+            **{n: counts.get(n, 0) for n in FLAG_COUNT_NAMES.values()},
             "to_grade": counts.get("to_grade", 0),
             "dirty": counts.get("dirty", 0),
             "published": counts.get("published", 0),

@@ -857,3 +857,7 @@ async def test_courses_count_each_kind_of_flag_apart(client: AsyncClient) -> Non
     one = (await client.get(f"/v1/teacher/courses/{w['course_id']}",
                             headers=_auth(w["teacher_token"]))).json()
     assert (one["flagged"], one["worth_a_look"], one["photo_problems"], one["too_long"]) == (4, 1, 2, 1)
+    # The Submissions tab's row for that homework says the same.
+    inbox = (await client.get(f"/v1/teacher/courses/{w['course_id']}/submissions-inbox",
+                              headers=_auth(w["teacher_token"]))).json()["rows"][0]
+    assert (inbox["flagged"], inbox["worth_a_look"], inbox["photo_problems"], inbox["too_long"]) == (4, 1, 2, 1)

@@ -21,8 +21,9 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 from sqlalchemy import select
 
 from api.database import get_session_factory
-from api.models.assignment import Submission
+from api.models.assignment import Submission, SubmissionGrade
 from api.models.integrity_check import IntegrityCheckSubmission
+from api.models.section_enrollment import SectionEnrollment
 from api.models.user import User
 from tests.harness.browser import HarnessBrowser
 from tests.harness.seed import Seed, seed_review_homework
@@ -48,7 +49,9 @@ async def flag_kinds_flow(
 ) -> FlowResult:
     """Home row and course row → "Understanding check: 1 worth a look"
     and "1 photo or reading problem", neither red, no "flagged" anywhere
-    on home; expanded, each student says which.
+    on home, and the headline counts the homework too long for the AI;
+    expanded, each student says which. The course's Submissions tab says
+    it the same way.
 
     Set HARNESS_FLOW_SHOTS=<dir> to save a screenshot of home."""
     from tests.harness import flows
@@ -68,6 +71,18 @@ async def flag_kinds_flow(
         s.add(IntegrityCheckSubmission(submission_id=subs[rs.graded_student].id, status="complete",
                                        disposition="flag_for_review", overall_summary="Worth a look."))
         subs[rs.ungraded_student].extraction_flagged_at = datetime.now(UTC)
+        # The third student's homework was too long for the AI grader.
+        absent = (await s.execute(
+            select(User).join(SectionEnrollment, SectionEnrollment.student_id == User.id).where(
+                SectionEnrollment.section_id == uuid.UUID(rs.section_id), User.name == rs.absent_student,
+            )
+        )).scalar_one()
+        long_sub = Submission(assignment_id=uuid.UUID(rs.assignment_id), student_id=absent.id,
+                              section_id=uuid.UUID(rs.section_id), status="submitted",
+                              submitted_at=datetime.now(UTC))
+        s.add(long_sub)
+        await s.flush()
+        s.add(SubmissionGrade(submission_id=long_sub.id, ai_grading_status="skipped_too_long"))
         await s.commit()
 
     shots = os.environ.get("HARNESS_FLOW_SHOTS")
@@ -118,7 +133,29 @@ async def flag_kinds_flow(
                         issues.append(f"{student}'s chip doesn't say \"{chip}\"")
                 except PlaywrightTimeoutError:
                     issues.append(f"{student} isn't listed under the row")
+        # The headline counts every kind, too long for the AI included.
+        if not await main.get_by_text(re.compile(r"^1 course ·.*1 too long to AI-grade")).count():
+            issues.append("home's headline drops the homework too long for the AI")
+        if not await main.get_by_text("1 too long to AI-grade", exact=True).count():
+            issues.append("the course row drops the homework too long for the AI")
         if shots:
             os.makedirs(shots, exist_ok=True)
             await page.screenshot(path=os.path.join(shots, "flag-kinds-home.png"), full_page=True)
+
+        # The course's Submissions tab says it the same way, not in red.
+        await page.goto(f"{web_base.rstrip('/')}/school/teacher/courses/{rs.course_id}?tab=submissions",
+                        wait_until="domcontentloaded", timeout=_TIMEOUT_MS)
+        main = page.locator("main")
+        tab_pill = main.get_by_text("Understanding check: 1 worth a look")
+        try:
+            await main.get_by_text("Review HW").first.wait_for(timeout=_TIMEOUT_MS)
+            await tab_pill.first.wait_for(timeout=_TIMEOUT_MS)
+            if await tab_pill.first.evaluate(_IN_ALARM_RED):
+                issues.append("the Submissions tab shows a check worth a look in alarm red")
+        except PlaywrightTimeoutError:
+            issues.append("the Submissions tab doesn't say which kind its flags are")
+        if await main.get_by_text(re.compile(r"\bflagged\b", re.I)).count():
+            issues.append("the Submissions tab still lumps them together as \"flagged\"")
+        if shots:
+            await page.screenshot(path=os.path.join(shots, "flag-kinds-submissions.png"), full_page=True)
     return flows.FlowResult(name, title, not issues, issues)

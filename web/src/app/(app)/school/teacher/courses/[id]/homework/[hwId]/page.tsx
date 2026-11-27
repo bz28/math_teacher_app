@@ -8,6 +8,7 @@ import {
   type BankItem,
   type SubmissionsInboxRow,
 } from "@/lib/api";
+import { flagWords } from "@/components/school/teacher/_pieces/flag-words";
 import { pointsRange } from "@/lib/points";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { GenerateQuestionsModal } from "@/components/school/teacher/question-bank/generate-questions-modal";
@@ -572,14 +573,21 @@ function SubmissionStrip({
     (s, r) => s + (r.submitted - r.published) + r.dirty,
     0,
   );
-  const totalFlagged = rows.reduce((s, r) => s + r.flagged, 0);
+  const totalFlags = rows.reduce(
+    (s, r) => ({
+      worth_a_look: s.worth_a_look + r.worth_a_look,
+      photo_problems: s.photo_problems + r.photo_problems,
+      too_long: s.too_long + r.too_long,
+    }),
+    { worth_a_look: 0, photo_problems: 0, too_long: 0 },
+  );
 
   const parts: string[] =
     totalSubmitted === 0
       ? [`Waiting for first submission`]
       : [`${totalSubmitted} of ${totalStudents} submitted`];
   if (totalToReview > 0) parts.push(`${totalToReview} to review`);
-  if (totalFlagged > 0) parts.push(`⚑ ${totalFlagged} flagged`);
+  parts.push(...flagWords(totalFlags));
   const summary = parts.join(" · ");
 
   const reviewHref = (sectionId: string) =>
@@ -638,15 +646,12 @@ function SubmissionStrip({
                       </span>
                     </>
                   )}
-                  {r.flagged > 0 && (
-                    <>
+                  {flagWords(r).map((w) => (
+                    <span key={w}>
                       {" "}
-                      ·{" "}
-                      <span className="font-semibold text-[color:var(--color-error)]">
-                        ⚑ {r.flagged}
-                      </span>
-                    </>
-                  )}
+                      · {w}
+                    </span>
+                  ))}
                 </span>
               </Link>
             );

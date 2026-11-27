@@ -9,6 +9,7 @@ import { formatDueRelative } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
 import { TOUR_ACTIONS, TOUR_IDS, useTour, useTourAction } from "@/components/tour";
 import { FlagPills } from "@/components/school/teacher/_pieces/flag-pills";
+import { flagWords } from "@/components/school/teacher/_pieces/flag-words";
 import { StatusPill } from "@/components/school/teacher/_pieces/status-pill";
 import { SubjectChip } from "@/components/school/teacher/_pieces/subject-chip";
 import { NeedsYouQueue } from "@/components/school/teacher/_pieces/needs-you-queue";
@@ -93,10 +94,11 @@ export default function SchoolTeacherDashboard() {
       courses.reduce(
         (acc, c) => ({
           toReview: acc.toReview + c.to_review,
-          worthALook: acc.worthALook + c.worth_a_look,
-          photoProblems: acc.photoProblems + c.photo_problems,
+          worth_a_look: acc.worth_a_look + c.worth_a_look,
+          photo_problems: acc.photo_problems + c.photo_problems,
+          too_long: acc.too_long + c.too_long,
         }),
-        { toReview: 0, worthALook: 0, photoProblems: 0 },
+        { toReview: 0, worth_a_look: 0, photo_problems: 0, too_long: 0 },
       ),
     [courses],
   );
@@ -266,7 +268,7 @@ function DashboardSkeleton() {
 
 function describeWorkload(
   courseCount: number,
-  totals: { toReview: number; worthALook: number; photoProblems: number },
+  totals: { toReview: number; worth_a_look: number; photo_problems: number; too_long: number },
 ): string {
   const courseLabel = `${courseCount} course${courseCount === 1 ? "" : "s"}`;
   const parts: string[] = [];
@@ -275,13 +277,7 @@ function describeWorkload(
   }
   // The flags by kind, as the pills below say them: a photo problem is
   // never summed into something that reads like an integrity count.
-  if (totals.worthALook > 0) {
-    parts.push(`${totals.worthALook} worth a look`);
-  }
-  if (totals.photoProblems > 0) {
-    const n = totals.photoProblems;
-    parts.push(`${n} photo or reading problem${n === 1 ? "" : "s"}`);
-  }
+  parts.push(...flagWords(totals));
   if (parts.length === 0) return `${courseLabel} · all caught up`;
   return `${courseLabel} · ${parts.join(" · ")}`;
 }
