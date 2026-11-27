@@ -232,3 +232,4 @@ Returns `200` if the server is running. No auth required.
 | `423` | Locked — account locked after too many failed login attempts |
 | `429` | Too many requests — daily session cap reached |
 | `503` | Service unavailable — LLM down, circuit breaker open, or cost limit reached |
+
