@@ -163,6 +163,7 @@ export default function LLMCalls() {
           <div style={{ color: "var(--ink)", fontWeight: 500 }}>{c.function}</div>
           <div className="llm-ctx">
             {c.submission_id && <span className="llm-ctx-tag" title={`submission ${c.submission_id}`}>▤ {shortId(c.submission_id)}</span>}
+            {c.deleted_submission && <span className="llm-ctx-tag" title="Its submission was deleted; the call stays with the student who made it">▤ deleted submission</span>}
             {c.session_id && <span className="llm-ctx-tag" title={`session ${c.session_id}`}>⧉ {shortId(c.session_id)}</span>}
           </div>
         </div>
