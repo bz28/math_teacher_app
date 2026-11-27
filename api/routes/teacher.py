@@ -13,6 +13,7 @@ from api.routes.teacher_preview import router as preview_router
 from api.routes.teacher_question_bank import router as question_bank_router
 from api.routes.teacher_reports import router as reports_router
 from api.routes.teacher_sections import router as sections_router
+from api.routes.teacher_submissions_inbox import router as submissions_inbox_router
 from api.routes.teacher_units import router as units_router
 from api.routes.teacher_visibility import router as visibility_router
 
@@ -24,6 +25,7 @@ router.include_router(sections_router)
 router.include_router(documents_router)
 router.include_router(units_router)
 router.include_router(assignments_router)
+router.include_router(submissions_inbox_router)
 router.include_router(visibility_router)
 router.include_router(question_bank_router)
 router.include_router(reports_router)
