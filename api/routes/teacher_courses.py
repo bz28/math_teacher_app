@@ -18,6 +18,7 @@ from api.core.class_rubric import (
     rubric_revision,
 )
 from api.core.integrity_pipeline import UNFINISHED_REASONS
+from api.core.late_policy import section_due_column
 from api.core.subjects import VALID_SUBJECTS
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_teacher
@@ -278,14 +279,14 @@ async def _course_attention(
     )).one()
 
     next_due_at = (await db.execute(
-        select(func.min(Assignment.due_at))
+        select(func.min(section_due_column()))
         .join(AssignmentSection, AssignmentSection.assignment_id == Assignment.id)
         .where(
             Assignment.course_id == course_id,
             Assignment.teacher_id == teacher_id,
             Assignment.type == "homework",
             Assignment.status == "published",
-            Assignment.due_at >= func.now(),
+            section_due_column() >= func.now(),
         )
     )).scalar_one_or_none()
 
@@ -378,14 +379,14 @@ async def list_courses(
     next_due_counts = (
         select(
             Assignment.course_id.label("course_id"),
-            func.min(Assignment.due_at).label("next_due_at"),
+            func.min(section_due_column()).label("next_due_at"),
         )
         .join(AssignmentSection, AssignmentSection.assignment_id == Assignment.id)
         .where(
             Assignment.teacher_id == current_user.user_id,
             Assignment.type == "homework",
             Assignment.status == "published",
-            Assignment.due_at >= func.now(),
+            section_due_column() >= func.now(),
         )
         .group_by(Assignment.course_id)
         .subquery()
@@ -453,8 +454,9 @@ async def needs_attention(
     flagged_expr = flagged_case()
     dirty_case = _dirty_case()
     # Overdue is decided in SQL so timezone handling stays in the DB.
+    # Against the submission's section date (its AssignmentSection row).
     overdue_case = case(
-        (and_(Assignment.due_at.is_not(None), Assignment.due_at < func.now()), True),
+        (and_(section_due_column().is_not(None), section_due_column() < func.now()), True),
         else_=False,
     )
 
@@ -469,7 +471,7 @@ async def needs_attention(
             Course.subject.label("subject"),
             Assignment.id.label("assignment_id"),
             Assignment.title.label("assignment_title"),
-            Assignment.due_at.label("due_at"),
+            section_due_column().label("due_at"),
             Section.id.label("section_id"),
             Section.name.label("section_name"),
             flagged_expr.label("flagged"),
@@ -481,6 +483,13 @@ async def needs_attention(
         .join(Assignment, Assignment.id == Submission.assignment_id)
         .join(Course, Course.id == Assignment.course_id)
         .join(Section, Section.id == Submission.section_id)
+        .outerjoin(
+            AssignmentSection,
+            and_(
+                AssignmentSection.assignment_id == Submission.assignment_id,
+                AssignmentSection.section_id == Submission.section_id,
+            ),
+        )
         .join(User, User.id == Submission.student_id)
         .join(
             SectionEnrollment,

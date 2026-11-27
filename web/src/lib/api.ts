@@ -1783,7 +1783,19 @@ export const teacher = {
       points: HomeworkPoints;
       /** Keyed by problem id; only problems that require a drawing. */
       graph_checklists: Record<string, HomeworkGraphChecklist>;
+      /** Each section it's on, with that section's due date. */
+      section_due_dates: SectionDueDate[];
     }>(`/teacher/assignments/${assignmentId}`);
+  },
+  /** Set a homework's due dates, draft or published: one date for every
+   *  section (`due_at`, or `clear_due_at`), or a date per section. With
+   *  `dry_run` nothing is saved and the counts say what saving would do
+   *  to work already turned in. */
+  setDueDates(assignmentId: string, body: Partial<Schemas["DueDatesRequest"]>) {
+    return apiFetch<Schemas["DueDatesResponse"]>(`/teacher/assignments/${assignmentId}/due-dates`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
   },
   createAssignment(courseId: string, data: {
     title: string; type: string; source_type?: string; due_at?: string;
@@ -2382,6 +2394,9 @@ export interface SubmissionAttempt {
   final_score: number | null;
   grade_published: boolean;
 }
+
+/** A section a homework is on, and that section's due date. */
+export type SectionDueDate = Schemas["SectionDueDate"];
 
 export interface StudentReopen {
   student_id: string;

@@ -98,6 +98,10 @@ class AssignmentSection(Base):
         UUID(as_uuid=True), ForeignKey("sections.id", ondelete="CASCADE"), nullable=False, index=True,
     )
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # This section's due date. Starts as the homework's (`Assignment.due_at`)
+    # and differs only when the teacher sets a date per section. NULL reads
+    # as the homework's date (late_policy.section_due_dates).
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class Submission(Base):

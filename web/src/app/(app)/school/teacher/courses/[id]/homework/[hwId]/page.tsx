@@ -26,6 +26,8 @@ import { usePreviewAsStudent } from "./_lib/use-preview-as-student";
 import { ActionBar } from "./_components/action-bar";
 import { CollapsibleSection, ConfigBlock, configSummary } from "./_components/config-block";
 import { DeleteHomework } from "./_components/delete-homework";
+import { DueDatesDialog } from "@/components/school/teacher/_pieces/due-dates-dialog";
+import { datesDiffer } from "@/components/school/teacher/_pieces/due-dates";
 import { HomeworkHeader } from "./_components/homework-header";
 import { InstructionsBlock } from "./_components/instructions-block";
 import {
@@ -57,6 +59,7 @@ export default function HomeworkDetailPage({
   const router = useRouter();
 
   const [hw, setHw] = useState<HomeworkDetail | null>(null);
+  const [showDueDates, setShowDueDates] = useState(false);
   const [loading, setLoading] = useState(true);
   // Back link points at whichever tab the assignment came from — HW
   // for type=homework, Practice for type=practice. Falls back to HW
@@ -298,7 +301,15 @@ export default function HomeworkDetailPage({
         }}
       />
     )}
-    {showBank && hw && (
+    {showDueDates && hw && (
+        <DueDatesDialog
+          assignmentId={assignmentId}
+          title={hw.title}
+          onSaved={reload}
+          onClose={() => setShowDueDates(false)}
+        />
+      )}
+      {showBank && hw && (
       <AddFromBankDialog
         courseId={courseId}
         homeworkUnitIds={hw.unit_ids ?? []}
@@ -332,6 +343,7 @@ export default function HomeworkDetailPage({
         loading={loading}
         busy={busy}
         onSaveTitle={saveTitle}
+        onChangeDueDates={() => setShowDueDates(true)}
       />
 
       {/* Instructions students will see (e.g. "Show all work, no
@@ -383,9 +395,9 @@ export default function HomeworkDetailPage({
         <>
           {isPublished && (
             <div className="mt-4 rounded-[--radius-md] border border-primary/20 bg-primary-bg/30 p-3 text-xs text-text-secondary">
-              Published — students can see this. Points, grading rules
-              and instructions stay editable; unpublish to change the
-              problem list, title, due date, or sections.
+              Published — students can see this. Points, grading rules,
+              instructions and the due date stay editable; unpublish to
+              change the problem list, title, or sections.
             </div>
           )}
 
@@ -480,11 +492,13 @@ export default function HomeworkDetailPage({
           <div className="mt-4">
             <CollapsibleSection
               label="Configuration"
-              summary={configSummary(hw, courseSections?.length ?? null)}
+              summary={configSummary(hw, courseSections?.length ?? null, datesDiffer(hw.section_due_dates))}
               defaultOpen={problems.length === 0 || hw.unit_ids.length === 0}
             >
               <ConfigBlock
                 hw={hw}
+                dueBySection={!!hw.due_at && datesDiffer(hw.section_due_dates)}
+                onOpenDueDates={() => setShowDueDates(true)}
                 courseId={courseId}
                 courseSections={courseSections}
                 disabled={isPublished}

@@ -3,6 +3,7 @@
 import type {
   HomeworkGraphChecklist,
   HomeworkPoints,
+  SectionDueDate,
   TeacherAssignment,
   TeacherRubric,
 } from "@/lib/api";
@@ -42,4 +43,5 @@ export type HomeworkDetail = TeacherAssignment & {
   rubric: TeacherRubric | null;
   points: HomeworkPoints;
   graph_checklists: Record<string, HomeworkGraphChecklist>;
+  section_due_dates: SectionDueDate[];
 };

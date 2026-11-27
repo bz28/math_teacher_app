@@ -1396,6 +1396,95 @@
         "title": "DismissRequest",
         "type": "object"
       },
+      "DueDatesRequest": {
+        "properties": {
+          "clear_due_at": {
+            "default": false,
+            "title": "Clear Due At",
+            "type": "boolean"
+          },
+          "dry_run": {
+            "default": false,
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          },
+          "section_due_dates": {
+            "additionalProperties": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "default": {},
+            "propertyNames": {
+              "format": "uuid"
+            },
+            "title": "Section Due Dates",
+            "type": "object"
+          }
+        },
+        "title": "DueDatesRequest",
+        "type": "object"
+      },
+      "DueDatesResponse": {
+        "properties": {
+          "due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          },
+          "grades_changed": {
+            "title": "Grades Changed",
+            "type": "integer"
+          },
+          "lateness_changed": {
+            "title": "Lateness Changed",
+            "type": "integer"
+          },
+          "published_grades_changed": {
+            "title": "Published Grades Changed",
+            "type": "integer"
+          },
+          "saved": {
+            "title": "Saved",
+            "type": "boolean"
+          },
+          "section_due_dates": {
+            "items": {
+              "$ref": "#/components/schemas/SectionDueDate"
+            },
+            "title": "Section Due Dates",
+            "type": "array"
+          }
+        },
+        "required": [
+          "due_at",
+          "section_due_dates",
+          "lateness_changed",
+          "grades_changed",
+          "published_grades_changed",
+          "saved"
+        ],
+        "title": "DueDatesResponse",
+        "type": "object"
+      },
       "DuplicateHomeworkRequest": {
         "description": "Where the copy goes and when it's due. Sections and the due date\nare picked fresh: the source's own never carry over.",
         "properties": {
@@ -3636,6 +3725,38 @@
           }
         },
         "title": "RetirePayload",
+        "type": "object"
+      },
+      "SectionDueDate": {
+        "properties": {
+          "due_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Due At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "section_id": {
+            "format": "uuid",
+            "title": "Section Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "section_id",
+          "name",
+          "due_at"
+        ],
+        "title": "SectionDueDate",
         "type": "object"
       },
       "SectionInsightsResponse": {
@@ -15325,6 +15446,64 @@
           }
         ],
         "summary": "Update Assignment",
+        "tags": [
+          "teacher"
+        ]
+      }
+    },
+    "/v1/teacher/assignments/{assignment_id}/due-dates": {
+      "post": {
+        "operationId": "set_due_dates_v1_teacher_assignments__assignment_id__due_dates_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "assignment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Assignment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DueDatesRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DueDatesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Set Due Dates",
         "tags": [
           "teacher"
         ]

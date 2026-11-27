@@ -44,13 +44,16 @@ const LATE_POLICY_OPTIONS: { value: string; label: string; hint: string }[] = [
 export function configSummary(
   hw: TeacherAssignment,
   courseSectionCount: number | null,
+  dueBySection = false,
 ): string {
   const parts: string[] = [];
   parts.push(`${hw.unit_ids.length} unit${hw.unit_ids.length === 1 ? "" : "s"}`);
   // Practice has no deadline concept — skip the due-date part
   // entirely rather than show "No due date" on every practice card.
   if (hw.type !== "practice") {
-    if (hw.due_at) {
+    if (hw.due_at && dueBySection) {
+      parts.push("Due by section");
+    } else if (hw.due_at) {
       const d = new Date(hw.due_at);
       parts.push(
         `Due ${d.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`,
@@ -127,6 +130,8 @@ export function ConfigBlock({
   onChangeDueAt,
   onChangeLatePolicy,
   onChangeSections,
+  dueBySection,
+  onOpenDueDates,
 }: {
   hw: TeacherAssignment;
   courseId: string;
@@ -139,6 +144,10 @@ export function ConfigBlock({
   onChangeDueAt: (next: string | null) => void;
   onChangeLatePolicy: (next: string) => void;
   onChangeSections: (next: string[]) => void;
+  /** Sections have different dates: one picker here would overwrite
+   *  them, so the dialog edits them instead. */
+  dueBySection: boolean;
+  onOpenDueDates: () => void;
 }) {
   return (
     <div className="space-y-5 rounded-[--radius-md] border border-border-light bg-surface/30 p-4">
@@ -170,12 +179,25 @@ export function ConfigBlock({
           saveState={saveStates.dueAt}
           saveError={saveErrors.dueAt}
         >
-          <DueDatePicker
-            value={hw.due_at}
-            onChange={onChangeDueAt}
-            disabled={disabled}
-            inputRef={dueDateInputRef}
-          />
+          {dueBySection ? (
+            <p className="text-sm text-text-secondary">
+              Different per section.{" "}
+              <button
+                type="button"
+                onClick={onOpenDueDates}
+                className="font-semibold text-primary hover:underline"
+              >
+                Change
+              </button>
+            </p>
+          ) : (
+            <DueDatePicker
+              value={hw.due_at}
+              onChange={onChangeDueAt}
+              disabled={disabled}
+              inputRef={dueDateInputRef}
+            />
+          )}
         </Field>
       )}
 

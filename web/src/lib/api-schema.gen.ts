@@ -2754,6 +2754,23 @@ export interface paths {
         patch: operations["update_assignment_v1_teacher_assignments__assignment_id__patch"];
         trace?: never;
     };
+    "/v1/teacher/assignments/{assignment_id}/due-dates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Set Due Dates */
+        post: operations["set_due_dates_v1_teacher_assignments__assignment_id__due_dates_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teacher/assignments/{assignment_id}/duplicate": {
         parameters: {
             query?: never;
@@ -5005,6 +5022,43 @@ export interface components {
              */
             reason: string;
         };
+        /** DueDatesRequest */
+        DueDatesRequest: {
+            /**
+             * Clear Due At
+             * @default false
+             */
+            clear_due_at: boolean;
+            /**
+             * Dry Run
+             * @default false
+             */
+            dry_run: boolean;
+            /** Due At */
+            due_at?: string | null;
+            /**
+             * Section Due Dates
+             * @default {}
+             */
+            section_due_dates: {
+                [key: string]: string;
+            };
+        };
+        /** DueDatesResponse */
+        DueDatesResponse: {
+            /** Due At */
+            due_at: string | null;
+            /** Grades Changed */
+            grades_changed: number;
+            /** Lateness Changed */
+            lateness_changed: number;
+            /** Published Grades Changed */
+            published_grades_changed: number;
+            /** Saved */
+            saved: boolean;
+            /** Section Due Dates */
+            section_due_dates: components["schemas"]["SectionDueDate"][];
+        };
         /**
          * DuplicateHomeworkRequest
          * @description Where the copy goes and when it's due. Sections and the due date
@@ -5980,6 +6034,18 @@ export interface components {
              * @default true
              */
             retired: boolean;
+        };
+        /** SectionDueDate */
+        SectionDueDate: {
+            /** Due At */
+            due_at: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Section Id
+             * Format: uuid
+             */
+            section_id: string;
         };
         /** SectionInsightsResponse */
         SectionInsightsResponse: {
@@ -11673,6 +11739,41 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_due_dates_v1_teacher_assignments__assignment_id__due_dates_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                assignment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DueDatesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DueDatesResponse"];
                 };
             };
             /** @description Validation Error */

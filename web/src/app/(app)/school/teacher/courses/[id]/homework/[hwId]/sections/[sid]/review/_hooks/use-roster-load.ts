@@ -65,7 +65,11 @@ export function useRosterLoad({
         if (cancelled) return;
         setError(null);
         setHwTitle(a.title);
-        setHwDueAt(a.due_at);
+        // This section's date: what a reopen extends, and what the
+        // page's due line shows.
+        setHwDueAt(
+          a.section_due_dates.find((d) => d.section_id === sectionId)?.due_at ?? a.due_at,
+        );
         setSectionName(s.name);
         setHwRubric(a.rubric);
         // Join submissions to roster by student_id. Email would work
