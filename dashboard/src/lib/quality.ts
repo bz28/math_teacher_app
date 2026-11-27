@@ -1,6 +1,6 @@
 /**
  * Shared labels + accent colors for a session's subject and mode, read
- * by MetaChip and the Accuracy (extraction quality) page so a
+ * by MetaChip and the Accuracy page's two tabs so a
  * subject/mode reads identically everywhere it appears.
  */
 
@@ -30,5 +30,6 @@ export const MODE_COLOR: Record<string, string> = {
   mock_test: "#b8431a",
 };
 
-export const subjectLabel = (s: string): string => SUBJECT_LABEL[s] ?? s;
+export const subjectLabel = (s: string): string =>
+  SUBJECT_LABEL[s] ?? s.charAt(0).toUpperCase() + s.slice(1);
 export const modeLabel = (m: string): string => MODE_LABEL[m] ?? m;

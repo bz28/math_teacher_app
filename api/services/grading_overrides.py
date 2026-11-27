@@ -89,6 +89,61 @@ class ProblemDelta:
     final_percent: float
     delta: float  # final - ai; + = teacher raised (AI too harsh)
     is_override: bool
+    # The problem's 1-based position at grading time — what the case
+    # file's `#pN` anchor names — or None when this pair can't be placed
+    # on one problem. See ``compare_grade``.
+    position: int | None
+
+
+def _recorded_position(recorded: Any) -> int | None:
+    """The AI's recorded ``problem_position`` when it is a usable int
+    (``bool`` is an ``int`` subclass, so it is refused explicitly)."""
+    if isinstance(recorded, int) and not isinstance(recorded, bool) and recorded >= 1:
+        return recorded
+    return None
+
+
+def _link_positions(
+    ai_breakdown: dict[str, Any],
+    ai_grades: list[dict[str, Any]],
+    breakdown: list[dict[str, Any]],
+) -> list[int | None]:
+    """Where in the case file each index pair lives — see ``compare_grade``.
+
+    A shift carries forward: the breakdown is built in the grader's order
+    with off-sheet grades skipped and missing problems appended at the
+    end, so once one pair is shown to be two problems, every later pair
+    is suspect too, even where two problems happen to share a percent."""
+    recorded = ai_breakdown.get("problem_percents")
+    percents = recorded if isinstance(recorded, dict) else {}
+    count = len(breakdown)
+    seen: set[int] = set()
+    shifted = False
+    out: list[int | None] = []
+    for index, (ai_g, final_g) in enumerate(zip(ai_grades, breakdown, strict=True)):
+        status = ai_g.get("score_status")
+        position = _recorded_position(ai_g.get("problem_position"))
+        ai_pct = normalize_percent(status, ai_g.get("percent"))
+        own = percents.get(str(final_g.get("problem_id")))
+        # The record holds the raw percent; clamp it the same way before
+        # comparing, or a 99.67 on a big problem reads as a mismatch.
+        own_pct = (
+            normalize_percent(status, own)
+            if isinstance(own, (int, float)) and not isinstance(own, bool) else None
+        )
+        if (
+            (ai_pct is not None and own_pct is not None and abs(own_pct - ai_pct) > 0.5)
+            or (position is not None and (position in seen or position > count))
+        ):
+            # A number past the list's end is where a shift starts (every
+            # problem gets one entry); on an assignment with a deleted
+            # question it can also be a real one — withholding is the safe
+            # side of that trade, a wrong link is not.
+            shifted = True
+        if position is not None:
+            seen.add(position)
+        out.append(None if shifted else (position or index + 1))
+    return out
 
 
 def compare_grade(
@@ -107,6 +162,18 @@ def compare_grade(
 
     ``None`` means "exclude this submission from the report" — distinct
     from an empty/zero-override result, which means "compared, no change".
+
+    Each delta's ``position`` (for the console's link into the case file)
+    is the AI grade's recorded ``problem_position`` — the grading-time
+    number the case file anchors on — else its place in the list. It is
+    None from the first pair that is provably two different problems on:
+    the snapshot keeps grades for positions that weren't on the
+    assignment, which shifts the lists while their lengths still match.
+    The grader's own per-problem record (``problem_percents``, keyed by
+    problem id) is the check — the AI's call for the teacher entry's
+    problem must be the percent this pair compares — along with a
+    position recorded twice or past the list's end. Counting is unchanged
+    either way; only the link is withheld, and it errs toward withholding.
     """
     if not ai_breakdown or not breakdown:
         return None
@@ -117,8 +184,9 @@ def compare_grade(
     if len(ai_grades) != len(breakdown):
         return None
 
+    links = _link_positions(ai_breakdown, ai_grades, breakdown)
     deltas: list[ProblemDelta] = []
-    for ai_g, final_g in zip(ai_grades, breakdown, strict=True):
+    for index, (ai_g, final_g) in enumerate(zip(ai_grades, breakdown, strict=True)):
         ai_status = ai_g.get("score_status")
         final_status = final_g.get("score_status")
         ai_pct = normalize_percent(ai_status, ai_g.get("percent"))
@@ -142,6 +210,7 @@ def compare_grade(
                 final_percent=final_pct,
                 delta=delta,
                 is_override=is_override,
+                position=links[index],
             )
         )
     return deltas or None

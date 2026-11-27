@@ -23,7 +23,9 @@ published, never in-progress drafts:
 
 No student PII leaves the endpoint: outputs are aggregate counts and
 averages, or per-problem AI-vs-teacher score pairs — never an individual
-student's identity or their written work.
+student's identity or their written work. A drill-in case does carry its
+submission id and problem position, so the console can open that
+problem in the submission case file (an admin-only page).
 """
 
 import uuid
@@ -78,7 +80,8 @@ async def _reviewed_rows(
     """The eligible reviewed/published AI grades in-window, one row per
     submission grade: (ai_breakdown, breakdown, effective_at, subject,
     course name). Shared by the summary report and the drill-in so both
-    read the exact same population."""
+    read the exact same population. The submission id rides last so the
+    drill-in can link each case to its case file."""
     filters = [
         or_(
             SubmissionGrade.reviewed_at.is_not(None),
@@ -109,6 +112,7 @@ async def _reviewed_rows(
             _EFFECTIVE_AT.label("at"),
             Course.subject,
             Course.name,
+            SubmissionGrade.submission_id,
         )
         .join(Submission, Submission.id == SubmissionGrade.submission_id)
         .join(User, User.id == Submission.student_id)
@@ -145,7 +149,7 @@ async def grading_quality(
     # only ever offers subjects with data behind them.
     subjects_seen: set[str] = set()
 
-    for ai_breakdown, breakdown, at, subj, course_name in rows:
+    for ai_breakdown, breakdown, at, subj, course_name, _submission_id in rows:
         deltas = compare_grade(ai_breakdown, breakdown)
         if deltas is None:
             unalignable += 1
@@ -286,7 +290,7 @@ async def grading_quality_overrides(
     rows = await _reviewed_rows(db, since, subject, course, school_id)
 
     cases: list[dict[str, Any]] = []
-    for ai_breakdown, breakdown, at, subj, course_name in rows:
+    for ai_breakdown, breakdown, at, subj, course_name, submission_id in rows:
         deltas = compare_grade(ai_breakdown, breakdown)
         if deltas is None:
             continue
@@ -302,6 +306,8 @@ async def grading_quality_overrides(
                 continue
             cases.append(
                 {
+                    "submission_id": str(submission_id),
+                    "position": d.position,
                     "subject": subj,
                     "course": course_name,
                     "day": day,

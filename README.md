@@ -23,7 +23,7 @@ The student-facing native app (Expo 54, React Native 0.81, TypeScript, Zustand, 
 A zero-auth, zero-API static React SPA (Vite 7, React Router) for sales/founder presentations. A front-door hub (`/`) plus a full-screen **present** mode (`/present`) with the four flagship stories, in pitch order: **integrity** (understanding), **grading**, **generation**, **teacher-day**. Content is bundled JSON captured from the live product / evaluation harness — no live calls.
 
 ### Admin dashboard — `dashboard/` (Vite / React ops console)
-Internal ops + sales + AI-quality console (Vite 7, React Router, Recharts). Default landing is **Calls** (`/llm-calls`). The rail's DEBUG group is Calls, Schools / School detail, Teacher reports and Accuracy (extraction quality), with Users and Audit log in its foot; Grading quality, Leads / Lead detail, Teacher and student detail and the per-submission trace are routed pages off the rail. Its own admin JWT auth.
+Internal ops + sales + AI-quality console (Vite 7, React Router, Recharts). Default landing is **Calls** (`/llm-calls`). The rail's DEBUG group is Calls, Schools / School detail, Teacher reports and Accuracy (`/accuracy`: Handwriting + Grading tabs, every case opening its case file), with Users and Audit log in its foot; Leads / Lead detail, Teacher and student detail and the per-submission trace are routed pages off the rail. Its own admin JWT auth.
 
 ### Backend — `api/` (FastAPI + Postgres)
 FastAPI (Python 3.12, SQLAlchemy 2 async, Alembic, asyncpg) serving everything under `/v1`. Anthropic Claude for all AI. Auth is JWT + refresh-token rotation (bcrypt, email-OTP MFA, brute-force lockout).

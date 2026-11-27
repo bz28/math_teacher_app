@@ -6,8 +6,7 @@ import { ToastProvider } from "./components/ToastProvider";
 import ServiceStatusBanner from "./components/ServiceStatusBanner";
 import Login from "./pages/Login";
 import LLMCalls from "./pages/LLMCalls";
-import GradingQuality from "./pages/GradingQuality";
-import ExtractionQuality from "./pages/ExtractionQuality";
+import Accuracy from "./pages/Accuracy";
 import Users from "./pages/Users";
 import LeadDetail from "./pages/LeadDetail";
 import Leads from "./pages/Leads";
@@ -60,8 +59,11 @@ export default function App() {
           {/* Diagnostics. */}
           <Route path="/audit-logs" element={<AuditLogs />} />
           <Route path="/llm-calls" element={<LLMCalls />} />
-          <Route path="/grading-quality" element={<GradingQuality />} />
-          <Route path="/extraction-quality" element={<ExtractionQuality />} />
+          <Route path="/accuracy" element={<Accuracy />} />
+          {/* The two quality pages merged into Accuracy's tabs; their old
+              routes land on the matching tab so bookmarks keep working. */}
+          <Route path="/extraction-quality" element={<Navigate to="/accuracy" replace />} />
+          <Route path="/grading-quality" element={<Navigate to="/accuracy?tab=grading" replace />} />
           <Route path="/assignments/:id" element={<AssignmentDetail />} />
           <Route
             path="/submissions/:submissionId/trace"

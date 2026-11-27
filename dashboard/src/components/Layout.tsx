@@ -27,8 +27,7 @@ const DEBUG: NavItem[] = [
   // first step of the drill and should still light up Schools.
   { to: "/schools", label: "Schools" },
   { to: "/reports", label: "Teacher reports" },
-  // Accuracy is extraction quality until the merged page lands.
-  { to: "/extraction-quality", label: "Accuracy" },
+  { to: "/accuracy", label: "Accuracy" },
 ];
 
 const FOOT: NavItem[] = [

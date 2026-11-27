@@ -137,6 +137,8 @@ async def seeded() -> dict[str, Any]:
         return {
             "admin_token": create_access_token(str(admin.id), "admin"),
             "student_token": create_access_token(str(student.id), "student"),
+            "math_submission": str(sub_m.id),
+            "chem_submission": str(sub_c.id),
         }
 
 
@@ -157,6 +159,13 @@ async def test_returns_only_overridden_cases(
     assert first["delta"] == 100.0
     assert first["subject"] == "math"
     assert first["course"] == "Algebra I"
+    # Each case names the submission and problem it came from, so the
+    # console can open it in the case file at `#p{position}`.
+    assert first["submission_id"] == seeded["math_submission"]
+    assert first["position"] == 1
+    second = data["cases"][1]
+    assert second["submission_id"] == seeded["chem_submission"]
+    assert second["position"] == 1
 
 
 async def test_subject_filter_narrows(

@@ -1,27 +1,30 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   api,
   type ExtractionQualityData,
   type ExtractionCase,
   type ExtractionDetail,
   type ExtractionBucket,
-} from "../lib/api";
-import { scopeParams, useSchoolScope } from "../lib/useSelectedSchool";
-import StatTile from "../components/StatTile";
-import StatusPill from "../components/StatusPill";
-import DataTable, { type Column } from "../components/DataTable";
-import ErrorState from "../components/ErrorState";
-import { EditorialModal } from "../components/EditorialModal";
-import ExtractionReadout from "../components/ExtractionReadout";
-import { Pagination } from "../components/Pagination";
-import { BOARD_PAGE_SIZE } from "../lib/pagination";
-import { MetaChip } from "../components/MetaChip";
-import { formatRelativeDate } from "../lib/format";
-import { windowLabel } from "../lib/definitions";
-import { SUBJECT_LABEL } from "../lib/quality";
+} from "../../lib/api";
+import { scopeParams, useSchoolScope } from "../../lib/useSelectedSchool";
+import StatTile from "../../components/StatTile";
+import StatusPill from "../../components/StatusPill";
+import DataTable, { type Column } from "../../components/DataTable";
+import ErrorState from "../../components/ErrorState";
+import { EditorialModal } from "../../components/EditorialModal";
+import ExtractionReadout from "../../components/ExtractionReadout";
+import { Pagination } from "../../components/Pagination";
+import { BOARD_PAGE_SIZE } from "../../lib/pagination";
+import { MetaChip } from "../../components/MetaChip";
+import { formatRelativeDate } from "../../lib/format";
+import { windowLabel } from "../../lib/definitions";
+import { SUBJECT_LABEL } from "../../lib/quality";
+import { caseFilePath } from "../../lib/anchor";
+import TabIntro, { type AccuracyTabProps } from "./TabIntro";
 
 // ────────────────────────────────────────────────────────────────────
-// Handwriting extraction quality — scoring the Vision read.
+// Handwriting — scoring the Vision read (the Accuracy page's first tab).
 //
 // This page answers "can the AI read a student's handwriting", and the
 // judge is the one person who knows for certain: the student who wrote
@@ -98,19 +101,32 @@ function DetailModal({ id, onClose }: { id: string; onClose: () => void }) {
       <div style={{ padding: "18px 30px 30px" }}>
         {error && <p className="empty-mini">{error}</p>}
         {!detail && !error && <p className="loading">Loading…</p>}
-        {detail && <ExtractionReadout detail={detail} />}
+        {detail && (
+          <>
+            <Link className="link-btn" to={caseFilePath(id)} style={{ display: "inline-block", marginBottom: 14 }}>
+              Open the case file →
+            </Link>
+            <ExtractionReadout detail={detail} />
+          </>
+        )}
       </div>
     </EditorialModal>
   );
 }
 
-export default function ExtractionQuality() {
+export default function HandwritingTab({ hours, windowSelect }: AccuracyTabProps) {
   const [data, setData] = useState<ExtractionQualityData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
-  const [hours, setHours] = useState("2160");
   const [bucket, setBucket] = useState("");
   const [offset, setOffset] = useState(0);
+  // A new window is a new list: back to its first page. Adjusted during
+  // render (not in an effect) so no fetch goes out for the stale offset.
+  const [offsetHours, setOffsetHours] = useState(hours);
+  if (offsetHours !== hours) {
+    setOffsetHours(hours);
+    setOffset(0);
+  }
   // Which page the rows on screen are, or null while none is loaded for
   // the offset being asked about — see Users.tsx.
   const [loadedOffset, setLoadedOffset] = useState<number | null>(null);
@@ -139,14 +155,14 @@ export default function ExtractionQuality() {
 
   const cols: Column<ExtractionCase>[] = useMemo(() => [
     {
-      key: "bucket", header: "Outcome", width: "18%",
+      key: "bucket", header: "Outcome", width: "17%",
       sortValue: (c) => c.bucket,
       render: (c) => (
         <StatusPill tone={BUCKET_META[c.bucket].tone} label={BUCKET_META[c.bucket].label} />
       ),
     },
     {
-      key: "course", header: "Course", width: "34%",
+      key: "course", header: "Course", width: "29%",
       sortValue: (c) => c.course,
       render: (c) => (
         <div style={{ minWidth: 0 }}>
@@ -162,7 +178,7 @@ export default function ExtractionQuality() {
       ),
     },
     {
-      key: "corrected_rows", header: "Rows fixed", numeric: true, width: "16%",
+      key: "corrected_rows", header: "Rows fixed", numeric: true, width: "13%",
       sortValue: (c) => c.corrected_rows,
       render: (c) => (
         <span className="num" style={{ color: c.corrected_rows > 0 ? "var(--warn)" : "var(--muted-2)" }}>
@@ -171,17 +187,33 @@ export default function ExtractionQuality() {
       ),
     },
     {
-      key: "steps_read", header: "Rows read", numeric: true, width: "14%",
+      key: "steps_read", header: "Rows read", numeric: true, width: "12%",
       sortValue: (c) => c.steps_read,
       render: (c) => <span className="num" style={{ color: "var(--muted)" }}>{c.steps_read}</span>,
     },
     {
-      key: "ruled_at", header: "Judged", numeric: true, width: "18%",
+      key: "ruled_at", header: "Judged", numeric: true, width: "14%",
       sortValue: (c) => (c.ruled_at ? new Date(c.ruled_at).getTime() : 0),
       render: (c) => (
         <span style={{ color: "var(--muted)", fontSize: 12.5 }}>
           {c.ruled_at ? formatRelativeDate(c.ruled_at) : "—"}
         </span>
+      ),
+    },
+    {
+      // The row opens the read side by side (the drill-in); this opens the
+      // whole case — photo, read, grade, every call — on its own page.
+      key: "case_file", header: "", align: "right", width: "15%",
+      render: (c) => (
+        <Link
+          className="link-btn"
+          to={caseFilePath(c.submission_id)}
+          // The row's own click opens the drill-in; a click here is a
+          // different destination, so it must not also fire that.
+          onClick={(e) => e.stopPropagation()}
+        >
+          Case file
+        </Link>
       ),
     },
   ], []);
@@ -198,26 +230,17 @@ export default function ExtractionQuality() {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 24 }}>
-        <div className="page-header" style={{ marginBottom: 0 }}>
-          <span className="eyebrow">Diagnostic</span>
-          <h1>Handwriting extraction quality</h1>
-          <p>
-            How well the AI reads a photo of handwritten work — scored by the
-            student who wrote it. Everything downstream, including the grade,
-            rests on this read being right.
-          </p>
-        </div>
-        <StatusPill tone="info" label="STUDENT SIGNAL" title="The student who wrote the page is the ground truth for what it says" />
-      </div>
+      <TabIntro
+        pill={<StatusPill tone="info" label="STUDENT SIGNAL" title="The student who wrote the page is the ground truth for what it says" />}
+      >
+        How well the AI reads a photo of handwritten work — scored by the
+        student who wrote it. Everything downstream, including the grade,
+        rests on this read being right. Click a read to compare it with the
+        student's corrections, or open its case file.
+      </TabIntro>
 
       <div className="filters">
-        <select value={hours} onChange={(e) => { setOffset(0); setHours(e.target.value); }}>
-          <option value="168">Last 7 days</option>
-          <option value="720">Last 30 days</option>
-          <option value="2160">Last 90 days</option>
-          <option value="87600">All time</option>
-        </select>
+        {windowSelect}
         <select value={bucket} onChange={(e) => { setOffset(0); setBucket(e.target.value); }}>
           <option value="">All outcomes</option>
           <option value="flagged">Flagged only</option>
