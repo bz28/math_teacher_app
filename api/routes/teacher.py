@@ -5,6 +5,7 @@ from fastapi import APIRouter
 from api.routes.teacher_assignments import router as assignments_router
 from api.routes.teacher_courses import router as courses_router
 from api.routes.teacher_documents import router as documents_router
+from api.routes.teacher_drafts import router as drafts_router
 from api.routes.teacher_grades import router as grades_router
 from api.routes.teacher_insights import router as insights_router
 from api.routes.teacher_practice_activity import router as practice_activity_router
@@ -18,6 +19,7 @@ from api.routes.teacher_visibility import router as visibility_router
 router = APIRouter(prefix="/teacher", tags=["teacher"])
 
 router.include_router(courses_router)
+router.include_router(drafts_router)
 router.include_router(sections_router)
 router.include_router(documents_router)
 router.include_router(units_router)

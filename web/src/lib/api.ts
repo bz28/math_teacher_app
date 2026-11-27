@@ -13,6 +13,7 @@ import type { components } from "./api-schema.gen";
 import { stablePhotoUrls } from "./submission-photos.ts";
 
 type Schemas = components["schemas"];
+export type DraftHomework = Schemas["DraftHomework"];
 
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/v1";
 const DEFAULT_TIMEOUT = 15_000;
@@ -1890,6 +1891,11 @@ export const teacher = {
     return apiFetch<{ items: NeedsAttentionItem[]; total: number }>(
       "/teacher/needs-attention",
     );
+  },
+  /** The teacher's draft homework, most recently edited first (a few;
+   *  `total` counts them all). Home's "Drafts in progress". */
+  drafts() {
+    return apiFetch<Schemas["Drafts"]>("/teacher/drafts");
   },
   /** Grades tab roster — one row per (student × section). Only
    *  counts HWs that are published, assigned, and past due. */

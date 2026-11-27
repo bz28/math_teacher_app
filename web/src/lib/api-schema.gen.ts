@@ -3656,6 +3656,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/teacher/drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Drafts
+         * @description This teacher's draft homework in courses that aren't archived,
+         *     most recently edited first.
+         */
+        get: operations["list_drafts_v1_teacher_drafts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/teacher/integrity/submissions/{submission_id}": {
         parameters: {
             query?: never;
@@ -4982,6 +5003,36 @@ export interface components {
              * @default
              */
             reason: string;
+        };
+        /** DraftHomework */
+        DraftHomework: {
+            /**
+             * Assignment Id
+             * Format: uuid
+             */
+            assignment_id: string;
+            /**
+             * Course Id
+             * Format: uuid
+             */
+            course_id: string;
+            /** Course Name */
+            course_name: string;
+            /** Due At */
+            due_at: string | null;
+            /** Pending Review */
+            pending_review: number;
+            /** Problem Count */
+            problem_count: number;
+            /** Title */
+            title: string;
+        };
+        /** Drafts */
+        Drafts: {
+            /** Drafts */
+            drafts: components["schemas"]["DraftHomework"][];
+            /** Total */
+            total: number;
         };
         /** EntitlementLimits */
         EntitlementLimits: {
@@ -13567,6 +13618,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_drafts_v1_teacher_drafts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Drafts"];
                 };
             };
         };

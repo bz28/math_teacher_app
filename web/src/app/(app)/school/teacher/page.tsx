@@ -11,6 +11,7 @@ import { TOUR_ACTIONS, TOUR_IDS, useTour, useTourAction } from "@/components/tou
 import { StatusPill } from "@/components/school/teacher/_pieces/status-pill";
 import { SubjectChip } from "@/components/school/teacher/_pieces/subject-chip";
 import { NeedsYouQueue } from "@/components/school/teacher/_pieces/needs-you-queue";
+import { DraftsInProgress } from "@/components/school/teacher/_pieces/drafts-in-progress";
 import { Modal, Select } from "@/components/ui";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -154,6 +155,7 @@ export default function SchoolTeacherDashboard() {
           the teacher actually has courses; a brand-new teacher gets the
           onboarding empty state above instead. */}
       {courses.length > 0 && <NeedsYouQueue />}
+      {courses.length > 0 && <DraftsInProgress />}
 
       {courses.length > 0 && (
       <motion.div
