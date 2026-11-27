@@ -12,13 +12,15 @@ One row per homework × section. `problems` maps a flagged problem's
 bank-item id to what was written for it:
 
     {"input_key":  sha256 of exactly what the model was given,
+     "n_items":    how many students' feedback that was,
      "reasons":    [{"label": str, "submission_ids": [str, ...]}] | None,
      "attempts":   failed calls on this input_key,
      "prompt_version": "reteach_reasons@v1"}
 
-`reasons` is None until a call succeeds. `grades_signature` is the
-approved / published grade state the row last caught up with: the drain
-only revisits a pair once that state moves.
+`reasons` is None until a call succeeds; a failing input is tracked as
+`failed_key` / `attempts` beside the last good read. `grades_signature`
+is the counted-grade state the row last caught up with: the drain only
+revisits a pair once that state moves.
 """
 
 import uuid

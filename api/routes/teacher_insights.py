@@ -38,7 +38,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.audit_log import log_student_record_access
 from api.core.grading_queue import EXTRACTION_GRACE
-from api.core.insights_counting import FLAG_MIN_COUNTED, counted_breakdown, is_flagged, tally
+from api.core.insights_counting import FLAG_MIN_COUNTED, counted_breakdown, is_flagged, missed_full_credit, tally
 from api.core.integrity_ai import UNREADABLE_THRESHOLD
 from api.core.reteach_reasons import MAX_ATTEMPTS as REASON_MAX_ATTEMPTS
 from api.database import get_db
@@ -367,7 +367,14 @@ async def _problems_for(
         )
     )).scalar_one_or_none() or {}
     flagged = {pid for pid, (c, m) in counts.items() if is_flagged(c, m)}
-    reasons = await _reasons_for({pid: stored.get(pid) for pid in flagged}, section_id, db)
+    # Who's still short of full credit on each flagged problem right now:
+    # a reason never names a student whose grade has since been raised.
+    missed_by: dict[str, set[uuid.UUID]] = {pid: set() for pid in flagged}
+    for (a_id, sid), counted in by_hw_student.items():
+        for e in counted or () if a_id == hw.id else ():
+            if (pid := str(e.get("problem_id"))) in missed_by and missed_full_credit(e):
+                missed_by[pid].add(sid)
+    reasons = await _reasons_for({pid: stored.get(pid) for pid in flagged}, missed_by, section_id, db)
 
     return [
         InsightsProblem(
@@ -394,10 +401,12 @@ def _reasons_pending(entry: Any) -> bool:
 
 
 async def _reasons_for(
-    entries: dict[str, Any], section_id: uuid.UUID, db: AsyncSession,
+    entries: dict[str, Any], missed_by: dict[str, set[uuid.UUID]], section_id: uuid.UUID, db: AsyncSession,
 ) -> dict[str, list[InsightsReason]]:
     """Stored reasons per flagged problem, each with the students behind
-    it. A stored submission resolves only while it's still a non-preview
+    it who are still short of full credit on it (`missed_by`; the drain
+    rewrites the reasons themselves). A stored submission resolves only
+    while it's still a non-preview
     submission in this section, so a reason never names anyone else."""
     written = {
         pid: [r for r in e["reasons"] if isinstance(r, dict)]
@@ -429,8 +438,12 @@ async def _reasons_for(
     for pid, rs in written.items():
         reasons = []
         for r in rs:
-            who = [students[s] for s in dict.fromkeys(str(x) for x in r.get("submission_ids") or ()) if s in students]
+            who = [
+                students[s] for s in dict.fromkeys(str(x) for x in r.get("submission_ids") or ())
+                if s in students and students[s].id in missed_by.get(pid, set())
+            ]
             if who and isinstance(r.get("label"), str) and r["label"].strip():
+                who.sort(key=lambda st: st.name.casefold())
                 reasons.append(InsightsReason(label=r["label"].strip(), count=len(who), students=who))
         out[pid] = sorted(reasons, key=lambda r: -r.count)
     return out

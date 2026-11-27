@@ -79,18 +79,24 @@ def test_parse_maps_numbers_to_submissions_once_each() -> None:
 
 def test_needs_call() -> None:
     k = "k1"
-    assert rr.needs_call(None, k, drafts_waiting=True)  # first flag: always
-    done = {"input_key": k, "reasons": []}
-    assert not rr.needs_call(done, k, drafts_waiting=False)
-    # Input moved: rewrite once the drafts are approved, not before.
-    assert rr.needs_call(done, "k2", drafts_waiting=False)
-    assert not rr.needs_call(done, "k2", drafts_waiting=True)
+    assert rr.needs_call(None, k, 3, drafts_waiting=True)  # first flag: always
+    done = {"input_key": k, "reasons": [{"label": "x"}], "n_items": 4}
+    assert not rr.needs_call(done, k, 4, drafts_waiting=False)
+    # Input moved: rewrite once that problem's drafts are approved...
+    assert rr.needs_call(done, "k2", 5, drafts_waiting=False)
+    assert not rr.needs_call(done, "k2", 7, drafts_waiting=True)
+    # ...or sooner, once the class behind the read has doubled.
+    assert rr.needs_call(done, "k2", 8, drafts_waiting=True)
+    # A read with no feedback to group yet takes the first feedback at once.
+    empty = {"input_key": k, "reasons": [], "n_items": 0}
+    assert rr.needs_call(empty, "k2", 1, drafts_waiting=True)
+    assert not rr.needs_call(empty, "k2", 0, drafts_waiting=True)
     # Failed with no read yet: retry, up to MAX_ATTEMPTS on one input.
     failing = {"failed_key": k, "attempts": rr.MAX_ATTEMPTS - 1}
-    assert rr.needs_call(failing, k, drafts_waiting=True)
+    assert rr.needs_call(failing, k, 3, drafts_waiting=True)
     gave_up = {"failed_key": k, "attempts": rr.MAX_ATTEMPTS}
-    assert not rr.needs_call(gave_up, k, drafts_waiting=False)
-    assert rr.needs_call(gave_up, "k2", drafts_waiting=False)
+    assert not rr.needs_call(gave_up, k, 3, drafts_waiting=False)
+    assert rr.needs_call(gave_up, "k2", 3, drafts_waiting=False)
 
 
 # ── A period with a flagged problem ────────────────────────────────
@@ -323,6 +329,93 @@ async def test_a_reason_never_names_a_student_from_elsewhere(client: AsyncClient
         await s.commit()
     names = {s["name"] for r in (await _insights(client, w))["problems"][0]["reasons"] for s in r["students"]}
     assert "Gus" not in names and "Preview" not in names
+
+
+async def _edit(w: dict[str, Any], name: str, entry: dict[str, Any]) -> None:
+    """What PATCH /grade does to a grade she already approved: the
+    breakdown and `graded_at` change, the approval stamp doesn't."""
+    async with get_session_factory()() as s:
+        g = (await s.execute(select(SubmissionGrade).where(
+            SubmissionGrade.submission_id == w["subs"][name]))).scalar_one()
+        g.breakdown = [entry]
+        g.graded_at = datetime.now(UTC)
+        await s.commit()
+
+
+async def test_an_edit_after_approval_rewrites_the_reasons(client: AsyncClient, model: FakeModel) -> None:
+    w = await _world()
+    await _flagged_period(w)
+    await rr.refresh_reteach_reasons(limit=1000)
+    assert len(_mine(model, w)) == 1
+
+    # She raises Ana to full credit on a grade she'd already approved.
+    await _edit(w, "Ana", _entry(w["pid"], "full", "Ana-note fixed"))
+    # The read stops naming Ana at once, before the drain comes round.
+    names = {s["name"] for r in (await _insights(client, w))["problems"][0]["reasons"] for s in r["students"]}
+    assert "Ana" not in names and "Ben" in names
+    # And the drain rewrites from the new grades.
+    await rr.refresh_reteach_reasons(limit=1000)
+    sent = _mine(model, w)
+    assert len(sent) == 2 and "Ana-note" not in sent[1]
+
+
+async def test_an_edit_that_flags_a_problem_writes_its_reasons(client: AsyncClient, model: FakeModel) -> None:
+    w = await _world()
+    for name in ("A", "B", "C"):
+        await _student(w, name, _entry(w["pid"], "full", None))
+    for name in ("D", "E"):
+        await _student(w, name, _entry(w["pid"], "zero", f"{name}-note"))
+    await rr.refresh_reteach_reasons(limit=1000)
+    assert _mine(model, w) == []  # 2 of 5: not flagged
+    await _edit(w, "A", _entry(w["pid"], "partial", "A-note lowered"))
+    problem = (await _insights(client, w))["problems"][0]
+    assert problem["flagged"] and problem["reasons_pending"]
+    await rr.refresh_reteach_reasons(limit=1000)
+    assert len(_mine(model, w)) == 1
+    assert not (await _insights(client, w))["problems"][0]["reasons_pending"]
+
+
+async def test_a_draft_on_another_problem_never_holds_a_rewrite(client: AsyncClient, model: FakeModel) -> None:
+    w = await _world()
+    await _flagged_period(w)
+    await rr.refresh_reteach_reasons(limit=1000)
+    # An unapproved grade that's about some other problem entirely.
+    await _student(w, "Kit", {**_entry(w["pid"], "zero", "x"), "problem_id": str(uuid.uuid4())}, approved=False)
+    await _student(w, "Jo", _entry(w["pid"], "partial", "Jo-note"))
+    await rr.refresh_reteach_reasons(limit=1000)
+    sent = _mine(model, w)
+    assert len(sent) == 2 and "Jo-note" in sent[1]
+
+
+async def test_a_small_first_read_is_redone_once_the_class_doubles(client: AsyncClient, model: FakeModel) -> None:
+    w = await _world()
+    for name in ("A", "B"):
+        await _student(w, name, _entry(w["pid"], "full", None))
+    for name in ("C", "D", "E"):
+        await _student(w, name, _entry(w["pid"], "zero", f"{name}-note"))
+    await _student(w, "Draft", _entry(w["pid"], "zero", "draft-note"), approved=False)
+    await rr.refresh_reteach_reasons(limit=1000)
+    assert len(_mine(model, w)) == 1  # first read at the flag: 3 students
+    for name in ("F", "G"):
+        await _student(w, name, _entry(w["pid"], "zero", f"{name}-note"))
+    await rr.refresh_reteach_reasons(limit=1000)
+    assert len(_mine(model, w)) == 1  # 5 < 2 × 3, and a draft on it waits
+    await _student(w, "H", _entry(w["pid"], "zero", "H-note"))
+    await rr.refresh_reteach_reasons(limit=1000)
+    sent = _mine(model, w)
+    assert len(sent) == 2 and sent[1].count("\n[") == 6
+
+
+async def test_homework_past_the_active_window_is_left_alone(client: AsyncClient, model: FakeModel) -> None:
+    w = await _world()
+    await _flagged_period(w)
+    async with get_session_factory()() as s:
+        hw = await s.get(Assignment, w["hw"])
+        assert hw is not None
+        hw.due_at = datetime.now(UTC) - rr._ACTIVE_WINDOW - timedelta(days=1)
+        await s.commit()
+    await rr.refresh_reteach_reasons(limit=1000)
+    assert _mine(model, w) == [] and await _stored(w) is None
 
 
 # ── Practiced count and the drain ──────────────────────────────────

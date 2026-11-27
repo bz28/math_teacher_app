@@ -12,17 +12,21 @@ flagged problem.
 
 Never on a page view. The grading drain (`routes/grading_drain`) runs
 `refresh_reteach_reasons` every pass. A homework × section is revisited
-only when its approved or published grades move (`grades_signature`),
-and a flagged problem is written:
+only when its counted grades move (`grades_signature`: how many, and the
+latest approval, publish and save), and a flagged problem is written:
 
 - the first time it's flagged (no reasons stored yet), and
-- again when what it would be given has changed, once no AI draft in the
-  period is waiting on the teacher — i.e. when its grades are approved.
+- again when what it would be given has changed, once no grade on that
+  problem is waiting on the teacher — i.e. when its grades are approved —
+  or sooner if the students behind it have doubled since the last read
+  (the first read lands at the flag, from a handful of students).
 
 So a period whose teacher approves one paper at a time gets a first read
-as soon as the flag appears and one more when she finishes, not a call per
-approval. A call that fails is retried on later passes up to
-`MAX_ATTEMPTS` for the same input, then left alone until the input moves.
+as soon as the flag appears, a few more as the class behind it doubles,
+and one when she finishes — not a call per approval. A call that fails is
+retried on later passes up to `MAX_ATTEMPTS` for the same input, then
+left alone until the input moves. Homework older than `_ACTIVE_WINDOW`
+keeps what it has.
 
 ## What the model sees
 
@@ -40,9 +44,10 @@ import json
 import logging
 import uuid
 from collections import Counter
+from datetime import timedelta
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import Text, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -184,22 +189,30 @@ async def group_reasons(
 # ── Deciding what to write ─────────────────────────────────────────
 
 
-def needs_call(entry: dict[str, Any] | None, key: str, *, drafts_waiting: bool) -> bool:
+def needs_call(entry: dict[str, Any] | None, key: str, n_items: int, *, drafts_waiting: bool) -> bool:
     """Whether a flagged problem's stored entry should be (re)written for
-    the input `key`. See the module docstring."""
+    the input `key` of `n_items` students. See the module docstring."""
     if entry is None:
         return True
     if entry.get("input_key") == key and entry.get("reasons") is not None:
         return False  # already written for exactly this
     if entry.get("failed_key") == key and int(entry.get("attempts") or 0) >= MAX_ATTEMPTS:
         return False  # gave up on this input; a new one tries again
-    if entry.get("reasons") is not None and drafts_waiting:
-        return False  # it has a read; the next waits for her approvals
-    return True
+    if entry.get("reasons") is None:
+        return True  # no read yet
+    had = int(entry.get("n_items") or 0)
+    if had == 0:
+        return n_items > 0  # the first feedback to group
+    # It has a read. The next waits for her approvals on this problem,
+    # unless the class behind it has at least doubled since — the first
+    # read lands at the flag, from a handful of students.
+    return not drafts_waiting or n_items >= 2 * had
 
 
-def _signature(count: int, reviewed: Any, published: Any) -> str:
-    return f"{count}|{reviewed.isoformat() if reviewed else ''}|{published.isoformat() if published else ''}"
+# Homework whose reasons the drain keeps current: due (or, with no due
+# date, created) within this window. Older homework keeps what it has, so
+# an idle pass never scans a whole term of grades.
+_ACTIVE_WINDOW = timedelta(days=180)
 
 
 def _grade_scope() -> Any:
@@ -218,31 +231,44 @@ def _grade_scope() -> Any:
     )
 
 
+def _ts(col: Any) -> Any:
+    return func.coalesce(func.max(col).cast(Text), "")
+
+
 async def _stale_pairs(db: AsyncSession, limit: int) -> list[tuple[uuid.UUID, uuid.UUID, str]]:
-    """Homework × section pairs whose approved / published grades moved
-    since their reasons were last caught up, most recent first."""
-    rows = (await db.execute(
+    """Homework × section pairs whose counted grades moved since their
+    reasons were last caught up, most recent first. The signature counts
+    approved / published grades and their latest approval, publish and
+    save (`graded_at`, stamped by every breakdown save — so an edit to a
+    grade she already approved moves it too). Compared in SQL."""
+    agg = (
         _grade_scope()
         .add_columns(
-            func.count(SubmissionGrade.id).label("n"),
-            func.max(SubmissionGrade.reviewed_at).label("reviewed"),
-            func.max(SubmissionGrade.grade_published_at).label("published"),
+            func.concat_ws(
+                "|", func.count(SubmissionGrade.id).cast(Text), _ts(SubmissionGrade.reviewed_at),
+                _ts(SubmissionGrade.grade_published_at), _ts(SubmissionGrade.graded_at),
+            ).label("sig"),
+            func.greatest(
+                func.max(SubmissionGrade.reviewed_at), func.max(SubmissionGrade.grade_published_at),
+                func.max(SubmissionGrade.graded_at),
+            ).label("latest"),
         )
-        .where(or_(SubmissionGrade.reviewed_at.is_not(None), SubmissionGrade.grade_published_at.is_not(None)))
+        .where(
+            or_(SubmissionGrade.reviewed_at.is_not(None), SubmissionGrade.grade_published_at.is_not(None)),
+            func.coalesce(Assignment.due_at, Assignment.created_at) > func.now() - _ACTIVE_WINDOW,
+        )
         .group_by(Submission.assignment_id, Submission.section_id)
+        .subquery()
+    )
+    rows = (await db.execute(
+        select(agg.c.assignment_id, agg.c.section_id, agg.c.sig)
+        .outerjoin(ReteachReasons, (ReteachReasons.assignment_id == agg.c.assignment_id)
+                   & (ReteachReasons.section_id == agg.c.section_id))
+        .where(ReteachReasons.grades_signature.is_distinct_from(agg.c.sig))
+        .order_by(agg.c.latest.desc().nulls_last())
+        .limit(limit)
     )).all()
-    seen = {
-        (r.assignment_id, r.section_id): r.grades_signature
-        for r in (await db.execute(
-            select(ReteachReasons.assignment_id, ReteachReasons.section_id, ReteachReasons.grades_signature)
-        )).all()
-    }
-    stale = [
-        (r, sig) for r in rows
-        if seen.get((r.assignment_id, r.section_id)) != (sig := _signature(r.n, r.reviewed, r.published))
-    ]
-    stale.sort(key=lambda x: max(t for t in (x[0].reviewed, x[0].published) if t is not None), reverse=True)
-    return [(r.assignment_id, r.section_id, sig) for r, sig in stale[:limit]]
+    return [(r.assignment_id, r.section_id, r.sig) for r in rows]
 
 
 async def _refresh_pair(
@@ -282,13 +308,16 @@ async def _refresh_pair(
         .where(Submission.assignment_id == assignment_id, Submission.section_id == section_id)
     )).all()
     counted = {str(g.submission_id): counted_breakdown(g) for g in grades}
-    # An AI draft she hasn't approved yet, fresh or a regrade over a
-    # published grade — the same draft `_coverage_bucket` calls "to approve".
-    drafts_waiting = any(
-        g.reviewed_at is None and isinstance(g.breakdown, list) and g.breakdown
-        and g.breakdown != g.published_breakdown
+    # Problems with a grade she hasn't approved yet — an AI draft, fresh or
+    # a regrade over a published grade, or a hand grade still being
+    # filled in — that has an entry for the problem.
+    waiting_on: set[str] = {
+        str(e.get("problem_id"))
         for g in grades
-    )
+        if g.reviewed_at is None and isinstance(g.breakdown, list) and g.breakdown != g.published_breakdown
+        for e in g.breakdown
+        if isinstance(e, dict)
+    }
 
     problems: dict[str, Any] = dict(row.problems or {})
     settled = True
@@ -303,10 +332,11 @@ async def _refresh_pair(
         )
         key = _input_key(questions[pid], items)
         entry = problems.get(pid)
-        if not needs_call(entry, key, drafts_waiting=drafts_waiting):
+        if not needs_call(entry, key, len(items), drafts_waiting=pid in waiting_on):
             continue
+        written = {"input_key": key, "n_items": len(items), "prompt_version": prompt_version(_PROMPT)}
         if not items:
-            problems[pid] = {"input_key": key, "reasons": [], "prompt_version": prompt_version(_PROMPT)}
+            problems[pid] = {**written, "reasons": []}
             continue
         try:
             reasons = await group_reasons(
@@ -321,7 +351,7 @@ async def _refresh_pair(
             settled = settled and attempts >= MAX_ATTEMPTS
             tally_out["failed"] += 1
             continue
-        problems[pid] = {"input_key": key, "reasons": reasons, "prompt_version": prompt_version(_PROMPT)}
+        problems[pid] = {**written, "reasons": reasons}
         tally_out["written"] += 1
 
     row.problems = problems
