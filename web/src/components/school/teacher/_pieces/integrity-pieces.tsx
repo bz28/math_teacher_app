@@ -438,11 +438,17 @@ function formatResolvedAt(iso: string): string {
 /** How long the Undo toast after a resolve stays up (unhovered). */
 export const RESOLVE_UNDO_MS = 8000;
 
+// The live Undo toast per submission. The server undoes only the
+// LATEST resolve, so a newer resolve retires the older toast rather
+// than leave an Undo that would no longer do what it said.
+const undoToastBySubmission = new Map<string, number>();
+
 /** The teacher's "I handled this" control. Unresolved: the outcomes as
  *  chips, so one click resolves. Resolved: a quiet Reviewed chip whose
  *  Change reopens the chips (with Cancel). Every resolve raises an Undo
- *  toast for RESOLVE_UNDO_MS that puts back the previous resolution
- *  (unresolved, or the outcome Change replaced). Only ever sets the
+ *  toast for RESOLVE_UNDO_MS; the server puts back exactly what that
+ *  resolve replaced (unresolved, or the earlier outcome with its
+ *  original who/when). Only ever sets the
  *  check's resolution — never the AI's verdict, and never the grade. */
 export function ResolveIntegrityControl({
   submissionId,
@@ -471,27 +477,35 @@ export function ResolveIntegrityControl({
     useState<IntegrityResolutionOutcome | null>(null);
   const [error, setError] = useState(false);
 
-  async function undo(previous: IntegrityResolution) {
+  async function undo() {
+    undoToastBySubmission.delete(submissionId);
     try {
-      await teacher.resolveIntegrity(submissionId, previous);
-      latestOnResolved.current(previous);
+      const { resolution: restored } = await teacher.undoResolveIntegrity(submissionId);
+      latestOnResolved.current(restored);
     } catch {
-      toast.error("Couldn't undo. Use Change on the card to set it back.");
+      toast.error("Couldn't undo the review.", {
+        durationMs: RESOLVE_UNDO_MS,
+        action: { label: "Retry", onAction: () => void undo() },
+      });
     }
   }
 
   async function resolve(outcome: IntegrityResolutionOutcome) {
-    const previous = resolution;
     setSubmitting(outcome);
     setError(false);
     try {
       await teacher.resolveIntegrity(submissionId, outcome);
       setPicking(false);
       onResolved(outcome);
-      toast.success(`Marked reviewed · ${RESOLUTION_LABEL[outcome]}`, {
-        durationMs: RESOLVE_UNDO_MS,
-        action: { label: "Undo", onAction: () => void undo(previous) },
-      });
+      const older = undoToastBySubmission.get(submissionId);
+      if (older !== undefined) toast.dismiss(older);
+      undoToastBySubmission.set(
+        submissionId,
+        toast.success(`Marked reviewed · ${RESOLUTION_LABEL[outcome]}`, {
+          durationMs: RESOLVE_UNDO_MS,
+          action: { label: "Undo", onAction: () => void undo() },
+        }),
+      );
     } catch {
       setError(true);
     } finally {

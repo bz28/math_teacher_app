@@ -3723,10 +3723,33 @@ export interface paths {
          *     submission stops showing as flagged forever. Owner-of-course gated,
          *     like the other teacher integrity endpoints. Idempotent: re-resolving
          *     with a new outcome just updates the outcome and re-stamps who/when.
-         *     "unresolved" (Undo right after a resolve) puts the check back in the
-         *     flagged aggregate with no resolver recorded. Never touches a grade.
+         *     Remembers what it replaced so `.../resolve/undo` can put it back.
+         *     Never touches a grade.
          */
         post: operations["teacher_resolve_integrity_v1_teacher_integrity_submissions__submission_id__resolve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/teacher/integrity/submissions/{submission_id}/resolve/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Teacher Undo Resolve Integrity
+         * @description Undo the latest resolve: put back exactly what it replaced — the
+         *     outcome and who/when, or unresolved with no resolver. One level:
+         *     a second undo (or an undo with no resolve to undo) is a 409. Never
+         *     touches the AI's disposition or a grade.
+         */
+        post: operations["teacher_undo_resolve_integrity_v1_teacher_integrity_submissions__submission_id__resolve_undo_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -5918,15 +5941,14 @@ export interface components {
          * @description Teacher's session-level resolution of an integrity check. The
          *     outcome is what the teacher decided after reviewing — it does NOT
          *     change the AI's disposition. All three outcomes clear the flag from
-         *     the roster's needs-attention aggregate. "unresolved" is the teacher's
-         *     Undo: it reopens the check and clears who/when.
+         *     the roster's needs-attention aggregate.
          */
         ResolveRequest: {
             /**
              * Resolution
              * @enum {string}
              */
-            resolution: "unresolved" | "cleared" | "confirmed_concern" | "contacted";
+            resolution: "cleared" | "confirmed_concern" | "contacted";
         };
         /** RespondRequest */
         RespondRequest: {
@@ -6928,6 +6950,15 @@ export interface components {
             pauses_over_3s: number;
             /** Total Ms */
             total_ms: number;
+        };
+        /**
+         * UndoResolveOut
+         * @description The resolution the undo put back ("unresolved" when the check had
+         *     never been resolved before).
+         */
+        UndoResolveOut: {
+            /** Resolution */
+            resolution: string;
         };
         /** UpdateAssignmentRequest */
         UpdateAssignmentRequest: {
@@ -13659,6 +13690,37 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    teacher_undo_resolve_integrity_v1_teacher_integrity_submissions__submission_id__resolve_undo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                submission_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UndoResolveOut"];
+                };
             };
             /** @description Validation Error */
             422: {

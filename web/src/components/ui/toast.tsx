@@ -35,11 +35,13 @@ interface Toast {
   action?: ToastAction;
 }
 
+/** Each call returns the toast's id, which `dismiss` takes. */
 interface ToastAPI {
-  success: (message: string, opts?: ToastOptions) => void;
-  error: (message: string, opts?: ToastOptions) => void;
-  warning: (message: string, opts?: ToastOptions) => void;
-  info: (message: string, opts?: ToastOptions) => void;
+  success: (message: string, opts?: ToastOptions) => number;
+  error: (message: string, opts?: ToastOptions) => number;
+  warning: (message: string, opts?: ToastOptions) => number;
+  info: (message: string, opts?: ToastOptions) => number;
+  dismiss: (id: number) => void;
 }
 
 const DEFAULT_DURATION_MS = 4000;
@@ -115,6 +117,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       if (opts?.durationMs) durations.current.set(id, opts.durationMs);
       setToasts((prev) => [...prev, { id, message, variant, action: opts?.action }]);
       schedule(id);
+      return id;
     },
     [schedule],
   );
@@ -142,6 +145,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     error: (m, o) => push("error", m, o),
     warning: (m, o) => push("warning", m, o),
     info: (m, o) => push("info", m, o),
+    dismiss,
   };
 
   return (

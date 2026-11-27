@@ -5,6 +5,7 @@ the AI's disposition or the grade."""
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 from httpx import AsyncClient
@@ -12,6 +13,7 @@ from sqlalchemy import select
 
 from api.database import get_session_factory
 from api.models.assignment import SubmissionGrade
+from api.models.integrity_check import IntegrityCheckSubmission
 from tests.conftest import auth_headers as _auth
 from tests.conftest import make_text, set_agent_script
 from tests.test_integrity_check import _submit
@@ -70,27 +72,27 @@ async def test_teacher_resolve_records_outcome_and_is_idempotent(
     r = await client.post(
         f"/v1/teacher/integrity/submissions/{submission_id}/resolve",
         headers=_auth(world["teacher_token"]),
-        json={"resolution": "approved"},
+        json={"resolution": "unresolved"},
     )
     assert r.status_code == 422
 
 
-async def test_teacher_undo_reopens_the_check_without_touching_the_grade(
+async def test_teacher_undo_puts_back_exactly_what_the_resolve_replaced(
     client: AsyncClient, world: dict[str, Any]
 ) -> None:
-    """Undo (resolution "unresolved") puts the check back exactly as it
-    was before any resolve: unresolved, no resolver, no timestamp — and
-    the AI disposition and the grade's approval/publish state are never
-    touched by resolving or undoing."""
+    """Undo restores the state before the latest resolve: from a fresh
+    check, unresolved with no resolver; after a Change, the earlier
+    outcome WITH its original who/when (not re-stamped). One level only:
+    a second undo is a 409. Resolving and undoing never touch the AI
+    disposition or the grade's approval/publish state."""
     set_agent_script([[make_text("Opener.")]])
     r = await _submit(client, world)
     submission_id = r.json()["submission_id"]
+    url = f"/v1/teacher/integrity/submissions/{submission_id}"
+    headers = _auth(world["teacher_token"])
 
     async def detail() -> dict[str, Any]:
-        return (await client.get(
-            f"/v1/teacher/integrity/submissions/{submission_id}",
-            headers=_auth(world["teacher_token"]),
-        )).json()
+        return (await client.get(url, headers=headers)).json()
 
     async def grade_state() -> tuple[Any, Any]:
         async with get_session_factory()() as s:
@@ -98,19 +100,43 @@ async def test_teacher_undo_reopens_the_check_without_touching_the_grade(
                 SubmissionGrade.submission_id == uuid.UUID(submission_id)))).scalar_one_or_none()
             return (g.reviewed_at, g.grade_published_at) if g else (None, None)
 
-    before = await detail()
-    grade_before = await grade_state()
-    for resolution in ("confirmed_concern", "unresolved"):
-        r = await client.post(
-            f"/v1/teacher/integrity/submissions/{submission_id}/resolve",
-            headers=_auth(world["teacher_token"]),
-            json={"resolution": resolution},
-        )
+    async def resolve(outcome: str) -> None:
+        r = await client.post(f"{url}/resolve", headers=headers, json={"resolution": outcome})
         assert r.status_code == 204, r.text
 
+    before = await detail()
+    grade_before = await grade_state()
+
+    # Nothing to undo yet.
+    assert (await client.post(f"{url}/resolve/undo", headers=headers)).status_code == 409
+
+    # Fresh check → resolve → undo: back to unresolved, no resolver.
+    await resolve("confirmed_concern")
+    r = await client.post(f"{url}/resolve/undo", headers=headers)
+    assert r.status_code == 200, r.text
+    assert r.json() == {"resolution": "unresolved"}
     after = await detail()
     assert after["resolution"] == "unresolved"
     assert after["resolved_by_name"] is None
     assert after["resolved_at"] is None
-    assert after["disposition"] == before["disposition"]
+    # One level only.
+    assert (await client.post(f"{url}/resolve/undo", headers=headers)).status_code == 409
+
+    # Resolved last week (say, by a co-teacher) → Change → undo: the old
+    # outcome comes back with its original timestamp, not "now".
+    await resolve("contacted")
+    async with get_session_factory()() as s:
+        check = (await s.execute(select(IntegrityCheckSubmission).where(
+            IntegrityCheckSubmission.submission_id == uuid.UUID(submission_id)))).scalar_one()
+        old_at = datetime(2026, 11, 19, 15, 0, tzinfo=UTC)
+        check.resolved_at = old_at
+        await s.commit()
+    await resolve("cleared")
+    r = await client.post(f"{url}/resolve/undo", headers=headers)
+    assert r.json() == {"resolution": "contacted"}
+    restored = await detail()
+    assert restored["resolution"] == "contacted"
+    assert datetime.fromisoformat(restored["resolved_at"]) == old_at
+
+    assert restored["disposition"] == before["disposition"]
     assert await grade_state() == grade_before
