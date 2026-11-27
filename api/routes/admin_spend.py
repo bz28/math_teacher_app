@@ -23,7 +23,7 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import ColumnElement, and_, func, or_, select
+from sqlalchemy import ColumnElement, and_, exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.llm_attribution import call_owners, school_calls
@@ -64,9 +64,10 @@ def _spend() -> Any:
     return func.coalesce(func.sum(LLMCall.cost_usd), 0.0)
 
 
-def customer_calls() -> ColumnElement[bool]:
-    """Calls a customer's usage caused: stamped with a school, and not a
-    teacher rehearsing their own homework as a preview student."""
+def not_preview() -> ColumnElement[bool]:
+    """Not a teacher rehearsing their own homework as a preview student —
+    by who made the call or whose submission it ran on. Real rows, not a
+    customer's usage."""
     preview_users = select(User.id).where(User.is_preview.is_(True))
     preview_submissions = (
         select(Submission.id)
@@ -74,13 +75,17 @@ def customer_calls() -> ColumnElement[bool]:
         .where(User.is_preview.is_(True))
     )
     return and_(
-        LLMCall.school_id.isnot(None),
         or_(LLMCall.user_id.is_(None), LLMCall.user_id.notin_(preview_users)),
         or_(
             LLMCall.submission_id.is_(None),
             LLMCall.submission_id.notin_(preview_submissions),
         ),
     )
+
+
+def customer_calls() -> ColumnElement[bool]:
+    """Calls a customer's usage caused: stamped with a school, not preview."""
+    return and_(LLMCall.school_id.isnot(None), not_preview())
 
 
 async def _total(db: AsyncSession, conds: list[Any], window: Window) -> float:
@@ -276,9 +281,12 @@ async def _breakdown(
         }
         for r in rows
     ]
+    # NOT EXISTS, not NOT IN: Postgres plans it as an anti-join, where NOT IN
+    # over the owners union degrades to a rescan per row once it outgrows
+    # work_mem.
     nobody = (await db.execute(
         select(func.count().label("calls"), _spend().label("cost"))
-        .where(*conds, LLMCall.id.notin_(select(owners.c.call_id)))
+        .where(*conds, ~exists().where(owners.c.call_id == LLMCall.id))
     )).one()
     if nobody.calls:
         out.append({

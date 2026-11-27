@@ -570,7 +570,7 @@ export default function SchoolDetail() {
 
         {/* Unit economics — cost per active seat over the rolling 30d. */}
         {(costPerStudent !== null || costPerTeacher !== null) && (
-          <div style={{ display: "flex", gap: 40, flexWrap: "wrap", borderTop: "1px solid var(--rule)", paddingTop: 18, marginBottom: trendChartData.length > 1 ? 28 : 0 }}>
+          <div style={{ display: "flex", gap: 40, flexWrap: "wrap", borderTop: "1px solid var(--rule)", paddingTop: 18, marginBottom: trendChartData.some((p) => p.cost > 0) ? 28 : 0 }}>
             {costPerStudent !== null && (
               <UnitEcon label={`Cost / student · ${costWindowLabel()}`} value={fmtCost(costPerStudent)} sub={`${studentCount.toLocaleString()} enrolled`} />
             )}
@@ -580,7 +580,7 @@ export default function SchoolDetail() {
           </div>
         )}
 
-        {trendChartData.length > 1 && (
+        {trendChartData.some((p) => p.cost > 0) && (
           <div style={{ borderTop: "1px solid var(--rule)", paddingTop: 18 }}>
             <h3 style={{ marginBottom: 10 }}>12-week trend</h3>
             <ResponsiveContainer width="100%" height={120}>

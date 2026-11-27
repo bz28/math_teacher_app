@@ -29,6 +29,7 @@ from api.models.section_enrollment import SectionEnrollment
 from api.models.teacher_invite import TeacherInvite
 from api.models.user import User
 from api.routes.admin_helpers import activity_last_action_sq, last_days
+from api.routes.admin_spend import not_preview
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +139,8 @@ async def list_schools(
 
     # Cost in the last 30 days per school. LLMCall.school_id is the
     # denormalized column populated when a submission is processed —
-    # exactly what we want for "what is each school costing us".
+    # exactly what we want for "what is each school costing us". Preview-
+    # as-student work is left out, as on the school's page and Costs.
     cost_30d_q = (
         select(
             LLMCall.school_id,
@@ -146,6 +148,7 @@ async def list_schools(
         )
         .where(
             LLMCall.school_id.isnot(None),
+            not_preview(),
             cost_window.covers(LLMCall.created_at),
         )
         .group_by(LLMCall.school_id)
@@ -161,6 +164,7 @@ async def list_schools(
         )
         .where(
             LLMCall.school_id.isnot(None),
+            not_preview(),
             prev_window.covers(LLMCall.created_at),
         )
         .group_by(LLMCall.school_id)

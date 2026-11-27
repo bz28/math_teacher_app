@@ -263,3 +263,40 @@ async def test_month_projection_and_its_range_from_full_weeks() -> None:
     assert h["projected_low"] == pytest.approx(24.0, abs=1e-3)
     assert h["projected_high"] == pytest.approx(24.0 + 14.0 * remaining_weeks, abs=1e-3)
     assert h["projected_low"] <= h["projected_month_end"] <= h["projected_high"]
+
+
+# --------------------------------------------------------------------------
+# Review round 1 — one school's spend reads the same everywhere
+# --------------------------------------------------------------------------
+
+async def test_school_page_schools_list_and_costs_agree_without_preview(
+    client: AsyncClient,
+) -> None:
+    """Radnor has $5 of customer spend and a $16 preview grading call. The
+    school's page, the Schools list and Costs scoped to Radnor all say $5."""
+    w = await _seed()
+    headers = auth_headers(create_access_token(w.admin_id, "admin"))
+
+    costs = await _get(client, w, school_id=w.radnor_id)
+    overview = (await client.get(
+        f"/v1/admin/schools/{w.radnor_id}/overview", headers=headers,
+    )).json()
+    listed = next(
+        s for s in (await client.get("/v1/admin/schools", headers=headers)).json()["schools"]
+        if s["id"] == w.radnor_id
+    )
+
+    assert costs["headline"]["cost_30d"] == pytest.approx(5.0)
+    assert overview["cost"]["cost_30d"] == pytest.approx(5.0)
+    assert overview["cost"]["this_month"] == pytest.approx(costs["headline"]["this_month"])
+    assert listed["cost_30d"] == pytest.approx(5.0)
+
+
+async def test_not_tied_row_survives_a_call_owned_by_nobody_in_the_role(
+    client: AsyncClient,
+) -> None:
+    """The remainder row sorts last and carries its share of the total."""
+    w = await _seed()
+    body = await _get(client, w, group_by="teacher")
+    assert body["rows"][-1]["key"] is None
+    assert body["rows"][-1]["share"] == pytest.approx(2 / 7, abs=1e-4)

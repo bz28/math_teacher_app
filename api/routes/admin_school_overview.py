@@ -45,7 +45,7 @@ from api.models.llm_call import LLMCall
 from api.models.school import School
 from api.models.section import Section
 from api.routes.admin_helpers import INTERNAL_SCHOOL_SENTINEL
-from api.routes.admin_spend import spend_headline, spend_series
+from api.routes.admin_spend import not_preview, spend_headline, spend_series
 
 router = APIRouter()
 
@@ -89,8 +89,12 @@ async def school_overview(
     # one place the console computes them. The rolling 30d pair is the
     # window the Schools list shows, so a school's KPI strip matches the
     # number the operator clicked in from.
-    headline = await spend_headline(db, [llm_school], now)
-    weekly = await spend_series(db, [llm_school], "week", now)
+    # Preview-as-student work is left out, as the Costs page and the
+    # Schools list leave it out: a teacher rehearsing their own homework
+    # isn't the school's usage.
+    spend = [llm_school] if is_internal else [llm_school, not_preview()]
+    headline = await spend_headline(db, spend, now)
+    weekly = await spend_series(db, spend, "week", now)
 
     # ---------- Health (failed calls — works for both scopes) ----------
     failed_24h = (await db.execute(
