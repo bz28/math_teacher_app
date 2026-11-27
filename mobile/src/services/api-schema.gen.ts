@@ -4478,8 +4478,8 @@ export interface components {
         /**
          * CaseGradingJob
          * @description The submission's grading job as it stands — the queue keeps one
-         *     row per submission and resets it on a regrade, so this is the most
-         *     recent run only.
+         *     row per submission (a reopen resets it; a regrade doesn't touch it),
+         *     so this is its most recent run only.
          */
         CaseGradingJob: {
             /** Attempts */

@@ -199,6 +199,13 @@ export const ACTIVITY_ACTIONS: Record<ActivityFamily, ActivityAction[]> = {
       detail: () => "Sent one submission to AI grading",
     },
     {
+      // Regrade on the review page: the AI grades again against the
+      // current rubric and replaces the live grade.
+      action: "grade.regrade",
+      label: "Regraded with AI",
+      detail: () => "Replaced the grade with a fresh AI pass",
+    },
+    {
       action: "grade.publish",
       label: "Published grades",
       detail: (m) =>

@@ -2654,6 +2654,10 @@ async def regrade_submission(
     skip = await run_ai_grading_for_submission(
         sub.id, extraction, db, user_id=actor_id, force=True,
     )
+    if skip is None:
+        # The grade timeline's record of the AI replacing the grade; the
+        # grading job is untouched by a regrade, so this is the only one.
+        await record_activity(db, current_user, "grade.regrade", "submission", sub.id, {})
     await db.commit()
     if skip == GRADING_STATUS_SKIPPED_TOO_LONG:
         # The grader ran out of output room; any prior grade is untouched.
@@ -2803,6 +2807,9 @@ async def publish_grades(
             # audit trail disagrees with the rows.
             "rows_written": len(rows),
             "reviewed_only": reviewed_only,
+            # Which grades this press released — the case timeline
+            # attaches a publish to a submission by this.
+            "submission_ids": [str(g.submission_id) for g, _ in rows],
         },
     )
     await db.commit()

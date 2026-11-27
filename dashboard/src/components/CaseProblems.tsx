@@ -209,6 +209,7 @@ export default function CaseProblems({
 
 function ProblemDetail({ p, check }: { p: CaseProblem; check: CaseIntegrity | null }) {
   const ip = p.integrity;
+  const hasRead = Boolean(p.reading && (p.reading.steps.length > 0 || p.reading.final_answer));
   const probed = ip && (ip.kind === "probed" || ip.kind === "probed_pending" || ip.kind === "inconclusive" || ip.kind === "unfinished");
   return (
     <div className="cp-detail">
@@ -221,7 +222,7 @@ function ProblemDetail({ p, check }: { p: CaseProblem; check: CaseIntegrity | nu
         <div className="cp-label">
           What the reader got{p.reading?.student_edited ? " · corrected by the student" : ""}
         </div>
-        {p.reading && (p.reading.steps.length > 0 || p.reading.final_answer) ? (
+        {hasRead && p.reading ? (
           <ol className="cp-steps">
             {p.reading.steps.map((l, i) => (
               <li key={i}><ReadLine line={l} /></li>
@@ -233,7 +234,9 @@ function ProblemDetail({ p, check }: { p: CaseProblem; check: CaseIntegrity | nu
         ) : (
           <p className="cp-muted">{p.reading ? "Nothing was read for this problem." : "The reader never ran."}</p>
         )}
-        <a className="cp-link" href={`#read-${problemAnchor(p.position)}`}>See it on the photo ↓</a>
+        <a className="cp-link" href={hasRead ? `#read-${problemAnchor(p.position)}` : "#student-work"}>
+          {hasRead ? "See it on the photo ↓" : "See the photo ↓"}
+        </a>
       </div>
       <div className="cp-detail-col">
         <div className="cp-label">The AI's grade</div>

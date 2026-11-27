@@ -519,7 +519,7 @@
         "type": "object"
       },
       "CaseGradingJob": {
-        "description": "The submission's grading job as it stands \u2014 the queue keeps one\nrow per submission and resets it on a regrade, so this is the most\nrecent run only.",
+        "description": "The submission's grading job as it stands \u2014 the queue keeps one\nrow per submission (a reopen resets it; a regrade doesn't touch it),\nso this is its most recent run only.",
         "properties": {
           "attempts": {
             "title": "Attempts",

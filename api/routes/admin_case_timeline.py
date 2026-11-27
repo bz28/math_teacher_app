@@ -7,10 +7,16 @@ Read from what is already stored, nothing new recorded per problem:
   reviewed, late penalty, graph item, "Grade with AI" = `grade.ai_single`);
 - the assignment's "Grade all" rows (`grade.ai_batch`) that name this
   submission among the ones they queued;
-- the assignment's `grade.publish` row that released this grade — the one
-  stamped with this grade's `grade_published_at`;
+- the assignment's `grade.publish` rows that released this grade — those
+  naming it in `submission_ids`; for rows written before that list, the
+  one nearest this grade's `grade_published_at`;
+- a regrade (`grade.regrade`), which replaces the grade without touching
+  the grading job;
 - the grading job: whether the AI ran on the schedule (nobody pressed
-  anything, `requested_by_id` NULL) or because a teacher asked.
+  anything, `requested_by_id` NULL) or because a teacher asked. The
+  drain also closes a job `done` without calling the AI when a teacher
+  had already graded by hand, so the schedule's run is shown only when
+  the AI's grade is on the row.
 """
 
 from __future__ import annotations
@@ -52,8 +58,8 @@ class CaseTimelineEvent(BaseModel):
 
 class CaseGradingJob(BaseModel):
     """The submission's grading job as it stands — the queue keeps one
-    row per submission and resets it on a regrade, so this is the most
-    recent run only."""
+    row per submission (a reopen resets it; a regrade doesn't touch it),
+    so this is its most recent run only."""
     status: str
     scheduled_for: datetime | None
     requested_by_name: str | None
@@ -103,15 +109,20 @@ async def case_timeline(
     )).scalars().all())
     sid = str(sub.id)
     published_at = grade.grade_published_at if grade else None
+    legacy_publishes: list[ActivityLog] = []
     for r in class_rows:
         if r.action == "grade.ai_batch" and _names_submission(r, sid):
             rows.append(r)
-        elif (
-            r.action == "grade.publish"
-            and published_at is not None
-            and abs(r.performed_at - published_at) <= _PUBLISH_MATCH
-        ):
-            rows.append(r)
+        elif r.action == "grade.publish":
+            if "submission_ids" in (r.action_metadata or {}):
+                if _names_submission(r, sid):
+                    rows.append(r)
+            elif published_at is not None and abs(r.performed_at - published_at) <= _PUBLISH_MATCH:
+                legacy_publishes.append(r)
+    if legacy_publishes and published_at is not None:
+        # Before publishes named their grades: the press nearest this
+        # grade's stamp is the one that released it — only that one.
+        rows.append(min(legacy_publishes, key=lambda r: abs(r.performed_at - published_at)))
 
     job = (await db.execute(
         select(GradingJob).where(GradingJob.submission_id == sub.id)
@@ -144,9 +155,13 @@ async def case_timeline(
             finished_at=job.finished_at,
         )
         ran_at = job.finished_at if job.status == STATUS_DONE else None
-        if ran_at is not None and job.requested_by_id is None:
+        ai_graded = grade is not None and grade.ai_score is not None
+        if ran_at is not None and job.requested_by_id is None and ai_graded:
+            # Late work is queued at a due date already past, so it runs
+            # at the next drain after the turn-in, not at the due date.
+            late = job.scheduled_for is not None and sub.submitted_at > job.scheduled_for
             events.append(CaseTimelineEvent(
-                at=ran_at, action=GRADING_AUTO, actor_name=None, metadata=None,
+                at=ran_at, action=GRADING_AUTO, actor_name=None, metadata={"late": late},
             ))
         elif job.requested_by_id is not None and not any(
             e.action in ("grade.ai_batch", "grade.ai_single") for e in events

@@ -14,7 +14,11 @@ function sentence(e: CaseTimelineEvent, student: string): string {
   const who = e.actor_name ?? "Someone";
   switch (e.action) {
     case "grading.auto":
-      return "AI-graded automatically at due date";
+      return e.metadata?.late
+        ? "AI-graded automatically after the late turn-in"
+        : "AI-graded automatically at due date";
+    case "grade.regrade":
+      return `${who} regraded with AI (replaced the grade)`;
     case "grading.requested":
       // A press from before Grade all / Grade with AI were logged.
       return `${who} requested AI grading (teacher-requested)`;
