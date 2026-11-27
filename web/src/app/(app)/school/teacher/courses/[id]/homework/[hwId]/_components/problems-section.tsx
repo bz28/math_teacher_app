@@ -32,6 +32,7 @@ export function ProblemsSection({
   onChangeProblemPoints,
   onChangeRubric,
   onGenerate,
+  onAddFromBank,
   onRemoveProblems,
   onEditProblem,
   checklistsLookedAgain,
@@ -53,7 +54,12 @@ export function ProblemsSection({
   onChangeProblemPoints: (problemId: string, n: number) => void;
   onChangeRubric: (patch: Partial<TeacherRubric>) => void;
   onGenerate: () => void;
-  onRemoveProblems: () => void;
+  /** Put the course's approved questions on this homework. Absent for a
+   *  practice set, whose problems are its own generated versions. */
+  onAddFromBank?: () => void;
+  /** Absent for a practice set: its problems are its own versions, not a
+   *  list this page rewrites. */
+  onRemoveProblems?: () => void;
   onEditProblem: (bankItemId: string) => void;
   checklistsLookedAgain: boolean;
   onChecklistChanged: () => Promise<void>;
@@ -67,6 +73,17 @@ export function ProblemsSection({
           {graded ? "Problems & grading" : "Problems"} · {problems.length}
         </h2>
         <div className="flex items-center gap-2">
+          {onAddFromBank && (
+            <button
+              type="button"
+              onClick={onAddFromBank}
+              disabled={isPublished}
+              title={isPublished ? "Unpublish to add problems" : "Add questions you already approved"}
+              className="rounded-[--radius-md] border border-primary/40 bg-primary-bg/30 px-3 py-1.5 text-xs font-bold text-primary hover:bg-primary-bg/60 disabled:opacity-50"
+            >
+              Add from bank
+            </button>
+          )}
           <button
             type="button"
             onClick={onGenerate}
@@ -76,21 +93,23 @@ export function ProblemsSection({
           >
             ✨ Generate more
           </button>
-          <button
-            type="button"
-            onClick={onRemoveProblems}
-            disabled={isPublished || problems.length === 0}
-            title={
-              isPublished
-                ? "Unpublish to remove problems"
-                : problems.length === 0
-                  ? "Nothing to remove"
-                  : "Remove problems from this homework in bulk"
-            }
-            className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-bold text-text-secondary hover:border-[color:var(--color-error-border)] hover:text-[color:var(--color-error)] disabled:opacity-50 disabled:hover:border-border-light disabled:hover:text-text-secondary"
-          >
-            Remove problems
-          </button>
+          {onRemoveProblems && (
+            <button
+              type="button"
+              onClick={onRemoveProblems}
+              disabled={isPublished || problems.length === 0}
+              title={
+                isPublished
+                  ? "Unpublish to remove problems"
+                  : problems.length === 0
+                    ? "Nothing to remove"
+                    : "Remove problems from this homework in bulk"
+              }
+              className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-bold text-text-secondary hover:border-[color:var(--color-error-border)] hover:text-[color:var(--color-error)] disabled:opacity-50 disabled:hover:border-border-light disabled:hover:text-text-secondary"
+            >
+              Remove problems
+            </button>
+          )}
         </div>
       </div>
 
