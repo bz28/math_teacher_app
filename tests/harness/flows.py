@@ -603,9 +603,10 @@ async def _review_page_flow(
     the AI-graded student opens by default, the rubric panel opens, a
     confident row is confirmed, a grade click saves, and the page's session
     state (rubric open, confirm ticks) survives switching students and coming
-    back. Then the shortcuts (via its button: a "?" keypress from Playwright
-    never opens it), verdict-legend and publish dialogs open and close
-    without publishing. Guards the page's split into
+    back. With nothing approved the header offers no Publish, only the
+    count waiting; once she approves, Publish appears. Then the shortcuts
+    (via its button: a "?" keypress from Playwright never opens it),
+    verdict-legend and publish dialogs open and close without publishing. Guards the page's split into
     components, hooks and a store: every step is a state it must keep.
 
     Set HARNESS_FLOW_SHOTS=<dir> to save a screenshot of each state (the
@@ -708,6 +709,20 @@ async def _review_page_flow(
                    roster.get_by_role("button", name=re.compile(rs.graded_student)).click(timeout=_TIMEOUT_MS))
         await step("coming back to the graded student did not reopen their work",
                    confirm_all.or_(confirmed.first).first.wait_for(timeout=_TIMEOUT_MS))
+        # Publishing releases approved grades only: with nothing approved
+        # the header offers no Publish, just the count waiting on her.
+        await step("the header did not say grades are waiting for approval",
+                   page.get_by_text(re.compile(r"\d+ waiting for your approval")).first
+                   .wait_for(timeout=_TIMEOUT_MS))
+        await step("an unapproved section still offered a Publish button",
+                   page.get_by_role("button", name=re.compile(r"^(Re)?[Pp]ublish \d+ approved"))
+                   .wait_for(state="detached", timeout=_TIMEOUT_MS))
+        # Approve her, so the header's Publish appears.
+        await step("the graded student had no Approve control",
+                   page.get_by_role("button", name=re.compile(r"^Approve")).first.click(timeout=_TIMEOUT_MS))
+        await step("approving did not bring up Publish 1 approved",
+                   page.get_by_role("button", name=re.compile(r"^Publish 1 approved"))
+                   .wait_for(timeout=_TIMEOUT_MS))
         dialog = page.get_by_role("dialog")
         for label, opener, what in (
             ("07-shortcuts",
@@ -717,7 +732,9 @@ async def _review_page_flow(
              lambda: page.get_by_role("button", name="Show integrity verdict legend").click(),
              "verdict legend"),
             ("09-publish-confirm",
-             lambda: page.get_by_role("button", name=re.compile(r"^Publish")).first.click(),
+             # Nothing to warn about, so it publishes straight through;
+             # the aborted call falls back to the confirm with its error.
+             lambda: page.get_by_role("button", name=re.compile(r"^Publish 1 approved")).click(),
              "publish confirm"),
         ):
             await page.evaluate("document.activeElement && document.activeElement.blur()")

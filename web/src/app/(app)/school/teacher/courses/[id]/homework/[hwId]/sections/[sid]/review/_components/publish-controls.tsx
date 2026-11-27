@@ -13,7 +13,8 @@ const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
  *   • approved grades to release here → "Publish N approved →"
  *     ("Republish N →" when every one is an edit to a published grade)
  *   • only unapproved ones here       → "N waiting for your approval"
- *   • other periods have approved     → quiet "Publish other periods (K)"
+ *   • other periods have approved     → quiet "Publish other periods (K)",
+ *                                       beside that pill when both apply
  *   • everything here released        → "All grades published"
  *   • nothing graded here             → "No grades to publish" */
 export function PublishButton({
@@ -44,27 +45,31 @@ export function PublishButton({
       </button>
     );
   }
+  const otherPeriods = approvedOtherSections > 0 && (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="rounded-[--radius-md] border border-primary/30 bg-primary-bg px-3.5 py-1.5 text-xs font-bold text-primary transition-colors hover:border-primary/60"
+    >
+      Publish other periods ({approvedOtherSections}) →
+    </button>
+  );
   if (unapproved > 0) {
+    // Nothing here to publish yet, but another period's approved
+    // grades are still reachable from this page.
     return (
-      <span
-        className="inline-flex items-center gap-1.5 rounded-[--radius-pill] bg-[color:var(--color-surface-alt-2)] px-3 py-1.5 text-xs font-semibold text-text-muted"
-        title="Only grades you approve are published. Approve a student to publish their grade."
-      >
-        {unapproved} waiting for your approval
+      <span className="inline-flex items-center gap-2">
+        <span
+          className="inline-flex items-center gap-1.5 rounded-[--radius-pill] bg-[color:var(--color-surface-alt-2)] px-3 py-1.5 text-xs font-semibold text-text-muted"
+          title="Only grades you approve are published. Approve a student to publish their grade."
+        >
+          {unapproved} waiting for your approval
+        </span>
+        {otherPeriods}
       </span>
     );
   }
-  if (approvedOtherSections > 0) {
-    return (
-      <button
-        type="button"
-        onClick={onOpen}
-        className="rounded-[--radius-md] border border-primary/30 bg-primary-bg px-3.5 py-1.5 text-xs font-bold text-primary transition-colors hover:border-primary/60"
-      >
-        Publish other periods ({approvedOtherSections}) →
-      </button>
-    );
-  }
+  if (otherPeriods) return otherPeriods;
   return (
     <span className="inline-flex items-center gap-1.5 rounded-[--radius-pill] bg-[color:var(--color-surface-alt-2)] px-3 py-1.5 text-xs font-semibold text-text-muted">
       {graded > 0 && (
