@@ -393,3 +393,22 @@ async def test_set_practiced_is_for_the_sets_own_teacher_and_practice_only(
     r = await client.get(f"/v1/teacher/assignments/{world['assignment_id']}/practiced",
                          headers=_auth(world["teacher_token"]))
     assert r.status_code == 404, r.text
+
+
+async def test_set_practiced_still_answers_when_the_access_log_fails(
+    client: AsyncClient, world: dict[str, Any], monkeypatch: Any,
+) -> None:
+    """A failed FERPA log rolls the session back; the read must not 500."""
+    from api.core import audit_log
+
+    class Broken:
+        def __init__(self, **_: Any) -> None:
+            raise RuntimeError("audit table down")
+
+    p = await _seed_practice(world)
+    await _record_class_activity(p, world)
+    monkeypatch.setattr(audit_log, "StudentRecordAccessLog", Broken)
+    r = await client.get(f"/v1/teacher/assignments/{p['practice_id']}/practiced",
+                         headers=_auth(world["teacher_token"]))
+    assert r.status_code == 200, r.text
+    assert r.json()["sections"][0]["practiced"] == 2

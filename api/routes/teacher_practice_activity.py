@@ -263,11 +263,12 @@ async def get_set_practiced(
     if practice.type != "practice":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Practice set not found")
     course = await get_teacher_course(db, practice.course_id, current_user.user_id)
+    practice_id, school_id = practice.id, course.school_id
 
     sections = (await db.execute(
         select(Section.id, Section.name)
         .join(AssignmentSection, AssignmentSection.section_id == Section.id)
-        .where(AssignmentSection.assignment_id == practice.id)
+        .where(AssignmentSection.assignment_id == practice_id)
         .order_by(Section.name)
     )).all()
     section_ids = [s.id for s in sections]
@@ -277,26 +278,14 @@ async def get_set_practiced(
         .where(SectionEnrollment.section_id.in_(section_ids), User.is_preview.is_(False))
     )).all() if section_ids else []
 
-    # FERPA: the not-yet list names students. Authz is confirmed above.
-    await log_student_record_access(
-        db,
-        accessor_user_id=current_user.user_id,
-        accessor_role=current_user.role,
-        target_student_id=None,
-        record_type="practice_roster",
-        record_id=practice.id,
-        accessor_school_id=course.school_id,
-        request=request,
-    )
-
     enrolled = {(r.section_id, r.id) for r in roster}
-    rows = [r for r in await practiced_rows(db, practice.id, section_ids) if (r[0], r[1]) in enrolled]
+    rows = [r for r in await practiced_rows(db, practice_id, section_ids) if (r[0], r[1]) in enrolled]
     practiced = {(sec, sid) for sec, sid, _item in rows}
     by_problem: dict[str, set[uuid.UUID]] = {}
     for _sec, sid, item in rows:
         by_problem.setdefault(str(item), set()).add(sid)
 
-    return SetPracticed(
+    out = SetPracticed(
         sections=[
             PracticedSection(
                 section_id=sec.id,
@@ -313,3 +302,17 @@ async def get_set_practiced(
         ],
         problems={item: len(sids) for item, sids in by_problem.items()},
     )
+    # FERPA: the not-yet list names students. Logged last, from plain
+    # values: a failed log rolls the session back, which expires every
+    # ORM object, and the read must still succeed (admin_students._log_read).
+    await log_student_record_access(
+        db,
+        accessor_user_id=current_user.user_id,
+        accessor_role=current_user.role,
+        target_student_id=None,
+        record_type="practice_roster",
+        record_id=practice_id,
+        accessor_school_id=school_id,
+        request=request,
+    )
+    return out
