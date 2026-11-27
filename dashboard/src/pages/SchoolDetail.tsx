@@ -604,15 +604,13 @@ export default function SchoolDetail() {
         )}
       </Section>
 
-      {/* ── 04 — BLOCKED UPLOADS ─────────────────────────────────
-          Failed calls live in the calls panel above; this is the work
-          students couldn't hand in. */}
-      <Section number="04" label="Blocked uploads">
-        <BlockedUploads schoolId={detail.id} />
-      </Section>
+      {/* Blocked uploads — the work students couldn't hand in (failed
+          calls live in the calls panel above). It carries its own
+          heading, so it sits between sections rather than in one. */}
+      <BlockedUploads schoolId={detail.id} />
 
-      {/* ── 05 — MANAGE TEACHERS (invite + pending) ─────────────── */}
-      <Section number="05" label="Manage teachers">
+      {/* ── 04 — MANAGE TEACHERS (invite + pending) ─────────────── */}
+      <Section number="04" label="Manage teachers">
         <div style={{ marginBottom: detail.pending_invites.length > 0 ? 28 : 0 }}>
           <h3 style={{ marginBottom: 12 }}>Invite a teacher</h3>
           <form onSubmit={handleInvite} style={{ display: "flex", gap: 8 }}>
