@@ -268,3 +268,41 @@ async def test_a_corrupt_problem_id_is_skipped_across_courses(
         dup = await s.get(Assignment, uuid.UUID(r.json()["id"]))
         assert dup is not None and dup.content is not None
         assert len(dup.content["problem_ids"]) == 1
+
+
+async def test_deleting_a_practice_set_still_deletes_its_versions(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """A practice set's versions hang off the homework's questions but
+    belong to the set: deleting it takes them along, never onto the
+    homework (where pending ones would nag its review count)."""
+    w = await _setup(world)
+    async with get_session_factory()() as s:
+        practice = Assignment(
+            course_id=w["course_id"], teacher_id=world["teacher_id"], title="P",
+            type="practice", status="draft", source_homework_id=w["source_id"],
+            unit_ids=[world["unit_id"]],
+        )
+        s.add(practice)
+        await s.flush()
+        versions = [
+            QuestionBankItem(
+                course_id=w["course_id"], unit_id=world["unit_id"],
+                originating_assignment_id=practice.id, parent_question_id=w["primary_id"],
+                title=f"V{i}", question=f"Solve x^2 = {i}", status="pending",
+                source="generated",
+            )
+            for i in range(2)
+        ]
+        s.add_all(versions)
+        await s.commit()
+        practice_id, version_ids = practice.id, [v.id for v in versions]
+    r = await client.delete(
+        f"/v1/teacher/assignments/{practice_id}", headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200, r.text
+    async with get_session_factory()() as s:
+        left = (await s.execute(
+            select(QuestionBankItem.id).where(QuestionBankItem.id.in_(version_ids))
+        )).scalars().all()
+        assert left == []

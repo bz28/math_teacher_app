@@ -265,11 +265,14 @@ def problem_ids_in_content(content: Any) -> list[str]:
 
 
 async def rehome_shared_bank_items(db: AsyncSession, assignment: Assignment) -> int:
-    """Before `assignment` is deleted, hand the bank items it originated
-    that another homework in the course still uses (a same-course
-    duplicate, Add from bank) to that homework, with their variations.
+    """Before a homework is deleted, hand the bank items it originated that
+    another homework in the course still uses (a same-course duplicate,
+    Add from bank) to that homework, with their versions.
     `originating_assignment_id` cascades on delete, so without this the
-    other homework loses those problems. Returns how many items moved."""
+    other homework loses those problems. A practice set's versions are
+    its own and still go with it. Returns how many items moved."""
+    if assignment.type != "homework":
+        return 0
     owned = (await db.execute(
         select(QuestionBankItem).where(QuestionBankItem.originating_assignment_id == assignment.id)
     )).scalars().all()
@@ -277,7 +280,11 @@ async def rehome_shared_bank_items(db: AsyncSession, assignment: Assignment) -> 
         return 0
     others = (await db.execute(
         select(Assignment.id, Assignment.content)
-        .where(Assignment.course_id == assignment.course_id, Assignment.id != assignment.id)
+        .where(
+            Assignment.course_id == assignment.course_id,
+            Assignment.id != assignment.id,
+            Assignment.type == "homework",
+        )
         .order_by(Assignment.created_at.desc())
     )).all()
     # Newest homework first: the copy the teacher is working on now.
@@ -285,16 +292,19 @@ async def rehome_shared_bank_items(db: AsyncSession, assignment: Assignment) -> 
     for other_id, content in others:
         for pid in problem_ids_in_content(content):
             new_home.setdefault(pid, other_id)
-    moved = 0
+    moved: dict[uuid.UUID, uuid.UUID] = {
+        item.id: new_home[str(item.id)] for item in owned if str(item.id) in new_home
+    }
+    # A version follows its question, and only when that question moves.
     for item in owned:
-        root = str(item.parent_question_id) if item.parent_question_id else str(item.id)
-        home = new_home.get(str(item.id)) or new_home.get(root)
-        if home is not None:
-            item.originating_assignment_id = home
-            moved += 1
+        if item.id not in moved and item.parent_question_id in moved:
+            moved[item.id] = moved[item.parent_question_id]
+    for item in owned:
+        if item.id in moved:
+            item.originating_assignment_id = moved[item.id]
     if moved:
         await db.flush()
-    return moved
+    return len(moved)
 
 
 async def used_in_assignments_map(
