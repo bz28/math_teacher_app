@@ -214,7 +214,7 @@ export default function Layout() {
             Keyed on the scope ALONE, never on the page's kind: a URL that
             changes kind on the same route (LLM calls gaining ?user=, Users
             flipping to the Admins preset) must not wipe its local filters. */}
-        <Outlet key={`scope:${school.id ?? "all"}`} />
+        <Outlet key={`scope:${school.id ?? "all"}`} context={{ schoolName: school.name }} />
       </main>
     </div>
   );

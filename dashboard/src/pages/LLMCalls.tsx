@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useOutletContext, useSearchParams } from "react-router-dom";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, AreaChart, Area, LineChart, Line,
 } from "recharts";
 import { api, type LLMCallsData } from "../lib/api";
-import { scopeParams, useSchoolScope, useSelectedSchool } from "../lib/useSelectedSchool";
+import { scopeParams, useSchoolScope } from "../lib/useSelectedSchool";
 import { INTERNAL_SCHOOL, isInternalOnly } from "../lib/pageScope";
 import { formatRelativeDate, shortModel, shortId, fmtCost, fmtLatency } from "../lib/format";
 import AttentionBand from "../components/AttentionBand";
@@ -23,6 +23,9 @@ const COLORS = ["#14130f", "#4a6b3a", "#b8431a", "#3d5a78", "#a66b15", "#6b21a8"
 type CallRow = LLMCallsData["calls"][number];
 type Status = "" | "ok" | "failed";
 
+
+/** Params that name one person, homework, submission or session. */
+const ENTITY_KEYS = ["user", "teacher", "student", "assignment", "submission", "session"];
 export default function LLMCalls() {
   const [searchParams, setSearchParams] = useSearchParams();
   const confirm = useConfirm();
@@ -54,13 +57,16 @@ export default function LLMCalls() {
   // admin's calls belong to no school. pageScope() treats these URLs as
   // single-thing pages for the same reason.
   const scope = useSchoolScope();
-  const selected = useSelectedSchool();
+  // The rail's school name, from Layout's one copy of the schools list.
+  const { schoolName } = useOutletContext<{ schoolName: string | null }>();
   const entityFilter = Boolean(
     userFilter || teacherFilter || studentFilter || assignmentFilter || submissionFilter || sessionFilter,
   );
   // "Internal only" (see INTERNAL_SCHOOL); a school id in `?school=` is
   // taken by the rail instead (Layout).
-  const internalOnly = isInternalOnly("/llm-calls", `?${searchParams.toString()}`);
+  // An entity filter already means "ignore the place" (pageScope), so
+  // Internal only never stands beside one — setParams drops it.
+  const internalOnly = !entityFilter && isInternalOnly("/llm-calls", `?${searchParams.toString()}`);
   const placeFilter = internalOnly ? INTERNAL_SCHOOL : scope;
   const schoolFilter = entityFilter ? null : placeFilter;
   const status: Status = ((): Status => {
@@ -119,6 +125,7 @@ export default function LLMCalls() {
     for (const [k, v] of Object.entries(changes)) {
       if (v) next.set(k, v); else next.delete(k);
     }
+    if (ENTITY_KEYS.some((k) => next.get(k)) && next.get("school") === INTERNAL_SCHOOL) next.delete("school");
     setSearchParams(next);
   };
   const setParam = (key: string, value: string) => setParams({ [key]: value });
@@ -275,7 +282,7 @@ export default function LLMCalls() {
         // The place only — never the narrower filters, which a band click
         // clears — so the list it lands on is the set it counted.
         schoolId={placeFilter}
-        placeLabel={internalOnly ? "Internal" : selected.name ?? (scope ? "this school" : "All schools")}
+        placeLabel={internalOnly ? "Internal" : schoolName ?? (scope ? "this school" : "All schools")}
         onFunction={(fn, failedOnly) => followBand({ function: fn, status: failedOnly ? "failed" : "" })}
         onSchool={(id) => followBand({ school: id, status: "failed" })}
       />
