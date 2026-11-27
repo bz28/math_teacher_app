@@ -3,6 +3,8 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { teacher, type StudentGradesResponse } from "@/lib/api";
+import { Breadcrumbs } from "@/components/school/teacher/breadcrumbs";
+import { useCourseName } from "@/components/school/teacher/teacher-courses";
 import { formatDate } from "@/lib/utils";
 import { PercentBadge } from "@/components/school/shared/percent-badge";
 import { PracticeEngagement } from "@/components/school/teacher/practice-engagement";
@@ -29,7 +31,16 @@ export default function StudentGradesPage({
   params: Promise<{ id: string; sectionId: string; studentId: string }>;
 }) {
   const { id: courseId, sectionId, studentId } = use(params);
-  const backHref = `/school/teacher/courses/${courseId}?tab=grades`;
+  const courseName = useCourseName(courseId);
+  const crumbs = (student: string) => (
+    <Breadcrumbs
+      items={[
+        { label: courseName ?? "", fallback: "Course", href: `/school/teacher/courses/${courseId}` },
+        { label: "Grades", href: `/school/teacher/courses/${courseId}?tab=grades` },
+        { label: student },
+      ]}
+    />
+  );
 
   const [data, setData] = useState<StudentGradesResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -54,7 +65,7 @@ export default function StudentGradesPage({
   if (error) {
     return (
       <div className="mx-auto max-w-4xl px-6 py-8">
-        <BackLink href={backHref} />
+        {crumbs("")}
         <p className="mt-6 text-sm text-[color:var(--color-error)]">{error}</p>
       </div>
     );
@@ -63,7 +74,7 @@ export default function StudentGradesPage({
   if (data === null) {
     return (
       <div className="mx-auto max-w-4xl px-6 py-8">
-        <BackLink href={backHref} />
+        {crumbs("")}
         <StudentGradesSkeleton />
       </div>
     );
@@ -71,7 +82,7 @@ export default function StudentGradesPage({
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-8">
-      <BackLink href={backHref} />
+      {crumbs(data.student.name)}
 
       <header className="mt-3">
         <h1 className="font-serif text-[34px] leading-tight tracking-[-0.015em] text-text-primary">{data.student.name}</h1>
@@ -127,17 +138,6 @@ export default function StudentGradesPage({
 }
 
 // ────────────────────────────────────────────────────────────────────
-
-function BackLink({ href }: { href: string }) {
-  return (
-    <Link
-      href={href}
-      className="inline-flex items-center gap-1 text-xs font-semibold text-text-secondary hover:text-primary"
-    >
-      ← Back to Grades
-    </Link>
-  );
-}
 
 /**
  * Initial-load placeholder for the student grades page. Mirrors the real

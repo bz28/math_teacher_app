@@ -20,6 +20,11 @@ import { SchoolStudentLayout } from "@/components/school/student/school-student-
 import { TeacherUsagePill } from "@/components/shared/teacher-usage-pill";
 import { useToast } from "@/components/ui";
 import { useTour } from "@/components/tour";
+import {
+  CourseNavList,
+  MobileCourseMenu,
+  TeacherCoursesProvider,
+} from "@/components/school/teacher/teacher-courses";
 
 // ── Teacher nav items ──
 
@@ -42,7 +47,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   // Veradic is schools-only: every student — school-linked, not yet in a
   // class, or a teacher's preview shadow — gets the school-student shell.
   const inner = isTeacher
-    ? <TeacherLayout>{children}</TeacherLayout>
+    ? <TeacherCoursesProvider><TeacherLayout>{children}</TeacherLayout></TeacherCoursesProvider>
     : <SchoolStudentLayout>{children}</SchoolStudentLayout>;
 
   // Preview banner hoisted out of SchoolStudentLayout so a previewing
@@ -238,6 +243,7 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
+          <CourseNavList />
 
           <div className="my-3 border-t border-border-light" />
 
@@ -339,12 +345,18 @@ function TeacherLayout({ children }: { children: React.ReactNode }) {
           place the release valve should be switched off. */}
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border-light bg-[color:var(--color-surface-alt-2)]/90 px-4 backdrop-blur-md md:hidden">
-          <Link href="/school/teacher" className="flex items-center gap-2">
-            <LogoMark size={28} />
-            <span className="text-sm font-bold tracking-[-0.01em] text-text-primary">
-              {user?.school_name || "Teacher"}
-            </span>
-          </Link>
+          <div className="flex min-w-0 items-center gap-2">
+            <Link href="/school/teacher" aria-label="All courses" className="shrink-0">
+              <LogoMark size={28} />
+            </Link>
+            <MobileCourseMenu
+              fallback={
+                <span className="truncate text-sm font-bold tracking-[-0.01em] text-text-primary">
+                  {user?.school_name || "Teacher"}
+                </span>
+              }
+            />
+          </div>
           <div className="flex items-center gap-2">
             {/* Compact meter for free teachers — same gating as the sidebar pill. */}
             <TeacherUsagePill compact />

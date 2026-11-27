@@ -1,8 +1,9 @@
 "use client";
 
 import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { Breadcrumbs } from "@/components/school/teacher/breadcrumbs";
+import { useCourseName } from "@/components/school/teacher/teacher-courses";
 import { parseProblemFocus, withSelectedStudent } from "@/lib/review-deep-link";
 import {
   useClassRubric,
@@ -70,7 +71,7 @@ function HomeworkSectionReview({
   params: Promise<{ id: string; hwId: string; sid: string }>;
 }) {
   const { id: courseId, hwId: assignmentId, sid: sectionId } = use(params);
-  const backHref = `/school/teacher/courses/${courseId}?tab=submissions`;
+  const courseName = useCourseName(courseId);
   // Deep-link focus — the "Needs you today" triage queue routes here with
   // ?student=<id> so a clicked queue row lands directly on that student
   // instead of the default auto-pick. Falls through to the auto-pick when
@@ -1492,14 +1493,14 @@ function HomeworkSectionReview({
 
   return (
     <div className="mx-auto max-w-7xl px-4 pb-10">
-      <div className="pt-3">
-        <Link
-          href={backHref}
-          className="inline-flex items-center gap-1 font-sans text-[11px] font-semibold uppercase tracking-[0.12em] text-text-muted transition-colors hover:text-text-primary"
-        >
-          ← Back to submissions
-        </Link>
-      </div>
+      <Breadcrumbs
+        className="pt-3"
+        items={[
+          { label: courseName ?? "", fallback: "Course", href: `/school/teacher/courses/${courseId}?tab=homework` },
+          { label: hwTitle, fallback: "Homework", href: `/school/teacher/courses/${courseId}/homework/${assignmentId}` },
+          { label: sectionName },
+        ]}
+      />
 
       <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">

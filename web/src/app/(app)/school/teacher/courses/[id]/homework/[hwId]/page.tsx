@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useCallback, useEffect, useRef, useState } from "react";
+import { courseTabHref } from "./_lib/course-tab-href";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -53,13 +54,8 @@ export default function HomeworkDetailPage({
 
   const [hw, setHw] = useState<HomeworkDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  // Back link points at whichever tab the assignment came from — HW
-  // for type=homework, Practice for type=practice. Falls back to HW
-  // while the assignment is still loading (matches prior behavior).
-  const backHref =
-    `/school/teacher/courses/${courseId}?tab=${
-      hw?.type === "practice" ? "practice" : "homework"
-    }`;
+  // Back up to whichever tab the assignment is listed on.
+  const backHref = courseTabHref(courseId, hw?.type);
   const goBack = () => router.push(backHref);
   const [editingProblems, setEditingProblems] = useState(false);
   // Soft confirm on Publish, for things that are usually mistakes but
@@ -313,6 +309,7 @@ export default function HomeworkDetailPage({
     )}
     <div className="mx-auto max-w-4xl px-4 pb-32">
       <HomeworkHeader
+        courseId={courseId}
         hw={hw}
         backHref={backHref}
         problemCount={problems.length}
