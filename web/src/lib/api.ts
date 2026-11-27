@@ -1387,6 +1387,10 @@ export interface SubmissionsInboxRow {
   dirty: number;
   /** Published — students can see these grades. */
   published: number;
+  /** Of `to_grade + dirty`, the grades already approved (a hand grade,
+   *  an Approve ✓, or an approved grade edited since): only Publish is
+   *  left for these. */
+  to_publish: number;
 }
 
 /** Why a submission is in the teacher's "Needs you today" triage queue.

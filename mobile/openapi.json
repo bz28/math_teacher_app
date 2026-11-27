@@ -18210,7 +18210,7 @@
     },
     "/v1/teacher/courses/{course_id}/submissions-inbox": {
       "get": {
-        "description": "Per-(HW \u00d7 section) aggregates for the Submissions tab inbox.\n\nOnly published homework is included \u2014 drafts have no student\nsubmissions and clutter the feed. Preview students are excluded\nfrom every count so teachers don't see their \"View as student\"\nscaffolding.\n\nRow shape:\n  { assignment_id, assignment_title, section_id, section_name,\n    due_at, total_students, submitted, flagged, to_grade, dirty,\n    published }\n\nSort + client-side: the frontend orders by urgency or due date and\nrenders pills per count.",
+        "description": "Per-(HW \u00d7 section) aggregates for the Submissions tab inbox.\n\nOnly published homework is included \u2014 drafts have no student\nsubmissions and clutter the feed. Preview students are excluded\nfrom every count so teachers don't see their \"View as student\"\nscaffolding.\n\nRow shape:\n  { assignment_id, assignment_title, section_id, section_name,\n    due_at, total_students, submitted, flagged, to_grade, dirty,\n    published, to_publish }\n\nSort + client-side: the frontend orders by urgency or due date and\nrenders pills per count.",
         "operationId": "submissions_inbox_v1_teacher_courses__course_id__submissions_inbox_get",
         "parameters": [
           {
