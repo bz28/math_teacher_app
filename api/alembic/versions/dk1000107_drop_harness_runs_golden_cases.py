@@ -8,8 +8,8 @@ harness still writes its HTML reports to disk; nothing reads these tables.
 Downgrade recreates both empty, exactly as their create migrations
 (bs1000062, cc1000072) made them — the dropped rows are not restored.
 
-Revision ID: di1000105
-Revises: dh1000104
+Revision ID: dk1000107
+Revises: dj1000106
 """
 from collections.abc import Sequence
 
@@ -17,8 +17,8 @@ import sqlalchemy as sa
 from alembic import op
 from sqlalchemy.dialects import postgresql
 
-revision: str = "di1000105"
-down_revision: str | None = "dh1000104"
+revision: str = "dk1000107"
+down_revision: str | None = "dj1000106"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
