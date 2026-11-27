@@ -1,9 +1,10 @@
 // Unit tests for where the review page moves next.
-//   node --experimental-strip-types --test <this file>
+//   node --experimental-strip-types <this file>   (or pnpm test; --test with
+//   this path treats [id] as a glob and runs nothing)
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { RosterEntry } from "./types.ts";
-import { awaitsApproval, needsTeacher, nextMatching } from "./next-student.ts";
+import { approvesOnKey, awaitsApproval, needsTeacher, nextMatching } from "./next-student.ts";
 
 type Sub = NonNullable<RosterEntry["submission"]>;
 const entry = (id: string, sub: Partial<Sub> | null): RosterEntry =>
@@ -59,4 +60,10 @@ test("nextMatching never returns the current student, and is null when nobody el
 test("nextStudent's rule (needsTeacher) still stops on an approved-but-unpublished grade", () => {
   const roster = [entry("a", {}), entry("b", { reviewed_at: "x" })];
   assert.equal(ids(nextMatching(roster, "a", needsTeacher)), "b");
+});
+
+test("a held A never approves: only a fresh press, and only when Approve is enabled", () => {
+  assert.equal(approvesOnKey({ repeat: false }, true), true);
+  assert.equal(approvesOnKey({ repeat: true }, true), false);
+  assert.equal(approvesOnKey({ repeat: false }, false), false);
 });

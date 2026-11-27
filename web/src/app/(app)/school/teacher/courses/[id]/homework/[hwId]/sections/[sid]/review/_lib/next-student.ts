@@ -40,3 +40,13 @@ export function nextMatching(
   }
   return null;
 }
+
+/** Whether a press of A approves. Only a fresh press, and only when the
+ *  Approve button itself would: a held A auto-repeats, and once Approve &
+ *  next opened the next student, a repeat would approve them unseen. */
+export function approvesOnKey(
+  e: { repeat: boolean },
+  canApprove: boolean,
+): boolean {
+  return canApprove && !e.repeat;
+}

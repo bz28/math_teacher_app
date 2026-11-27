@@ -24,6 +24,7 @@ import { PHOTO_URLS_EXPIRED } from "@/lib/submission-photos";
 import { earnedPoints, formatPoints } from "@/lib/points";
 import type { GradeStatus, RosterEntry } from "../_lib/types";
 import { isTypingTarget, isDialogOpen, isActionableTarget } from "../_lib/focus";
+import { approvesOnKey } from "../_lib/next-student";
 import {
   EMPTY_ID_SET,
   isConfidentAi,
@@ -771,7 +772,7 @@ export function SubmissionDetailPanel({
         case "a":
         case "A":
           // Approve (& next) — the same act as the button, never more.
-          if (canApprove) {
+          if (approvesOnKey(e, canApprove)) {
             e.preventDefault();
             approve();
           }
