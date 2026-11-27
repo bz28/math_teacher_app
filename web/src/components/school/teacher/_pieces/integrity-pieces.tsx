@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
+  ApiError,
   teacher,
   type IntegrityActivityReason,
   type IntegrityActivitySummary,
@@ -13,6 +14,7 @@ import {
   type TeacherIntegrityTranscriptTurn,
   type UnfinishedCheck,
 } from "@/lib/api";
+import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
 // ── Disposition badge ──
@@ -300,6 +302,16 @@ const ACTIVITY_REASON_COPY: Record<
   },
 };
 
+/** One-line description of why a student turn was notable, e.g.
+ *  "pasted 412 chars before sending" — the same words the transcript's
+ *  per-turn marker uses. */
+export function activityReasonText(
+  reason: IntegrityActivityReason,
+  turn: TeacherIntegrityTranscriptTurn,
+): string {
+  return ACTIVITY_REASON_COPY[reason](turn);
+}
+
 /** Lite shape: just the per-turn entry from activity_summary.notable_turns. */
 export type IntegrityActivityNotableTurnLite = {
   ordinal: number;
@@ -424,35 +436,127 @@ function formatResolvedAt(iso: string): string {
   });
 }
 
+/** How long the Undo toast after a resolve stays up (unhovered). */
+export const RESOLVE_UNDO_MS = 8000;
+
+// The live Undo (or Retry-undo) toast per submission. The server undoes
+// only the LATEST resolve, so a newer resolve retires the older toast
+// rather than leave an Undo that would no longer do what it said.
+const undoToastBySubmission = new Map<string, number>();
+// Submissions with an Undo request in flight. Resolving meanwhile would
+// race it (the server undoes whichever resolve is latest), so the
+// control holds still until the undo settles. A tiny external store:
+// every mounted control for that student (the card mounts in two places,
+// and can remount mid-undo) re-reads it when an undo starts or settles.
+const undoInFlight = new Set<string>();
+const undoListeners = new Set<() => void>();
+function setUndoInFlight(submissionId: string, inFlight: boolean) {
+  if (inFlight) undoInFlight.add(submissionId);
+  else undoInFlight.delete(submissionId);
+  undoListeners.forEach((l) => l());
+}
+function subscribeUndoInFlight(listener: () => void) {
+  undoListeners.add(listener);
+  return () => {
+    undoListeners.delete(listener);
+  };
+}
+
+/** The teacher's "I handled this" control. Unresolved: the outcomes as
+ *  chips, so one click resolves. Resolved: a quiet Reviewed chip whose
+ *  Change reopens the chips (with Cancel). Every resolve raises an Undo
+ *  toast for RESOLVE_UNDO_MS; the server puts back exactly what that
+ *  resolve replaced (unresolved, or the earlier outcome with its
+ *  original who/when). Only ever sets the
+ *  check's resolution — never the AI's verdict, and never the grade. */
 export function ResolveIntegrityControl({
   submissionId,
   resolution,
   resolvedByName,
   resolvedAt,
   onResolved,
-  primary = false,
 }: {
   submissionId: string;
   resolution: IntegrityResolution;
   resolvedByName: string | null;
   resolvedAt: string | null;
-  onResolved: (resolution: IntegrityResolutionOutcome) => void;
-  /** Render the unresolved "Mark reviewed" button as the filled primary
-   *  action — where it's the one thing left to do on a flagged check. */
-  primary?: boolean;
+  /** After a resolve, and after an Undo with the restored resolution. */
+  onResolved: (resolution: IntegrityResolution) => void;
 }) {
+  const toast = useToast();
+  // Undo can fire after this control re-rendered (or unmounted, once the
+  // teacher moved on): call the newest handler, not the one captured
+  // when the toast went up.
+  const latestOnResolved = useRef(onResolved);
+  useEffect(() => {
+    latestOnResolved.current = onResolved;
+  });
   const [picking, setPicking] = useState(false);
   const [submitting, setSubmitting] =
     useState<IntegrityResolutionOutcome | null>(null);
   const [error, setError] = useState(false);
+  const undoing = useSyncExternalStore(
+    subscribeUndoInFlight,
+    () => undoInFlight.has(submissionId),
+    () => false,
+  );
+
+  async function undo() {
+    if (undoInFlight.has(submissionId)) return;
+    undoToastBySubmission.delete(submissionId);
+    setUndoInFlight(submissionId, true);
+    try {
+      const { resolution: restored } = await teacher.undoResolveIntegrity(submissionId);
+      latestOnResolved.current(restored);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409) {
+        // Nothing (left) to undo here: an earlier undo already landed
+        // with its reply lost, or someone resolved it since. Retrying
+        // can't help — show what the server has now.
+        try {
+          const now = await teacher.integrityDetail(submissionId);
+          latestOnResolved.current(now.resolution);
+        } catch {
+          /* the card keeps its state; a reload shows the truth */
+        }
+        toast.info("Nothing to undo — showing the current review.");
+        return;
+      }
+      if (undoToastBySubmission.has(submissionId)) {
+        // A newer resolve landed while this undo was in flight; a Retry
+        // now would take back THAT resolve, not the one this undo meant.
+        toast.error("Couldn't undo the review.");
+        return;
+      }
+      undoToastBySubmission.set(
+        submissionId,
+        toast.error("Couldn't undo the review.", {
+          durationMs: RESOLVE_UNDO_MS,
+          action: { label: "Retry", onAction: () => void undo() },
+        }),
+      );
+    } finally {
+      setUndoInFlight(submissionId, false);
+    }
+  }
 
   async function resolve(outcome: IntegrityResolutionOutcome) {
+    if (undoInFlight.has(submissionId)) return;
     setSubmitting(outcome);
     setError(false);
     try {
       await teacher.resolveIntegrity(submissionId, outcome);
       setPicking(false);
       onResolved(outcome);
+      const older = undoToastBySubmission.get(submissionId);
+      if (older !== undefined) toast.dismiss(older);
+      undoToastBySubmission.set(
+        submissionId,
+        toast.success(`Marked reviewed · ${RESOLUTION_LABEL[outcome]}`, {
+          durationMs: RESOLVE_UNDO_MS,
+          action: { label: "Undo", onAction: () => void undo() },
+        }),
+      );
     } catch {
       setError(true);
     } finally {
@@ -473,30 +577,13 @@ export function ResolveIntegrityControl({
         {resolvedAt && <span>{formatResolvedAt(resolvedAt)}</span>}
         <button
           type="button"
+          disabled={undoing}
           onClick={() => setPicking(true)}
-          className="font-medium text-text-secondary underline-offset-2 hover:text-primary hover:underline"
+          className="font-medium disabled:opacity-60 text-text-secondary underline-offset-2 hover:text-primary hover:underline"
         >
           Change
         </button>
       </div>
-    );
-  }
-
-  // Collapsed "Mark reviewed" button — expands to the outcome picker.
-  if (!picking) {
-    return (
-      <button
-        type="button"
-        onClick={() => setPicking(true)}
-        className={cn(
-          "rounded-[--radius-md] px-3 py-1.5 text-xs font-semibold",
-          primary
-            ? "bg-primary text-white shadow-sm transition-colors hover:bg-primary-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-            : "border border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:text-primary focus:border-primary focus:outline-none",
-        )}
-      >
-        Mark reviewed
-      </button>
     );
   }
 
@@ -505,36 +592,38 @@ export function ResolveIntegrityControl({
       <p className="text-[11px] font-semibold uppercase tracking-[0.06em] text-text-muted">
         Mark reviewed as
       </p>
-      <div className="flex flex-wrap gap-1.5">
+      <div role="group" aria-label="Mark reviewed as" className="flex flex-wrap gap-1.5">
         {RESOLUTION_OUTCOMES.map((o) => (
           <button
             key={o.value}
             type="button"
-            disabled={submitting !== null}
+            disabled={submitting !== null || undoing}
             onClick={() => void resolve(o.value)}
             className={cn(
-              "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors",
+              "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
               resolution === o.value
                 ? "border-primary/50 bg-primary-bg text-primary"
                 : "border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:text-primary",
-              submitting !== null && "opacity-60",
+              (submitting !== null || undoing) && "opacity-60",
             )}
           >
             <span aria-hidden>{o.icon}</span>
             {submitting === o.value ? "Saving…" : o.label}
           </button>
         ))}
-        <button
-          type="button"
-          disabled={submitting !== null}
-          onClick={() => {
-            setPicking(false);
-            setError(false);
-          }}
-          className="rounded-full px-2 py-1 text-xs font-medium text-text-muted hover:text-text-secondary"
-        >
-          Cancel
-        </button>
+        {picking && (
+          <button
+            type="button"
+            disabled={submitting !== null}
+            onClick={() => {
+              setPicking(false);
+              setError(false);
+            }}
+            className="rounded-full px-2 py-1 text-xs font-medium text-text-muted hover:text-text-secondary"
+          >
+            Cancel
+          </button>
+        )}
       </div>
       {error && (
         <p className="text-[11px] text-error">Couldn&apos;t save. Try again.</p>

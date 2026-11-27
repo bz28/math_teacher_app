@@ -643,3 +643,132 @@ async def seed_review_homework(seed: Seed) -> ReviewSeed:
             graded_student=names["graded"], ungraded_student=names["ungraded"],
             absent_student=names["absent"],
         )
+
+
+@dataclass
+class IntegrityReviewSeed:
+    """A review page with one AI-graded, integrity-flagged student."""
+
+    course_id: str
+    assignment_id: str
+    section_id: str
+    submission_id: str
+    flagged_student: str
+    last_answer: str
+    pasted_answer: str  # an earlier answer the activity rollup marked as a paste
+
+
+async def seed_review_integrity(seed: Seed) -> IntegrityReviewSeed:
+    """A published one-problem homework in the seeded section with one
+    student whose understanding check finished flag_for_review, a short
+    AI↔student conversation, and an AI grade not yet reviewed or
+    published. Rows are written finished (check complete, AI grading off),
+    so opening the page fires no LLM call."""
+    from api.models.integrity_check import (
+        IntegrityCheckProblem,
+        IntegrityCheckSubmission,
+        IntegrityConversationTurn,
+    )
+
+    course_id = uuid.UUID(seed.course_id)
+    now = datetime.now(UTC)
+    tag = uuid.uuid4().hex[:6]
+    last_answer = "idk the same thing i guess"
+    pasted_answer = "Adding eliminates y because the coefficients are opposites."
+    async with get_session_factory()() as s:
+        section_id = (await s.execute(
+            select(SectionEnrollment.section_id).where(
+                SectionEnrollment.student_id == uuid.UUID(seed.student_id),
+                SectionEnrollment.course_id == course_id,
+            ).limit(1)
+        )).scalar_one()
+        hw = Assignment(
+            course_id=course_id, unit_ids=[uuid.UUID(seed.unit_id)],
+            teacher_id=uuid.UUID(seed.teacher_id), title="Integrity HW",
+            type="homework", status="published", content={"problem_ids": []},
+            integrity_check_enabled=True, ai_grading_enabled=False,
+        )
+        s.add(hw)
+        await s.flush()
+        item = QuestionBankItem(
+            course_id=course_id, unit_id=uuid.UUID(seed.unit_id),
+            originating_assignment_id=hw.id, title="Problem 1",
+            question="Solve x + y = 10, x - y = 4.", final_answer="(7, 3)",
+            status="approved", source="generated",
+        )
+        s.add(item)
+        await s.flush()
+        hw.content = {"problem_ids": [str(item.id)]}
+        s.add(AssignmentSection(assignment_id=hw.id, section_id=section_id, published_at=now))
+
+        name = "Flo Integrity"
+        student = User(
+            email=f"harness_integrity_{tag}@t.com", password_hash=hash_password("x"),
+            grade_level=8, role="student", name=name,
+        )
+        s.add(student)
+        await s.flush()
+        s.add(SectionEnrollment(section_id=section_id, course_id=course_id, student_id=student.id))
+        sub = Submission(
+            assignment_id=hw.id, student_id=student.id, section_id=section_id,
+            status="submitted", files=[], is_late=False, extraction={"steps": []},
+            extraction_confirmed_at=now,
+        )
+        s.add(sub)
+        await s.flush()
+        s.add(SubmissionGrade(
+            submission_id=sub.id, ai_score=100.0, final_score=100.0, graded_at=now,
+            ai_breakdown={"grades": [{
+                "problem_position": 1, "student_answer": "(7, 3)", "score_status": "full",
+                "percent": 100, "confidence": 0.95, "reasoning": "Correct.",
+                "student_feedback": None,
+            }]},
+            breakdown=[{
+                "problem_id": str(item.id), "score_status": "full", "percent": 100,
+                "confidence": 0.95, "feedback": None, "deductions": None,
+            }],
+        ))
+        check = IntegrityCheckSubmission(
+            submission_id=sub.id, status="complete", disposition="flag_for_review",
+            headline="Correct work but couldn't explain it",
+            overall_summary="Restated the answer and couldn't solve a sign-flipped variant.",
+            resolution="unresolved",
+            activity_summary={
+                "totals": {"tab_out_count": 0, "tab_out_total_ms": 0, "paste_count": 2,
+                           "paste_total_chars": len(pasted_answer) + len(last_answer),
+                           "paste_largest_chars": len(pasted_answer)},
+                # The last answer (3) is marked too: the card quotes it
+                # with its reason instead of repeating it as evidence.
+                "notable_turns": [{"ordinal": 1, "reasons": ["full_paste"]},
+                                  {"ordinal": 3, "reasons": ["full_paste"]}],
+            },
+        )
+        s.add(check)
+        await s.flush()
+        s.add(IntegrityCheckProblem(
+            integrity_check_submission_id=check.id, bank_item_id=item.id,
+            sample_position=0, status="verdict_submitted",
+            rubric={"paraphrase_originality": "low", "causal_fluency": "low"},
+            ai_reasoning="Couldn't say why adding the equations works.",
+        ))
+        for o, (role, text) in enumerate((
+            ("agent", "Why did you add the two equations?"),
+            ("student", pasted_answer),
+            ("agent", "If the second equation were x + 2y = 0, what would you do?"),
+            ("student", last_answer),
+        )):
+            s.add(IntegrityConversationTurn(
+                integrity_check_submission_id=check.id, ordinal=o, role=role,
+                content=text, seconds_on_turn=None if role == "agent" else 12,
+                telemetry=None if role != "student" else {
+                    "focus_blur_events": [],
+                    "paste_events": [{"at": now.isoformat(), "byte_count": len(text)}],
+                    "typing_cadence": {"total_ms": 0, "pauses_over_3s": 0},
+                },
+            ))
+        await s.commit()
+        return IntegrityReviewSeed(
+            course_id=seed.course_id, assignment_id=str(hw.id),
+            section_id=str(section_id), submission_id=str(sub.id),
+            flagged_student=name, last_answer=last_answer, pasted_answer=pasted_answer,
+        )

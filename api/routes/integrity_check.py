@@ -16,7 +16,7 @@ import logging
 import re
 import uuid
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any, Literal, NamedTuple
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -281,14 +281,6 @@ class TurnRequest(BaseModel):
 class DismissRequest(BaseModel):
     problem_id: uuid.UUID
     reason: str = Field(default="", max_length=500)
-
-
-class ResolveRequest(BaseModel):
-    """Teacher's session-level resolution of an integrity check. The
-    outcome is what the teacher decided after reviewing — it does NOT
-    change the AI's disposition. All three outcomes clear the flag from
-    the roster's needs-attention aggregate."""
-    resolution: Literal["cleared", "confirmed_concern", "contacted"]
 
 
 # ── Helpers ─────────────────────────────────────────────────────────
@@ -1198,38 +1190,4 @@ async def teacher_dismiss_problem(
     # shows the agent's original disposition alongside which problems
     # were dismissed; teacher interprets.
 
-    await db.commit()
-
-
-@router.post(
-    "/teacher/integrity/submissions/{submission_id}/resolve", status_code=204,
-)
-async def teacher_resolve_integrity(
-    submission_id: uuid.UUID,
-    body: ResolveRequest,
-    current_user: CurrentUser = Depends(require_teacher),
-    db: AsyncSession = Depends(get_db),
-) -> None:
-    """Set the teacher's session-level resolution on an integrity check.
-
-    This is the "I handled this" action — it does NOT touch the AI's
-    disposition (the agent's verdict stands), but it clears the flag
-    from the roster's needs-attention aggregate so a reviewed
-    submission stops showing as flagged forever. Owner-of-course gated,
-    like the other teacher integrity endpoints. Idempotent: re-resolving
-    with a new outcome just updates the outcome and re-stamps who/when."""
-    sub = (await db.execute(
-        select(Submission).where(Submission.id == submission_id)
-    )).scalar_one_or_none()
-    if sub is None:
-        raise HTTPException(status_code=404, detail="Submission not found")
-    await get_teacher_assignment(db, sub.assignment_id, current_user.user_id)
-
-    check = await _load_check_for_submission(db, submission_id)
-    if check is None:
-        raise HTTPException(status_code=404, detail="Integrity check not found")
-
-    check.resolution = body.resolution
-    check.resolved_by = current_user.user_id
-    check.resolved_at = datetime.now(UTC)
     await db.commit()

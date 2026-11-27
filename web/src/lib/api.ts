@@ -2305,12 +2305,22 @@ export const teacher = {
   },
   /** Set the teacher's session-level resolution on an integrity check —
    *  the "I handled this" action. Clears the flag from the roster's
-   *  needs-attention aggregate. Does NOT change the AI's disposition. */
+   *  needs-attention aggregate. Does NOT change the AI's disposition,
+   *  nor any grade. */
   resolveIntegrity(submissionId: string, resolution: IntegrityResolutionOutcome) {
     return apiFetch<void>(`/teacher/integrity/submissions/${submissionId}/resolve`, {
       method: "POST",
       body: JSON.stringify({ resolution }),
     });
+  },
+  /** Undo the latest resolve: the server puts back exactly what it
+   *  replaced (outcome + who/when, or unresolved) and returns the
+   *  restored resolution. 409 when there's nothing to undo. */
+  undoResolveIntegrity(submissionId: string) {
+    return apiFetch<{ resolution: IntegrityResolution }>(
+      `/teacher/integrity/submissions/${submissionId}/resolve/undo`,
+      { method: "POST" },
+    );
   },
   /** Create or reuse a shadow student, return its JWT pair. Pass the
    *  homework being previewed so the shadow lands in a section that

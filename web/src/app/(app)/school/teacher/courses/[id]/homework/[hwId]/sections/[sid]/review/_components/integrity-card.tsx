@@ -4,6 +4,7 @@ import { Modal } from "@/components/ui/modal";
 import {
   ActivityDigest,
   ActivityTurnMarker,
+  activityReasonText,
   formatMs,
   integrityNeedsResolution,
   ResolveIntegrityControl,
@@ -11,7 +12,7 @@ import {
   type IntegrityActivityNotableTurnLite,
 } from "@/components/school/teacher/_pieces/integrity-pieces";
 import type {
-  IntegrityResolutionOutcome,
+  IntegrityResolution,
   TeacherIntegrityDetail,
   TeacherIntegrityTranscriptTurn,
   UnfinishedCheck,
@@ -19,13 +20,24 @@ import type {
 } from "@/lib/api";
 import type { IntegrityBannerKey } from "../_lib/types";
 import { NEUTRAL_STYLE, INTEGRITY_STYLE } from "../_lib/integrity-style";
+import {
+  flaggedTurns,
+  quotedAnswer,
+  type FlaggedTurn,
+  type QuotedAnswer,
+} from "../_lib/quoted-answer";
 
 /**
  * Compact integrity verdict card. Collapsed by default: verdict icon +
  * headline, the activity flags as chips, and a footer with the Details
- * toggle, "Conversation ↗", and — on an open flag — "Mark reviewed" as
- * the one primary action. Details holds the AI summary, the activity
- * digest, and (once resolved) the resolution chip with Change.
+ * toggle and "Conversation ↗". On an open check (flagged, inconclusive,
+ * unreadable, unfinished) the card also quotes the student's last
+ * answer — with any paste/tab-out turns as collapsed evidence under the
+ * activity flags — and shows the resolution outcomes as chips, so one
+ * click resolves it — the same call and outcomes "Mark reviewed" used,
+ * and never a grade approval. Once resolved, a quiet "Reviewed" chip
+ * with Change takes their place. Details holds the AI summary and the
+ * activity digest.
  *
  * Lives at the top of the pinned right rail on xl, and in the grade
  * column below xl, so the verdict no longer pushes PROBLEMS down the
@@ -51,13 +63,24 @@ export function IntegrityCard({
   unfinished: UnfinishedCheck | null;
   onResolved: (
     submissionId: string,
-    resolution: IntegrityResolutionOutcome,
+    resolution: IntegrityResolution,
   ) => void;
   detailsOpen: boolean;
   onToggleDetails: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const detailsId = useId();
+  // The resolution just set (an outcome, or "unresolved" by Undo), held
+  // only until the refetched detail lands (a new object) so the card
+  // doesn't flash back to the old state in between.
+  const [justResolved, setJustResolved] = useState<{
+    detail: TeacherIntegrityDetail;
+    resolution: IntegrityResolution;
+  } | null>(null);
+  const resolution: IntegrityResolution =
+    justResolved && justResolved.detail === integrity
+      ? justResolved.resolution
+      : (integrity?.resolution ?? "unresolved");
 
   // Prefer full detail. If it's missing (fetch pending / 404), use
   // the overview so the disposition signal still surfaces without
@@ -94,8 +117,7 @@ export function IntegrityCard({
   // A teacher who marked the check reviewed has handled it — drop the
   // loud verdict color to a neutral tint (keep the icon/label) so a
   // resolved flag no longer reads as an open alarm.
-  const resolved =
-    !!integrity && integrity.resolution !== "unresolved";
+  const resolved = !!integrity && resolution !== "unresolved";
   const style = resolved
     ? { ...INTEGRITY_STYLE[key], ...NEUTRAL_STYLE }
     : INTEGRITY_STYLE[key];
@@ -127,31 +149,38 @@ export function IntegrityCard({
 
   const activitySummary = integrity?.activity_summary ?? null;
   const totals = activitySummary?.totals ?? null;
-  // "Mark reviewed" is the one primary action on an open flag, so it
-  // sits on the collapsed card. Needs full detail (resolution +
-  // resolved-by); hidden during the overview-only gap. Once resolved,
-  // the resolution chip (with Change) moves into Details.
-  const showMarkReviewed =
-    !!integrity &&
-    integrityNeedsResolution(integrity) &&
-    integrity.resolution === "unresolved";
+  // Resolving is the one action on an open check, so its outcomes sit
+  // on the collapsed card. Needs full detail (resolution + resolved-by);
+  // hidden during the overview-only gap. Once resolved, the quiet
+  // Reviewed chip (with Change) stays in the same spot.
+  const showResolve =
+    !!integrity && (resolved || integrityNeedsResolution(integrity));
+  const openCheck =
+    !!integrity && !resolved && integrityNeedsResolution(integrity);
+  const quote = openCheck ? quotedAnswer(integrity) : null;
+  // Only when the activity flag is about a paste or tab-out: the turns
+  // behind it, collapsed, so the teacher can judge without digging.
+  const evidence = openCheck ? flaggedTurns(integrity) : [];
   const inProgressCount = key === "in_progress" && overviewFallback;
   const hasDetails =
     !!shownSummary ||
     key === "unfinished" ||
     !!integrity?.didnt_engage ||
     !!inProgressCount ||
-    !!activitySummary ||
-    resolved;
+    !!activitySummary;
 
   return (
     <>
       <div
         className={`rounded-[--radius-xl] border ${style.border} ${style.bg} p-3.5`}
-        role="status"
-        aria-live="polite"
       >
-        <div className="flex min-w-0 items-start gap-2.5">
+        {/* Only the verdict line is live: the quote and outcome chips
+            below would turn every student switch into a long readout. */}
+        <div
+          className="flex min-w-0 items-start gap-2.5"
+          role="status"
+          aria-live="polite"
+        >
           <span
             className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-sm font-bold ${style.iconBg}`}
             aria-hidden
@@ -184,6 +213,7 @@ export function IntegrityCard({
               No tab-outs or pastes
             </p>
           ))}
+        {evidence.length > 0 && <FlaggedTurnsEvidence turns={evidence} />}
 
         {detailsOpen && hasDetails && (
           <div id={detailsId} className="mt-3 space-y-2.5">
@@ -221,19 +251,29 @@ export function IntegrityCard({
             {/* Always neutral-styled — the card carries the verdict
                 color; the digest is supporting evidence. */}
             <ActivityDigest summary={activitySummary} />
-            {integrity && resolved && (
-              <ResolveIntegrityControl
-                submissionId={integrity.submission_id}
-                resolution={integrity.resolution}
-                resolvedByName={integrity.resolved_by_name}
-                resolvedAt={integrity.resolved_at}
-                onResolved={(r) => onResolved(integrity.submission_id, r)}
-              />
-            )}
           </div>
         )}
 
-        {(hasDetails || hasMeaningfulTranscript || showMarkReviewed) && (
+        {quote && <QuotedAnswerExcerpt quote={quote} />}
+
+        {showResolve && (
+          <div className="mt-3">
+            <ResolveIntegrityControl
+              // Remount per student so a half-open Change doesn't carry over.
+              key={integrity.submission_id}
+              submissionId={integrity.submission_id}
+              resolution={resolution}
+              resolvedByName={integrity.resolved_by_name}
+              resolvedAt={integrity.resolved_at}
+              onResolved={(r) => {
+                setJustResolved({ detail: integrity, resolution: r });
+                onResolved(integrity.submission_id, r);
+              }}
+            />
+          </div>
+        )}
+
+        {(hasDetails || hasMeaningfulTranscript) && (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
             {hasDetails ? (
               <button
@@ -248,29 +288,15 @@ export function IntegrityCard({
             ) : (
               <span />
             )}
-            <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
-              {/* "Mark reviewed" — clearing a flag drops it from the
-                  roster Flagged filter. */}
-              {showMarkReviewed && (
-                <ResolveIntegrityControl
-                  primary
-                  submissionId={integrity.submission_id}
-                  resolution={integrity.resolution}
-                  resolvedByName={integrity.resolved_by_name}
-                  resolvedAt={integrity.resolved_at}
-                  onResolved={(r) => onResolved(integrity.submission_id, r)}
-                />
-              )}
-              {hasMeaningfulTranscript && (
-                <button
-                  type="button"
-                  onClick={() => setOpen(true)}
-                  className="shrink-0 rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-semibold text-text-secondary hover:border-primary/40 hover:text-primary focus:border-primary focus:outline-none"
-                >
-                  Conversation ↗
-                </button>
-              )}
-            </div>
+            {hasMeaningfulTranscript && (
+              <button
+                type="button"
+                onClick={() => setOpen(true)}
+                className="ml-auto shrink-0 rounded-[--radius-md] border border-border-light bg-surface px-3 py-1.5 text-xs font-semibold text-text-secondary hover:border-primary/40 hover:text-primary focus:border-primary focus:outline-none"
+              >
+                Conversation ↗
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -282,6 +308,74 @@ export function IntegrityCard({
         />
       )}
     </>
+  );
+}
+
+function FlaggedTurnsEvidence({ turns }: { turns: FlaggedTurn[] }) {
+  return (
+    <details className="group mt-2">
+      <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-[--radius-sm] text-[11px] font-semibold text-text-secondary hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary [&::-webkit-details-marker]:hidden">
+        What they sent on {turns.length === 1 ? "that turn" : `those ${turns.length} turns`}
+        <span aria-hidden className="transition-transform group-open:rotate-180">▾</span>
+      </summary>
+      <ul className="mt-1.5 space-y-2">
+        {turns.map(({ turn, reasons }) => (
+          <li
+            key={turn.ordinal}
+            className="rounded-[--radius-md] border border-border-light bg-surface px-3 py-2"
+          >
+            <p className="text-[10px] font-semibold uppercase tracking-[0.06em] text-text-muted">
+              {reasons.map((r) => activityReasonText(r, turn)).join(" · ")}
+            </p>
+            <EvidenceText className="mt-1 text-xs" text={turn.content} />
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+/** Text a student sent on a paste / tab-out turn, in full: a capped
+ *  box that scrolls, focusable so a long paste scrolls from the
+ *  keyboard too. */
+function EvidenceText({ text, className }: { text: string; className: string }) {
+  return (
+    <div
+      role="group"
+      tabIndex={0}
+      aria-label="Text the student sent"
+      className={`${className} max-h-40 overflow-y-auto whitespace-pre-wrap border-l-2 border-text-muted/40 pl-2.5 leading-snug text-text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary`}
+    >
+      <MathText text={text} />
+    </div>
+  );
+}
+
+function QuotedAnswerExcerpt({ quote }: { quote: QuotedAnswer }) {
+  const note = quote.reasons
+    .map((r) => activityReasonText(r, quote.turn))
+    .join(" · ");
+  return (
+    <figure className="mt-3 rounded-[--radius-md] border border-border-light bg-surface px-3 py-2.5">
+      <figcaption className="text-[10px] font-semibold uppercase tracking-[0.06em] text-text-muted">
+        Their last answer{note && <> · {note}</>}
+      </figcaption>
+      {quote.question && (
+        <p className="mt-1.5 line-clamp-2 text-[11px] leading-snug text-text-muted">
+          <span className="font-semibold">AI asked:</span>{" "}
+          <MathText text={quote.question} />
+        </p>
+      )}
+      {quote.reasons.length > 0 ? (
+        // A pasted / tabbed-out last answer is the evidence itself (the
+        // disclosure leaves it out), so it's never clamped: it scrolls.
+        <EvidenceText className="mt-1.5 text-[13px]" text={quote.turn.content} />
+      ) : (
+        <blockquote className="mt-1.5 line-clamp-3 border-l-2 border-text-muted/40 pl-2.5 text-[13px] leading-snug text-text-primary">
+          <MathText text={quote.turn.content} />
+        </blockquote>
+      )}
+    </figure>
   );
 }
 

@@ -6212,6 +6212,20 @@
         "title": "TypingCadence",
         "type": "object"
       },
+      "UndoResolveOut": {
+        "description": "The resolution the undo put back (\"unresolved\" when the check had\nnever been resolved before).",
+        "properties": {
+          "resolution": {
+            "title": "Resolution",
+            "type": "string"
+          }
+        },
+        "required": [
+          "resolution"
+        ],
+        "title": "UndoResolveOut",
+        "type": "object"
+      },
       "UpdateAssignmentRequest": {
         "properties": {
           "answer_key": {
@@ -18773,7 +18787,7 @@
     },
     "/v1/teacher/integrity/submissions/{submission_id}/resolve": {
       "post": {
-        "description": "Set the teacher's session-level resolution on an integrity check.\n\nThis is the \"I handled this\" action \u2014 it does NOT touch the AI's\ndisposition (the agent's verdict stands), but it clears the flag\nfrom the roster's needs-attention aggregate so a reviewed\nsubmission stops showing as flagged forever. Owner-of-course gated,\nlike the other teacher integrity endpoints. Idempotent: re-resolving\nwith a new outcome just updates the outcome and re-stamps who/when.",
+        "description": "Set the teacher's session-level resolution on an integrity check.\n\nThis is the \"I handled this\" action \u2014 it does NOT touch the AI's\ndisposition (the agent's verdict stands), but it clears the flag\nfrom the roster's needs-attention aggregate so a reviewed\nsubmission stops showing as flagged forever. Owner-of-course gated,\nlike the other teacher integrity endpoints. Idempotent: re-resolving\nwith a new outcome just updates the outcome and re-stamps who/when.\nRemembers what it replaced so `.../resolve/undo` can put it back.\nNever touches a grade.",
         "operationId": "teacher_resolve_integrity_v1_teacher_integrity_submissions__submission_id__resolve_post",
         "parameters": [
           {
@@ -18818,6 +18832,55 @@
           }
         ],
         "summary": "Teacher Resolve Integrity",
+        "tags": [
+          "integrity"
+        ]
+      }
+    },
+    "/v1/teacher/integrity/submissions/{submission_id}/resolve/undo": {
+      "post": {
+        "description": "Undo the latest resolve: put back exactly what it replaced \u2014 the\noutcome and who/when, or unresolved with no resolver. One level:\na second undo (or an undo with no resolve to undo) is a 409, and so\nis undoing a resolve someone else made since \u2014 a teacher's Undo\nonly ever takes back their own latest resolve. Never touches the\nAI's disposition or a grade.",
+        "operationId": "teacher_undo_resolve_integrity_v1_teacher_integrity_submissions__submission_id__resolve_undo_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "submission_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Submission Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UndoResolveOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Teacher Undo Resolve Integrity",
         "tags": [
           "integrity"
         ]

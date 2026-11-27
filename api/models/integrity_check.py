@@ -143,6 +143,17 @@ class IntegrityCheckSubmission(Base):
     resolved_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True,
     )
+    # What the teacher's latest resolve replaced (outcome + who/when),
+    # so Undo can put it back exactly. Null when there's nothing to undo.
+    prev_resolution: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    prev_resolved_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    prev_resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False,

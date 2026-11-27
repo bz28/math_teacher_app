@@ -16,7 +16,7 @@ import { ReopenControl } from "@/components/school/teacher/_pieces/reopen-contro
 import {
   teacher,
   type GradeBreakdownEntry,
-  type IntegrityResolutionOutcome,
+  type IntegrityResolution,
   type TeacherRubric,
   type TeacherSubmissionRow,
 } from "@/lib/api";
@@ -430,7 +430,7 @@ function HomeworkSectionReview({
   // "needs your eyes" subhead update instantly, then refetch the detail
   // so the resolved-by name + timestamp on the banner are authoritative.
   const handleIntegrityResolved = useCallback(
-    (submissionId: string, resolution: IntegrityResolutionOutcome) => {
+    (submissionId: string, resolution: IntegrityResolution) => {
       setRoster((prev) =>
         prev
           ? prev.map((e) =>
