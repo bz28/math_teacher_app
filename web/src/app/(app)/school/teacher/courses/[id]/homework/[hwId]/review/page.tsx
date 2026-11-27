@@ -8,6 +8,7 @@ import { oldestFirst } from "@/lib/generation-progress";
 import { WorkshopModal } from "@/components/school/teacher/workshop-modal";
 import { PageErrorState } from "@/components/ui/page-error-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PublishFromReview } from "./_components/publish-from-review";
 
 /**
  * Full-page approval queue for a homework's generated problems.
@@ -62,6 +63,11 @@ export default function HomeworkReviewPage({
   // Cached so the auto-append polling effect can re-run fetchPending
   // without re-fetching the assignment each tick.
   const [assignmentType, setAssignmentType] = useState<string | null>(null);
+  // Generation jobs still writing problems for this HW (the wizard's, via
+  // the same sessionStorage key the auto-append poll reads). While any
+  // run, "All caught up" must not offer Publish — more problems are on
+  // their way. The poll below sets and settles it.
+  const [generating, setGenerating] = useState(false);
 
   const fetchPending = useCallback(
     async (assignmentType: string): Promise<BankItem[]> => {
@@ -145,8 +151,13 @@ export default function HomeworkReviewPage({
     if (jobIds.length === 0) return;
 
     const startedAt = Date.now();
-    const interval = window.setInterval(async () => {
+    // First look right away (so Publish is held from the start, not
+    // after one interval), then every few seconds.
+    const poll = async () => {
       if (Date.now() - startedAt > QUEUE_AUTOAPPEND_CEILING_MS) {
+        // Past the ceiling the poll stops looking; don't hold Publish
+        // back on a job nobody is watching any more.
+        setGenerating(false);
         window.clearInterval(interval);
         return;
       }
@@ -159,19 +170,31 @@ export default function HomeworkReviewPage({
         );
         const items = await fetchPending(assignmentType);
         setPhase((p) => {
-          if (p.kind === "ready") return { ...p, items };
+          // WorkshopModal only ever appends from this list, and reads an
+          // empty one as "not a queue" — which, once the teacher has
+          // approved everything, dropped them off "All caught up" back
+          // onto the last problem. Keep the list until there's more.
+          if (p.kind === "ready") return items.length > 0 ? { ...p, items } : p;
           if (p.kind === "empty" && items.length > 0) {
             return { kind: "ready", items };
           }
           return p;
         });
+        // Batched with the queue update above; the workshop appends the
+        // new items an effect later, so Publish can show for a frame
+        // before they take the teacher off "All caught up". The click
+        // re-checks for pending problems, so that frame can't publish
+        // without them.
+        setGenerating(stillRunning);
         if (!stillRunning) {
           window.clearInterval(interval);
         }
       } catch {
         // Transient — keep polling.
       }
-    }, QUEUE_AUTOAPPEND_INTERVAL_MS);
+    };
+    const interval = window.setInterval(poll, QUEUE_AUTOAPPEND_INTERVAL_MS);
+    void poll();
     return () => window.clearInterval(interval);
   }, [phase.kind, assignmentId, courseId, fetchPending, assignmentType]);
 
@@ -230,6 +253,19 @@ export default function HomeworkReviewPage({
             queue={phase.items}
             renderAsPage
             onClose={goBack}
+            // A draft homework whose queue is now empty has one click
+            // left — offer it here. Skipped items are still pending, so
+            // not every problem is approved yet.
+            completionNext={(counts) =>
+              assignmentType === "homework" && counts.skipped === 0 ? (
+                <PublishFromReview
+                  courseId={courseId}
+                  assignmentId={assignmentId}
+                  homeworkHref={backHref}
+                  generating={generating}
+                />
+              ) : null
+            }
             onChanged={() => {
               // WorkshopModal updates individual items in-place and
               // handles queue advance internally; we don't need to

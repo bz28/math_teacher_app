@@ -19,6 +19,7 @@ import { ClickToEditText } from "@/components/school/shared/click-to-edit-text";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { GenerateSimilarDialog } from "./_pieces/generate-similar-dialog";
 import { InlineTitleEdit } from "./_pieces/inline-title-edit";
+import { CompletionModal } from "./_pieces/workshop-completion";
 import { SimilarJobStrip } from "./_pieces/similar-job-strip";
 import { AddStepButton, StepControls, StepDraft } from "./_pieces/step-editing";
 
@@ -67,6 +68,7 @@ export function WorkshopModal({
   parentTitle,
   onJumpToParent,
   renderAsPage = false,
+  completionNext,
 }: {
   item?: BankItem;
   queue?: BankItem[];
@@ -94,6 +96,9 @@ export function WorkshopModal({
   // (`/courses/[id]/homework/[hwId]/review`) so teachers get the same
   // rich edit+chat UX on a dedicated page instead of inside a modal.
   renderAsPage?: boolean;
+  // Queue mode: what to offer once every item is resolved, on the
+  // "All caught up" screen; given that screen's counts, null for nothing.
+  completionNext?: (counts: { approved: number; rejected: number; skipped: number }) => React.ReactNode;
 }) {
   // Queue state — only meaningful when `queue` is provided
   const isQueueMode = queue !== undefined && queue.length > 0;
@@ -666,6 +671,7 @@ export function WorkshopModal({
         total={total}
         onClose={onClose}
         renderAsPage={renderAsPage}
+        next={completionNext?.(counts)}
       />
     );
   }
@@ -1827,69 +1833,6 @@ function ChatMessageBubble({
     </div>
   );
 }
-
-// ─────────────────────────────────────────────────────────────────────
-// Completion screen (queue mode only)
-// ─────────────────────────────────────────────────────────────────────
-
-function CompletionModal({
-  counts,
-  total,
-  onClose,
-  renderAsPage = false,
-}: {
-  counts: { approved: number; rejected: number; skipped: number };
-  total: number;
-  onClose: () => void;
-  renderAsPage?: boolean;
-}) {
-  const card = (
-    <div
-      className={
-        renderAsPage
-          ? "w-full rounded-[--radius-xl] border border-green-200 bg-green-50 p-10 text-center shadow-sm dark:border-green-500/30 dark:bg-green-500/10"
-          : "w-full max-w-md rounded-[--radius-xl] bg-surface p-8 text-center shadow-xl"
-      }
-      onClick={renderAsPage ? undefined : (e) => e.stopPropagation()}
-    >
-      <div className="text-5xl">🎉</div>
-      <h2 className="mt-3 text-lg font-bold text-text-primary">All caught up</h2>
-      <p className="mt-1 text-sm text-text-muted">
-        You reviewed {total} question{total === 1 ? "" : "s"}
-      </p>
-      <div className="mt-4 flex justify-center gap-4 text-sm">
-        <span className="font-semibold text-green-700 ">
-          ✓ {counts.approved} approved
-        </span>
-        <span className="font-semibold text-red-700 dark:text-red-400">
-          ✕ {counts.rejected} rejected
-        </span>
-        {counts.skipped > 0 && (
-          <span className="font-semibold text-text-muted">⏭ {counts.skipped} skipped</span>
-        )}
-      </div>
-      <button
-        onClick={onClose}
-        className="mt-6 rounded-[--radius-md] bg-primary px-6 py-2 text-sm font-bold text-white hover:bg-primary-dark"
-      >
-        {renderAsPage ? "Back to homework" : "Done"}
-      </button>
-    </div>
-  );
-
-  if (renderAsPage) {
-    return <div className="mx-auto max-w-2xl px-4 pb-10 pt-8">{card}</div>;
-  }
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      onClick={onClose}
-    >
-      {card}
-    </div>
-  );
-}
-
 
 /**
  * "Requires a drawing" — whether a graph / sketch / table of values is
