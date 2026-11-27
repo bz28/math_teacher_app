@@ -305,7 +305,10 @@ async def review_integrity_flow(
             # never "stable", so click() would wait on it forever.
             close = toasts.get_by_role("button", name="Dismiss notification")
             for button in await close.all():
-                await button.dispatch_event("click")
+                try:  # a toast can time out between all() and here
+                    await button.dispatch_event("click", timeout=1000)
+                except PlaywrightTimeoutError:
+                    pass
             await close.first.wait_for(state="detached", timeout=_TIMEOUT_MS)
 
         async def re_resolve(outcome: str, *, clear: bool = True) -> bool:
@@ -359,8 +362,9 @@ async def review_integrity_flow(
                            retry.wait_for(state="detached", timeout=3000))
         await page.unroute("**/resolve/undo")
 
-        # An Undo that fails AFTER a newer resolve landed must not offer
-        # Retry: the server would take back the newer resolve instead.
+        # While an Undo is in flight the control holds still: a resolve
+        # then would race it (the server undoes whichever resolve is
+        # latest). Once that undo fails, Retry is offered as usual.
         release = asyncio.Event()
 
         async def slow_fail(route: Route) -> None:
@@ -370,15 +374,22 @@ async def review_integrity_flow(
         await page.route("**/resolve/undo", slow_fail)
         if await re_resolve("Contacted student"):
             await undo.click(timeout=_TIMEOUT_MS)
-            await re_resolve("Cleared — no concern")  # clears toasts; undo still in flight
-            release.set()
-            await step("a stale failed Undo did not report its failure",
-                       page.get_by_text("Couldn't undo the review.").last
-                       .wait_for(timeout=_TIMEOUT_MS))
-            if await retry.count():
-                issues.append("an Undo that failed after a newer resolve offered Retry "
-                              "(it would take back the newer resolve)")
+            try:
+                if await change.first.is_enabled():
+                    issues.append("Change stayed enabled while an Undo was in flight "
+                                  "(a resolve then races the undo)")
+            finally:
+                release.set()
+            await step("a failed Undo with no newer resolve offered no Retry",
+                       retry.wait_for(timeout=_TIMEOUT_MS))
+            await step("Change did not come back after the failed Undo settled",
+                       page.wait_for_function(
+                           "() => [...document.querySelectorAll('button')].some("
+                           "b => b.textContent.trim() === 'Change' && !b.disabled"
+                           " && b.offsetParent)", timeout=_TIMEOUT_MS))
         await page.unroute("**/resolve/undo")
+        # Leave the check as the final DB check expects.
+        await re_resolve("Cleared — no concern")
 
     async with get_session_factory()() as s:
         sub_id = uuid.UUID(rs.submission_id)

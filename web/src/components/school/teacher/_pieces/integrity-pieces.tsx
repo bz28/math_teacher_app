@@ -443,6 +443,10 @@ export const RESOLVE_UNDO_MS = 8000;
 // only the LATEST resolve, so a newer resolve retires the older toast
 // rather than leave an Undo that would no longer do what it said.
 const undoToastBySubmission = new Map<string, number>();
+// Submissions with an Undo request in flight. Resolving meanwhile would
+// race it (the server undoes whichever resolve is latest), so the
+// control holds still until the undo settles.
+const undoInFlight = new Set<string>();
 
 /** The teacher's "I handled this" control. Unresolved: the outcomes as
  *  chips, so one click resolves. Resolved: a quiet Reviewed chip whose
@@ -477,9 +481,13 @@ export function ResolveIntegrityControl({
   const [submitting, setSubmitting] =
     useState<IntegrityResolutionOutcome | null>(null);
   const [error, setError] = useState(false);
+  const [undoing, setUndoing] = useState(() => undoInFlight.has(submissionId));
 
   async function undo() {
+    if (undoInFlight.has(submissionId)) return;
     undoToastBySubmission.delete(submissionId);
+    undoInFlight.add(submissionId);
+    setUndoing(true);
     try {
       const { resolution: restored } = await teacher.undoResolveIntegrity(submissionId);
       latestOnResolved.current(restored);
@@ -510,10 +518,14 @@ export function ResolveIntegrityControl({
           action: { label: "Retry", onAction: () => void undo() },
         }),
       );
+    } finally {
+      undoInFlight.delete(submissionId);
+      setUndoing(false);
     }
   }
 
   async function resolve(outcome: IntegrityResolutionOutcome) {
+    if (undoInFlight.has(submissionId)) return;
     setSubmitting(outcome);
     setError(false);
     try {
@@ -549,8 +561,9 @@ export function ResolveIntegrityControl({
         {resolvedAt && <span>{formatResolvedAt(resolvedAt)}</span>}
         <button
           type="button"
+          disabled={undoing}
           onClick={() => setPicking(true)}
-          className="font-medium text-text-secondary underline-offset-2 hover:text-primary hover:underline"
+          className="font-medium disabled:opacity-60 text-text-secondary underline-offset-2 hover:text-primary hover:underline"
         >
           Change
         </button>
@@ -568,14 +581,14 @@ export function ResolveIntegrityControl({
           <button
             key={o.value}
             type="button"
-            disabled={submitting !== null}
+            disabled={submitting !== null || undoing}
             onClick={() => void resolve(o.value)}
             className={cn(
               "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary",
               resolution === o.value
                 ? "border-primary/50 bg-primary-bg text-primary"
                 : "border-border-light bg-surface text-text-secondary hover:border-primary/40 hover:text-primary",
-              submitting !== null && "opacity-60",
+              (submitting !== null || undoing) && "opacity-60",
             )}
           >
             <span aria-hidden>{o.icon}</span>
