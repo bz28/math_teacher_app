@@ -269,17 +269,20 @@ async def test_submit_homework_total_payload_guard_rejects() -> None:
     from unittest.mock import MagicMock
 
     fake_assignment = MagicMock()
+    # The refusal is recorded before it is raised; the recorder opens
+    # its own DB session, so stub it here and assert on the call.
+    recorded = _AsyncMock()
     with (
         patch.object(
             ssp,
             "_load_assignment_for_student",
             new=_AsyncMock(return_value=fake_assignment),
         ),
-        patch.object(
-            ssp,
-            "validate_and_decode_upload",
+        patch(
+            "api.core.submission_uploads.validate_and_decode_upload",
             return_value=(fake_decoded, "application/pdf"),
         ),
+        patch.object(ssp, "record_submission_rejection", new=recorded),
     ):
         # Existence check on the prior submission needs to not match.
         # Easiest path: stub the db.execute chain to return None for
@@ -297,16 +300,26 @@ async def test_submit_homework_total_payload_guard_rejects() -> None:
         # guard runs. This test is about a real student's upload.
         user.is_preview = False
 
+        request = MagicMock()
+        request.headers = {"content-length": "83886080"}
+        request.client = None
+
         try:
             await submit_homework(
                 assignment_id="00000000-0000-0000-0000-000000000002",
                 body=body,
+                request=request,
                 user=user,
                 db=db,
             )
         except HTTPException as exc:
             assert exc.status_code == 413
             assert "Submission too large" in exc.detail
+            recorded.assert_awaited_once()
+            kwargs = recorded.await_args.kwargs
+            assert kwargs["reason"] == "submission_too_large"
+            assert kwargs["decoded_bytes"] == 3 * len(fake_decoded)
+            assert kwargs["request_bytes"] == 83886080
             return
     raise AssertionError("expected total-payload guard to trip")
 
@@ -420,7 +433,7 @@ async def test_submit_rejects_pdfs_too_large_together(
     from unittest.mock import patch
 
     one_pdf = len(base64.b64decode(TINY_PDF))
-    with patch("api.routes.school_student_practice.MAX_PDF_BYTES", one_pdf + 1):
+    with patch("api.core.submission_uploads.MAX_PDF_BYTES", one_pdf + 1):
         r = await client.post(
             f"/v1/school/student/homework/{world['assignment_id']}/submit",
             headers=_auth(world["student_token"]),
@@ -447,7 +460,7 @@ async def test_submit_accepts_a_pdf_exactly_at_the_cap(
 
     exact = len(base64.b64decode(TINY_PDF))
     assert len(TINY_PDF) * 3 // 4 > exact  # the case that used to fail
-    with patch("api.routes.school_student_practice.MAX_PDF_BYTES", exact):
+    with patch("api.core.submission_uploads.MAX_PDF_BYTES", exact):
         r = await client.post(
             f"/v1/school/student/homework/{world['assignment_id']}/submit",
             headers=_auth(world["student_token"]),

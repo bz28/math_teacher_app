@@ -25,13 +25,12 @@ approved variation content.
 from __future__ import annotations
 
 import asyncio
-import base64
 import hashlib
 import logging
 import uuid
 from collections.abc import Coroutine
 from datetime import UTC, datetime, timedelta
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -42,18 +41,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, undefer
 
 from api.core import photo_store
-from api.core.audit_log import record_student_activity
-from api.core.constants import MAX_PDF_BYTES, MAX_SUBMISSION_FILES, MAX_SUBMISSION_TOTAL_BYTES
+from api.core.audit_log import client_ip, record_student_activity
+from api.core.constants import MAX_SUBMISSION_FILES
 from api.core.extraction_queue import drain as extraction_drain
 from api.core.extraction_queue import enqueue_submission as enqueue_extraction
 from api.core.image_utils import (
-    MIN_PAGE_LONG_EDGE,
     PAGE_ROTATIONS,
-    image_long_edge,
     page_looks_sideways,
     pdf_page_checks,
-    pdf_scan_long_edges,
-    rotate_upload,
     validate_and_decode_upload,
 )
 from api.core.integrity_pipeline import (
@@ -72,6 +67,8 @@ from api.core.late_policy import (
 )
 from api.core.part_labels import is_multi_part
 from api.core.submission_attempts import archive_attempt, clear_grading
+from api.core.submission_rejections import record_submission_rejection
+from api.core.submission_uploads import UploadRejected, validated_upload_files
 from api.core.tutor import completed_chat, step_chat
 from api.database import get_db, get_session_factory
 from api.middleware.auth import get_current_user_full
@@ -2259,104 +2256,37 @@ async def check_page_orientation(
     )
 
 
-async def _validated_upload_files(body: SubmitHomeworkRequest) -> list[dict[str, str]]:
-    """Validate, size-check and turn each page of a turn-in, returning
-    the files as stored. Shared by submit and retake, so a retake is
-    held to exactly the rules the first turn-in was. 400 on an
-    unreadable or too-small page, 413 over the whole-submission cap."""
-    # The work is required and is the source of truth — what the
-    # teacher reviews and what the integrity checker reads for per-
-    # problem answer extraction. Each file is validated by magic bytes
-    # against per-format size caps; we also enforce a whole-submission
-    # cap so a 10-PDF payload can't blow up the row store.
-    validated_files: list[dict[str, str]] = []
-    total_bytes = 0
-    pdf_bytes = 0
-    for i, raw in enumerate(body.files):
-        # Strip an optional `data:<media>;base64,` prefix before
-        # validation. The prefix is informational; magic bytes inside
-        # the decoded payload are the source of truth.
-        b64 = raw.split(",", 1)[1] if raw.startswith("data:") else raw
-        try:
-            decoded, media_type = validate_and_decode_upload(b64)
-        except ValueError as e:
-            raise HTTPException(
-                status_code=400,
-                detail=f"File {i + 1}: {e}",
-            ) from e
-        if media_type == "application/pdf":
-            # A PDF page is held to the same floor as a photo: a phone
-            # photo saved as a PDF reads no better than the photo. A PDF
-            # that can't be opened is left for the reader, as before.
-            edges = await asyncio.to_thread(pdf_scan_long_edges, b64)
-            small = next(
-                ((p, e) for p, e in enumerate(edges, 1) if e is not None and e < MIN_PAGE_LONG_EDGE),
-                None,
-            )
-            if small is not None:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        f"File {i + 1}, page {small[0]} is too small to read ({small[1]}px). "
-                        "Take it again closer up, so the page fills the screen."
-                    ),
-                )
-        else:
-            try:
-                long_edge = image_long_edge(decoded)
-            except Exception as e:
-                raise HTTPException(
-                    status_code=400, detail=f"File {i + 1}: couldn't read this image",
-                ) from e
-            if long_edge < MIN_PAGE_LONG_EDGE:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        f"File {i + 1} is too small to read ({long_edge}px). "
-                        "Take it again closer up, so the page fills the screen."
-                    ),
-                )
-        rotation = body.rotations[i] if body.rotations else 0
-        if rotation:
-            try:
-                # CPU work — off the event loop.
-                b64 = await asyncio.to_thread(rotate_upload, b64, media_type, rotation)
-            except Exception as e:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"File {i + 1}: couldn't read this file to rotate it",
-                ) from e
-            # Count what is stored, not what was sent.
-            stored = len(base64.b64decode(b64))
-        else:
-            stored = len(decoded)
-        total_bytes += stored
-        if media_type == "application/pdf":
-            pdf_bytes += stored
-        validated_files.append({"data": b64, "media_type": media_type})
-    if total_bytes > MAX_SUBMISSION_TOTAL_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=(
-                f"Submission too large: {total_bytes / 1024 / 1024:.1f}MB "
-                f"(max {MAX_SUBMISSION_TOTAL_BYTES // 1024 // 1024}MB total)"
-            ),
+async def _validated_or_recorded(
+    request: Request, user: User, assignment_id: uuid.UUID, body: SubmitHomeworkRequest,
+) -> list[dict[str, str]]:
+    """`validated_upload_files`, recording any refusal before it is
+    raised. A refused upload writes no submission row, so without the
+    record the student is indistinguishable from one who never tried —
+    the blind spot the admin dashboard's blocked-students view closes."""
+    try:
+        return await validated_upload_files(body.files, body.rotations)
+    except UploadRejected as e:
+        await record_submission_rejection(
+            actor_user_id=user.id,
+            assignment_id=assignment_id,
+            reason=e.reason,
+            request_bytes=_declared_request_bytes(request),
+            decoded_bytes=e.decoded_bytes,
+            detail=str(e.detail),
+            ip_address=client_ip(request),
         )
-    # The reader sends a PDF it can't render page by page (unreadable, or
-    # past its page cap) whole, and every page of a turn-in goes in one
-    # model request. So the PDFs together must fit that request, like a
-    # single PDF does (MAX_PDF_BYTES). Photos are resampled, so they don't
-    # count here.
-    if pdf_bytes > MAX_PDF_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=(
-                f"The PDFs in this turn-in come to {pdf_bytes / 1024 / 1024:.1f}MB "
-                f"(max {MAX_PDF_BYTES // 1024 // 1024}MB of PDFs). "
-                "Take photos of some pages instead, or split the PDF."
-            ),
-        )
-    return validated_files
+        raise
+
+
+def _declared_request_bytes(request: Request) -> int | None:
+    """The transport size of the upload, as the client declared it —
+    the same number the size-limit middleware measures, so a handler
+    rejection and a middleware rejection report bytes on one scale."""
+    raw = request.headers.get("content-length")
+    try:
+        return int(raw) if raw else None
+    except ValueError:
+        return None
 
 
 async def _store_photos(submission_id: uuid.UUID, files: list[dict[str, str]]) -> list[dict[str, Any]]:
@@ -2374,6 +2304,7 @@ async def _store_photos(submission_id: uuid.UUID, files: list[dict[str, str]]) -
 
 async def _resubmit_reopened(
     db: AsyncSession,
+    request: Request,
     user: User,
     assignment: Assignment,
     submission_id: uuid.UUID,
@@ -2401,7 +2332,7 @@ async def _resubmit_reopened(
     """
     from api.models.grading_job import STATUS_RUNNING, GradingJob
 
-    validated_files = await _validated_upload_files(body)
+    validated_files = await _validated_or_recorded(request, user, assignment.id, body)
     stored_files = await _store_photos(submission_id, validated_files)
     sub = (await db.execute(
         select(Submission)
@@ -2480,27 +2411,23 @@ async def _resubmit_reopened(
     return SubmitHomeworkResponse(submission_id=str(submission_id), submitted_at=now, is_late=is_late)
 
 
-@router.post("/homework/{assignment_id}/submit")
-async def submit_homework(
-    assignment_id: uuid.UUID,
-    body: SubmitHomeworkRequest,
-    user: User = Depends(get_current_user_full),
-    db: AsyncSession = Depends(get_db),
-) -> SubmitHomeworkResponse:
-    """Insert a submission for this student/HW. One-shot — a second call
-    returns 409 — unless the teacher reopened the homework for this
-    student after they turned it in (`Submission.reopened_at`): then this
-    turns it in once more (`_resubmit_reopened`). A late turn-in is
-    accepted and marked late, unless the homework's late policy closes it
-    at the student's due date (`no_credit`), which refuses it with a 403 —
-    except for a teacher's preview, which always goes through.
-    """
-    assignment = await _load_assignment_for_student(db, assignment_id, user)
-    # One instant for "when was this turned in": the closed check, is_late
-    # and the late penalty (measured off submitted_at) must all agree.
-    now = datetime.now(UTC)
-    due_at = await effective_due_at(db, assignment, user.id)
+class _SubmitGate(NamedTuple):
+    assignment: Assignment
+    due_at: datetime | None
+    existing: uuid.UUID | None
+    reopened: bool
 
+
+async def _submit_gate(
+    db: AsyncSession, assignment_id: uuid.UUID, user: User, now: datetime,
+) -> _SubmitGate:
+    """Every refusal submit makes before it looks at the photos: the
+    homework's own gate, one-shot (409 unless the teacher reopened it),
+    and a closed homework (403). Shared with the size-refusal recorder
+    (api/core/submission_rejections.py), so a refusal is logged exactly
+    when the route would have let the student this far."""
+    assignment = await _load_assignment_for_student(db, assignment_id, user)
+    due_at = await effective_due_at(db, assignment, user.id)
     # Already submitted? One-shot enforcement.
     existing_row = (await db.execute(
         select(Submission.id, Submission.reopened_at).where(
@@ -2517,8 +2444,31 @@ async def submit_homework(
     # submitted", not "closed"; before the preview's rehearsal is cleared.
     if not user.is_preview and is_closed(assignment.late_policy, due_at, now):
         raise HTTPException(status_code=403, detail=HOMEWORK_CLOSED_DETAIL)
+    return _SubmitGate(assignment, due_at, existing, reopened)
+
+
+@router.post("/homework/{assignment_id}/submit")
+async def submit_homework(
+    assignment_id: uuid.UUID,
+    body: SubmitHomeworkRequest,
+    request: Request,
+    user: User = Depends(get_current_user_full),
+    db: AsyncSession = Depends(get_db),
+) -> SubmitHomeworkResponse:
+    """Insert a submission for this student/HW. One-shot — a second call
+    returns 409 — unless the teacher reopened the homework for this
+    student after they turned it in (`Submission.reopened_at`): then this
+    turns it in once more (`_resubmit_reopened`). A late turn-in is
+    accepted and marked late, unless the homework's late policy closes it
+    at the student's due date (`no_credit`), which refuses it with a 403 —
+    except for a teacher's preview, which always goes through.
+    """
+    # One instant for "when was this turned in": the closed check, is_late
+    # and the late penalty (measured off submitted_at) must all agree.
+    now = datetime.now(UTC)
+    assignment, due_at, existing, reopened = await _submit_gate(db, assignment_id, user, now)
     if existing is not None and reopened and not user.is_preview:
-        return await _resubmit_reopened(db, user, assignment, existing, body, now, due_at)
+        return await _resubmit_reopened(db, request, user, assignment, existing, body, now, due_at)
     replaced_pages: list[dict[str, Any]] = []
     if existing is not None:
         # A teacher's preview is a rehearsal, not a turn-in. One-shot
@@ -2535,7 +2485,7 @@ async def submit_homework(
         )
         await db.flush()
 
-    validated_files = await _validated_upload_files(body)
+    validated_files = await _validated_or_recorded(request, user, assignment_id, body)
 
     # The submissions schema requires a section_id on the row.
     section_id = await _section_for_student_work(db, user, assignment)
@@ -2959,10 +2909,34 @@ async def _retake_block(db: AsyncSession, sub: Submission) -> str | None:
     return None
 
 
+async def _retake_gate(
+    db: AsyncSession, submission_id: uuid.UUID, user: User,
+) -> tuple[Submission, Assignment]:
+    """Every refusal retake makes before it looks at the photos: the
+    student's own submission, submit's homework gate, and
+    `_retake_block`. Shared with the size-refusal recorder, like
+    `_submit_gate`."""
+    sub = (await db.execute(
+        select(Submission).where(Submission.id == submission_id)
+    )).scalar_one_or_none()
+    if sub is None:
+        raise HTTPException(status_code=404, detail="Submission not found")
+    if sub.student_id != user.id:
+        raise HTTPException(status_code=403, detail="Not your submission")
+    # Same gate as submit: published (or the teacher's preview), and the
+    # student is still in a section it was assigned to.
+    assignment = await _load_assignment_for_student(db, sub.assignment_id, user)
+    block = await _retake_block(db, sub)
+    if block is not None:
+        raise HTTPException(status_code=409, detail=block)
+    return sub, assignment
+
+
 @router.post("/submissions/{submission_id}/retake")
 async def retake_submission(
     submission_id: uuid.UUID,
     body: SubmitHomeworkRequest,
+    request: Request,
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
 ) -> SubmitHomeworkResponse:
@@ -2972,7 +2946,7 @@ async def retake_submission(
     photos were the problem — sideways, blurry, a page missing. Allowed
     once, under `_retake_block`'s rules, while the homework still takes
     turn-ins. The new photos go through exactly submit's validation
-    (`_validated_upload_files`), and the reading is spawned the same way.
+    (`validated_upload_files`), and the reading is spawned the same way.
     The submission then walks the normal path again: the student checks
     the new reading, confirms or flags it.
 
@@ -2989,21 +2963,9 @@ async def retake_submission(
     takes turn-ins), 409 when a retake isn't allowed (with why), and
     submit's 400 / 413 for the files themselves.
     """
-    sub = (await db.execute(
-        select(Submission).where(Submission.id == submission_id)
-    )).scalar_one_or_none()
-    if sub is None:
-        raise HTTPException(status_code=404, detail="Submission not found")
-    if sub.student_id != user.id:
-        raise HTTPException(status_code=403, detail="Not your submission")
-    # Same gate as submit: published (or the teacher's preview), and the
-    # student is still in a section it was assigned to.
-    assignment = await _load_assignment_for_student(db, sub.assignment_id, user)
-    block = await _retake_block(db, sub)
-    if block is not None:
-        raise HTTPException(status_code=409, detail=block)
+    sub, assignment = await _retake_gate(db, submission_id, user)
 
-    validated_files = await _validated_upload_files(body)
+    validated_files = await _validated_or_recorded(request, user, sub.assignment_id, body)
     stored_files = await _store_photos(submission_id, validated_files)
 
     now = datetime.now(UTC)

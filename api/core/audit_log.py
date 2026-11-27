@@ -43,7 +43,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def _client_ip(request: Request | None) -> str | None:
+def client_ip(request: Request | None) -> str | None:
     """Best-effort client IP. Falls back through X-Forwarded-For when
     we're behind a proxy (Railway / Vercel set this) to the direct
     connection address. Truncated to 45 chars for IPv6 column width.
@@ -91,7 +91,7 @@ async def log_student_record_access(
             record_type=record_type,
             record_id=_as_uuid(record_id),
             school_id=_as_uuid(accessor_school_id),
-            ip_address=_client_ip(request),
+            ip_address=client_ip(request),
         )
         db.add(entry)
         await db.commit()
@@ -158,7 +158,7 @@ async def record_activity(
             target_type=target_type,
             target_id=_as_uuid(target_id),
             action_metadata=metadata,
-            ip_address=_client_ip(request),
+            ip_address=client_ip(request),
         )
         db.add(entry)
     except Exception:
