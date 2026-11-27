@@ -9,7 +9,7 @@ Downgrade recreates all three empty, as prod had them — the dropped rows
 are not restored (the export is their home).
 
 Revision ID: dl1000106
-Revises: di1000105
+Revises: dm1000106
 """
 from collections.abc import Sequence
 from typing import Any
@@ -18,7 +18,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "dl1000106"
-down_revision: str | None = "di1000105"
+down_revision: str | None = "dm1000106"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
