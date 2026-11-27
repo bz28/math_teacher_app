@@ -19,6 +19,7 @@ import { ClickToEditText } from "@/components/school/shared/click-to-edit-text";
 import { useAsyncAction } from "@/components/school/shared/use-async-action";
 import { GenerateSimilarDialog } from "./_pieces/generate-similar-dialog";
 import { InlineTitleEdit } from "./_pieces/inline-title-edit";
+import { PracticeVersionBanner, type PracticeOrigin } from "./_pieces/practice-version-banner";
 import { SimilarJobStrip } from "./_pieces/similar-job-strip";
 import { AddStepButton, StepControls, StepDraft } from "./_pieces/step-editing";
 
@@ -64,8 +65,7 @@ export function WorkshopModal({
   onJobStarted,
   activeJob,
   onReviewVariations,
-  parentTitle,
-  onJumpToParent,
+  practiceOrigin,
   renderAsPage = false,
 }: {
   item?: BankItem;
@@ -81,14 +81,9 @@ export function WorkshopModal({
   // Receives the full BankItem so the parent can stash it for later
   // restoration regardless of which status tab is active.
   onReviewVariations?: (parent: BankItem) => void;
-  // When viewing a variation, the parent's title is shown in the
-  // banner so the teacher knows which problem this scaffolds. Looked
-  // up by the parent (QuestionBankTab) since this component doesn't
-  // fetch on its own.
-  parentTitle?: string;
-  // Click handler for the parent title link. When present, shown as a
-  // clickable link; teacher clicks → parent swaps in.
-  onJumpToParent?: () => void;
+  // A practice set's source homework, looked up by the review page so
+  // each version shows beside its original problem.
+  practiceOrigin?: PracticeOrigin;
   // When true, renders inline (no fixed overlay, no backdrop, no
   // click-outside-to-close). Used by the full-page review route
   // (`/courses/[id]/homework/[hwId]/review`) so teachers get the same
@@ -853,45 +848,12 @@ export function WorkshopModal({
               chatOpen ? "md:border-r md:border-border-light" : ""
             }`}
           >
-            {/* Variation banner — shown only for items with a parent.
-                Makes it obvious the teacher is reviewing practice
-                scaffolding, not a standalone HW problem. Surfaces the
-                parent title so the teacher always knows which problem
-                this scaffolds. Clicking the parent title swaps to the
-                parent (gated when a proposal is pending so unsaved
-                chat doesn't get lost). */}
+            {/* Variation banner — shown only for items with a parent. */}
             {liveItem.parent_question_id && (
-              <div className="mb-4 rounded-[--radius-md] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] px-4 py-3 text-xs  ">
-                <div className="flex items-baseline justify-between gap-3">
-                  <div className="font-bold text-[color:var(--color-warning-dark)] ">
-                    ✨ Practice problem
-                  </div>
-                  {parentTitle && onJumpToParent && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (isProposalPending) {
-                          setError("Accept or discard the AI proposal first.");
-                          return;
-                        }
-                        onJumpToParent();
-                      }}
-                      className="text-[11px] font-semibold text-[color:var(--color-warning-dark)] underline-offset-2 hover:underline "
-                    >
-                      View parent question →
-                    </button>
-                  )}
-                </div>
-                {parentTitle && (
-                  <div className="mt-1 text-[12px] font-semibold text-[color:var(--color-warning-dark)] ">
-                    Practice for: <span className="font-bold">{parentTitle}</span>
-                  </div>
-                )}
-                <div className="mt-1 text-[color:var(--color-warning-dark)]/90 /80">
-                  Approving this makes it available as practice scaffolding —
-                  served via the student practice loop, not added to a homework.
-                </div>
-              </div>
+              <PracticeVersionBanner
+                parentId={liveItem.parent_question_id}
+                origin={practiceOrigin}
+              />
             )}
 
             {/* Question */}

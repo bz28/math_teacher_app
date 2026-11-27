@@ -20,7 +20,8 @@ predates the table.
 
 SHOTS is a comma list of: insights (the tab, Period 1), reason (the
 first reason opened to its students), live (the older homework, whose
-set is live, for the tray's practiced count). Shots land in
+set is live, for the tray's practiced count), review (the draft set's
+review queue, first version beside its original). Shots land in
 docs/design/insights-reteach-<shot>-<OUT>.png.
 """
 
@@ -194,7 +195,7 @@ async def seed() -> dict[str, Any]:
                                   [(0, "Solve by substitution: $x + y = 14$, $x - y = 4$."),
                                    (1, "Solve by substitution: $y = 3x$, $x + y = 8$."),
                                    (2, "Solve by substitution: $3x + y = 13$, $x - y = 3$.")])
-        await practice_set(elim, elim_ids, "draft", "pending",
+        draft = await practice_set(elim, elim_ids, "draft", "pending",
                            [(2, "Solve by elimination: $2x + 3y = 13$, $x - 3y = -4$."),
                             (2, "Solve by elimination: $5x + 2y = 24$, $x - 2y = 0$."),
                             (2, "Solve by elimination: $3x + 4y = 18$, $x - 4y = -2$.")])
@@ -209,6 +210,7 @@ async def seed() -> dict[str, Any]:
         refresh = await create_refresh_token(s, teacher.id)
         await s.commit()
         return {"course": str(course.id), "p1": str(p1.id), "elim": str(elim.id), "live": str(live.id),
+                "draft": str(draft.id),
                 "access": create_access_token(str(teacher.id), "teacher"), "refresh": refresh}
 
 
@@ -263,6 +265,14 @@ async def main() -> int:
                 await page.mouse.move(1, 1)
                 await page.wait_for_timeout(600)
                 await page.screenshot(path=str(OUT_DIR / f"insights-reteach-live-{OUT}.png"), full_page=True)
+            if "review" in SHOTS:
+                review = f"/school/teacher/courses/{w['course']}/homework/{w['draft']}/review"
+                await page.goto(f"{WEB_BASE}{review}", wait_until="networkidle", timeout=90000)
+                await page.get_by_text("[Practice] Elimination Method").first.wait_for(timeout=60000)
+                await page.get_by_text("Solve by elimination").first.wait_for(timeout=60000)
+                await page.mouse.move(1, 1)
+                await page.wait_for_timeout(800)
+                await page.screenshot(path=str(OUT_DIR / f"insights-reteach-review-{OUT}.png"), full_page=True)
             print(f"  page errors: {len(errors)}")
             for e in errors[:10]:
                 print(f"    ! {e}")
