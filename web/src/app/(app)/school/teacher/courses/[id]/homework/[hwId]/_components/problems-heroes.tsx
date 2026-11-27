@@ -5,8 +5,8 @@ import { generatingLabel } from "@/lib/generation-progress";
 
 // ────────────────────────────────────────────────────────────────────
 // Empty hero — shown in the Problems section when there are no
-// problems AND nothing is generating. Turns the dead-end into a clear
-// next action.
+// problems AND nothing is generating or waiting for review. Turns the
+// dead-end into a clear next action.
 // ────────────────────────────────────────────────────────────────────
 export function ProblemsEmptyHero({
   disabled,
@@ -22,7 +22,7 @@ export function ProblemsEmptyHero({
         Let&apos;s add some problems
       </h3>
       <p className="mt-1 text-xs text-text-muted">
-        Generate with AI in ~30 seconds, grounded in your uploaded materials.
+        Generate with AI, grounded in your uploaded materials. Usually 1–2 minutes.
       </p>
       <button
         type="button"
@@ -36,40 +36,78 @@ export function ProblemsEmptyHero({
   );
 }
 
+// While problems are on their way (or waiting in the review queue), the
+// empty Problems list says only where they'll appear: the banner above
+// holds the one call to action.
 // ────────────────────────────────────────────────────────────────────
-// Generating hero — shown in the Problems section while a gen job is
-// in flight and zero problems have landed yet. Mirrors the empty-hero
-// aesthetic so an in-flight gen reads as a deliberate "we're on it"
-// state, not a stalled skeleton. Live count comes from the polled job.
-// ────────────────────────────────────────────────────────────────────
-export function ProblemsGeneratingHero({
-  requestedCount,
-  producedCount,
-  reading,
-}: {
-  requestedCount: number;
-  producedCount: number;
-  reading: boolean;
-}) {
-  // role="status" announces text changes politely — drives the "X of Y
-  // ready" subcopy update so screen-reader users hear progress.
+export function ProblemsAwaitingNote() {
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="mt-5 rounded-[--radius-xl] border border-dashed border-primary/40 bg-primary-bg/20 px-8 py-12 text-center"
-    >
-      <div className="animate-pulse text-5xl" aria-hidden="true">✨</div>
-      <h3 className="mt-4 text-lg font-bold text-text-primary">
-        {generatingLabel(requestedCount, reading)}
-      </h3>
-      <p className="mt-1 text-xs text-text-muted">
-        {producedCount > 0 && requestedCount > 0
-          ? `${producedCount} of ${requestedCount} ready — they'll land in the review queue as the AI finishes each one.`
-          : reading
-            ? "The AI is copying each problem from your pages and working out its solution. They'll land in the review queue for you to approve."
-            : "The AI is writing them from your unit and materials. Usually about 30 seconds."}
-      </p>
+    <p className="mt-5 rounded-[--radius-md] border border-dashed border-border-light px-6 py-8 text-center text-sm text-text-muted">
+      Problems you approve appear here.
+    </p>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Generation banner — the one place the page talks about a running job:
+// what's being made, an honest wait (the real median for AI generation
+// is about 90 s; an upload has no estimate), progress, and Review once
+// anything is ready. Replaces the pending banner while a job runs.
+// ────────────────────────────────────────────────────────────────────
+export function GenerationBanner({
+  requested,
+  produced,
+  reading,
+  more,
+  pendingCount,
+  reviewHref,
+}: {
+  requested: number;
+  produced: number;
+  reading: boolean;
+  /** The homework already has problems: "Generating 5 more problems". */
+  more: boolean;
+  pendingCount: number;
+  reviewHref: string;
+}) {
+  const label = generatingLabel(requested, reading, more ? "more" : undefined).replace(/…$/, "");
+  const pct = requested > 0 ? Math.min(100, Math.round((produced / requested) * 100)) : 0;
+  return (
+    <div className="mt-4 flex flex-col gap-3 rounded-[--radius-xl] border border-[color:var(--color-warning)]/30 bg-[color:var(--color-warning-bg)] px-5 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:bg-[color:var(--color-warning)]/10">
+      <div role="status" aria-live="polite" className="min-w-0 flex-1">
+        <p className="text-sm font-bold text-text-primary">
+          {label}
+          {reading ? "…" : " · usually 1–2 minutes"}
+        </p>
+        {requested > 0 && (
+          <div
+            className="mt-2 h-1.5 overflow-hidden rounded-full bg-[color:var(--color-warning)]/15"
+            role="progressbar"
+            aria-label="Problems ready"
+            aria-valuemin={0}
+            aria-valuemax={requested}
+            aria-valuenow={Math.min(produced, requested)}
+          >
+            <div
+              className="h-full rounded-full bg-[color:var(--color-warning-dark)] transition-[width] duration-500"
+              style={{ width: `${Math.max(pct, 4)}%` }}
+            />
+          </div>
+        )}
+        <p className="mt-1.5 text-xs text-text-secondary">
+          {pendingCount > 0
+            ? `${pendingCount} ready to review now. The rest land in the queue as they finish.`
+            : "They land in your review queue as they finish. You can leave this page."}
+        </p>
+      </div>
+      {pendingCount > 0 && (
+        <Link
+          href={reviewHref}
+          className="shrink-0 self-start rounded-[--radius-md] bg-[color:var(--color-warning-dark)] px-4 py-2 text-xs font-bold text-white hover:opacity-90 sm:self-auto"
+        >
+          Review {pendingCount} ▸
+        </Link>
+      )}
     </div>
   );
 }

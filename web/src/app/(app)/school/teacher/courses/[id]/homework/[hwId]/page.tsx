@@ -27,7 +27,11 @@ import { CollapsibleSection, ConfigBlock, configSummary } from "./_components/co
 import { DeleteHomework } from "./_components/delete-homework";
 import { HomeworkHeader } from "./_components/homework-header";
 import { InstructionsBlock } from "./_components/instructions-block";
-import { GenerationStalledBanner, PendingReviewLink } from "./_components/problems-heroes";
+import {
+  GenerationBanner,
+  GenerationStalledBanner,
+  PendingReviewLink,
+} from "./_components/problems-heroes";
 import { ProblemsSection } from "./_components/problems-section";
 import { RemoveProblemsView } from "./_components/remove-problems-view";
 
@@ -413,7 +417,18 @@ export default function HomeworkDetailPage({
             />
           )}
 
-          {pending.length > 0 && <PendingReviewLink count={pending.length} href={reviewHref} />}
+          {activeGenerating ? (
+            <GenerationBanner
+              requested={aggregateRequested}
+              produced={aggregateProduced}
+              reading={readingUpload}
+              more={problems.length > 0}
+              pendingCount={pending.length}
+              reviewHref={reviewHref}
+            />
+          ) : (
+            pending.length > 0 && <PendingReviewLink count={pending.length} href={reviewHref} />
+          )}
 
           <ProblemsSection
             hw={hw}
@@ -422,12 +437,7 @@ export default function HomeworkDetailPage({
             assignmentId={assignmentId}
             graded={graded}
             isPublished={isPublished}
-            generation={{
-              active: activeGenerating,
-              requested: aggregateRequested,
-              produced: aggregateProduced,
-              reading: readingUpload,
-            }}
+            awaitingProblems={activeGenerating || pending.length > 0}
             saveStates={saveStates}
             saveErrors={saveErrors}
             onChangePoints={onChangePoints}

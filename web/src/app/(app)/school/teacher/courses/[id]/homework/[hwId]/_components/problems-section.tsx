@@ -1,6 +1,5 @@
 "use client";
 
-import { generatingLabel } from "@/lib/generation-progress";
 import { MAX_TOTAL_POINTS } from "@/lib/points";
 import type { TeacherRubric } from "@/lib/api";
 import type { SaveState } from "@/components/school/teacher/_pieces/inline-saved-hint";
@@ -11,7 +10,7 @@ import {
 } from "@/components/school/teacher/_pieces/problem-points";
 import type { AssignmentProblem, ConfigField, HomeworkDetail } from "../_lib/types";
 import { ProblemRow } from "./problem-row";
-import { ProblemsEmptyHero, ProblemsGeneratingHero } from "./problems-heroes";
+import { ProblemsAwaitingNote, ProblemsEmptyHero } from "./problems-heroes";
 
 /**
  * Problems & grading — the hero of the homework page. Holds every
@@ -26,7 +25,7 @@ export function ProblemsSection({
   assignmentId,
   graded,
   isPublished,
-  generation,
+  awaitingProblems,
   saveStates,
   saveErrors,
   onChangePoints,
@@ -45,8 +44,9 @@ export function ProblemsSection({
   assignmentId: string;
   graded: boolean;
   isPublished: boolean;
-  /** The generation jobs feeding this homework, summed. */
-  generation: { active: boolean; requested: number; produced: number; reading: boolean };
+  /** Problems are being generated or wait in the review queue: the
+   *  banner above is the call to action, so an empty list stays quiet. */
+  awaitingProblems: boolean;
   saveStates: Record<ConfigField, SaveState>;
   saveErrors: Record<ConfigField, string | null>;
   onChangePoints: (change: PointsChange) => void;
@@ -95,44 +95,14 @@ export function ProblemsSection({
       </div>
 
       {/* State-driven body */}
-      {generation.active && problems.length === 0 ? (
-        <ProblemsGeneratingHero
-          requestedCount={generation.requested}
-          producedCount={generation.produced}
-          reading={generation.reading}
-        />
-      ) : problems.length === 0 ? (
-        <ProblemsEmptyHero
-          disabled={isPublished}
-          onGenerate={onGenerate}
-        />
+      {problems.length === 0 ? (
+        awaitingProblems ? (
+          <ProblemsAwaitingNote />
+        ) : (
+          <ProblemsEmptyHero disabled={isPublished} onGenerate={onGenerate} />
+        )
       ) : (
         <>
-          {/* Inline generating strip when we already have
-              problems but the teacher kicked off more.
-              role=status announces the live count to screen
-              readers, mirroring the empty-state hero. */}
-          {generation.active && (
-            <div
-              role="status"
-              aria-live="polite"
-              className="mt-4 flex items-center gap-3 rounded-[--radius-md] border border-primary/30 bg-primary-bg/30 px-3 py-2 text-xs text-text-primary dark:border-primary/40 dark:bg-primary/10"
-            >
-              <span className="relative flex h-2.5 w-2.5 shrink-0" aria-hidden="true">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-60" />
-                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-primary" />
-              </span>
-              <span>
-                <span className="font-semibold">
-                  {generatingLabel(generation.requested, generation.reading, "more")}
-                  {generation.produced > 0 && generation.requested > 0
-                    ? ` · ${generation.produced} of ${generation.requested} ready`
-                    : ""}
-                </span>{" "}
-                <span className="text-text-secondary">new ones land in the review queue when ready.</span>
-              </span>
-            </div>
-          )}
           {graded && (
             <PointsTotalBar
               points={hw.points}
