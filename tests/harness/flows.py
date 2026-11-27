@@ -43,6 +43,7 @@ from PIL import Image
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from tests.harness.browser import HarnessBrowser
+from tests.harness.flows_student_history import student_history_flow
 from tests.harness.seed import (
     WORKSHOP_FLOW_FIGURE,
     Seed,
@@ -738,7 +739,7 @@ _FLOWS = (
     _login_flow, _logout_flow, _student_insights_flow, _confirm_reading_flow,
     _retake_photos_flow, _reopen_resubmit_flow,
     _join_class_flow, _submit_homework_flow, _grade_publish_flow,
-    _workshop_steps_flow, _review_page_flow,
+    _workshop_steps_flow, _review_page_flow, student_history_flow,
 )
 
 

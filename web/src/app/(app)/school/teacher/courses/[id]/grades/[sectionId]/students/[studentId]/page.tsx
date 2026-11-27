@@ -4,6 +4,7 @@ import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { teacher, type StudentGradesResponse } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
+import { studentReviewHref } from "@/lib/review-deep-link";
 import { PercentBadge } from "@/components/school/shared/percent-badge";
 import { PracticeEngagement } from "@/components/school/teacher/practice-engagement";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -96,6 +97,7 @@ export default function StudentGradesPage({
                 hw={hw}
                 courseId={courseId}
                 sectionId={sectionId}
+                studentId={studentId}
               />
             ))}
           </div>
@@ -239,15 +241,16 @@ function PublishedHwRow({
   hw,
   courseId,
   sectionId,
+  studentId,
 }: {
   hw: StudentGradesResponse["published_hws"][number];
   courseId: string;
   sectionId: string;
+  studentId: string;
 }) {
-  // Link into the existing per-HW review page — the teacher can
-  // see the full breakdown there. sectionId in the HW link matches
-  // the section we're viewing on this page.
-  const href = `/school/teacher/courses/${courseId}/homework/${hw.assignment_id}/sections/${sectionId}/review`;
+  // Into the per-HW review page, opened on this student — without
+  // ?student= it opens on whoever it picks first.
+  const href = studentReviewHref(courseId, hw.assignment_id, sectionId, studentId);
   return (
     <Link
       href={href}
@@ -266,7 +269,16 @@ function PublishedHwRow({
           </div>
         )}
       </div>
-      {hw.final_score === null ? (
+      {hw.final_score === null && hw.awaiting_review_ai_score !== null ? (
+        <span className="flex shrink-0 items-center gap-2">
+          <span className="text-[11px] tabular-nums text-text-muted">
+            AI {Math.round(hw.awaiting_review_ai_score)}%
+          </span>
+          <span className="rounded-[--radius-pill] border border-primary/30 bg-primary-bg px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-primary">
+            Awaiting your review
+          </span>
+        </span>
+      ) : hw.final_score === null ? (
         <span className="shrink-0 rounded-[--radius-pill] border border-border-light bg-[color:var(--color-surface-alt-2)] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--color-text-secondary)]">
           Not graded yet
         </span>

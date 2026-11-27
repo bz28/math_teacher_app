@@ -34,6 +34,7 @@ import {
   type SortKey,
 } from "@/lib/gradebook";
 import { earnedPoints, formatPoints } from "@/lib/points";
+import { studentReviewHref } from "@/lib/review-deep-link";
 
 /**
  * The section gradebook: students down the side, homework across the
@@ -92,7 +93,7 @@ export function GradebookGrid({
   }, [hide]);
 
   const reviewHref = (assignmentId: string, studentId: string) =>
-    `/school/teacher/courses/${courseId}/homework/${assignmentId}/sections/${data.section.id}/review?student=${studentId}`;
+    studentReviewHref(courseId, assignmentId, data.section.id, studentId);
 
   if (data.assignments.length === 0) {
     return (

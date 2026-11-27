@@ -552,6 +552,8 @@ class ReviewSeed:
     graded_student: str  # AI-graded, one confident + one low-confidence problem
     ungraded_student: str  # submitted, not graded yet
     absent_student: str  # enrolled, never submitted
+    graded_student_id: str
+    ungraded_student_id: str
 
 
 async def seed_review_homework(seed: Seed) -> ReviewSeed:
@@ -597,6 +599,7 @@ async def seed_review_homework(seed: Seed) -> ReviewSeed:
         s.add(AssignmentSection(assignment_id=hw.id, section_id=section_id, published_at=now))
 
         names = {}
+        ids: dict[str, str] = {}
         subs: dict[str, Submission] = {}
         for key, name, submits in (
             ("graded", "Ada Review", True),
@@ -611,6 +614,7 @@ async def seed_review_homework(seed: Seed) -> ReviewSeed:
             await s.flush()
             s.add(SectionEnrollment(section_id=section_id, course_id=course_id, student_id=student.id))
             names[key] = name
+            ids[key] = str(student.id)
             if submits:
                 sub = Submission(
                     assignment_id=hw.id, student_id=student.id, section_id=section_id,
@@ -642,4 +646,5 @@ async def seed_review_homework(seed: Seed) -> ReviewSeed:
             course_id=seed.course_id, assignment_id=str(hw.id), section_id=str(section_id),
             graded_student=names["graded"], ungraded_student=names["ungraded"],
             absent_student=names["absent"],
+            graded_student_id=ids["graded"], ungraded_student_id=ids["ungraded"],
         )

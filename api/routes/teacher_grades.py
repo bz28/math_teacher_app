@@ -495,6 +495,19 @@ async def get_student_grades(
         )
     )).all()
     published_by_aid = {r.assignment_id: r for r in published_rows}
+    # An AI grade nobody has approved yet: the teacher's to-do, not a
+    # "not graded" — the page says "Awaiting your review" with the AI's score.
+    awaiting_by_aid = {r.assignment_id: r.ai_score for r in (await db.execute(
+        select(Submission.assignment_id, SubmissionGrade.ai_score)
+        .join(SubmissionGrade, SubmissionGrade.submission_id == Submission.id)
+        .where(
+            Submission.student_id == student_id,
+            Submission.assignment_id.in_(assigned_aids),
+            SubmissionGrade.ai_score.is_not(None),
+            SubmissionGrade.reviewed_by.is_(None),
+            SubmissionGrade.grade_published_at.is_(None),
+        )
+    )).all()}
     submitted_aids = {r.assignment_id for r in (await db.execute(
         select(Submission.assignment_id)
         .where(
@@ -523,6 +536,9 @@ async def get_student_grades(
             "graded_at": grade.graded_at.isoformat() if grade and grade.graded_at else None,
             "final_score": round(grade.final_score, 1) if grade else None,
             "teacher_notes": grade.teacher_notes if grade else None,
+            "awaiting_review_ai_score": (
+                round(awaiting_by_aid[aid], 1) if not grade and aid in awaiting_by_aid else None
+            ),
             "section_id": str(section_id),
         })
     published_hws.sort(key=lambda h: h["due_at"] or "", reverse=True)

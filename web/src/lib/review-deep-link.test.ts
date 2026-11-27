@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   parseProblemFocus,
+  studentReviewHref,
   withReportedProblem,
   withSelectedStudent,
 } from "./review-deep-link.ts";
@@ -51,4 +52,11 @@ test("a per-problem report points at the problem; others drop a stale one", () =
   const whole = new URL(withReportedProblem(`${REVIEW}?student=a&problem=4`, null));
   assert.equal(whole.searchParams.has("problem"), false);
   assert.equal(whole.searchParams.get("student"), "a");
+});
+
+test("a link to one student's review names that student", () => {
+  const href = studentReviewHref("c", "h", "s", "stu-9");
+  const url = new URL(href, "https://veradicai.com");
+  assert.equal(url.pathname, "/school/teacher/courses/c/homework/h/sections/s/review");
+  assert.equal(url.searchParams.get("student"), "stu-9");
 });

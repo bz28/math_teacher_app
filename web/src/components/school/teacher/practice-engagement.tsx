@@ -88,7 +88,9 @@ export function PracticeEngagement({
       {!hasPracticed ? (
         <div className="mt-5 rounded-[--radius-lg] border border-dashed border-border-light bg-bg-subtle px-6 py-8 text-center">
           <p className="text-sm text-text-secondary">
-            {data.student.name.split(" ")[0]} hasn&rsquo;t practiced yet.
+            {/* One string: as JSX text, the space before an entity was dropped
+                ("Adahasn't practiced yet"). */}
+            {`${data.student.name.split(" ")[0]} hasn’t practiced yet.`}
           </p>
           <p className="mt-1 text-xs text-text-muted">
             Engagement will appear here once they work through a practice set or a guided walkthrough.

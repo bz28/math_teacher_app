@@ -1496,6 +1496,10 @@ export interface StudentGradePublishedHw {
    *  "Not graded yet" instead of a score. */
   final_score: number | null;
   teacher_notes: string | null;
+  /** The AI's score while it waits for the teacher's approval — the row
+   *  reads "Awaiting your review" rather than "Not graded yet". Null once
+   *  approved, hand-graded or published, or when there's no AI grade. */
+  awaiting_review_ai_score: number | null;
   /** Included so the detail page can link into the review page. */
   section_id: string;
 }
