@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import StatTile from "../../components/StatTile";
 import ErrorState from "../../components/ErrorState";
 import { costsApi, type SpendBucket, type SpendData, type SpendGroup, type SpendRow } from "../../lib/costsApi";
-import { BREAKDOWN_HOURS, barValue, bucketLabel, drillTo, isConcentrated, monthName, perCall, usd } from "./spendFormat";
+import { BREAKDOWN_HOURS, barValue, bucketLabel, drillTo, isConcentrated, monthLabels, perCall, usd } from "./spendFormat";
 
 /**
  * Spend — what we actually paid, where it went, and where the month is
@@ -59,8 +59,17 @@ export default function SpendTab({ scopeParams, includeInternal }: Props) {
     return () => { cancelled = true; };
   }, [scopeKey, bucket, group, includeInternal, attempt]);
 
-  // A new breakdown starts folded again.
-  useEffect(() => setShowAll(false), [group]);
+  // The fold's button goes away once pressed, so keyboard focus moves to
+  // the first row it revealed rather than dropping to the page.
+  const tbodyRef = useRef<HTMLTableSectionElement>(null);
+  const focusRevealed = useRef(false);
+  const expand = () => { focusRevealed.current = true; setShowAll(true); };
+  useEffect(() => {
+    if (!showAll || !focusRevealed.current) return;
+    focusRevealed.current = false;
+    const revealed = tbodyRef.current?.rows[VISIBLE_ROWS - 1];
+    (revealed?.querySelector("a") ?? revealed?.cells[0])?.focus();
+  }, [showAll]);
 
   const rows = useMemo(() => {
     if (!data) return { shown: [] as SpendRow[], rest: null as SpendRow | null };
@@ -84,11 +93,9 @@ export default function SpendTab({ scopeParams, includeInternal }: Props) {
   if (!data) return <p className="loading">Loading…</p>;
 
   const h = data.headline;
-  const today = new Date();
-  const monthLabel = monthName(h.month_start);
-  const lastMonthLabel = monthName(
-    new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 1, 1)).toISOString().slice(0, 10),
-  );
+  // From the response, never the browser's clock: a tab left open over
+  // a month's turn must still label the figures it shows.
+  const months = monthLabels(h.month_start, data.window.end);
   // Render from what the response says it is, not the toggles: until a
   // new breakdown lands, the old rows must keep their own labels and links.
   const shownBucket = data.bucket;
@@ -96,17 +103,19 @@ export default function SpendTab({ scopeParams, includeInternal }: Props) {
   const c = data.concentration;
   const concentrated = isConcentrated(c, "school_id" in scopeParams);
   const peak = Math.max(...data.series.map((p) => p.cost), 0);
+  // A toggle was pressed and its answer hasn't landed: say so.
+  const stale = shownGroup !== group || shownBucket !== bucket;
 
   return (
-    <div className="costs-spend">
+    <div className={`costs-spend${stale ? " stale" : ""}`} aria-busy={stale}>
       <div className="tile-grid">
         <StatTile
-          label={`This month · ${monthLabel} 1–${today.getUTCDate()}`}
+          label={`This month · ${months.thisMonth} 1–${months.throughDay}`}
           value={usd(h.this_month)}
         />
-        <StatTile label={`Last month · ${lastMonthLabel}`} value={usd(h.last_month)} />
+        <StatTile label={`Last month · ${months.lastMonth}`} value={usd(h.last_month)} />
         <StatTile
-          label={`Projected ${monthLabel}`}
+          label={`Projected ${months.thisMonth}`}
           value={usd(h.projected_month_end, 0)}
           sub={
             h.range_weeks >= 2
@@ -176,7 +185,8 @@ export default function SpendTab({ scopeParams, includeInternal }: Props) {
                 type="button"
                 aria-pressed={group === g.key}
                 className={group === g.key ? "on" : ""}
-                onClick={() => setGroup(g.key)}
+                // A new breakdown starts folded again.
+                onClick={() => { setGroup(g.key); setShowAll(false); }}
               >
                 {g.label}
               </button>
@@ -196,7 +206,7 @@ export default function SpendTab({ scopeParams, includeInternal }: Props) {
                 <th className="num">$/call</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody ref={tbodyRef}>
               {rows.shown.map((r) => {
                 const to = drillTo(r, shownGroup);
                 return (
@@ -218,10 +228,10 @@ export default function SpendTab({ scopeParams, includeInternal }: Props) {
                 );
               })}
               {rows.rest && (
-                <tr className="drill" onClick={() => setShowAll(true)}>
+                <tr className="drill" onClick={expand}>
                   <td>
-                    <button type="button" className="costs-rest" aria-expanded={false}
-                      onClick={(e) => { e.stopPropagation(); setShowAll(true); }}>
+                    <button type="button" className="costs-rest"
+                      onClick={(e) => { e.stopPropagation(); expand(); }}>
                       {rows.rest.label}
                     </button>
                   </td>

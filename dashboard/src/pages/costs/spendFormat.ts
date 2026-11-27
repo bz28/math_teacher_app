@@ -32,6 +32,18 @@ export function monthName(iso: string, style: "long" | "short" = "short"): strin
   return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-US", { month: style, timeZone: "UTC" });
 }
 
+/** The headline's month names and the day "this month" runs through —
+ * read off the response's month start and window end, in UTC. */
+export function monthLabels(monthStart: string, windowEnd: string) {
+  const start = new Date(`${monthStart}T00:00:00Z`);
+  const last = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() - 1, 1));
+  return {
+    thisMonth: monthName(monthStart),
+    lastMonth: monthName(last.toISOString().slice(0, 10)),
+    throughDay: new Date(windowEnd).getUTCDate(),
+  };
+}
+
 export function bucketLabel(iso: string, bucket: SpendBucket): string {
   const d = new Date(`${iso}T00:00:00Z`);
   if (bucket === "month") return d.toLocaleDateString("en-US", { month: "short", year: "2-digit", timeZone: "UTC" });

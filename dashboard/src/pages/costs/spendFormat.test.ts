@@ -9,7 +9,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { SpendRow } from "../../lib/costsApi.ts";
-import { barValue, drillTo, isConcentrated, perCall } from "./spendFormat.ts";
+import { barValue, drillTo, isConcentrated, monthLabels, perCall } from "./spendFormat.ts";
 
 const row = (key: string | null): SpendRow => ({
   key, label: key ?? "not tied to a teacher", calls: 1, cost: 1, share: 1, cost_per_call: 1,
@@ -51,4 +51,14 @@ test("a bar under a cent isn't labelled 0.00", () => {
   assert.equal(barValue(0.004), "<0.01");
   assert.equal(barValue(0), "");
   assert.equal(barValue(5.239), "5.24");
+});
+
+test("month labels come from the response, not the browser's clock", () => {
+  // A tab open over the turn of the year: the figures are December's.
+  assert.deepEqual(monthLabels("2026-12-01", "2026-12-01T03:00:00+00:00"), {
+    thisMonth: "Dec", lastMonth: "Nov", throughDay: 1,
+  });
+  assert.deepEqual(monthLabels("2027-01-01", "2027-01-15T12:00:00+00:00"), {
+    thisMonth: "Jan", lastMonth: "Dec", throughDay: 15,
+  });
 });
