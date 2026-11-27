@@ -1197,6 +1197,12 @@ export interface TeacherAssignment {
   /** Submissions whose grade has been released to the student view
    *  (grade_published_at set by "Publish grades"). */
   published: number;
+  /** Published grades edited since (the student still sees the old
+   *  one) — a republish the teacher still owes. */
+  republish: number;
+  /** Students who haven't turned it in whose own due date (an
+   *  extension) is still ahead — not missing yet. */
+  extended: number;
   /** AI-generated problems originated by this HW that are still
    *  awaiting the teacher's approve/reject decision before they can
    *  join the problem list. Mirrors the "N problems need your review"

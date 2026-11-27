@@ -4,7 +4,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { TeacherAssignment } from "@/lib/api";
-import { bucketHomeworks, isHomeworkCompleted } from "./homework-buckets.ts";
+import {
+  bucketHomeworks,
+  extendedCount,
+  isHomeworkCompleted,
+  missingCount,
+  needsGradingAlert,
+  republishOnlyCount,
+} from "./homework-buckets.ts";
 
 const NOW = new Date("2026-06-22T12:00:00.000Z").getTime();
 const DAY = 86_400_000;
@@ -34,6 +41,8 @@ function hw(overrides: Partial<TeacherAssignment>): TeacherAssignment {
     graded: 0,
     to_review: 0,
     published: 0,
+    republish: 0,
+    extended: 0,
     pending_review: 0,
     avg_score: null,
     created_at: at(-30 * DAY),
@@ -76,21 +85,6 @@ test("past due, all graded but NONE published → needsGrading (the fix)", () =>
 test("past due, fully submitted, only some published → needsGrading", () => {
   assert.equal(
     bucketOf({ due_at: at(-1 * DAY), total_students: 10, submitted: 10, published: 6 }),
-    "needsGrading",
-  );
-});
-
-test("past due with missing submissions, all present grades published → needsGrading", () => {
-  // Everyone who submitted is published, but the class isn't fully in.
-  assert.equal(
-    bucketOf({ due_at: at(-1 * DAY), total_students: 10, submitted: 7, published: 7 }),
-    "needsGrading",
-  );
-});
-
-test("past due with zero submissions → needsGrading (overdue, missing work)", () => {
-  assert.equal(
-    bucketOf({ due_at: at(-1 * DAY), total_students: 10, submitted: 0, published: 0 }),
     "needsGrading",
   );
 });
@@ -175,4 +169,79 @@ test("every published HW lands in exactly one bucket", () => {
   const total =
     b.needsGrading.length + b.dueThisWeek.length + b.upcoming.length + b.completed.length;
   assert.equal(total, items.length);
+});
+
+test("past due, every turned-in grade published, some never turned in → Completed, with them as missing", () => {
+  // Nothing left for the teacher to grade; the row says "2 missing".
+  const past = { due_at: at(-8 * DAY), total_students: 25, submitted: 23, published: 23 };
+  assert.equal(bucketOf(past), "completed");
+  assert.equal(missingCount(hw(past), NOW), 2);
+  // Nobody turned it in: nothing to grade either.
+  assert.equal(bucketOf({ due_at: at(-3 * DAY), total_students: 25, submitted: 0, published: 0 }), "completed");
+  assert.equal(missingCount(hw({ due_at: at(-3 * DAY), total_students: 25 }), NOW), 25);
+});
+
+test("a published grade edited since is a republish still owed → Needs grading, never 'missing only'", () => {
+  const past = { due_at: at(-8 * DAY), total_students: 25, submitted: 23, published: 23 };
+  assert.equal(bucketOf({ ...past, republish: 1 }), "needsGrading");
+  assert.equal(isHomeworkCompleted(hw({ ...past, republish: 1 }), NOW), false);
+});
+
+test("a student inside their own extended due date isn't missing", () => {
+  const past = { due_at: at(-2 * DAY), total_students: 25, submitted: 23, published: 23 };
+  assert.equal(missingCount(hw({ ...past, extended: 1 }), NOW), 1);
+  assert.equal(missingCount(hw({ ...past, extended: 2 }), NOW), 0);
+});
+
+test("missingCount: 0 before the due date, with no due date, for a draft, or an empty class", () => {
+  assert.equal(missingCount(hw({ due_at: at(2 * DAY), total_students: 25, submitted: 23 }), NOW), 0);
+  assert.equal(missingCount(hw({ due_at: null, total_students: 10, submitted: 3 }), NOW), 0);
+  assert.equal(missingCount(hw({ status: "draft", due_at: at(-1 * DAY) }), NOW), 0);
+  assert.equal(missingCount(hw({ due_at: at(-3 * DAY), total_students: 0 }), NOW), 0);
+});
+
+test("a grade still waiting on the teacher keeps it in Needs grading", () => {
+  assert.equal(
+    bucketOf({ due_at: at(-8 * DAY), total_students: 25, submitted: 23, published: 20 }),
+    "needsGrading",
+  );
+});
+
+test("only a republish owed → calm 'N to republish', not overdue; any unreleased grade → 0", () => {
+  const past = { due_at: at(-20 * DAY), total_students: 25, submitted: 25, graded: 25, published: 25 };
+  assert.equal(republishOnlyCount(hw({ ...past, republish: 1 })), 1);
+  // Still "published", but the edit took its score away (cleared) or its
+  // review stamp (forced regrade): grading/review owed → red stays.
+  assert.equal(republishOnlyCount(hw({ ...past, graded: 24, republish: 1 })), 0);
+  assert.equal(republishOnlyCount(hw({ ...past, to_review: 1, republish: 1 })), 0);
+  // A grade not yet released is real grading work: overdue stays red.
+  assert.equal(republishOnlyCount(hw({ ...past, published: 24, republish: 1 })), 0);
+  assert.equal(republishOnlyCount(hw(past)), 0);
+});
+
+test("a Completed row counts students still inside their extension", () => {
+  const past = { due_at: at(-2 * DAY), total_students: 25, submitted: 23, published: 23, extended: 1 };
+  assert.equal(bucketOf(past), "completed");
+  assert.equal(extendedCount(hw(past), NOW), 1);
+  assert.equal(extendedCount(hw({ ...past, due_at: at(2 * DAY) }), NOW), 0);
+  assert.equal(extendedCount(hw({ ...past, status: "draft" }), NOW), 0);
+});
+
+test("the Needs-grading card: red (with days overdue) for owed grading, amber for a republish only", () => {
+  const past = { due_at: at(-3 * DAY), total_students: 25, submitted: 25, graded: 25, published: 25 };
+  assert.deepEqual(needsGradingAlert(hw({ ...past, republish: 2 }), NOW), { tone: "amber", republish: 2 });
+  assert.deepEqual(
+    needsGradingAlert(hw({ ...past, published: 20, to_review: 5 }), NOW),
+    { tone: "red", overdueDays: 3 },
+  );
+  // A cleared score on a published grade is grading owed, not a republish.
+  assert.deepEqual(
+    needsGradingAlert(hw({ ...past, graded: 24, republish: 1 }), NOW),
+    { tone: "red", overdueDays: 3 },
+  );
+  // Due earlier today: red border, no "days overdue" yet.
+  assert.deepEqual(
+    needsGradingAlert(hw({ ...past, due_at: at(-2 * 3_600_000), published: 20 }), NOW),
+    { tone: "red", overdueDays: 0 },
+  );
 });
