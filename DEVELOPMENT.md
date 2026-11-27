@@ -87,8 +87,10 @@ alembic current                                   # Show current
 ## Testing
 
 ```bash
-# Unit tests only (skip integration tests that hit Claude and cost money)
-pytest tests/ -v -m "not integration"
+# Unit tests only (skip integration tests that hit Claude and cost money).
+# -n auto runs one worker per CPU, each in its own database
+# (<DATABASE_URL's database>_gw0, _gw1, ...), created on first run.
+pytest tests/ -n auto -m "not integration"
 
 # Integration tests (requires CLAUDE_API_KEY, costs money)
 pytest tests/ -v -m integration
