@@ -88,8 +88,10 @@ export function PracticeEngagement({
       {!hasPracticed ? (
         <div className="mt-5 rounded-[--radius-lg] border border-dashed border-border-light bg-bg-subtle px-6 py-8 text-center">
           <p className="text-sm text-text-secondary">
-            {/* One string: as JSX text, the space before an entity was dropped
-                ("Adahasn't practiced yet"). */}
+            {/* One string. Written as JSX text ({name} hasn&rsquo;t …) the
+                page rendered "Adahasn’t practiced yet." — no space (read off
+                the DOM in a Next dev build; the harness flow
+                student_history fails on that markup). */}
             {`${data.student.name.split(" ")[0]} hasn’t practiced yet.`}
           </p>
           <p className="mt-1 text-xs text-text-muted">

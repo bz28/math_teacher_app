@@ -5,6 +5,7 @@ import Link from "next/link";
 import { teacher, type StudentGradesResponse } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
 import { studentReviewHref } from "@/lib/review-deep-link";
+import { DRAFT_LABEL, draftScoreText } from "@/lib/student-history";
 import { PercentBadge } from "@/components/school/shared/percent-badge";
 import { PracticeEngagement } from "@/components/school/teacher/practice-engagement";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -271,11 +272,9 @@ function PublishedHwRow({
       </div>
       {hw.final_score === null && hw.draft_state !== null && hw.draft_score !== null ? (
         <span className="flex shrink-0 items-center gap-2">
-          {/* A partly graded score is of some problems only, so it isn't shown. */}
-          {hw.draft_state !== "partly_graded" && (
+          {draftScoreText(hw.draft_state, hw.draft_score) && (
             <span className="text-[11px] tabular-nums text-text-muted">
-              {hw.draft_state === "awaiting_review" ? "AI " : ""}
-              {Math.round(hw.draft_score)}%
+              {draftScoreText(hw.draft_state, hw.draft_score)}
             </span>
           )}
           <span
@@ -298,13 +297,6 @@ function PublishedHwRow({
     </Link>
   );
 }
-
-// Worded as the review page's own markers for the same states.
-const DRAFT_LABEL = {
-  awaiting_review: "Awaiting your review",
-  graded_unpublished: "Graded, not published",
-  partly_graded: "Partly graded",
-} as const;
 
 function MissingHwRow({ hw }: { hw: StudentGradesResponse["missing_hws"][number] }) {
   return (
