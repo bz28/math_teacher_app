@@ -399,3 +399,47 @@ async def test_a_regrade_that_wrote_nothing_is_not_logged(
         rows = (await s.execute(select(ActivityLog).where(ActivityLog.action == "grade.regrade")
                                 .where(ActivityLog.target_id == sid))).scalars().all()
     assert rows == []
+
+
+async def test_a_replaced_turn_ins_saves_stay_off_the_resubmission(
+    client: AsyncClient, admin_token: str,
+) -> None:
+    """A reopen clears the grade and the job and restamps submitted_at:
+    the first attempt's teacher steps aren't this grade's, and mustn't
+    hide the scheduled run on the new work."""
+    world = await _seed_hw(n_submissions=1)
+    await _prepare(world, due_at=None)
+    [sid] = world["submission_ids"]
+    teacher_id = await _teacher_id(world)
+    now = datetime.now(UTC)
+    await _finish_job(sid, scheduled_for=now - timedelta(hours=3), submitted_at=now - timedelta(hours=2))
+    async with get_session_factory()() as s:
+        s.add(SubmissionGrade(submission_id=sid, ai_score=70.0, final_score=70.0,
+                              ai_breakdown={"grades": []}, graded_at=now))
+        s.add(ActivityLog(actor_user_id=teacher_id, actor_role="teacher", action="grade.save",
+                          target_type="submission", target_id=sid, action_metadata={"final_score": 90.0},
+                          performed_at=now - timedelta(days=1)))
+        await s.commit()
+    actions = [e["action"] for e in (await _timeline(client, admin_token, sid))["timeline"]]
+    assert actions == ["grading.auto"]
+
+
+async def test_a_hand_grade_cleared_before_the_run_does_not_hide_it(
+    client: AsyncClient, admin_token: str,
+) -> None:
+    world = await _seed_hw(n_submissions=1)
+    await _prepare(world, due_at=None)
+    [sid] = world["submission_ids"]
+    teacher_id = await _teacher_id(world)
+    now = datetime.now(UTC)
+    await _finish_job(sid, scheduled_for=now - timedelta(hours=1), submitted_at=now - timedelta(days=1))
+    async with get_session_factory()() as s:
+        s.add(SubmissionGrade(submission_id=sid, ai_score=70.0, final_score=70.0,
+                              ai_breakdown={"grades": []}, graded_at=now))
+        for hours, score in ((3, 85.0), (2, None)):
+            s.add(ActivityLog(actor_user_id=teacher_id, actor_role="teacher", action="grade.save",
+                              target_type="submission", target_id=sid, action_metadata={"final_score": score},
+                              performed_at=now - timedelta(hours=hours)))
+        await s.commit()
+    actions = [e["action"] for e in (await _timeline(client, admin_token, sid))["timeline"]]
+    assert actions == ["grade.save", "grade.save", "grading.auto"]

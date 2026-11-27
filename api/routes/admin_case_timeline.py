@@ -94,6 +94,9 @@ async def case_timeline(
             ActivityLog.target_type == "submission",
             ActivityLog.target_id == sub.id,
             ActivityLog.action.like("grade.%"),
+            # This turn-in's grade only: a reopen clears the grade and job
+            # and stamps a new submitted_at on the same row.
+            ActivityLog.performed_at >= sub.submitted_at,
         )
     )).scalars().all())
 
@@ -159,8 +162,12 @@ async def case_timeline(
         # A hand grade before the run means the drain closed the job
         # without the AI (it never grades over a grade); an AI score on the
         # row then came from a later regrade, which the timeline shows.
-        hand_graded_first = ran_at is not None and any(
-            e.action == "grade.save" and e.at <= ran_at for e in events
+        # The last save before the run is the grade's state then; a save
+        # that cleared it (final_score None) left nothing to stop the AI.
+        saves_before = [e for e in events if e.action == "grade.save" and ran_at is not None and e.at <= ran_at]
+        last_save = max(saves_before, key=lambda e: e.at) if saves_before else None
+        hand_graded_first = (
+            last_save is not None and (last_save.metadata or {}).get("final_score") is not None
         )
         if ran_at is not None and job.requested_by_id is None and ai_graded and not hand_graded_first:
             # Late work is queued at a due date already past, so it runs
