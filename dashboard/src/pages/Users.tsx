@@ -111,12 +111,13 @@ function menuActionsFor(u: UserRow, selfId: string | null): MenuAction[] {
   return actions;
 }
 
-/** The calls behind a row's cost. Teachers and students go through the
- *  one whose-call rule, so the list matches the number on their row; an
- *  admin's calls are just the ones they made. */
-function callsLink(u: { id: string; role: string }): string {
+/** The calls behind a row's cost, over the same window the row's cost
+ *  covers. Teachers and students go through the one whose-call rule, so
+ *  the list matches the number on their row; an admin's calls are just
+ *  the ones they made. */
+function callsLink(u: { id: string; role: string }, hours: string): string {
   const key = u.role === "teacher" ? "teacher" : u.role === "student" ? "student" : "user";
-  return `/llm-calls?${key}=${u.id}`;
+  return `/llm-calls?${key}=${u.id}&hours=${hours}`;
 }
 
 export default function Users() {
@@ -574,7 +575,7 @@ export default function Users() {
                 );
               case "view-calls":
                 return (
-                  <button key={action} onClick={() => { setOpenMenu(null); navigate(callsLink(openUser)); }}>
+                  <button key={action} onClick={() => { setOpenMenu(null); navigate(callsLink(openUser, hours)); }}>
                     View calls
                   </button>
                 );

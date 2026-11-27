@@ -198,7 +198,9 @@ async def call_summary(db: AsyncSession, conds: list[Any]) -> dict[str, Any]:
                 "latency_ms": round(f.latency_ms, 1),
                 "retry_count": f.retry_count,
                 "submission_id": str(f.submission_id) if f.submission_id else None,
-                "deleted_submission": is_deleted_submission_call(f.function, f.submission_id),
+                "deleted_submission": is_deleted_submission_call(
+                    f.function, f.submission_id, f.created_at,
+                ),
                 # Failed calls store the error in output_text.
                 "error": (f.output_text or "")[:300] or None,
             }
@@ -455,7 +457,9 @@ async def llm_calls(
                 "submission_id": str(c.submission_id) if c.submission_id else None,
                 # A submission-pipeline call whose submission was deleted.
                 # Still the student's (user_id) — labelled, never re-homed.
-                "deleted_submission": is_deleted_submission_call(c.function, c.submission_id),
+                "deleted_submission": is_deleted_submission_call(
+                    c.function, c.submission_id, c.created_at,
+                ),
                 "metadata": c.call_metadata,
                 # The ID of the system prompt this call sent, not its
                 # text: prompts run to ~18KB and dedupe heavily, so

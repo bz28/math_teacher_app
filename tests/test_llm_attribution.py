@@ -33,7 +33,13 @@ from httpx import AsyncClient
 from sqlalchemy import select, text
 
 from api.core.auth import create_access_token, hash_password
-from api.core.llm_attribution import call_owners, calls_of
+from api.core.llm_attribution import (
+    SUBMISSION_STAMPED_SINCE,
+    call_owners,
+    calls_of,
+    is_deleted_submission_call,
+)
+from api.core.llm_client import LLMMode
 from api.database import get_session_factory
 from api.models.assignment import Assignment, Submission
 from api.models.course import Course, CourseTeacher
@@ -265,6 +271,15 @@ async def test_custom_date_range(client: AsyncClient, world: dict[str, Any]) -> 
         headers=auth_headers(world["token"]),
     )
     assert r.status_code == 400
+    assert "'to'" in r.json()["detail"]
+    # A future `from` with no `to` names the real problem, not a `to`
+    # the caller never sent.
+    r = await client.get(
+        "/v1/admin/llm-calls/summary", params={"from": str(today + timedelta(days=2))},
+        headers=auth_headers(world["token"]),
+    )
+    assert r.status_code == 400
+    assert r.json()["detail"] == "'from' is in the future"
 
 
 async def test_bad_ids_are_400(client: AsyncClient, world: dict[str, Any]) -> None:
@@ -274,3 +289,32 @@ async def test_bad_ids_are_400(client: AsyncClient, world: dict[str, Any]) -> No
             headers=auth_headers(world["token"]),
         )
         assert r.status_code == 400, key
+
+
+def test_deleted_submission_label_covers_the_whole_pipeline_since_stamping() -> None:
+    after = SUBMISSION_STAMPED_SINCE + timedelta(days=1)
+    # Graph feedback runs inside the grading pass on one submission.
+    assert is_deleted_submission_call(LLMMode.GRAPH_FEEDBACK, None, after)
+    assert is_deleted_submission_call(LLMMode.AI_GRADING, None, after)
+    # Before the pipeline stamped submission_id the NULL means "never
+    # recorded", not "deleted".
+    before = SUBMISSION_STAMPED_SINCE - timedelta(days=1)
+    assert not is_deleted_submission_call(LLMMode.AI_GRADING, None, before)
+    # Not a pipeline call, or a call that still has its submission.
+    assert not is_deleted_submission_call("generate_questions", None, after)
+    assert not is_deleted_submission_call(LLMMode.AI_GRADING, uuid.uuid4(), after)
+
+
+async def test_owners_in_keeps_only_those_owners(world: dict[str, Any]) -> None:
+    """A page about a few people restricts the rule to them, and the
+    numbers it gets are the same as the unrestricted rule's for them."""
+    tess = uuid.UUID(world["tess"])
+    async with get_session_factory()() as s:
+        everyone = call_owners()
+        only_tess = call_owners(owners_in=select(User.id).where(User.id == tess))
+        rows = (await s.execute(select(only_tess.c.owner_id, only_tess.c.call_id))).all()
+        assert {r.owner_id for r in rows} == {tess}
+        full = set((await s.execute(
+            select(everyone.c.call_id).where(everyone.c.owner_id == tess)
+        )).scalars())
+        assert {r.call_id for r in rows} == full
