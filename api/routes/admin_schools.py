@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
 from api.core.email import send_email
-from api.core.llm_attribution import call_owners
+from api.core.llm_attribution import call_owners, not_preview
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
 from api.models.activity_log import ActivityLog
@@ -29,7 +29,6 @@ from api.models.section_enrollment import SectionEnrollment
 from api.models.teacher_invite import TeacherInvite
 from api.models.user import User
 from api.routes.admin_helpers import activity_last_action_sq, last_days
-from api.routes.admin_spend import not_preview
 
 logger = logging.getLogger(__name__)
 
@@ -303,10 +302,14 @@ async def get_school(
 
       * A **teacher's** cost follows the one whose-call rule
         (api/core/llm_attribution.py): their own calls plus every call
-        on a submission to their homework — the same number their own
-        page and the Users list show.
+        on a submission to their homework — counting only calls stamped
+        with THIS school and leaving out preview work, the rule Costs
+        scoped to the school applies. The Users list counts a teacher's
+        calls wherever they were stamped, so for a teacher with unstamped
+        calls (admin contexts, pre-backfill rows) the two can differ.
       * A **section's** cost is the calls on submissions handed in to
-        it (LLMCall.submission_id → submission → section).
+        it (LLMCall.submission_id → submission → section), by the same
+        school and preview rule.
 
     All aggregation is done with grouped subqueries assembled in Python
     (no per-teacher / per-section follow-up queries), so a large school

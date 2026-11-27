@@ -23,13 +23,12 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import ColumnElement, and_, exists, func, or_, select
+from sqlalchemy import ColumnElement, and_, exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.core.llm_attribution import call_owners, school_calls
+from api.core.llm_attribution import call_owners, not_preview, school_calls
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
-from api.models.assignment import Submission
 from api.models.llm_call import LLMCall
 from api.models.school import School
 from api.models.user import User
@@ -65,25 +64,6 @@ def _utc_trunc(bucket: str) -> Any:
 
 def _spend() -> Any:
     return func.coalesce(func.sum(LLMCall.cost_usd), 0.0)
-
-
-def not_preview() -> ColumnElement[bool]:
-    """Not a teacher rehearsing their own homework as a preview student —
-    by who made the call or whose submission it ran on. Real rows, not a
-    customer's usage."""
-    preview_users = select(User.id).where(User.is_preview.is_(True))
-    preview_submissions = (
-        select(Submission.id)
-        .join(User, User.id == Submission.student_id)
-        .where(User.is_preview.is_(True))
-    )
-    return and_(
-        or_(LLMCall.user_id.is_(None), LLMCall.user_id.notin_(preview_users)),
-        or_(
-            LLMCall.submission_id.is_(None),
-            LLMCall.submission_id.notin_(preview_submissions),
-        ),
-    )
 
 
 def customer_calls() -> ColumnElement[bool]:
