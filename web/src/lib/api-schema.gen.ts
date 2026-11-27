@@ -372,6 +372,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/llm-calls/attention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Llm Attention
+         * @description The band above the Calls table: what's failing or slowing now.
+         */
+        get: operations["llm_attention_v1_admin_llm_calls_attention_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/llm-calls/summary": {
         parameters: {
             query?: never;
@@ -7792,11 +7812,45 @@ export interface operations {
                 user_id?: string | null;
                 teacher_id?: string | null;
                 student_id?: string | null;
+                assignment_id?: string | null;
                 submission_id?: string | null;
                 session_id?: string | null;
                 school_id?: string | null;
                 success?: boolean | null;
                 search?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    llm_attention_v1_admin_llm_calls_attention_get: {
+        parameters: {
+            query?: {
+                school_id?: string | null;
             };
             header?: never;
             path?: never;
@@ -7837,6 +7891,7 @@ export interface operations {
                 user_id?: string | null;
                 teacher_id?: string | null;
                 student_id?: string | null;
+                assignment_id?: string | null;
                 submission_id?: string | null;
                 session_id?: string | null;
                 school_id?: string | null;
