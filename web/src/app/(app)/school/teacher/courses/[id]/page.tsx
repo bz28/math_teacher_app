@@ -24,6 +24,7 @@ import { GradesTab } from "@/components/school/teacher/grades-tab";
 import { StudentInsightsTab } from "@/components/school/teacher/student-insights-tab";
 import { SettingsTab } from "@/components/school/teacher/settings-tab";
 import { SetupChecklist } from "@/components/school/teacher/setup/setup-checklist";
+import { shouldReadSetup } from "@/components/school/teacher/setup/setup-steps";
 import { ErrorBoundary } from "@/components/ui";
 import { PencilIcon } from "@/components/ui/icons";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -212,7 +213,9 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
     try {
       setCourse(await teacher.course(id));
       setError(null);
-      setSetupRead((n) => n + 1);
+      // A reload means something changed (a section added or removed);
+      // the first load is already covered by the setup read's own mount.
+      if (course) setSetupRead((n) => n + 1);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load course");
     } finally {
@@ -230,7 +233,10 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
   // teacher just did on a tab is ticked when they look back up.
   const [setup, setSetup] = useState<{ id: string; status: CourseSetupStatus } | null>(null);
   const [setupRead, setSetupRead] = useState(0);
+  const setupStatus = setup?.id === id ? setup.status : null;
+  const readSetup = shouldReadSetup(tab !== null, setupStatus);
   useEffect(() => {
+    if (!readSetup) return;
     let cancelled = false;
     teacher
       .courseSetupStatus(id)
@@ -241,8 +247,7 @@ function CourseWorkspaceContent({ params }: { params: Promise<{ id: string }> })
     return () => {
       cancelled = true;
     };
-  }, [id, tab, setupRead]);
-  const setupStatus = setup?.id === id ? setup.status : null;
+  }, [id, tab, setupRead, readSetup]);
 
   // ── Onboarding tour wiring ──
   // The Field Guide tour (components/tour) walks a first-run teacher

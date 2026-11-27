@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { CourseSetupStatus } from "@/lib/api";
-import { setupSteps } from "./setup-steps.ts";
+import { setupSteps, shouldReadSetup } from "./setup-steps.ts";
 
 const status = (over: Partial<CourseSetupStatus> = {}): CourseSetupStatus => ({
   has_section: false,
@@ -27,4 +27,11 @@ test("each step is done by its own milestone", () => {
 
 test("the checklist goes away once all three are done", () => {
   assert.equal(setupSteps(status({ has_section: true, has_student: true, has_homework: true })), null);
+});
+
+test("the status is read once the tab is known, and not after setup is done", () => {
+  assert.equal(shouldReadSetup(false, null), false);
+  assert.equal(shouldReadSetup(true, null), true);
+  assert.equal(shouldReadSetup(true, status({ has_section: true })), true);
+  assert.equal(shouldReadSetup(true, status({ has_section: true, has_student: true, has_homework: true })), false);
 });

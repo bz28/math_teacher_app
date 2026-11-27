@@ -2,8 +2,8 @@
 button does the step.
 
 Create a course on the courses list → it opens (not just a list
-refresh) with "Set up <name>", 0 of 3 done → Add sections takes
-"Period 1, Period 3" in one go → 1 of 3 done, both sections listed →
+refresh) with "Set up <name>", 0 of 3 done → Add sections takes a
+pasted column ("Period 1" / "Period 3") as two, previewed before Create → 1 of 3 done, both sections listed →
 Show codes opens a section's roster → New homework opens the dialog.
 
 $0 and deterministic: no AI runs (the homework dialog is only opened).
@@ -86,11 +86,34 @@ async def course_setup_flow(
         await checklist.get_by_role("button", name="Add sections").click()
         names = page.get_by_label("Section names")
         await step("Add sections didn't open the New section form", names.wait_for(timeout=_TIMEOUT_MS))
-        await names.fill("Period 1, Period 3")
+        # A column pasted from a roster: each line is its own section.
+        await names.evaluate(
+            """(el, text) => {
+                const dt = new DataTransfer();
+                dt.setData("text/plain", text);
+                el.dispatchEvent(new ClipboardEvent("paste", {clipboardData: dt, bubbles: true, cancelable: true}));
+            }""",
+            "Period 1\nPeriod 3",
+        )
+        preview = page.get_by_role("list", name="Sections to create")
+        await step("a pasted column isn't previewed as two sections",
+                   preview.get_by_text("Period 3", exact=True).wait_for(timeout=_TIMEOUT_MS))
         create = page.get_by_role("button", name="Create 2 sections")
-        if await step("two names don't offer to create 2 sections", create.wait_for(timeout=_TIMEOUT_MS)):
-            await shot("sections-form")
-            await create.click()
+        if not await step("two names don't offer to create 2 sections",
+                          create.wait_for(timeout=_TIMEOUT_MS)):
+            return flows.FlowResult(name, title, False, issues)
+        await shot("sections-form")
+        # A click outside while the sections are being made mustn't close
+        # the form: a failure partway has to stay on screen.
+        async def slow(route) -> None:  # type: ignore[no-untyped-def]
+            await page.wait_for_timeout(800)
+            await route.continue_()
+        await page.route(re.compile(r"/sections$"), slow)
+        await create.click()
+        await page.mouse.click(5, 5)
+        if not await names.is_visible():
+            issues.append("a click outside closed New section while it was creating")
+        await page.unroute(re.compile(r"/sections$"))
         await step("the checklist didn't tick sections off (1 of 3)",
                    checklist.get_by_text("1 of 3 done").wait_for(timeout=_TIMEOUT_MS))
         for period in ("Period 1", "Period 3"):
@@ -104,7 +127,7 @@ async def course_setup_flow(
 
         await checklist.get_by_role("button", name="New homework").click()
         await step("New homework didn't open the dialog",
-                   page.get_by_text("New homework", exact=True).nth(1).wait_for(timeout=_TIMEOUT_MS))
+                   page.get_by_role("dialog", name="New homework").wait_for(timeout=_TIMEOUT_MS))
         if "tab=homework" not in page.url:
             issues.append("New homework didn't move to the Homework tab")
         await shot("homework")

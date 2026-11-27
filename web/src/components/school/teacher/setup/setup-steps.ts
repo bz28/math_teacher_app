@@ -15,3 +15,10 @@ export function setupSteps(status: CourseSetupStatus): SetupStep[] | null {
   ];
   return steps.every((s) => s.done) ? null : steps;
 }
+
+/** Whether the course page should (re)read the setup status: not before
+ *  its tab is known (the read would only repeat once it is), and never
+ *  again once all three steps are done — the checklist is gone for good. */
+export function shouldReadSetup(tabKnown: boolean, status: CourseSetupStatus | null): boolean {
+  return tabKnown && (status === null || setupSteps(status) !== null);
+}
