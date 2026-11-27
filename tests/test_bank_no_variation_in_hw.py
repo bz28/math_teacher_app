@@ -277,3 +277,23 @@ async def test_bank_questions_cannot_be_put_on_a_practice_set(
     )
     assert r.status_code == 400
     assert "practice set" in r.json()["detail"]
+
+
+async def test_a_practice_set_cannot_be_created_with_bank_questions(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """Create refuses it too, so the two paths can't drift."""
+    from tests.conftest import auth_headers
+    async with get_session_factory()() as s:
+        course_id = (await s.execute(
+            text("SELECT course_id FROM assignments WHERE id=:id"), {"id": world["assignment_id"]},
+        )).scalar_one()
+    await _link_teacher_to_course(world["teacher_id"], course_id)
+    r = await client.post(
+        f"/v1/teacher/courses/{course_id}/assignments",
+        json={"title": "P", "type": "practice", "unit_ids": [str(world["unit_id"])],
+              "bank_item_ids": [str(world["primary_id"])]},
+        headers=auth_headers(world["teacher_token"]),
+    )
+    assert r.status_code == 400, r.text
+    assert "practice set" in r.json()["detail"]

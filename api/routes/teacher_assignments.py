@@ -626,6 +626,17 @@ def assignment_to_dict(
 
 # ── Endpoints ──
 
+def _refuse_bank_items_on_practice(assignment_type: str) -> None:
+    """A practice set's problems are its own generated versions
+    (approved_practice_items): bank questions written into its content
+    would never show."""
+    if assignment_type == "practice":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A practice set's problems come from its own versions",
+        )
+
+
 @router.post("/courses/{course_id}/assignments", status_code=status.HTTP_201_CREATED)
 async def create_assignment(
     course_id: uuid.UUID, body: CreateAssignmentRequest,
@@ -666,6 +677,7 @@ async def create_assignment(
     # two shouldn't both be present in the new homework flow.
     content = body.content
     if body.bank_item_ids:
+        _refuse_bank_items_on_practice(body.type)
         content = await snapshot_bank_items(db, course_id, body.bank_item_ids)
 
     assignment = Assignment(
@@ -1109,14 +1121,7 @@ async def update_assignment(
                 detail="Unpublish before editing problems",
             )
         if body.bank_item_ids is not None:
-            if a.type == "practice":
-                # A practice set's problems are its own generated versions
-                # (approved_practice_items); bank questions written here
-                # would never show.
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="A practice set's problems come from its own versions",
-                )
+            _refuse_bank_items_on_practice(a.type)
             a.content = await snapshot_bank_items(db, a.course_id, body.bank_item_ids)
         else:
             a.content = body.content
