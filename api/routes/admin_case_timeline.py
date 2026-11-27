@@ -156,7 +156,13 @@ async def case_timeline(
         )
         ran_at = job.finished_at if job.status == STATUS_DONE else None
         ai_graded = grade is not None and grade.ai_score is not None
-        if ran_at is not None and job.requested_by_id is None and ai_graded:
+        # A hand grade before the run means the drain closed the job
+        # without the AI (it never grades over a grade); an AI score on the
+        # row then came from a later regrade, which the timeline shows.
+        hand_graded_first = ran_at is not None and any(
+            e.action == "grade.save" and e.at <= ran_at for e in events
+        )
+        if ran_at is not None and job.requested_by_id is None and ai_graded and not hand_graded_first:
             # Late work is queued at a due date already past, so it runs
             # at the next drain after the turn-in, not at the due date.
             late = job.scheduled_for is not None and sub.submitted_at > job.scheduled_for

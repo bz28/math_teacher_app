@@ -10,13 +10,14 @@ asked for before those rows existed reads as teacher-requested.
 from __future__ import annotations
 
 import uuid
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 
 from api.core.auth import create_access_token, hash_password
 from api.database import get_session_factory
@@ -36,6 +37,17 @@ from tests.test_teacher_grade_now import _prepare
 from tests.test_teacher_review_checkpoint import _seed_hw
 
 pytestmark = pytest.mark.asyncio
+
+
+@pytest.fixture(autouse=True)
+async def _no_jobs_left_behind() -> AsyncIterator[None]:
+    """Grade all / Grade now leave jobs due now; a later test's `drain()`
+    (test_grading_too_long) would grade them. Nothing here needs a job to
+    outlive its test."""
+    yield
+    async with get_session_factory()() as s:
+        await s.execute(delete(GradingJob))
+        await s.commit()
 
 
 @pytest.fixture
@@ -339,3 +351,51 @@ async def test_the_log_is_indexed_by_target() -> None:
             "AND indexname = 'ix_activity_log_target'"
         ))).scalar_one()
     assert "(target_type, target_id)" in cols
+
+
+async def test_a_regrade_over_a_hand_grade_is_not_called_scheduled(
+    client: AsyncClient, admin_token: str,
+) -> None:
+    """Hand grade first: the drain closes the job without the AI. A later
+    regrade puts an AI score on the row — the schedule still didn't grade."""
+    world = await _seed_hw(n_submissions=1)
+    await _prepare(world, due_at=None)
+    [sid] = world["submission_ids"]
+    teacher_id = await _teacher_id(world)
+    now = datetime.now(UTC)
+    await _finish_job(sid, scheduled_for=now - timedelta(hours=1), submitted_at=now - timedelta(days=1))
+    async with get_session_factory()() as s:
+        s.add(SubmissionGrade(submission_id=sid, ai_score=72.0, final_score=72.0,
+                              ai_breakdown={"grades": []}, graded_at=now))
+        s.add_all([
+            ActivityLog(actor_user_id=teacher_id, actor_role="teacher", action="grade.save",
+                        target_type="submission", target_id=sid, action_metadata={"final_score": 85.0},
+                        performed_at=now - timedelta(hours=3)),
+            ActivityLog(actor_user_id=teacher_id, actor_role="teacher", action="grade.regrade",
+                        target_type="submission", target_id=sid, action_metadata={},
+                        performed_at=now + timedelta(minutes=5)),
+        ])
+        await s.commit()
+    actions = [e["action"] for e in (await _timeline(client, admin_token, sid))["timeline"]]
+    assert actions == ["grade.save", "grade.regrade"]
+
+
+async def test_a_regrade_that_wrote_nothing_is_not_logged(
+    client: AsyncClient, admin_token: str,
+) -> None:
+    world = await _seed_hw()
+    sid = world["submission_ids"][0]
+    await _enable_grading_and_store(world["assignment_id"], sid, extraction=_STORED_EXTRACTION)
+    with (
+        patch("api.core.grading_ai.grade_submission_with_ai", new=AsyncMock(return_value={"grades": []})),
+        patch("api.core.grading_ai.run_ai_grading_for_submission", new=_real_run_ai_grading),
+    ):
+        r = await client.post(
+            f"/v1/teacher/submissions/{sid}/regrade",
+            headers={"Authorization": f"Bearer {world['teacher_token']}"},
+        )
+    assert r.status_code == 422, r.text
+    async with get_session_factory()() as s:
+        rows = (await s.execute(select(ActivityLog).where(ActivityLog.action == "grade.regrade")
+                                .where(ActivityLog.target_id == sid))).scalars().all()
+    assert rows == []

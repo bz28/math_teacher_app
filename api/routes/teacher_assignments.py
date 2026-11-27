@@ -2651,12 +2651,20 @@ async def regrade_submission(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Could not regrade — no gradeable content",
         )
+    graded_before = (await db.execute(
+        select(SubmissionGrade.graded_at).where(SubmissionGrade.submission_id == sub.id)
+    )).scalar_one_or_none()
     skip = await run_ai_grading_for_submission(
         sub.id, extraction, db, user_id=actor_id, force=True,
     )
-    if skip is None:
-        # The grade timeline's record of the AI replacing the grade; the
-        # grading job is untouched by a regrade, so this is the only one.
+    # The grade timeline's record of the AI replacing the grade — only when
+    # it did: the grader also returns None when it gave up without writing
+    # (no problems, no grades back). A regrade never touches the grading
+    # job, so this row is the timeline's only trace of it.
+    graded_after = (await db.execute(
+        select(SubmissionGrade.graded_at).where(SubmissionGrade.submission_id == sub.id)
+    )).scalar_one_or_none()
+    if skip is None and graded_after is not None and graded_after != graded_before:
         await record_activity(db, current_user, "grade.regrade", "submission", sub.id, {})
     await db.commit()
     if skip == GRADING_STATUS_SKIPPED_TOO_LONG:
