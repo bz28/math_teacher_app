@@ -11,6 +11,7 @@ from api.models import (  # noqa: F401
     assignment,
     contact_lead,
     course,
+    extraction_job,
     golden_case,
     grading_job,
     harness_run,
