@@ -3003,3 +3003,19 @@ table.dt tr:last-child td { border-bottom: none; }
 .calls-panel .tile-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .calls-panel .stat-tile { min-width: 0; }
 .attention-place { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+
+/* ── Accuracy — each tab's one-paragraph statement of what it measures ── */
+.accuracy-intro {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 24px;
+  margin-bottom: 18px;
+}
+.accuracy-intro p {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.5;
+  max-width: 72ch;
+}

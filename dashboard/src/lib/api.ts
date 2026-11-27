@@ -817,6 +817,9 @@ export interface GradingQualityData {
 /** One overridden problem behind a weak row or catastrophic cell — the
  *  AI's original call, the teacher's final, and the signed delta. */
 export interface GradingOverrideCase {
+  submission_id: string;
+  /** 1-based problem position — the case file's `#pN`. */
+  position: number;
   subject: string;
   course: string;
   day: string | null;

@@ -2,8 +2,8 @@
  * Does the page at this URL follow the rail's school scope?
  *
  *   "school"   — its data belongs to schools and it sends `school_id`
- *                (Teacher reports, LLM calls, Users, Audit log, the
- *                accuracy pages).
+ *                (Teacher reports, LLM calls, Users, Audit log,
+ *                Accuracy).
  *   "platform" — its data belongs to no school, so the scope does not
  *                apply: the Schools directory and Leads (the business
  *                side) and the Admins preset of Users (admins have no school).
@@ -21,8 +21,7 @@ const SCHOOL_SCOPED = [
   "/llm-calls",
   "/users",
   "/audit-logs",
-  "/grading-quality",
-  "/extraction-quality",
+  "/accuracy",
 ];
 
 const PLATFORM = ["/schools", "/leads"];

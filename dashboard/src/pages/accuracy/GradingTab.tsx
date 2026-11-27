@@ -9,23 +9,20 @@ import {
   type GradingSummary,
   type GradingBucket,
   type GradingDirection,
-  type GradingOverridesData,
-} from "../lib/api";
-import { scopeParams, useSchoolScope } from "../lib/useSelectedSchool";
-import StatTile from "../components/StatTile";
-import StatusPill from "../components/StatusPill";
-import DataTable, { type Column } from "../components/DataTable";
-import { EditorialModal } from "../components/EditorialModal";
+} from "../../lib/api";
+import { scopeParams, useSchoolScope } from "../../lib/useSelectedSchool";
+import StatTile from "../../components/StatTile";
+import StatusPill from "../../components/StatusPill";
+import DataTable, { type Column } from "../../components/DataTable";
+import { subjectLabel } from "../../lib/quality";
+import GradingDrillModal, { type DrillTarget } from "./GradingDrillModal";
+import { STATUS_LABEL, fmtPts } from "./grading";
+import TabIntro, { type AccuracyTabProps } from "./TabIntro";
 
 // Status severity order — best to worst. Drives the override matrix
 // (a teacher moving a grade "up" the ranks means the AI under-credited).
 const STATUS_ORDER = ["full", "partial", "zero"] as const;
 const STATUS_RANK: Record<string, number> = { full: 2, partial: 1, zero: 0 };
-const STATUS_LABEL: Record<string, string> = {
-  full: "Full",
-  partial: "Partial",
-  zero: "Zero",
-};
 
 // Below this many compared problems the override rate is too thin to
 // trust — the page surfaces a caveat and de-emphasizes the row.
@@ -43,25 +40,6 @@ const DIRECTION_META: Record<
   // No overrides at all. Deliberately NOT a verdict — see VerdictHero.
   unmeasured: { color: "var(--muted)", soft: "var(--paper-2)", word: "not yet measured" },
 };
-
-const SUBJECT_LABEL: Record<string, string> = {
-  math: "Math",
-  chemistry: "Chemistry",
-  physics: "Physics",
-  unknown: "Unspecified",
-};
-
-function subjectLabel(s: string): string {
-  return SUBJECT_LABEL[s] ?? s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-// Delta unit is percentage-POINTS on the 0–100 per-problem score — the
-// SAME scale everywhere (hero, tiles, rows, drill). Never rendered as a
-// bare "%", which reads as a relative change.
-function fmtPts(v: number, signed = false): string {
-  const sign = signed && v > 0 ? "+" : "";
-  return `${sign}${v.toFixed(1)} pts`;
-}
 
 /** Severe flips — full↔zero reversals, the worst grading errors. Pulled
  *  from the status matrix (both directions). */
@@ -459,124 +437,19 @@ function Legend2({ color, label }: { color: string; label: string }) {
   );
 }
 
-/** A small AI-status / teacher-status grade chip for the drill table. */
-function GradeChip({ status, percent }: { status: string; percent: number }) {
-  const tone = status === "full" ? "var(--ok)" : status === "zero" ? "var(--danger)" : "var(--warn)";
-  const soft = status === "full" ? "var(--ok-soft)" : status === "zero" ? "#f3ddd9" : "#f6ecd8";
-  return (
-    <span style={{
-      display: "inline-flex", alignItems: "center", gap: 6, background: soft, color: tone,
-      padding: "2px 8px", borderRadius: 2, fontSize: 11, fontWeight: 600,
-      textTransform: "uppercase", letterSpacing: 0.4, fontFamily: "var(--font-sans)",
-    }}>
-      {STATUS_LABEL[status] ?? status}
-      {status === "partial" && <span className="num" style={{ fontWeight: 500 }}>{Math.round(percent)}%</span>}
-    </span>
-  );
-}
+const INTRO = (
+  <TabIntro
+    pill={<StatusPill tone="info" label="OVERRIDE SIGNAL" title="Teacher overrides are the ground-truth signal for grading accuracy" />}
+  >
+    Is the AI grader trustworthy — how often teachers override it, by how
+    much, and where it goes wrong. Every case opens its problem in the
+    case file.
+  </TabIntro>
+);
 
-interface DrillTarget {
-  title: string;
-  subtitle: string;
-  fetches: Record<string, string>[];
-}
-
-/** Drill-in modal — fetches the actual overridden cases behind a weak row
- *  or catastrophic cell and lists AI call → teacher final → delta. Accepts
- *  multiple param sets (a severe-flips tile spans two matrix cells). */
-function DrillModal({
-  target, baseParams, onClose,
-}: {
-  target: DrillTarget;
-  baseParams: Record<string, string>;
-  onClose: () => void;
-}) {
-  const [data, setData] = useState<GradingOverridesData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    Promise.all(
-      target.fetches.map((f) => api.gradingQualityOverrides({ ...baseParams, ...f })),
-    )
-      .then((results) => {
-        if (!active) return;
-        const cases = results.flatMap((r) => r.cases).sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta));
-        setData({
-          cases,
-          total_count: results.reduce((n, r) => n + r.total_count, 0),
-          truncated: results.some((r) => r.truncated),
-        });
-        setError(null);
-      })
-      .catch((e) => { if (active) setError(e instanceof Error ? e.message : "Failed to load"); });
-    return () => { active = false; };
-  }, [target, baseParams]);
-
-  // Stable per-render keys (cases carry no id and can repeat identically).
-  const keyed = useMemo(
-    () => (data?.cases ?? []).map((c, i) => ({ ...c, _k: String(i) })),
-    [data],
-  );
-  type Keyed = GradingOverridesData["cases"][number] & { _k: string };
-
-  const cols: Column<Keyed>[] = [
-    {
-      key: "where", header: "Course", width: "34%",
-      render: (c) => (
-        <div style={{ minWidth: 0 }}>
-          <div style={{ color: "var(--ink)" }}>{c.course}</div>
-          <div style={{ fontSize: 11, color: "var(--muted)" }}>
-            {subjectLabel(c.subject)}{c.day ? ` · ${c.day}` : ""}
-          </div>
-        </div>
-      ),
-    },
-    { key: "ai", header: "AI graded", render: (c) => <GradeChip status={c.ai_status} percent={c.ai_percent} /> },
-    { key: "final", header: "Teacher final", render: (c) => <GradeChip status={c.final_status} percent={c.final_percent} /> },
-    {
-      key: "delta", header: "Δ", numeric: true, width: "16%",
-      sortValue: (c) => c.delta,
-      render: (c) => (
-        <span style={{ color: c.delta > 0 ? "var(--accent)" : "var(--info)", fontWeight: 600 }}>
-          {fmtPts(c.delta, true)}
-        </span>
-      ),
-    },
-  ];
-
-  return (
-    <EditorialModal eyebrow="Overridden cases" title={target.title} subtitle={target.subtitle} maxWidth={760} onClose={onClose}>
-      <div style={{ padding: "18px 30px 30px" }}>
-        <DataTable
-          columns={cols}
-          rows={keyed}
-          rowKey={(r) => r._k}
-          loading={!data && !error}
-          error={error}
-          // The caption below counts `data.cases`, and the modal merges
-          // several fetches, so a page of 5 under a line reading "Showing
-          // 200 of 261" would have the screen contradict itself. This is a
-          // scan-the-whole-set drill — it lists what it loaded.
-          unpaged
-          minWidth={560}
-          empty={<span className="dt-state-title">No overridden cases here.</span>}
-        />
-        {data && data.total_count > 0 && (
-          <p style={{ fontSize: 12, color: "var(--muted)", marginTop: 12, fontFamily: "var(--font-sans)" }}>
-            Showing {Math.min(data.cases.length, data.total_count)} of {data.total_count} overridden problems
-            {data.truncated ? " (biggest changes first — narrow the window to see the rest)" : ""}. Points = the 0–100 per-problem score.
-          </p>
-        )}
-      </div>
-    </EditorialModal>
-  );
-}
-
-export default function GradingQuality() {
+export default function GradingTab({ hours, windowSelect }: AccuracyTabProps) {
   const [data, setData] = useState<GradingQualityData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [hours, setHours] = useState("2160");
   const [subject, setSubject] = useState("");
   const [drill, setDrill] = useState<DrillTarget | null>(null);
   const scope = useSchoolScope();
@@ -601,7 +474,7 @@ export default function GradingQuality() {
   if (error) {
     return (
       <div>
-        <Header />
+        {INTRO}
         <div className="empty-state">
           <div className="empty-state-title">Couldn't load grading quality</div>
           <div className="empty-state-sub">{error}</div>
@@ -641,15 +514,10 @@ export default function GradingQuality() {
 
   return (
     <div>
-      <Header />
+      {INTRO}
 
       <div className="filters">
-        <select value={hours} onChange={(e) => setHours(e.target.value)}>
-          <option value="168">Last 7 days</option>
-          <option value="720">Last 30 days</option>
-          <option value="2160">Last 90 days</option>
-          <option value="87600">All time</option>
-        </select>
+        {windowSelect}
         <select value={subject} onChange={(e) => setSubject(e.target.value)}>
           <option value="">All subjects</option>
           {data.subjects.map((s) => (
@@ -786,20 +654,7 @@ export default function GradingQuality() {
         </>
       )}
 
-      {drill && <DrillModal target={drill} baseParams={baseParams} onClose={() => setDrill(null)} />}
-    </div>
-  );
-}
-
-function Header() {
-  return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 24 }}>
-      <div className="page-header" style={{ marginBottom: 0 }}>
-        <span className="eyebrow">Diagnostic</span>
-        <h1>Grading quality</h1>
-        <p>Is the AI grader trustworthy — how often teachers override it, by how much, and where it goes wrong.</p>
-      </div>
-      <StatusPill tone="info" label="OVERRIDE SIGNAL" title="Teacher overrides are the ground-truth signal for grading accuracy" />
+      {drill && <GradingDrillModal target={drill} baseParams={baseParams} onClose={() => setDrill(null)} />}
     </div>
   );
 }

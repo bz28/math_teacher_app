@@ -14,6 +14,9 @@ export const problemAnchor = (position: number) => `p${position}`;
 /** Where the photo readout's rows anchor on a page whose per-problem
  *  table owns `p{n}` (the submission trace's case file). */
 export const readAnchor = (position: number) => `read-${problemAnchor(position)}`;
+/** A submission's case file, landing on one problem when given. */
+export const caseFilePath = (submissionId: string, position?: number) =>
+  `/submissions/${submissionId}/trace${position ? `#${problemAnchor(position)}` : ""}`;
 
 /** The problem the URL's hash points at, or null. */
 export function useProblemHash(): number | null {
