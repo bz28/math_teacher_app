@@ -10,6 +10,9 @@ rule); it reuses that file's seed.
 - Usage rates (homeworks per student per month, students per teacher)
   are measured over the window, so the simulator never defaults to a
   guess six times what schools actually do.
+- A discarded generation job's calls are generation cost, rates read off
+  a short window are flagged, and a submission begun before the window
+  isn't counted as a cheap whole one.
 - Each stage's model picker defaults to the model that actually carried
   that stage's spend in the window.
 """
@@ -21,8 +24,9 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import select, update
 
+from api.core.llm_logging import _with_generation_job
 from api.core.model_pricing import cost_usd
 from api.database import get_session_factory
 from api.models.assignment import Assignment, Submission
@@ -32,6 +36,7 @@ from api.models.section import Section
 from api.models.user import User
 from tests.test_admin_unit_economics import (
     _OPUS,
+    _gen_job_cost,
     _get,
     _hw_cost,
     _price,
@@ -103,8 +108,8 @@ async def test_deleted_submission_calls_raise_the_per_submission_cost(
     assert body["deleted_submissions"] == {
         "calls": 3,
         "cost_usd": pytest.approx(3 * _deleted_call_cost()),
-        "per_submission_usd": pytest.approx(overhead),
-        "spread_over_submissions": 6,
+        "per_unit_usd": pytest.approx(overhead),
+        "spread_over": 6,
     }
 
 
@@ -279,3 +284,100 @@ async def test_each_function_names_its_stage(client: AsyncClient) -> None:
     assert family("residual:student", "decompose") == "tutoring"
     assert family("submission:homework", "integrity_extract") == "vision"
     assert family("submission:homework", "ai_grading") == "grading"
+
+
+# --------------------------------------------------------------------------
+# Review round 1 — pinned so they fail on revert
+# --------------------------------------------------------------------------
+
+async def test_a_discarded_jobs_calls_are_generation_cost_not_teacher_ai(
+    client: AsyncClient,
+) -> None:
+    """A teacher generates problems for a draft, then deletes the draft:
+    the job goes, generation_job_id is SET NULL, and only the id the logger
+    copied into call_metadata says it was generation work."""
+    w = await _seed(homework_submissions=6, generation_units=2)
+    async with get_session_factory()() as s:
+        s.add(LLMCall(
+            function="generate_questions", model="claude-sonnet-4-6",
+            input_tokens=5000, output_tokens=2000, latency_ms=1.0,
+            cost_usd=0.5, success=True, school_id=uuid.UUID(w.school_id),
+            user_id=uuid.UUID(w.teacher_id), generation_job_id=None,
+            call_metadata={"generation_job_id": str(uuid.uuid4())},
+            created_at=_WHEN,
+        ))
+        await s.commit()
+
+    body = await _get(client, w.admin_id, days=30)
+
+    teacher_ai = _unit(body, "residual:teacher")
+    assert teacher_ai["cost_total"] == 0.0
+    gen = _unit(body, "generation:unit")
+    assert gen["n"] == 2
+    assert gen["cost_median"] == pytest.approx(_gen_job_cost() + 0.5 / 2)
+    fns = body["functions_by_unit"]["generation:unit"]
+    assert sum(f["cost_per_unit"] for f in fns) == pytest.approx(gen["cost_mean"])
+    assert body["deleted_generation_jobs"]["cost_usd"] == pytest.approx(0.5)
+    assert body["deleted_generation_jobs"]["spread_over"] == 2
+
+
+async def test_a_standalone_regenerate_stays_teacher_side_ai(client: AsyncClient) -> None:
+    """No job ever, so no job id in the metadata: still a teacher's own AI."""
+    w = await _seed(homework_submissions=6)
+    async with get_session_factory()() as s:
+        s.add(LLMCall(
+            function="regenerate_bank_item", model="claude-sonnet-4-6",
+            input_tokens=100, output_tokens=50, latency_ms=1.0, cost_usd=0.2,
+            success=True, school_id=uuid.UUID(w.school_id),
+            user_id=uuid.UUID(w.teacher_id), call_metadata={"tier": "x"},
+            created_at=_WHEN,
+        ))
+        await s.commit()
+    body = await _get(client, w.admin_id, days=30)
+    assert _unit(body, "residual:teacher")["cost_total"] == pytest.approx(0.2)
+
+
+def test_the_logger_keeps_a_copy_of_the_job_id() -> None:
+    job = uuid.uuid4()
+    assert _with_generation_job({"tier": "fast"}, job) == {
+        "tier": "fast", "generation_job_id": str(job),
+    }
+    assert _with_generation_job(None, job) == {"generation_job_id": str(job)}
+    assert _with_generation_job({"tier": "fast"}, None) == {"tier": "fast"}
+
+
+async def test_measured_rates_from_a_short_window_are_flagged(
+    client: AsyncClient,
+) -> None:
+    w = await _seed(homework_submissions=6, test_submissions=0)
+    async with get_session_factory()() as s:
+        await s.execute(
+            update(Submission).values(submitted_at=datetime.now(UTC) - timedelta(hours=1)),
+        )
+        await s.commit()
+    short = (await _get(client, w.admin_id, days=1))["measured"]
+    assert short["submissions_per_student_month"]["homework"] == pytest.approx(30.0, rel=1e-3)
+    assert short["window_too_short"] is True
+    assert (await _get(client, w.admin_id, days=30))["measured"]["window_too_short"] is False
+
+
+async def test_a_submission_begun_before_the_window_is_not_a_cheap_phantom(
+    client: AsyncClient,
+) -> None:
+    """Read 10 days ago, regraded 2 days ago: in a 7-day window it would be
+    one whole submission carrying only its regrade."""
+    w = await _seed(homework_submissions=6, test_submissions=0)
+    async with get_session_factory()() as s:
+        await s.execute(
+            update(LLMCall)
+            .where(
+                LLMCall.function == "integrity_extract",
+                LLMCall.user_id == uuid.UUID(w.student_ids[0]),
+            )
+            .values(created_at=datetime.now(UTC) - timedelta(days=10)),
+        )
+        await s.commit()
+
+    hw = _unit(await _get(client, w.admin_id, days=7), "submission:homework")
+    assert hw["n"] == 5
+    assert hw["cost_median"] == pytest.approx(_hw_cost())

@@ -24,6 +24,13 @@ from api.routes.admin_helpers import INTERNAL_SCHOOL_SENTINEL, Window
 _DAYS_PER_MONTH = 30.0
 SUBMISSION_KINDS = ("homework", "quiz", "test", "practice")
 
+# A per-month rate extrapolated from a window far shorter than a month is
+# arithmetic, not measurement: five homeworks in the hour after a model
+# switch read as 720 a month. Rates off a shorter window are returned
+# but flagged, and the dashboard won't seed a default from them. The
+# residual per-user rates share the threshold.
+MIN_RATE_DAYS = 7.0
+
 
 def _user_scope(school_id: str | None, exclude_internal: bool) -> list[Any]:
     """Which users count, by the same rule the call scope uses."""
@@ -40,7 +47,8 @@ async def measured_rates(
     db: AsyncSession, window: Window, school_id: str | None, exclude_internal: bool,
 ) -> dict[str, Any]:
     users = _user_scope(school_id, exclude_internal)
-    months = (window.end - window.start).total_seconds() / 86400.0 / _DAYS_PER_MONTH
+    days = (window.end - window.start).total_seconds() / 86400.0
+    months = days / _DAYS_PER_MONTH
 
     handed_in = (
         select(Submission.id, Submission.student_id, Assignment.type)
@@ -80,6 +88,7 @@ async def measured_rates(
     teachers = roles.get("teacher", 0)
     students = roles.get("student", 0)
     return {
+        "window_too_short": days < MIN_RATE_DAYS,
         "active_students": int(active),
         "submissions": {k: by_kind.get(k, 0) for k in SUBMISSION_KINDS},
         "submissions_per_student_month": {

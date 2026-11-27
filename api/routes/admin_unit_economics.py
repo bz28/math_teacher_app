@@ -25,21 +25,14 @@ api/core/model_pricing.reprice for why that needs the tokenizer factor.
 """
 
 import uuid as uuid_lib
-from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from types import SimpleNamespace
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.config import settings
-from api.core.llm_attribution import (
-    SUBMISSION_FUNCTIONS,
-    deleted_submission_calls,
-    school_calls,
-)
 from api.core.llm_families import FAMILY_LABELS, family_for
 from api.core.model_pricing import cost_usd, price_for
 from api.database import get_db
@@ -49,16 +42,27 @@ from api.models.llm_call import LLMCall
 from api.models.question_bank import QuestionBankGenerationJob
 from api.models.user import User
 from api.routes.admin_helpers import INTERNAL_SCHOOL_SENTINEL, Window
-from api.routes.admin_unit_economics_measured import SUBMISSION_KINDS, measured_rates
+from api.routes.admin_unit_economics_measured import (
+    MIN_RATE_DAYS,
+    SUBMISSION_KINDS,
+    measured_rates,
+)
+from api.routes.admin_unit_economics_orphans import (
+    OrphanCalls,
+    deleted_generation_jobs,
+    deleted_submissions,
+)
 from api.routes.admin_unit_economics_profiles import as_float, catalog, profile_rows
+from api.routes.admin_unit_economics_scope import (
+    PROFILE_COLS,
+    RESIDUAL,
+    Scope,
+    deleted_generation_calls,
+)
 
 router = APIRouter()
 
 _DAYS_PER_MONTH = 30.0
-
-# Harness grading calls. They carry a real cost but no customer, and
-# including them would price our own test runs into a school's bill.
-_EXCLUDED_FUNCTIONS = ("judge",)
 
 
 # Below this many observations a unit cost is noise. The dashboard greys
@@ -67,14 +71,8 @@ _EXCLUDED_FUNCTIONS = ("judge",)
 # in a board deck.
 _DEFAULT_MIN_SAMPLE = 5
 
-# A per-month rate extrapolated from a window far shorter than a month is
-# arithmetic, not measurement. The DEFAULT window is "since the model
-# changed", so the hour after a model switch it is an hour long: five
-# students and $0.20 of tutoring would report $173 per student per month
-# with n=5 and no warning at all. Residual units below this are reported
-# with their figures intact but flagged insufficient, so the page greys
-# them and the simulator's thin-data banner fires.
-_MIN_RESIDUAL_DAYS = 7.0
+# Residual rates are per month too, so the same short-window guard as
+# the measured usage rates applies (see MIN_RATE_DAYS).
 
 
 def _median(col: Any) -> Any:
@@ -84,52 +82,6 @@ def _median(col: Any) -> Any:
 def _p90(col: Any) -> Any:
     return func.percentile_cont(0.9).within_group(col.asc())
 
-
-class _Scope:
-    """The filters every query in this endpoint shares."""
-
-    def __init__(
-        self, window: Window, school_id: str | None, exclude_internal: bool,
-    ) -> None:
-        self.window = window
-        self.school_id = school_id
-        self.exclude_internal = exclude_internal
-
-    @property
-    def days(self) -> float:
-        span = self.window.end - self.window.start
-        return max(span.total_seconds() / 86400.0, 1e-9)
-
-    def filters(self) -> list[Any]:
-        out: list[Any] = [
-            self.window.covers(LLMCall.created_at),
-            LLMCall.function.notin_(_EXCLUDED_FUNCTIONS),
-        ]
-        if self.school_id == INTERNAL_SCHOOL_SENTINEL:
-            out.append(school_calls(None))
-        elif self.school_id:
-            out.append(school_calls(self.school_id))
-        elif self.exclude_internal:
-            # school_id IS NULL is founder/admin/test traffic. It looks
-            # like a school's usage and would inflate every per-student
-            # figure on the page.
-            out.append(LLMCall.school_id.isnot(None))
-        return out
-
-    def apply(self, stmt: Select[Any]) -> Select[Any]:
-        return stmt.where(*self.filters())
-
-
-# Work tied to neither a submission nor a generation job. The function
-# filter is what keeps a SUBMISSION-pipeline call whose submission is gone
-# (or was never stamped) out of here: it was grading a student's work,
-# not tutoring them, and counting it as self-study would spread one
-# submission's cost across every active student as a per-student rate.
-_RESIDUAL = (
-    LLMCall.submission_id.is_(None),
-    LLMCall.generation_job_id.is_(None),
-    LLMCall.function.notin_(SUBMISSION_FUNCTIONS),
-)
 
 
 async def _resolve_window(
@@ -162,101 +114,16 @@ async def _resolve_window(
     return Window(cutover, until), "model_cutover", settings.llm_model_opus
 
 
-def _submission_join(stmt: Select[Any]) -> Select[Any]:
+def _submission_join(stmt: Select[Any], scope: Scope) -> Select[Any]:
+    """Join a call to its submission's assignment, keeping only submissions
+    whose pipeline began in the window (see Scope.started_in_window)."""
     return stmt.join(Submission, Submission.id == LLMCall.submission_id).join(
         Assignment, Assignment.id == Submission.assignment_id,
-    )
-
-
-@dataclass
-class _DeletedSubmissions:
-    """Submission-pipeline calls whose submission was deleted.
-
-    The work happened and was paid for; only the row it hung off is gone
-    (a student re-uploads, a teacher clears a submission). Its cost is
-    SUBMISSION cost — dropping it understates what one homework costs, and
-    the old residual bucket counted it as self-study, i.e. a monthly rate
-    charged to every active student.
-
-    Which submission, and so which assignment type, is unrecoverable. So
-    the cost rides on the window's surviving submissions pro rata: each
-    one carries `per_submission` on top of its own calls, which is exactly
-    "what it costs to get one submission through, retries included".
-    """
-
-    calls: int = 0
-    cost: float = 0.0
-    # Distinct surviving submissions in the window — the denominator.
-    submissions: int = 0
-    # Per (function, model) profile rows, for the per-function legs.
-    rows: list[Any] = field(default_factory=list)
-
-    @property
-    def per_submission(self) -> float:
-        return self.cost / self.submissions if self.submissions else 0.0
-
-    def legs_for(self, kind: str, kind_units: float) -> list[Any]:
-        """This kind's pro-rata share of the deleted calls, as profile rows.
-
-        Scaled so that dividing by the kind's own submission count (what
-        profile_rows does) yields calls / ALL submissions — the same
-        per-submission overhead every kind carries.
-        """
-        if not self.submissions:
-            return []
-        share = kind_units / self.submissions
-        return [
-            SimpleNamespace(
-                kind=kind, function=r.function, model=r.model,
-                calls=float(r.calls) * share, cost=as_float(r.cost) * share,
-                avg_in=r.avg_in, avg_out=r.avg_out,
-                avg_cread=r.avg_cread, avg_cwrite=r.avg_cwrite,
-            )
-            for r in self.rows
-        ]
-
-    def summary(self) -> dict[str, Any]:
-        return {
-            "calls": self.calls,
-            "cost_usd": self.cost,
-            "per_submission_usd": self.per_submission,
-            "spread_over_submissions": self.submissions,
-        }
-
-
-async def _deleted_submissions(db: AsyncSession, scope: _Scope) -> _DeletedSubmissions:
-    rows = list(
-        (
-            await db.execute(
-                scope.apply(
-                    select(
-                        LLMCall.function.label("function"),
-                        LLMCall.model.label("model"),
-                        *_PROFILE_COLS,
-                    ),
-                )
-                .where(deleted_submission_calls())
-                .group_by(LLMCall.function, LLMCall.model),
-            )
-        ).all(),
-    )
-    submissions = (
-        await db.execute(
-            scope.apply(
-                select(func.count(func.distinct(LLMCall.submission_id))),
-            ).where(LLMCall.submission_id.isnot(None)),
-        )
-    ).scalar() or 0
-    return _DeletedSubmissions(
-        calls=sum(int(r.calls) for r in rows),
-        cost=sum(as_float(r.cost) for r in rows),
-        submissions=int(submissions),
-        rows=rows,
-    )
+    ).where(scope.started_in_window())
 
 
 async def _submission_units(
-    db: AsyncSession, scope: _Scope, deleted: _DeletedSubmissions,
+    db: AsyncSession, scope: Scope, deleted: OrphanCalls,
 ) -> list[dict[str, Any]]:
     """Cost of one submission, by assignment type.
 
@@ -266,7 +133,7 @@ async def _submission_units(
     very expensive call that should not set our rate card.
 
     Every figure includes the deleted-submission overhead (see
-    _DeletedSubmissions), the same amount on each submission, so the
+    admin_unit_economics_orphans), the same amount on each submission, so the
     median, mean and p90 all shift by it and the total by n times it.
     """
     per_submission = scope.apply(
@@ -276,6 +143,7 @@ async def _submission_units(
                 Assignment.type.label("kind"),
                 func.sum(LLMCall.cost_usd).label("cost"),
             ),
+            scope,
         ),
     ).group_by(LLMCall.submission_id, Assignment.type).subquery()
 
@@ -293,7 +161,7 @@ async def _submission_units(
     ).all()
 
     by_kind = {r.kind: r for r in rows}
-    extra = deleted.per_submission
+    extra = deleted.per_unit
     out: list[dict[str, Any]] = []
     for kind in SUBMISSION_KINDS:
         r = by_kind.get(kind)
@@ -313,30 +181,8 @@ async def _submission_units(
 
 
 
-# MEAN, not median. These columns reconstruct a COST: the repriced figure
-# is `calls_per_unit x cost(profile)`, and only the mean satisfies
-# `sum = mean x count`. A median profile understates every right-skewed
-# distribution — and token counts here are explicitly skewed (one student
-# photographs forty pages). Worse, the four medians are taken
-# INDEPENDENTLY, so a group where fewer than half the calls hit cache has
-# `median(cache_read_tokens) = 0` and the repriced figure drops the
-# cache-read term that the recorded cost definitely includes.
-#
-# The median still leads for the DISPLAYED unit cost (_submission_units),
-# where resisting one freak submission is exactly what we want. Different
-# statistic, different job.
-_PROFILE_COLS = (
-    func.count().label("calls"),
-    func.sum(LLMCall.cost_usd).label("cost"),
-    func.avg(LLMCall.input_tokens).label("avg_in"),
-    func.avg(LLMCall.output_tokens).label("avg_out"),
-    func.avg(LLMCall.cache_read_tokens).label("avg_cread"),
-    func.avg(LLMCall.cache_write_tokens).label("avg_cwrite"),
-)
-
-
 async def _unit_functions(
-    db: AsyncSession, scope: _Scope, deleted: _DeletedSubmissions,
+    db: AsyncSession, scope: Scope, deleted: OrphanCalls, discarded: OrphanCalls,
 ) -> dict[str, list[dict[str, Any]]]:
     """Per-function decomposition, token profile, and a reprice matrix.
 
@@ -368,8 +214,9 @@ async def _unit_functions(
                             Assignment.type.label("kind"),
                             LLMCall.function.label("function"),
                             LLMCall.model.label("model"),
-                            *_PROFILE_COLS,
+                            *PROFILE_COLS,
                         ),
+                        scope,
                     ),
                 ).group_by(Assignment.type, LLMCall.function, LLMCall.model),
             )
@@ -386,6 +233,7 @@ async def _unit_functions(
                             func.count(func.distinct(LLMCall.submission_id))
                             .label("units"),
                         ).select_from(LLMCall),
+                        scope,
                     ),
                 ).group_by(Assignment.type),
             )
@@ -409,7 +257,7 @@ async def _unit_functions(
                     select(
                         LLMCall.function.label("function"),
                         LLMCall.model.label("model"),
-                        *_PROFILE_COLS,
+                        *PROFILE_COLS,
                     ).join(
                         QuestionBankGenerationJob,
                         QuestionBankGenerationJob.id == LLMCall.generation_job_id,
@@ -430,6 +278,7 @@ async def _unit_functions(
             ),
         )
     ).scalar() or 1
+    gen_rows.extend(discarded.legs_for("generation", float(gen_units)))
     out.update(
         profile_rows(
             gen_rows,
@@ -449,10 +298,10 @@ async def _unit_functions(
                         User.role.label("role"),
                         LLMCall.function.label("function"),
                         LLMCall.model.label("model"),
-                        *_PROFILE_COLS,
+                        *PROFILE_COLS,
                     ).join(User, User.id == LLMCall.user_id),
                 )
-                .where(*_RESIDUAL, User.role.in_(("student", "teacher")))
+                .where(*RESIDUAL, User.role.in_(("student", "teacher")))
                 .group_by(User.role, LLMCall.function, LLMCall.model),
             )
         ).all(),
@@ -467,7 +316,7 @@ async def _unit_functions(
                         func.count(func.distinct(LLMCall.user_id)).label("units"),
                     ).select_from(LLMCall).join(User, User.id == LLMCall.user_id),
                 )
-                .where(*_RESIDUAL, User.role.in_(("student", "teacher")))
+                .where(*RESIDUAL, User.role.in_(("student", "teacher")))
                 .group_by(User.role),
             )
         ).all()
@@ -483,7 +332,9 @@ async def _unit_functions(
 
 
 
-async def _generation_unit(db: AsyncSession, scope: _Scope) -> dict[str, Any]:
+async def _generation_unit(
+    db: AsyncSession, scope: Scope, discarded: OrphanCalls,
+) -> dict[str, Any]:
     """Cost of generating one teaching unit's problems.
 
     Grouped by the job's `unit_id`, not by job: a teacher may run several
@@ -512,19 +363,22 @@ async def _generation_unit(db: AsyncSession, scope: _Scope) -> dict[str, Any]:
         )
     ).one()
 
+    # Plus each unit's share of jobs discarded with their draft (see
+    # admin_unit_economics_orphans).
+    extra = discarded.per_unit
     return {
         "kind": "generation:unit",
         "label": "unit generation",
         "denominator": "per teaching unit",
         "n": int(r.n),
-        "cost_median": as_float(r.median) if r.n else None,
-        "cost_mean": as_float(r.mean) if r.n else None,
-        "cost_p90": as_float(r.p90) if r.n else None,
-        "cost_total": as_float(r.total),
+        "cost_median": as_float(r.median) + extra if r.n else None,
+        "cost_mean": as_float(r.mean) + extra if r.n else None,
+        "cost_p90": as_float(r.p90) + extra if r.n else None,
+        "cost_total": as_float(r.total) + extra * int(r.n),
     }
 
 
-async def _residual_units(db: AsyncSession, scope: _Scope) -> list[dict[str, Any]]:
+async def _residual_units(db: AsyncSession, scope: Scope) -> list[dict[str, Any]]:
     """Everything tied to neither a submission nor a generation job.
 
     Tutoring, practice, question-bank chat, unit suggestions. Split by the
@@ -545,7 +399,7 @@ async def _residual_units(db: AsyncSession, scope: _Scope) -> list[dict[str, Any
                     func.count().label("calls"),
                 ).join(User, User.id == LLMCall.user_id),
             )
-            .where(*_RESIDUAL)
+            .where(*RESIDUAL)
             .group_by(User.role),
         )
     ).all()
@@ -564,7 +418,7 @@ async def _residual_units(db: AsyncSession, scope: _Scope) -> list[dict[str, Any
             func.sum(LLMCall.cost_usd).label("cost"),
         ).select_from(LLMCall).join(User, User.id == LLMCall.user_id),
     ).where(
-        *_RESIDUAL, User.role.in_(("student", "teacher")),
+        *RESIDUAL, User.role.in_(("student", "teacher")),
     ).group_by(User.role, LLMCall.user_id).subquery()
 
     dist = {
@@ -603,13 +457,13 @@ async def _residual_units(db: AsyncSession, scope: _Scope) -> list[dict[str, Any
                 "cost_p90": (as_float(d.p90) * per_month) if (d and actives) else None,
                 "cost_total": total,
                 # A month's rate read off a few hours is not a measurement.
-                "window_too_short": scope.days < _MIN_RESIDUAL_DAYS,
+                "window_too_short": scope.days < MIN_RATE_DAYS,
             },
         )
     return out
 
 
-async def _reconciliation(db: AsyncSession, scope: _Scope) -> dict[str, Any]:
+async def _reconciliation(db: AsyncSession, scope: Scope) -> dict[str, Any]:
     """Recorded spend vs. the same tokens priced at published rates.
 
     The two should agree. A gap means a model is priced wrong in the
@@ -684,7 +538,7 @@ async def _reconciliation(db: AsyncSession, scope: _Scope) -> dict[str, Any]:
     }
 
 
-async def _models_in_use(db: AsyncSession, scope: _Scope) -> dict[str, Any]:
+async def _models_in_use(db: AsyncSession, scope: Scope) -> dict[str, Any]:
     """The model each stage actually ran on in the window — the one that
     took the most spend — so every model picker defaults to reality."""
     rows = (
@@ -693,7 +547,10 @@ async def _models_in_use(db: AsyncSession, scope: _Scope) -> dict[str, Any]:
                 select(
                     LLMCall.function,
                     LLMCall.model,
-                    LLMCall.generation_job_id.isnot(None).label("in_generation"),
+                    or_(
+                        LLMCall.generation_job_id.isnot(None),
+                        deleted_generation_calls(),
+                    ).label("in_generation"),
                     func.sum(LLMCall.cost_usd).label("cost"),
                 ),
             ).group_by(LLMCall.function, LLMCall.model, "in_generation"),
@@ -736,11 +593,12 @@ async def unit_economics(
             raise HTTPException(status_code=400, detail="invalid school_id") from e
 
     window, window_basis, cutover_model = await _resolve_window(db, days)
-    scope = _Scope(window, school_id, exclude_internal)
-    deleted = await _deleted_submissions(db, scope)
+    scope = Scope(window, school_id, exclude_internal)
+    deleted = await deleted_submissions(db, scope)
+    discarded = await deleted_generation_jobs(db, scope)
 
     units = await _submission_units(db, scope, deleted)
-    units.append(await _generation_unit(db, scope))
+    units.append(await _generation_unit(db, scope, discarded))
     units.extend(await _residual_units(db, scope))
     for u in units:
         # Popped FIRST: `and` short-circuits, so folding the pop into the
@@ -759,8 +617,9 @@ async def unit_economics(
             "cutover_model": cutover_model,
         },
         "units": units,
-        "functions_by_unit": await _unit_functions(db, scope, deleted),
+        "functions_by_unit": await _unit_functions(db, scope, deleted, discarded),
         "deleted_submissions": deleted.summary(),
+        "deleted_generation_jobs": discarded.summary(),
         "reconciliation": await _reconciliation(db, scope),
         "measured": await measured_rates(db, window, school_id, exclude_internal),
         "models_in_use": await _models_in_use(db, scope),
