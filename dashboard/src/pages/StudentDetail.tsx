@@ -15,6 +15,7 @@ import DataTable, { type Column } from "../components/DataTable";
 import CallsPanel from "../components/CallsPanel";
 import StatTile from "../components/StatTile";
 import StatusPill from "../components/StatusPill";
+import BlockedUploads from "../components/BlockedUploads";
 import { useScopeToSchool } from "../lib/useSelectedSchool";
 
 /**
@@ -451,6 +452,8 @@ export default function StudentDetail() {
           );
         })}
       </div>
+
+      {studentId && <BlockedUploads studentId={studentId} />}
 
       <h2 className="section-head">
         Submissions

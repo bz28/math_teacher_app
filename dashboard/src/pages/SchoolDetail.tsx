@@ -18,6 +18,7 @@ import { useToast } from "../lib/toast";
 import CallsPanel from "../components/CallsPanel";
 import StatTile from "../components/StatTile";
 import StatusPill from "../components/StatusPill";
+import BlockedUploads from "../components/BlockedUploads";
 import DataTable, { type Column } from "../components/DataTable";
 import {
   activityPill,
@@ -603,8 +604,15 @@ export default function SchoolDetail() {
         )}
       </Section>
 
-      {/* ── 04 — MANAGE TEACHERS (invite + pending) ─────────────── */}
-      <Section number="04" label="Manage teachers">
+      {/* ── 04 — BLOCKED UPLOADS ─────────────────────────────────
+          Failed calls live in the calls panel above; this is the work
+          students couldn't hand in. */}
+      <Section number="04" label="Blocked uploads">
+        <BlockedUploads schoolId={detail.id} />
+      </Section>
+
+      {/* ── 05 — MANAGE TEACHERS (invite + pending) ─────────────── */}
+      <Section number="05" label="Manage teachers">
         <div style={{ marginBottom: detail.pending_invites.length > 0 ? 28 : 0 }}>
           <h3 style={{ marginBottom: 12 }}>Invite a teacher</h3>
           <form onSubmit={handleInvite} style={{ display: "flex", gap: 8 }}>
