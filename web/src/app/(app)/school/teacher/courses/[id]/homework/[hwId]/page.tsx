@@ -26,6 +26,7 @@ import { GenerationStalledBanner, PendingReviewLink } from "./_components/proble
 import { ProblemsSection } from "./_components/problems-section";
 import { RemoveProblemsView } from "./_components/remove-problems-view";
 import { SubmissionStrip } from "./_components/submission-strip";
+import { SectionReviewBand, hasTurnedInWork } from "./_components/section-review-band";
 
 /**
  * Full-page detail for a single homework. Handles all lifecycle
@@ -318,6 +319,17 @@ export default function HomeworkDetailPage({
         onSaveTitle={saveTitle}
       />
 
+      {/* Once work comes in, what's waiting on the teacher leads the
+          page: one row per section, straight into its review. The
+          editor below is still here, but it's no longer the job. */}
+      {!editingProblems && isPublished && hasTurnedInWork(inboxRows) && (
+        <SectionReviewBand
+          courseId={courseId}
+          assignmentId={assignmentId}
+          rows={inboxRows!}
+        />
+      )}
+
       {/* Instructions students will see (e.g. "Show all work, no
           calculators"). Editable inline; lives just below the title so
           teachers see it as a first-class part of the HW, not buried in
@@ -373,12 +385,10 @@ export default function HomeworkDetailPage({
             </div>
           )}
 
-          {/* Submission summary — only shown for published HWs. Tells
-              the teacher at a glance how many students have submitted
-              and how many need grading, with a one-click jump to the
-              grading queue. Multi-section HWs expand into an inline
-              section picker rather than auto-pick a section. */}
-          {isPublished && inboxRows && inboxRows.length > 0 && (
+          {/* Submission summary before any work is in ("Waiting for
+              first submission"). Once there is, the review band at the
+              top of the page takes over. */}
+          {isPublished && inboxRows && inboxRows.length > 0 && !hasTurnedInWork(inboxRows) && (
             <SubmissionStrip
               courseId={courseId}
               assignmentId={assignmentId}
