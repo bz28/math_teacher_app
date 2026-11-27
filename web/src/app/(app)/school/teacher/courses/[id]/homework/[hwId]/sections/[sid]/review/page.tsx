@@ -1496,7 +1496,7 @@ function HomeworkSectionReview({
       <Breadcrumbs
         className="pt-3"
         items={[
-          { label: courseName ?? "", href: `/school/teacher/courses/${courseId}?tab=homework` },
+          { label: courseName ?? "", fallback: "Course", href: `/school/teacher/courses/${courseId}?tab=homework` },
           { label: hwTitle, href: `/school/teacher/courses/${courseId}/homework/${assignmentId}` },
           { label: sectionName },
         ]}

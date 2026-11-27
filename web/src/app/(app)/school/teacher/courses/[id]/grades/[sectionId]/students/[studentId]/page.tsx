@@ -35,7 +35,7 @@ export default function StudentGradesPage({
   const crumbs = (student: string) => (
     <Breadcrumbs
       items={[
-        { label: courseName ?? "", href: `/school/teacher/courses/${courseId}` },
+        { label: courseName ?? "", fallback: "Course", href: `/school/teacher/courses/${courseId}` },
         { label: "Grades", href: `/school/teacher/courses/${courseId}?tab=grades` },
         { label: student },
       ]}

@@ -185,7 +185,7 @@ export default function HomeworkReviewPage({
         <Breadcrumbs
           items={[
             {
-              label: courseName ?? "",
+              label: courseName ?? "", fallback: "Course",
               // Practice sets are reviewed here too; they live on the Practice tab.
               href: courseTabHref(courseId, assignmentType),
             },

@@ -42,7 +42,7 @@ export function HomeworkHeader({
         <Breadcrumbs
       className="pt-3"
       items={[
-        { label: courseName ?? "", href: backHref },
+        { label: courseName ?? "", fallback: "Course", href: backHref },
         { label: hw?.title ?? "" },
       ]}
     />

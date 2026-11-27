@@ -36,3 +36,13 @@ test("a crumb not loaded yet is left out", () => {
     { label: "HW 1", href: null, current: true },
   ]);
 });
+
+test("a crumb with a fallback keeps its link while its name is missing", () => {
+  assert.deepEqual(
+    breadcrumbTrail([{ label: "", fallback: "Course", href: "/c" }, { label: "HW 1" }]),
+    [
+      { label: "Course", href: "/c", current: false },
+      { label: "HW 1", href: null, current: true },
+    ],
+  );
+});

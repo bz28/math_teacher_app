@@ -1,4 +1,7 @@
-export type Crumb = { label: string; href?: string };
+/** `fallback` names a crumb whose label may never arrive (the course's,
+ *  read from a list that can fail): it then shows as that word rather
+ *  than vanishing, so the page keeps its link up. */
+export type Crumb = { label: string; href?: string; fallback?: string };
 export type ShownCrumb = { label: string; href: string | null; current: boolean };
 
 /**
@@ -9,9 +12,10 @@ export type ShownCrumb = { label: string; href: string | null; current: boolean 
  */
 export function breadcrumbTrail(items: Crumb[]): ShownCrumb[] {
   const lastIdx = items.length - 1;
-  return items.flatMap((c, i) =>
-    c.label
-      ? [{ label: c.label, href: i === lastIdx ? null : (c.href ?? null), current: i === lastIdx }]
-      : [],
-  );
+  return items.flatMap((c, i) => {
+    const label = c.label || c.fallback;
+    return label
+      ? [{ label, href: i === lastIdx ? null : (c.href ?? null), current: i === lastIdx }]
+      : [];
+  });
 }
