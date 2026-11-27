@@ -20,6 +20,24 @@ from api.core.image_utils import (
     rotate_upload,
     validate_and_decode_upload,
 )
+from api.core.submission_rejections import (
+    REASON_FILE_INVALID,
+    REASON_PAGE_TOO_SMALL,
+    REASON_PDFS_TOO_LARGE,
+    REASON_SUBMISSION_TOO_LARGE,
+    reason_for_file_error,
+)
+
+
+class UploadRejected(HTTPException):
+    """A refused turn-in page: the HTTP error the student gets, plus why
+    (one of submission_rejections' reasons) and how many decoded bytes
+    had passed before it, so the route can record the refusal."""
+
+    def __init__(self, status_code: int, detail: str, reason: str, decoded_bytes: int) -> None:
+        super().__init__(status_code=status_code, detail=detail)
+        self.reason = reason
+        self.decoded_bytes = decoded_bytes
 
 
 async def validated_upload_files(
@@ -28,7 +46,8 @@ async def validated_upload_files(
     """Validate, size-check and turn each page of a turn-in, returning
     the files as stored. Shared by submit and retake, so a retake is
     held to exactly the rules the first turn-in was. 400 on an
-    unreadable or too-small page, 413 over the whole-submission cap."""
+    unreadable or too-small page, 413 over the whole-submission cap —
+    each an `UploadRejected` carrying its reason."""
     # The work is required and is the source of truth — what the
     # teacher reviews and what the integrity checker reads for per-
     # problem answer extraction. Each file is validated by magic bytes
@@ -45,9 +64,8 @@ async def validated_upload_files(
         try:
             decoded, media_type = validate_and_decode_upload(b64)
         except ValueError as e:
-            raise HTTPException(
-                status_code=400,
-                detail=f"File {i + 1}: {e}",
+            raise UploadRejected(
+                400, f"File {i + 1}: {e}", reason_for_file_error(str(e)), total_bytes,
             ) from e
         if media_type == "application/pdf":
             # A PDF page is held to the same floor as a photo: a phone
@@ -59,27 +77,25 @@ async def validated_upload_files(
                 None,
             )
             if small is not None:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        f"File {i + 1}, page {small[0]} is too small to read ({small[1]}px). "
-                        "Take it again closer up, so the page fills the screen."
-                    ),
+                raise UploadRejected(
+                    400,
+                    f"File {i + 1}, page {small[0]} is too small to read ({small[1]}px). "
+                    "Take it again closer up, so the page fills the screen.",
+                    REASON_PAGE_TOO_SMALL, total_bytes,
                 )
         else:
             try:
                 long_edge = image_long_edge(decoded)
             except Exception as e:
-                raise HTTPException(
-                    status_code=400, detail=f"File {i + 1}: couldn't read this image",
+                raise UploadRejected(
+                    400, f"File {i + 1}: couldn't read this image", REASON_FILE_INVALID, total_bytes,
                 ) from e
             if long_edge < MIN_PAGE_LONG_EDGE:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        f"File {i + 1} is too small to read ({long_edge}px). "
-                        "Take it again closer up, so the page fills the screen."
-                    ),
+                raise UploadRejected(
+                    400,
+                    f"File {i + 1} is too small to read ({long_edge}px). "
+                    "Take it again closer up, so the page fills the screen.",
+                    REASON_PAGE_TOO_SMALL, total_bytes,
                 )
         rotation = rotations[i] if rotations else 0
         if rotation:
@@ -87,9 +103,9 @@ async def validated_upload_files(
                 # CPU work — off the event loop.
                 b64 = await asyncio.to_thread(rotate_upload, b64, media_type, rotation)
             except Exception as e:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"File {i + 1}: couldn't read this file to rotate it",
+                raise UploadRejected(
+                    400, f"File {i + 1}: couldn't read this file to rotate it",
+                    REASON_FILE_INVALID, total_bytes,
                 ) from e
             # Count what is stored, not what was sent.
             stored = len(base64.b64decode(b64))
@@ -100,12 +116,11 @@ async def validated_upload_files(
             pdf_bytes += stored
         validated_files.append({"data": b64, "media_type": media_type})
     if total_bytes > MAX_SUBMISSION_TOTAL_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=(
-                f"Submission too large: {total_bytes / 1024 / 1024:.1f}MB "
-                f"(max {MAX_SUBMISSION_TOTAL_BYTES // 1024 // 1024}MB total)"
-            ),
+        raise UploadRejected(
+            413,
+            f"Submission too large: {total_bytes / 1024 / 1024:.1f}MB "
+            f"(max {MAX_SUBMISSION_TOTAL_BYTES // 1024 // 1024}MB total)",
+            REASON_SUBMISSION_TOO_LARGE, total_bytes,
         )
     # The reader sends a PDF it can't render page by page (unreadable, or
     # past its page cap) whole, and every page of a turn-in goes in one
@@ -113,12 +128,11 @@ async def validated_upload_files(
     # single PDF does (MAX_PDF_BYTES). Photos are resampled, so they don't
     # count here.
     if pdf_bytes > MAX_PDF_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=(
-                f"The PDFs in this turn-in come to {pdf_bytes / 1024 / 1024:.1f}MB "
-                f"(max {MAX_PDF_BYTES // 1024 // 1024}MB of PDFs). "
-                "Take photos of some pages instead, or split the PDF."
-            ),
+        raise UploadRejected(
+            413,
+            f"The PDFs in this turn-in come to {pdf_bytes / 1024 / 1024:.1f}MB "
+            f"(max {MAX_PDF_BYTES // 1024 // 1024}MB of PDFs). "
+            "Take photos of some pages instead, or split the PDF.",
+            REASON_PDFS_TOO_LARGE, total_bytes,
         )
     return validated_files

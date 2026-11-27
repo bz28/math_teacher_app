@@ -1,6 +1,7 @@
+import logging
 import re
 import uuid
-from collections.abc import MutableMapping
+from collections.abc import Awaitable, Callable, MutableMapping
 from typing import Any
 
 from starlette.requests import Request
@@ -65,16 +66,42 @@ def _bearer_status(scope: Scope) -> str:
     return "absent"
 
 
+logger = logging.getLogger(__name__)
+
+# Told about every body this middleware refuses as too large: the raw
+# ASGI scope and the byte count that tripped the cap. Exists because a
+# rejection here happens before any handler runs — without a hook,
+# nothing downstream ever learns that a student was turned away.
+RejectHook = Callable[[Scope, int], Awaitable[None]]
+
+
 class RequestSizeLimitMiddleware:
     def __init__(
         self,
         app: ASGIApp,
         max_size: int = 10 * 1024 * 1024,
         upload_caps: list[tuple[re.Pattern[str], int]] | None = None,
+        on_reject: RejectHook | None = None,
     ) -> None:
         self.app = app
         self.max_size = max_size
         self.upload_caps = upload_caps or []
+        self.on_reject = on_reject
+
+    async def _refuse_and_note(
+        self, status: int, size: int, scope: Scope, receive: Receive, send: Send,
+    ) -> None:
+        """Refuse the body, then tell the hook — best-effort, after the
+        response, so it never changes or delays what the client gets.
+        Only a 413 is a rejection: a 401 is the expired-token path, which
+        the client recovers from by refreshing and retrying."""
+        await self._refuse(status, scope, receive, send)
+        if self.on_reject is None or status != 413:
+            return
+        try:
+            await self.on_reject(scope, size)
+        except Exception:
+            logger.exception("request-size reject hook failed")
 
     def limit_for(self, scope: Scope) -> tuple[int, int]:
         """(byte cap, status to refuse with past it). An upload with an
@@ -102,7 +129,7 @@ class RequestSizeLimitMiddleware:
         content_length = headers.get(b"content-length")
         max_size, refuse_status = self.limit_for(scope)
         if content_length and int(content_length) > max_size:
-            await self._refuse(refuse_status, scope, receive, send)
+            await self._refuse_and_note(refuse_status, int(content_length), scope, receive, send)
             return
 
         if content_length:
@@ -124,7 +151,9 @@ class RequestSizeLimitMiddleware:
             chunk = message.get("body", b"")
             received += len(chunk)
             if received > max_size:
-                await self._refuse(refuse_status, scope, receive, send)
+                # No Content-Length, so the only size we know is how far
+                # the body got before it crossed the cap — a lower bound.
+                await self._refuse_and_note(refuse_status, received, scope, receive, send)
                 return
             chunks.append(chunk)
             if not message.get("more_body", False):

@@ -41,7 +41,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import load_only, undefer
 
 from api.core import photo_store
-from api.core.audit_log import record_student_activity
+from api.core.audit_log import client_ip, record_student_activity
 from api.core.constants import MAX_SUBMISSION_FILES
 from api.core.extraction_queue import drain as extraction_drain
 from api.core.extraction_queue import enqueue_submission as enqueue_extraction
@@ -67,7 +67,8 @@ from api.core.late_policy import (
 )
 from api.core.part_labels import is_multi_part
 from api.core.submission_attempts import archive_attempt, clear_grading
-from api.core.submission_uploads import validated_upload_files
+from api.core.submission_rejections import record_submission_rejection
+from api.core.submission_uploads import UploadRejected, validated_upload_files
 from api.core.tutor import completed_chat, step_chat
 from api.database import get_db, get_session_factory
 from api.middleware.auth import get_current_user_full
@@ -2255,6 +2256,39 @@ async def check_page_orientation(
     )
 
 
+async def _validated_or_recorded(
+    request: Request, user: User, assignment_id: uuid.UUID, body: SubmitHomeworkRequest,
+) -> list[dict[str, str]]:
+    """`validated_upload_files`, recording any refusal before it is
+    raised. A refused upload writes no submission row, so without the
+    record the student is indistinguishable from one who never tried —
+    the blind spot the admin dashboard's blocked-students view closes."""
+    try:
+        return await validated_upload_files(body.files, body.rotations)
+    except UploadRejected as e:
+        await record_submission_rejection(
+            actor_user_id=user.id,
+            assignment_id=assignment_id,
+            reason=e.reason,
+            request_bytes=_declared_request_bytes(request),
+            decoded_bytes=e.decoded_bytes,
+            detail=str(e.detail),
+            ip_address=client_ip(request),
+        )
+        raise
+
+
+def _declared_request_bytes(request: Request) -> int | None:
+    """The transport size of the upload, as the client declared it —
+    the same number the size-limit middleware measures, so a handler
+    rejection and a middleware rejection report bytes on one scale."""
+    raw = request.headers.get("content-length")
+    try:
+        return int(raw) if raw else None
+    except ValueError:
+        return None
+
+
 async def _store_photos(submission_id: uuid.UUID, files: list[dict[str, str]]) -> list[dict[str, Any]]:
     """Put a turn-in's validated pages in the photo store; the entries to
     save on the row. 503 when the store can't take them — the turn-in is
@@ -2270,6 +2304,7 @@ async def _store_photos(submission_id: uuid.UUID, files: list[dict[str, str]]) -
 
 async def _resubmit_reopened(
     db: AsyncSession,
+    request: Request,
     user: User,
     assignment: Assignment,
     submission_id: uuid.UUID,
@@ -2297,7 +2332,7 @@ async def _resubmit_reopened(
     """
     from api.models.grading_job import STATUS_RUNNING, GradingJob
 
-    validated_files = await validated_upload_files(body.files, body.rotations)
+    validated_files = await _validated_or_recorded(request, user, assignment.id, body)
     stored_files = await _store_photos(submission_id, validated_files)
     sub = (await db.execute(
         select(Submission)
@@ -2380,6 +2415,7 @@ async def _resubmit_reopened(
 async def submit_homework(
     assignment_id: uuid.UUID,
     body: SubmitHomeworkRequest,
+    request: Request,
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
 ) -> SubmitHomeworkResponse:
@@ -2414,7 +2450,7 @@ async def submit_homework(
     if not user.is_preview and is_closed(assignment.late_policy, due_at, now):
         raise HTTPException(status_code=403, detail=HOMEWORK_CLOSED_DETAIL)
     if existing is not None and reopened and not user.is_preview:
-        return await _resubmit_reopened(db, user, assignment, existing, body, now, due_at)
+        return await _resubmit_reopened(db, request, user, assignment, existing, body, now, due_at)
     replaced_pages: list[dict[str, Any]] = []
     if existing is not None:
         # A teacher's preview is a rehearsal, not a turn-in. One-shot
@@ -2431,7 +2467,7 @@ async def submit_homework(
         )
         await db.flush()
 
-    validated_files = await validated_upload_files(body.files, body.rotations)
+    validated_files = await _validated_or_recorded(request, user, assignment_id, body)
 
     # The submissions schema requires a section_id on the row.
     section_id = await _section_for_student_work(db, user, assignment)
@@ -2859,6 +2895,7 @@ async def _retake_block(db: AsyncSession, sub: Submission) -> str | None:
 async def retake_submission(
     submission_id: uuid.UUID,
     body: SubmitHomeworkRequest,
+    request: Request,
     user: User = Depends(get_current_user_full),
     db: AsyncSession = Depends(get_db),
 ) -> SubmitHomeworkResponse:
@@ -2899,7 +2936,7 @@ async def retake_submission(
     if block is not None:
         raise HTTPException(status_code=409, detail=block)
 
-    validated_files = await validated_upload_files(body.files, body.rotations)
+    validated_files = await _validated_or_recorded(request, user, sub.assignment_id, body)
     stored_files = await _store_photos(submission_id, validated_files)
 
     now = datetime.now(UTC)
