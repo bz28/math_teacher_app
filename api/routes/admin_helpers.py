@@ -1,9 +1,11 @@
 """Shared utilities for admin route modules."""
 
-from datetime import UTC, datetime, timedelta
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 
-from sqlalchemy import func, select
+from fastapi import HTTPException
+from sqlalchemy import ColumnElement, and_, func, select
 from sqlalchemy.orm import InstrumentedAttribute
 from sqlalchemy.sql.selectable import Subquery
 
@@ -22,6 +24,54 @@ INTERNAL_SCHOOL_SENTINEL = "internal"
 def time_range(hours: int) -> datetime:
     """Return a datetime `hours` ago from now (UTC)."""
     return datetime.now(UTC) - timedelta(hours=hours)
+
+
+@dataclass(frozen=True)
+class Window:
+    """A reporting window [start, end). The one definition every admin
+    number reads its "last 30 days" (or 7, or a custom range) from, so two
+    pages can't disagree about what "this month's spend" covers."""
+
+    start: datetime
+    end: datetime
+
+    def covers(self, col: InstrumentedAttribute[datetime]) -> ColumnElement[bool]:
+        return and_(col >= self.start, col < self.end)
+
+    def previous(self) -> "Window":
+        """The same-length window immediately before this one."""
+        return Window(self.start - (self.end - self.start), self.start)
+
+
+def last_days(days: int, now: datetime | None = None) -> Window:
+    """The rolling window ending now. `days=30` is the console's default."""
+    end = now or datetime.now(UTC)
+    return Window(end - timedelta(days=days), end)
+
+
+def resolve_window(
+    hours: int, date_from: date | None = None, date_to: date | None = None,
+) -> Window:
+    """A preset (`hours` back from now) unless a custom range is given.
+
+    A custom range is whole UTC days, both ends inclusive: from=2026-11-01
+    to=2026-11-07 is the seven days of that week. Either end alone is
+    allowed (open-ended to now, or from the beginning).
+    """
+    if date_from is None and date_to is None:
+        end = datetime.now(UTC)
+        return Window(end - timedelta(hours=hours), end)
+    start = (
+        datetime.combine(date_from, time.min, tzinfo=UTC)
+        if date_from else datetime(2000, 1, 1, tzinfo=UTC)
+    )
+    end = (
+        datetime.combine(date_to + timedelta(days=1), time.min, tzinfo=UTC)
+        if date_to else datetime.now(UTC)
+    )
+    if end <= start:
+        raise HTTPException(status_code=400, detail="'from' must be on or before 'to'")
+    return Window(start, end)
 
 
 def activity_last_action_sq(
