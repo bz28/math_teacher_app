@@ -13,6 +13,7 @@ grading drain running the pass.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -398,6 +399,33 @@ async def test_approving_writes_reasons_without_waiting_for_the_drain(
     r = await client.post(f"/v1/teacher/submissions/{w['subs']['Kit']}/mark-reviewed", headers=_auth(w["token"]))
     await rr.drain_refresh_tasks()
     assert len(_mine(model, w)) == 2
+
+
+async def test_an_approval_during_a_drain_pass_still_lands(
+    client: AsyncClient, model: FakeModel,
+) -> None:
+    """A pass holding the pair's lock read the grades before this
+    approval; the kick waits for it rather than leaving it to the next
+    drain hours later."""
+    w = await _world()
+    await _flagged_period(w)
+    await _student(w, "Kit", _entry(w["pid"], "zero", "Kit-note draft"), approved=False)
+    async with get_session_factory()() as s:
+        g = (await s.execute(select(SubmissionGrade).where(
+            SubmissionGrade.submission_id == w["subs"]["Kit"]))).scalar_one()
+        g.final_score, g.ai_score = 0.0, 0.0
+        s.add(ReteachReasons(id=uuid.uuid4(), assignment_id=w["hw"], section_id=w["p1"]))
+        await s.commit()
+
+    async with get_session_factory()() as held:  # a drain mid-pass
+        await held.execute(select(ReteachReasons).where(
+            ReteachReasons.assignment_id == w["hw"]).with_for_update())
+        r = await client.post(f"/v1/teacher/submissions/{w['subs']['Kit']}/mark-reviewed", headers=_auth(w["token"]))
+        assert r.status_code == 200, r.text
+        await asyncio.sleep(0.3)  # the kick reaches the lock
+        await held.commit()
+    await rr.drain_refresh_tasks()
+    assert any("Kit-note" in m for m in _mine(model, w))
 
 
 async def test_a_failed_call_retries_then_gives_up(client: AsyncClient, model: FakeModel) -> None:

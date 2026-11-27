@@ -30,8 +30,8 @@ from sqlalchemy import text
 from api.core.auth import create_access_token, hash_password
 from api.core.cost_tracker import cost_tracker
 from api.core.graph_checklist import drain_checklist_tasks
-from api.core.reteach_reasons import drain_refresh_tasks as drain_reasons_kicks
 from api.core.llm_client import _circuit
+from api.core.reteach_reasons import drain_refresh_tasks as drain_reasons_kicks
 from api.database import Base, get_engine, get_session_factory
 from api.main import app
 from api.models.assignment import Assignment, AssignmentSection

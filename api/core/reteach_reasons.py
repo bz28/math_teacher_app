@@ -10,8 +10,11 @@ flagged problem.
 
 ## When it runs
 
-Never on a page view. The grading drain (`routes/grading_drain`) runs
-`refresh_reteach_reasons` every pass. A homework × section is revisited
+Never on a page view. Right after an approval — Approve ✓, or a grade
+save that leaves the grade approved — that homework × section gets a
+pass in the background (`schedule_refresh`), so Insights doesn't wait
+for the drain. The grading drain (`routes/grading_drain`) runs the same
+pass for every pair as the backstop. A homework × section is revisited
 only when its counted grades move (`grades_signature`: how many, and the
 latest approval, publish and save), and a flagged problem is written:
 
@@ -21,9 +24,15 @@ latest approval, publish and save), and a flagged problem is written:
   or sooner if the students behind it have doubled since the last read
   (the first read lands at the flag, from a handful of students).
 
+With AI grading off, a paper not yet graded holds a problem's re-read
+while the period's grades have moved in the last day
+(`_HAND_GRADING_QUIET`) — she's still grading — and the pair stays open
+so a later pass makes the final read.
+
 So a period whose teacher approves one paper at a time gets a first read
 as soon as the flag appears, a few more as the class behind it doubles,
-and one when she finishes — not a call per approval. A call that fails is
+and one when she finishes — not a call per approval: a pass whose
+problems' approved input hasn't changed calls nothing. A call that fails is
 retried on later passes up to `MAX_ATTEMPTS` for the same input, then
 left alone until the input moves. Homework older than `_ACTIVE_WINDOW`
 keeps what it has.
@@ -323,9 +332,13 @@ async def _stale_pairs(
 
 async def _refresh_pair(
     db: AsyncSession, assignment_id: uuid.UUID, section_id: uuid.UUID, signature: str,
+    *, wait: bool = False,
 ) -> Counter[str]:
     """Bring one pair's reasons up to date. Holds the pair's row lock for
-    the whole pass, so two drains never write (or pay for) it twice."""
+    the whole pass, so two drains never write (or pay for) it twice. A
+    drain skips a pair another pass holds; an approval's kick (`wait`)
+    waits for it instead, since that pass read the grades before the
+    approval and would otherwise leave it to the next drain."""
     tally_out: Counter[str] = Counter()
     await db.execute(
         pg_insert(ReteachReasons)
@@ -335,7 +348,7 @@ async def _refresh_pair(
     row = (await db.execute(
         select(ReteachReasons)
         .where(ReteachReasons.assignment_id == assignment_id, ReteachReasons.section_id == section_id)
-        .with_for_update(skip_locked=True)
+        .with_for_update(skip_locked=not wait)
     )).scalar_one_or_none()
     if row is None or row.grades_signature == signature:
         await db.rollback()
@@ -491,7 +504,7 @@ async def _refresh_now(pair: tuple[uuid.UUID, uuid.UUID]) -> None:
                 due = await _stale_pairs(db, 1, pair)
             for assignment_id, section_id, signature in due:
                 async with get_session_factory()() as db:
-                    await _refresh_pair(db, assignment_id, section_id, signature)
+                    await _refresh_pair(db, assignment_id, section_id, signature, wait=True)
             if pair not in _AGAIN:
                 return
     except Exception:  # noqa: BLE001 — the drain is the backstop
