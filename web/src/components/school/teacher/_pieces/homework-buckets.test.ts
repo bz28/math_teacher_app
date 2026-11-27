@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { TeacherAssignment } from "@/lib/api";
-import { bucketHomeworks, isHomeworkCompleted } from "./homework-buckets.ts";
+import { bucketHomeworks, isHomeworkCompleted, missingOnlyCount } from "./homework-buckets.ts";
 
 const NOW = new Date("2026-06-22T12:00:00.000Z").getTime();
 const DAY = 86_400_000;
@@ -175,4 +175,31 @@ test("every published HW lands in exactly one bucket", () => {
   const total =
     b.needsGrading.length + b.dueThisWeek.length + b.upcoming.length + b.completed.length;
   assert.equal(total, items.length);
+});
+
+test("missingOnlyCount: past due, every turned-in grade published → the students who never turned it in", () => {
+  const past = { due_at: at(-8 * DAY), total_students: 25, submitted: 23 };
+  assert.equal(missingOnlyCount(hw({ ...past, published: 23 }), NOW), 2);
+  // Still in NEEDS GRADING — the class didn't all submit, so it isn't completed.
+  assert.equal(bucketOf({ ...past, published: 23 }), "needsGrading");
+});
+
+test("missingOnlyCount: 0 while a grade still waits on the teacher, before the due date, or nobody's missing", () => {
+  assert.equal(
+    missingOnlyCount(hw({ due_at: at(-8 * DAY), total_students: 25, submitted: 23, published: 20 }), NOW),
+    0,
+  );
+  assert.equal(
+    missingOnlyCount(hw({ due_at: at(2 * DAY), total_students: 25, submitted: 23, published: 23 }), NOW),
+    0,
+  );
+  assert.equal(
+    missingOnlyCount(hw({ due_at: at(-1 * DAY), total_students: 10, submitted: 10, published: 10 }), NOW),
+    0,
+  );
+  assert.equal(missingOnlyCount(hw({ due_at: null, total_students: 10, submitted: 3, published: 3 }), NOW), 0);
+  assert.equal(
+    missingOnlyCount(hw({ status: "draft", due_at: at(-1 * DAY), submitted: 0, published: 0 }), NOW),
+    0,
+  );
 });

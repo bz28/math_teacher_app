@@ -42,6 +42,26 @@ export function isHomeworkCompleted(
   );
 }
 
+/**
+ * How many students never turned in a past-due homework, when that is
+ * the ONLY thing still outstanding — every grade that was turned in is
+ * published. 0 otherwise (not past due, a grade still waiting on the
+ * teacher, or nobody missing).
+ *
+ * The homework stays in NEEDS GRADING (it isn't "Completed": the class
+ * didn't all submit), but what's left isn't the teacher's grading, so the
+ * card says "N missing" rather than a red "N days overdue".
+ */
+export function missingOnlyCount(
+  hw: TeacherAssignment,
+  now: number = Date.now(),
+): number {
+  if (hw.status !== "published" || !hw.due_at) return 0;
+  if (new Date(hw.due_at).getTime() >= now) return 0;
+  if (hw.published !== hw.submitted) return 0;
+  return Math.max(0, hw.total_students - hw.submitted);
+}
+
 export function bucketHomeworks(
   homeworks: TeacherAssignment[],
   now: number = Date.now(),

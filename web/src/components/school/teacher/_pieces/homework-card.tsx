@@ -7,6 +7,7 @@ import {
   sectionTargetLabel,
   sectionToneClass,
 } from "@/lib/utils";
+import { missingOnlyCount } from "./homework-buckets";
 import { StatusPill } from "./status-pill";
 
 export type HomeworkBucket =
@@ -59,7 +60,12 @@ export function HomeworkCard({
     selectedNames: hw.section_names,
     status: hw.status,
   });
-  const overdueDays = bucket === "needsGrading" && hw.due_at ? daysOverdue(hw.due_at) : 0;
+  // Past due with every turned-in grade published: the only thing left is
+  // students who never turned it in. That's not grading the teacher owes,
+  // so it reads as a neutral "N missing", not a red overdue alarm.
+  const missingOnly = bucket === "needsGrading" ? missingOnlyCount(hw) : 0;
+  const overdueDays =
+    bucket === "needsGrading" && hw.due_at && missingOnly === 0 ? daysOverdue(hw.due_at) : 0;
   // Outstanding submissions = submitted but not yet graded. Headline
   // signal for the NEEDS GRADING bucket: surface as a pill on the
   // title row so a teacher can scan a stack of cards and pick the one
@@ -80,7 +86,7 @@ export function HomeworkCard({
       type="button"
       onClick={onOpen}
       className={`block w-full rounded-[--radius-lg] border bg-surface p-4 text-left transition-all hover:-translate-y-px hover:shadow-sm ${
-        bucket === "needsGrading"
+        bucket === "needsGrading" && missingOnly === 0
           ? "border-[color:var(--color-error-border)] hover:border-[color:var(--color-error)]"
           : bucket === "dueThisWeek"
             ? "border-[color:var(--color-info-border)] hover:border-[color:var(--color-info)]"
@@ -100,6 +106,7 @@ export function HomeworkCard({
             label={`${ungraded} to grade`}
           />
         )}
+        {missingOnly > 0 && <StatusPill tone="muted" label={`${missingOnly} missing`} />}
         {overdueDays > 0 && (
           <StatusPill
             tone="red"
