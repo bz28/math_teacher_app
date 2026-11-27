@@ -25,7 +25,6 @@ approved variation content.
 from __future__ import annotations
 
 import asyncio
-import base64
 import hashlib
 import logging
 import uuid
@@ -43,17 +42,13 @@ from sqlalchemy.orm import load_only, undefer
 
 from api.core import photo_store
 from api.core.audit_log import record_student_activity
-from api.core.constants import MAX_PDF_BYTES, MAX_SUBMISSION_FILES, MAX_SUBMISSION_TOTAL_BYTES
+from api.core.constants import MAX_SUBMISSION_FILES
 from api.core.extraction_queue import drain as extraction_drain
 from api.core.extraction_queue import enqueue_submission as enqueue_extraction
 from api.core.image_utils import (
-    MIN_PAGE_LONG_EDGE,
     PAGE_ROTATIONS,
-    image_long_edge,
     page_looks_sideways,
     pdf_page_checks,
-    pdf_scan_long_edges,
-    rotate_upload,
     validate_and_decode_upload,
 )
 from api.core.integrity_pipeline import (
@@ -72,6 +67,7 @@ from api.core.late_policy import (
 )
 from api.core.part_labels import is_multi_part
 from api.core.submission_attempts import archive_attempt, clear_grading
+from api.core.submission_uploads import validated_upload_files
 from api.core.tutor import completed_chat, step_chat
 from api.database import get_db, get_session_factory
 from api.middleware.auth import get_current_user_full
@@ -2259,106 +2255,6 @@ async def check_page_orientation(
     )
 
 
-async def _validated_upload_files(body: SubmitHomeworkRequest) -> list[dict[str, str]]:
-    """Validate, size-check and turn each page of a turn-in, returning
-    the files as stored. Shared by submit and retake, so a retake is
-    held to exactly the rules the first turn-in was. 400 on an
-    unreadable or too-small page, 413 over the whole-submission cap."""
-    # The work is required and is the source of truth — what the
-    # teacher reviews and what the integrity checker reads for per-
-    # problem answer extraction. Each file is validated by magic bytes
-    # against per-format size caps; we also enforce a whole-submission
-    # cap so a 10-PDF payload can't blow up the row store.
-    validated_files: list[dict[str, str]] = []
-    total_bytes = 0
-    pdf_bytes = 0
-    for i, raw in enumerate(body.files):
-        # Strip an optional `data:<media>;base64,` prefix before
-        # validation. The prefix is informational; magic bytes inside
-        # the decoded payload are the source of truth.
-        b64 = raw.split(",", 1)[1] if raw.startswith("data:") else raw
-        try:
-            decoded, media_type = validate_and_decode_upload(b64)
-        except ValueError as e:
-            raise HTTPException(
-                status_code=400,
-                detail=f"File {i + 1}: {e}",
-            ) from e
-        if media_type == "application/pdf":
-            # A PDF page is held to the same floor as a photo: a phone
-            # photo saved as a PDF reads no better than the photo. A PDF
-            # that can't be opened is left for the reader, as before.
-            edges = await asyncio.to_thread(pdf_scan_long_edges, b64)
-            small = next(
-                ((p, e) for p, e in enumerate(edges, 1) if e is not None and e < MIN_PAGE_LONG_EDGE),
-                None,
-            )
-            if small is not None:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        f"File {i + 1}, page {small[0]} is too small to read ({small[1]}px). "
-                        "Take it again closer up, so the page fills the screen."
-                    ),
-                )
-        else:
-            try:
-                long_edge = image_long_edge(decoded)
-            except Exception as e:
-                raise HTTPException(
-                    status_code=400, detail=f"File {i + 1}: couldn't read this image",
-                ) from e
-            if long_edge < MIN_PAGE_LONG_EDGE:
-                raise HTTPException(
-                    status_code=400,
-                    detail=(
-                        f"File {i + 1} is too small to read ({long_edge}px). "
-                        "Take it again closer up, so the page fills the screen."
-                    ),
-                )
-        rotation = body.rotations[i] if body.rotations else 0
-        if rotation:
-            try:
-                # CPU work — off the event loop.
-                b64 = await asyncio.to_thread(rotate_upload, b64, media_type, rotation)
-            except Exception as e:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"File {i + 1}: couldn't read this file to rotate it",
-                ) from e
-            # Count what is stored, not what was sent.
-            stored = len(base64.b64decode(b64))
-        else:
-            stored = len(decoded)
-        total_bytes += stored
-        if media_type == "application/pdf":
-            pdf_bytes += stored
-        validated_files.append({"data": b64, "media_type": media_type})
-    if total_bytes > MAX_SUBMISSION_TOTAL_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=(
-                f"Submission too large: {total_bytes / 1024 / 1024:.1f}MB "
-                f"(max {MAX_SUBMISSION_TOTAL_BYTES // 1024 // 1024}MB total)"
-            ),
-        )
-    # The reader sends a PDF it can't render page by page (unreadable, or
-    # past its page cap) whole, and every page of a turn-in goes in one
-    # model request. So the PDFs together must fit that request, like a
-    # single PDF does (MAX_PDF_BYTES). Photos are resampled, so they don't
-    # count here.
-    if pdf_bytes > MAX_PDF_BYTES:
-        raise HTTPException(
-            status_code=413,
-            detail=(
-                f"The PDFs in this turn-in come to {pdf_bytes / 1024 / 1024:.1f}MB "
-                f"(max {MAX_PDF_BYTES // 1024 // 1024}MB of PDFs). "
-                "Take photos of some pages instead, or split the PDF."
-            ),
-        )
-    return validated_files
-
-
 async def _store_photos(submission_id: uuid.UUID, files: list[dict[str, str]]) -> list[dict[str, Any]]:
     """Put a turn-in's validated pages in the photo store; the entries to
     save on the row. 503 when the store can't take them — the turn-in is
@@ -2401,7 +2297,7 @@ async def _resubmit_reopened(
     """
     from api.models.grading_job import STATUS_RUNNING, GradingJob
 
-    validated_files = await _validated_upload_files(body)
+    validated_files = await validated_upload_files(body.files, body.rotations)
     stored_files = await _store_photos(submission_id, validated_files)
     sub = (await db.execute(
         select(Submission)
@@ -2535,7 +2431,7 @@ async def submit_homework(
         )
         await db.flush()
 
-    validated_files = await _validated_upload_files(body)
+    validated_files = await validated_upload_files(body.files, body.rotations)
 
     # The submissions schema requires a section_id on the row.
     section_id = await _section_for_student_work(db, user, assignment)
@@ -2972,7 +2868,7 @@ async def retake_submission(
     photos were the problem — sideways, blurry, a page missing. Allowed
     once, under `_retake_block`'s rules, while the homework still takes
     turn-ins. The new photos go through exactly submit's validation
-    (`_validated_upload_files`), and the reading is spawned the same way.
+    (`validated_upload_files`), and the reading is spawned the same way.
     The submission then walks the normal path again: the student checks
     the new reading, confirms or flags it.
 
@@ -3003,7 +2899,7 @@ async def retake_submission(
     if block is not None:
         raise HTTPException(status_code=409, detail=block)
 
-    validated_files = await _validated_upload_files(body)
+    validated_files = await validated_upload_files(body.files, body.rotations)
     stored_files = await _store_photos(submission_id, validated_files)
 
     now = datetime.now(UTC)

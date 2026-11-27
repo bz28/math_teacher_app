@@ -297,14 +297,14 @@ def _during_validation(monkeypatch: Any, side_effect: Any) -> None:
     """Run `side_effect` while the retake is validating its photos."""
     import api.routes.school_student_practice as route
 
-    real = route._validated_upload_files
+    real = route.validated_upload_files
 
-    async def validating(body: Any) -> Any:
-        files = await real(body)
+    async def validating(*args: Any) -> Any:
+        files = await real(*args)
         await side_effect()
         return files
 
-    monkeypatch.setattr(route, "_validated_upload_files", validating)
+    monkeypatch.setattr(route, "validated_upload_files", validating)
 
 
 async def _assert_untouched(sid: str) -> None:

@@ -275,9 +275,8 @@ async def test_submit_homework_total_payload_guard_rejects() -> None:
             "_load_assignment_for_student",
             new=_AsyncMock(return_value=fake_assignment),
         ),
-        patch.object(
-            ssp,
-            "validate_and_decode_upload",
+        patch(
+            "api.core.submission_uploads.validate_and_decode_upload",
             return_value=(fake_decoded, "application/pdf"),
         ),
     ):
@@ -420,7 +419,7 @@ async def test_submit_rejects_pdfs_too_large_together(
     from unittest.mock import patch
 
     one_pdf = len(base64.b64decode(TINY_PDF))
-    with patch("api.routes.school_student_practice.MAX_PDF_BYTES", one_pdf + 1):
+    with patch("api.core.submission_uploads.MAX_PDF_BYTES", one_pdf + 1):
         r = await client.post(
             f"/v1/school/student/homework/{world['assignment_id']}/submit",
             headers=_auth(world["student_token"]),
@@ -447,7 +446,7 @@ async def test_submit_accepts_a_pdf_exactly_at_the_cap(
 
     exact = len(base64.b64decode(TINY_PDF))
     assert len(TINY_PDF) * 3 // 4 > exact  # the case that used to fail
-    with patch("api.routes.school_student_practice.MAX_PDF_BYTES", exact):
+    with patch("api.core.submission_uploads.MAX_PDF_BYTES", exact):
         r = await client.post(
             f"/v1/school/student/homework/{world['assignment_id']}/submit",
             headers=_auth(world["student_token"]),
