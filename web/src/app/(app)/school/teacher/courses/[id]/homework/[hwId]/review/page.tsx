@@ -189,7 +189,7 @@ export default function HomeworkReviewPage({
               // Practice sets are reviewed here too; they live on the Practice tab.
               href: courseTabHref(courseId, assignmentType),
             },
-            { label: hwTitle, href: backHref },
+            { label: hwTitle, fallback: assignmentType === "practice" ? "Practice set" : "Homework", href: backHref },
             { label: "Review problems" },
           ]}
         />

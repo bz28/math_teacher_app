@@ -62,6 +62,20 @@ async def course_nav_flow(
         except PlaywrightTimeoutError:
             issues.append("the review page's breadcrumb doesn't lead back to its homework")
 
+        # The problem-review page keeps a link to its homework even when the
+        # homework can't be read (its title never arrives).
+        hw_read = f"**/v1/teacher/assignments/{rs.assignment_id}"
+        await page.route(hw_read, lambda route: route.abort())
+        await page.goto(f"{course}/homework/{rs.assignment_id}/review", wait_until="domcontentloaded",
+                        timeout=_TIMEOUT_MS)
+        try:
+            await page.locator(
+                f'nav[aria-label="Breadcrumb"] a[href$="/homework/{rs.assignment_id}"]',
+            ).wait_for(timeout=_TIMEOUT_MS)
+        except PlaywrightTimeoutError:
+            issues.append("problem review lost its link to the homework when the homework couldn't load")
+        await page.unroute(hw_read)
+
         await page.set_viewport_size({"width": 390, "height": 844})
         await page.goto(f"{course}?tab=grades", wait_until="domcontentloaded", timeout=_TIMEOUT_MS)
         menu = page.locator('button[aria-controls="mobile-course-menu"]')
