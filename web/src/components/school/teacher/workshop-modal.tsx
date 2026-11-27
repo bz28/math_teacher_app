@@ -68,6 +68,7 @@ export function WorkshopModal({
   parentTitle,
   onJumpToParent,
   renderAsPage = false,
+  completionNext,
 }: {
   item?: BankItem;
   queue?: BankItem[];
@@ -95,6 +96,9 @@ export function WorkshopModal({
   // (`/courses/[id]/homework/[hwId]/review`) so teachers get the same
   // rich edit+chat UX on a dedicated page instead of inside a modal.
   renderAsPage?: boolean;
+  // Queue mode: what to offer once every item is resolved, on the
+  // "All caught up" screen; given that screen's counts, null for nothing.
+  completionNext?: (counts: { approved: number; rejected: number; skipped: number }) => React.ReactNode;
 }) {
   // Queue state — only meaningful when `queue` is provided
   const isQueueMode = queue !== undefined && queue.length > 0;
@@ -667,6 +671,7 @@ export function WorkshopModal({
         total={total}
         onClose={onClose}
         renderAsPage={renderAsPage}
+        next={completionNext?.(counts)}
       />
     );
   }

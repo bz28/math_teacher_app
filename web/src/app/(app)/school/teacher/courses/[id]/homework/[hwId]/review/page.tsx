@@ -8,6 +8,7 @@ import { oldestFirst } from "@/lib/generation-progress";
 import { WorkshopModal } from "@/components/school/teacher/workshop-modal";
 import { PageErrorState } from "@/components/ui/page-error-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { PublishFromReview } from "./_components/publish-from-review";
 
 /**
  * Full-page approval queue for a homework's generated problems.
@@ -230,6 +231,14 @@ export default function HomeworkReviewPage({
             queue={phase.items}
             renderAsPage
             onClose={goBack}
+            // A draft homework whose queue is now empty has one click
+            // left — offer it here. Skipped items are still pending, so
+            // not every problem is approved yet.
+            completionNext={(counts) =>
+              assignmentType === "homework" && counts.skipped === 0 ? (
+                <PublishFromReview assignmentId={assignmentId} homeworkHref={backHref} />
+              ) : null
+            }
             onChanged={() => {
               // WorkshopModal updates individual items in-place and
               // handles queue advance internally; we don't need to

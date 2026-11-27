@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReactNode } from "react";
+
 // ─────────────────────────────────────────────────────────────────────
 // Completion screen (queue mode only)
 // ─────────────────────────────────────────────────────────────────────
@@ -9,11 +11,15 @@ export function CompletionModal({
   total,
   onClose,
   renderAsPage = false,
+  next,
 }: {
   counts: { approved: number; rejected: number; skipped: number };
   total: number;
   onClose: () => void;
   renderAsPage?: boolean;
+  /** What the caller offers next (e.g. publishing the homework the
+   *  queue fed), shown above the way back. */
+  next?: ReactNode;
 }) {
   const card = (
     <div
@@ -40,9 +46,16 @@ export function CompletionModal({
           <span className="font-semibold text-text-muted">⏭ {counts.skipped} skipped</span>
         )}
       </div>
+      {next}
       <button
         onClick={onClose}
-        className="mt-6 rounded-[--radius-md] bg-primary px-6 py-2 text-sm font-bold text-white hover:bg-primary-dark"
+        // With a next step offered, that's the primary action and the
+        // way back steps down to a quiet link.
+        className={
+          next
+            ? "mt-4 text-sm font-semibold text-text-secondary underline-offset-2 hover:text-text-primary hover:underline"
+            : "mt-6 rounded-[--radius-md] bg-primary px-6 py-2 text-sm font-bold text-white hover:bg-primary-dark"
+        }
       >
         {renderAsPage ? "Back to homework" : "Done"}
       </button>
