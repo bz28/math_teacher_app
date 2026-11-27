@@ -185,13 +185,12 @@ async def test_every_level_shows_the_same_number(
     client: AsyncClient, world: dict[str, Any],
 ) -> None:
     """Tess's $3.00 and Sam's $1.50 read the same on every page."""
-    tess_page = await _get(client, world, f"/v1/admin/users/{world['tess']}/students")
-    assert tess_page["teacher"]["total_cost_30d"] == pytest.approx(3.0)
-    assert tess_page["teacher"]["call_count_30d"] == 2
-
-    sam_page = await _get(client, world, f"/v1/admin/students/{world['sam']}")
-    assert sam_page["student"]["total_cost_30d"] == pytest.approx(1.5)
-    assert sam_page["student"]["call_count_30d"] == 2
+    # The teacher, student and homework pages show the calls panel, which
+    # reads this same summary with the person's filter.
+    tess = await _summary(client, world, teacher_id=world["tess"])
+    assert (tess["calls"], tess["spend"]) == (2, pytest.approx(3.0))
+    sam = await _summary(client, world, student_id=world["sam"])
+    assert (sam["calls"], sam["spend"]) == (2, pytest.approx(1.5))
 
     school_page = await _get(client, world, f"/v1/admin/schools/{world['school']}")
     by_name = {t["name"]: t for t in school_page["teachers"]}

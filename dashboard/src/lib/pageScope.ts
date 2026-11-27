@@ -30,11 +30,11 @@ const PLATFORM = ["/schools", "/leads"];
 export function pageScope(pathname: string, search: string): PageScope {
   const params = new URLSearchParams(search);
   if (pathname === "/users" && params.get("role") === "admin") return "platform";
-  // LLM calls filtered to one user / submission / session is about that
+  // LLM calls filtered to one person / homework / submission / session is about that
   // one thing, and the page drops the school scope for it (LLMCalls.tsx).
   if (
     pathname === "/llm-calls" &&
-    ["user", "teacher", "student", "submission", "session"].some((k) => params.get(k))
+    ["user", "teacher", "student", "assignment", "submission", "session"].some((k) => params.get(k))
   ) {
     return null;
   }
@@ -58,4 +58,15 @@ export function schoolLabel(s: {
 }): string {
   const where = [s.city, s.state].filter(Boolean).join(", ");
   return where ? `${s.name} — ${where}` : s.name;
+}
+
+/** The Calls page's bucket of calls with no school (admins, internal
+ *  tools); the API takes it as a school_id. Not a rail scope — the rail
+ *  holds a real school or all of them — so the Calls page alone keeps it
+ *  in its URL as `?school=internal`. */
+export const INTERNAL_SCHOOL = "internal";
+
+/** True on the Calls page while its "Internal only" filter is on. */
+export function isInternalOnly(pathname: string, search: string): boolean {
+  return pathname === "/llm-calls" && new URLSearchParams(search).get("school") === INTERNAL_SCHOOL;
 }

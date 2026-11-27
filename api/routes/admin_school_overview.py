@@ -167,13 +167,6 @@ async def school_overview(
             LLMCall.created_at >= now - timedelta(hours=24),
         )
     )).scalar() or 0
-    failed_7d = (await db.execute(
-        select(func.count()).select_from(LLMCall).where(
-            llm_school,
-            LLMCall.success.is_(False),
-            LLMCall.created_at >= now - timedelta(days=7),
-        )
-    )).scalar() or 0
 
     # ---------- Activity (week-over-week) ----------
     week_start = (
@@ -238,7 +231,6 @@ async def school_overview(
             "last_week": activity_last_week,
         },
         "failed_calls_24h": failed_24h,
-        "failed_calls_7d": failed_7d,
     }
 
 

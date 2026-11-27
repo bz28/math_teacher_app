@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { apiHealth, getToken, setToken } from "../lib/api";
 import SchoolSwitcher from "./SchoolSwitcher";
 import { setSchoolScope, useSelectedSchool, type SelectedSchool } from "../lib/useSelectedSchool";
-import { pageScope, schoolLabel } from "../lib/pageScope";
+import { pageScope, schoolLabel, isInternalOnly } from "../lib/pageScope";
 
 interface NavItem {
   to: string;
@@ -69,6 +69,17 @@ function ScopeLine({ school }: { school: SelectedSchool }) {
       <div className="scope-line scope-line-platform" role="note">
         <span className="scope-line-label">Scope</span>
         <span>Platform-wide — this page isn't school data, so the school scope doesn't apply.</span>
+      </div>
+    );
+  }
+
+  // The Calls page's "Internal only" filter: not a rail scope, but it is
+  // what the page shows.
+  if (isInternalOnly(pathname, search)) {
+    return (
+      <div className="scope-line" role="note">
+        <span className="scope-line-label">Scope</span>
+        <span><b>Internal only</b> — calls that belong to no school (admins, internal tools).</span>
       </div>
     );
   }
@@ -203,7 +214,7 @@ export default function Layout() {
             Keyed on the scope ALONE, never on the page's kind: a URL that
             changes kind on the same route (LLM calls gaining ?user=, Users
             flipping to the Admins preset) must not wipe its local filters. */}
-        <Outlet key={`scope:${school.id ?? "all"}`} />
+        <Outlet key={`scope:${school.id ?? "all"}`} context={{ schoolName: school.name }} />
       </main>
     </div>
   );

@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router-dom";
 
+import CallsPanel from "../components/CallsPanel";
 import ErrorState from "../components/ErrorState";
 import MathText from "../components/MathText";
 import StatusPill, { type PillTone } from "../components/StatusPill";
@@ -161,6 +162,9 @@ export default function AssignmentDetail() {
 
       <Sections sections={a.sections} />
       <Lifecycle a={a} />
+
+      {/* Every call on a submission handed in to this homework. */}
+      <CallsPanel key={id} scope={{ kind: "assignment", id: a.id }} />
 
       <div style={{ marginTop: 22 }}>
         {a.problems.length === 0 ? (

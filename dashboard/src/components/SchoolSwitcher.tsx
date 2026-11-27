@@ -1,6 +1,6 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { setSchoolScope, type SelectedSchool } from "../lib/useSelectedSchool";
-import { pageScope, schoolLabel } from "../lib/pageScope";
+import { isInternalOnly, pageScope, schoolLabel } from "../lib/pageScope";
 
 /** The <select> value for All schools. Never a real id (ids are UUIDs). */
 const ALL = "";
@@ -38,9 +38,13 @@ export default function SchoolSwitcher({ selected }: { selected: SelectedSchool 
       // Staying put — but a page number from the old school's list can
       // point past the end of the new one's. Pages that keep their offset
       // in the URL (Audit log) start over; the rest remount (Layout).
+      // Picking a scope also ends the Calls page's "Internal only" filter
+      // (?school=internal), or the pick would change nothing on screen.
       const params = new URLSearchParams(search);
-      if (params.has("offset")) {
+      const internal = isInternalOnly(pathname, search);
+      if (params.has("offset") || internal) {
         params.delete("offset");
+        if (internal) params.delete("school");
         navigate({ pathname, search: params.toString() }, { replace: true });
       }
     }

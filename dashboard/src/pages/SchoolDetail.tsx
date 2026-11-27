@@ -15,6 +15,7 @@ import { btnGhost, btnPrimary, btnSmall, inputStyle } from "../lib/styles";
 import { useConfirm } from "../lib/confirm";
 import { confirmAndDeleteUser } from "../lib/deleteUserFlow";
 import { useToast } from "../lib/toast";
+import CallsPanel from "../components/CallsPanel";
 import StatTile from "../components/StatTile";
 import StatusPill from "../components/StatusPill";
 import DataTable, { type Column } from "../components/DataTable";
@@ -450,6 +451,10 @@ export default function SchoolDetail() {
         />
       </div>
 
+      {/* The calls panel — the same five numbers as every level, by the
+          school stamped on each call. */}
+      <CallsPanel key={detail.id} scope={{ kind: "school", id: detail.id }} />
+
       {/* ── 01 — TEACHERS & CLASSES (the hero) ──────────────────── */}
       {/* The teacher → section → student hierarchy. Each teacher owns
           class periods; drill a class to see its students, their work,
@@ -457,18 +462,6 @@ export default function SchoolDetail() {
       <Section
         number="01"
         label={`Teachers & classes (${teacherCount})`}
-        action={
-          teacherCount > 0 ? (
-            <Link
-              to={`/llm-calls?school=${detail.id}&hours=720`}
-              className="link-btn"
-              style={{ fontSize: 12 }}
-              title="LLM calls for everyone at this school (teachers + students)"
-            >
-              View all school calls (30d) →
-            </Link>
-          ) : undefined
-        }
       >
         {teacherCount === 0 && detail.unassigned_sections.length === 0 ? (
           <p style={{ color: "var(--muted)", fontStyle: "italic" }}>
@@ -610,24 +603,8 @@ export default function SchoolDetail() {
         )}
       </Section>
 
-      {/* ── 04 — HEALTH ─────────────────────────────────────────── */}
-      <Section number="04" label="Health">
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32 }}>
-          <HealthBlock
-            label="Failed calls (24h)"
-            count={overview.failed_calls_24h}
-            href={`/llm-calls?school=${detail.id}&status=failed&hours=24`}
-          />
-          <HealthBlock
-            label="Failed calls (7d)"
-            count={overview.failed_calls_7d}
-            href={`/llm-calls?school=${detail.id}&status=failed&hours=168`}
-          />
-        </div>
-      </Section>
-
-      {/* ── 05 — MANAGE TEACHERS (invite + pending) ─────────────── */}
-      <Section number="05" label="Manage teachers">
+      {/* ── 04 — MANAGE TEACHERS (invite + pending) ─────────────── */}
+      <Section number="04" label="Manage teachers">
         <div style={{ marginBottom: detail.pending_invites.length > 0 ? 28 : 0 }}>
           <h3 style={{ marginBottom: 12 }}>Invite a teacher</h3>
           <form onSubmit={handleInvite} style={{ display: "flex", gap: 8 }}>
@@ -1248,53 +1225,6 @@ function ActivityRow({
         }}
       >
         {delta === 0 ? "→ no change" : `${delta > 0 ? "↑" : "↓"} ${Math.abs(delta).toLocaleString()}${pct !== null ? ` (${Math.abs(pct).toFixed(0)}%)` : ""}`}
-      </div>
-    </div>
-  );
-}
-
-function HealthBlock({
-  label,
-  count,
-  href,
-}: {
-  label: string;
-  count: number;
-  href: string;
-}) {
-  const danger = count > 0;
-  return (
-    <div>
-      <div
-        style={{
-          fontFamily: "var(--font-sans)",
-          fontSize: 10,
-          fontWeight: 600,
-          textTransform: "uppercase",
-          letterSpacing: 1.6,
-          color: "var(--muted)",
-          marginBottom: 10,
-        }}
-      >
-        {label}
-      </div>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 16 }}>
-        <span
-          style={{
-            fontFamily: "var(--font-mono)",
-            fontSize: 32,
-            color: danger ? "var(--danger)" : "var(--ok)",
-            letterSpacing: -0.5,
-            lineHeight: 1,
-          }}
-        >
-          {count}
-        </span>
-        {danger && (
-          <Link to={href} className="link-btn" style={{ fontSize: 13 }}>
-            View {count} trace{count === 1 ? "" : "s"} →
-          </Link>
-        )}
       </div>
     </div>
   );

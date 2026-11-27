@@ -1,21 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useOutletContext, useSearchParams } from "react-router-dom";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, AreaChart, Area, LineChart, Line,
 } from "recharts";
 import { api, type LLMCallsData } from "../lib/api";
 import { scopeParams, useSchoolScope } from "../lib/useSelectedSchool";
-import { formatRelativeDate, shortModel, shortId, fmtCost } from "../lib/format";
+import { INTERNAL_SCHOOL, isInternalOnly } from "../lib/pageScope";
+import { formatRelativeDate, shortModel, shortId, fmtCost, fmtLatency } from "../lib/format";
+import AttentionBand from "../components/AttentionBand";
+import CallDrawer from "../components/CallDrawer";
 import { windowLabel } from "../lib/definitions";
 import { BOARD_PAGE_SIZE } from "../lib/pagination";
 import StatTile from "../components/StatTile";
-import StatusPill from "../components/StatusPill";
 import DataTable, { type Column } from "../components/DataTable";
-import MetadataChips from "../components/MetadataChips";
 import { Pagination, SearchInput } from "../components/Pagination";
 import ErrorState from "../components/ErrorState";
-import { EditorialModal } from "../components/EditorialModal";
 import { useConfirm } from "../lib/confirm";
 
 const COLORS = ["#14130f", "#4a6b3a", "#b8431a", "#3d5a78", "#a66b15", "#6b21a8"];
@@ -23,109 +23,129 @@ const COLORS = ["#14130f", "#4a6b3a", "#b8431a", "#3d5a78", "#a66b15", "#6b21a8"
 type CallRow = LLMCallsData["calls"][number];
 type Status = "" | "ok" | "failed";
 
-function fmtLatency(ms: number | null): string {
-  if (ms === null) return "—";
-  return ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${Math.round(ms)}ms`;
-}
-
 export default function LLMCalls() {
   const [searchParams, setSearchParams] = useSearchParams();
   const confirm = useConfirm();
-  const tracePathFor = (submissionId: string) => `/submissions/${submissionId}/trace`;
 
   const [data, setData] = useState<LLMCallsData | null>(null);
-  // Time window is URL-driven so deep links from SchoolDetail /
-  // TeacherDetail ("View calls (30d)" → ?hours=720, failed calls → ?status=
-  // failed) land on the window + scope they advertised.
-  const [hours, setHours] = useState(searchParams.get("hours") ?? "24");
-  // Function + free-text search are the operator's transient live query —
-  // deliberately local (not URL-synced), unlike the deep-linkable scopes.
-  const [fnFilter, setFnFilter] = useState("");
+  // Every filter is in the URL, so a link from any level (a school, a
+  // teacher, a homework, a student, the attention band) lands on exactly
+  // the calls it advertised, and the page can be shared as-is. Free-text
+  // search stays local: it is the operator's live query.
+  const hours = searchParams.get("hours") ?? "24";
+  const dateFrom = searchParams.get("from") ?? "";
+  const dateTo = searchParams.get("to") ?? "";
+  const custom = Boolean(dateFrom || dateTo);
+  const fnFilter = searchParams.get("function") ?? "";
   const [search, setSearch] = useState("");
-  // URL-driven scopes (deep-linkable, and the single source of truth so the
-  // shown value and the URL can never disagree): user, teacher, student,
-  // submission, session, status. `user` is "made the call"; `teacher` and
-  // `student` are the one whose-call rule the console's costs use.
+  // `user` is "made the call"; `teacher` and `student` are the one
+  // whose-call rule every level's numbers use; `assignment` is every call
+  // on a submission to one homework.
   const userFilter = searchParams.get("user") ?? "";
   const teacherFilter = searchParams.get("teacher") ?? "";
   const studentFilter = searchParams.get("student") ?? "";
+  const assignmentFilter = searchParams.get("assignment") ?? "";
   const submissionFilter = searchParams.get("submission") ?? "";
   const sessionFilter = searchParams.get("session") ?? "";
+  const modelFilter = searchParams.get("model") ?? "";
   // The school comes from the rail's scope — except when the URL already
-  // names one user, submission or session. Those identify their own rows,
-  // and ANDing a school on top can only hide them: an admin's calls belong
-  // to no school, and a trace link followed under another school's scope
-  // would land on an empty list. pageScope() treats these URLs as
-  // single-thing pages for the same reason, so the rail doesn't claim a
-  // scope the request isn't using.
+  // names one person, homework, submission or session. Those identify
+  // their own rows, and ANDing a school on top can only hide them: an
+  // admin's calls belong to no school. pageScope() treats these URLs as
+  // single-thing pages for the same reason.
   const scope = useSchoolScope();
+  // The rail's school name, from Layout's one copy of the schools list.
+  const { schoolName } = useOutletContext<{ schoolName: string | null }>();
   const entityFilter = Boolean(
-    userFilter || teacherFilter || studentFilter || submissionFilter || sessionFilter,
+    userFilter || teacherFilter || studentFilter || assignmentFilter || submissionFilter || sessionFilter,
   );
-  const schoolFilter = entityFilter ? null : scope;
+  // "Internal only" (see INTERNAL_SCHOOL); a school id in `?school=` is
+  // taken by the rail instead (Layout).
+  // Never beside an entity filter — see the effect below.
+  const internalOnly = !entityFilter && isInternalOnly("/llm-calls", `?${searchParams.toString()}`);
+  const placeFilter = internalOnly ? INTERNAL_SCHOOL : scope;
+  const schoolFilter = entityFilter ? null : placeFilter;
   const status: Status = ((): Status => {
     const s = searchParams.get("status");
     return s === "ok" || s === "failed" ? s : "";
   })();
 
-  // Hold the selected call *object*, not its id. The list refetches on every
-  // filter change; an id looked up against `data.calls` would blank the open
-  // modal the moment a refetch dropped that row. A snapshot always renders.
+  // Hold the selected call *object*, not its id: the list refetches on
+  // every filter change, and the drawer must not blank when a refetch
+  // drops its row.
   const [selectedCall, setSelectedCall] = useState<CallRow | null>(null);
   const [debugState, setDebugState] = useState<Record<string, string>>({});
   const [offset, setOffset] = useState(0);
-  // Which page the rows on screen are, or null while none is loaded for
-  // the offset being asked about — see Users.tsx.
   const [loadedOffset, setLoadedOffset] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
+  const query = useMemo(() => ({
+    ...(custom ? { from: dateFrom, to: dateTo } : { hours }),
+    function: fnFilter,
+    model: modelFilter,
+    user_id: userFilter,
+    teacher_id: teacherFilter,
+    student_id: studentFilter,
+    assignment_id: assignmentFilter,
+    submission_id: submissionFilter,
+    session_id: sessionFilter,
+    ...scopeParams(schoolFilter),
+    search,
+    ...(status === "ok" ? { success: "true" } : status === "failed" ? { success: "false" } : {}),
+  }), [custom, dateFrom, dateTo, hours, fnFilter, modelFilter, userFilter, teacherFilter, studentFilter, assignmentFilter, submissionFilter, sessionFilter, schoolFilter, search, status]);
+
   useEffect(() => {
     let cancelled = false;
-    api.llmCalls({
-      hours,
-      function: fnFilter,
-      user_id: userFilter,
-      teacher_id: teacherFilter,
-      student_id: studentFilter,
-      submission_id: submissionFilter,
-      session_id: sessionFilter,
-      ...scopeParams(schoolFilter),
-      search,
-      ...(status === "ok" ? { success: "true" } : status === "failed" ? { success: "false" } : {}),
-      limit: String(BOARD_PAGE_SIZE),
-      offset: String(offset),
-    })
+    const params = Object.fromEntries(Object.entries(query).filter(([, v]) => v !== ""));
+    api.llmCalls({ ...params, limit: String(BOARD_PAGE_SIZE), offset: String(offset) })
       .then((d) => { if (!cancelled) { setData(d); setLoadedOffset(offset); setError(null); } })
       .catch((e) => {
         if (cancelled) return;
         // Mark this offset loaded even though it failed: that ends the
-        // in-flight state so DataTable, which renders loading ahead of
-        // error, reaches the message and its Retry.
+        // in-flight state so DataTable reaches the message and its Retry.
         setLoadedOffset(offset);
         setError(e instanceof Error ? e.message : "Failed to load LLM calls.");
       });
     return () => { cancelled = true; };
-  }, [hours, fnFilter, userFilter, teacherFilter, studentFilter, submissionFilter, sessionFilter, schoolFilter, status, search, offset, reloadKey]);
+  }, [query, offset, reloadKey]);
 
-  // Reset pagination whenever any non-offset filter changes so a deep link or
-  // scope flip never lands past the end of a smaller result set. One effect
-  // (not per-handler) because several filters are URL-driven with no handler.
+  // A filter change can leave the page past the end of a smaller result.
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setOffset(0);
-  }, [hours, fnFilter, userFilter, teacherFilter, studentFilter, submissionFilter, sessionFilter, schoolFilter, status, search]);
+  }, [query]);
 
-  const handleHoursChange = (v: string) => {
-    setHours(v);
+  // An entity filter already means "ignore the place" (pageScope), so
+  // Internal only never stands beside one: however the URL arrived (a
+  // picker, a hand-edited or old link), drop it, as Layout drops a
+  // `?school=<id>` it has taken into the rail.
+  const strayInternal = entityFilter && searchParams.get("school") === INTERNAL_SCHOOL;
+  useEffect(() => {
+    if (!strayInternal) return;
     const next = new URLSearchParams(searchParams);
-    if (v === "24") next.delete("hours"); else next.set("hours", v);
+    next.delete("school");
+    setSearchParams(next, { replace: true });
+  }, [strayInternal, searchParams, setSearchParams]);
+
+  const setParams = (changes: Record<string, string>) => {
+    const next = new URLSearchParams(searchParams);
+    for (const [k, v] of Object.entries(changes)) {
+      if (v) next.set(k, v); else next.delete(k);
+    }
     setSearchParams(next);
   };
-  const setParam = (key: string, value: string) => {
-    const next = new URLSearchParams(searchParams);
-    if (value) next.set(key, value); else next.delete(key);
-    setSearchParams(next);
+  const setParam = (key: string, value: string) => setParams({ [key]: value });
+  const pickFunction = (fn: string) => setParam("function", fn);
+  // A band line describes the last 24h of the band's own scope — the
+  // school, nothing narrower — so following one drops every narrower
+  // filter, or the list it lands on is a different set of calls.
+  const followBand = (changes: Record<string, string>) => {
+    setSearch("");
+    setParams({
+      user: "", teacher: "", student: "", assignment: "", submission: "", session: "", model: "",
+      function: "", hours: "", from: "", to: "", ...changes,
+    });
   };
 
   const handleDebug = async (callId: string) => {
@@ -146,23 +166,30 @@ export default function LLMCalls() {
 
   const columns: Column<CallRow>[] = useMemo(() => [
     {
-      key: "created_at", header: "When", width: "16%",
+      key: "created_at", header: "When", width: "10%",
       sortValue: (c) => new Date(c.created_at).getTime(),
       render: (c) => (
         <span title={new Date(c.created_at).toLocaleString()}>{formatRelativeDate(c.created_at)}</span>
       ),
     },
     {
-      key: "user", header: "User", width: "22%",
-      render: (c) => <span style={{ color: "var(--ink)" }}>{c.user_name || "—"}</span>,
+      key: "who", header: "School · teacher · student", width: "22%",
+      render: (c) => {
+        const who = [c.school_name ?? "Internal", c.teacher_name, c.student_name].filter(Boolean);
+        return (
+          <div style={{ minWidth: 0 }}>
+            <div className="calls-who">{who.join(" · ")}</div>
+            {!c.student_name && c.user_name && <div className="llm-ctx">by {c.user_name}</div>}
+          </div>
+        );
+      },
     },
     {
-      key: "function", header: "Function", width: "26%",
+      key: "function", header: "Function", width: "16%",
       render: (c) => (
         <div style={{ minWidth: 0 }}>
-          <div style={{ color: "var(--ink)", fontWeight: 500 }}>{c.function}</div>
+          <div className="calls-fn">{c.function}</div>
           <div className="llm-ctx">
-            {c.submission_id && <span className="llm-ctx-tag" title={`submission ${c.submission_id}`}>▤ {shortId(c.submission_id)}</span>}
             {c.deleted_submission && <span className="llm-ctx-tag" title="Its submission was deleted; the call stays with the student who made it">▤ deleted submission</span>}
             {c.session_id && <span className="llm-ctx-tag" title={`session ${c.session_id}`}>⧉ {shortId(c.session_id)}</span>}
           </div>
@@ -170,19 +197,33 @@ export default function LLMCalls() {
       ),
     },
     {
-      key: "status", header: "Status", width: "12%",
+      key: "model", header: "Model", width: "8%",
+      render: (c) => <span title={c.model} className="calls-muted">{shortModel(c.model)}</span>,
+    },
+    {
+      key: "status", header: "Status", width: "14%",
       sortValue: (c) => (c.success ? 1 : 0),
-      render: (c) => <StatusPill tone={c.success ? "ok" : "danger"} label={c.success ? "OK" : "FAIL"} />,
+      render: (c) => (
+        <span className={c.success ? "calls-ok" : "calls-bad"}>
+          {c.success ? "OK" : "Failed"}
+          {c.retry_count > 0 && ` · ${c.retry_count} ${c.retry_count === 1 ? "retry" : "retries"}`}
+        </span>
+      ),
     },
     {
-      key: "cost", header: "Cost", numeric: true, width: "12%",
-      sortValue: (c) => c.cost_usd,
-      render: (c) => fmtCost(c.cost_usd),
+      key: "tokens", header: "Tokens in→out", numeric: true, width: "13%",
+      sortValue: (c) => c.input_tokens,
+      render: (c) => `${c.input_tokens.toLocaleString()} → ${c.output_tokens.toLocaleString()}`,
     },
     {
-      key: "latency", header: "Latency", numeric: true, width: "12%",
+      key: "latency", header: "Latency", numeric: true, width: "8%",
       sortValue: (c) => c.latency_ms,
       render: (c) => fmtLatency(c.latency_ms),
+    },
+    {
+      key: "cost", header: "Cost", numeric: true, width: "9%",
+      sortValue: (c) => c.cost_usd,
+      render: (c) => fmtCost(c.cost_usd),
     },
   ], []);
 
@@ -191,137 +232,147 @@ export default function LLMCalls() {
   }
   if (!data) return <p className="loading">Loading…</p>;
 
-  const win = windowLabel(Number(hours));
+  const win = custom ? `${dateFrom || "start"} → ${dateTo || "today"}` : windowLabel(Number(hours));
   const sum = data.summary;
   const errTone = sum.failure_rate >= 5 ? "danger" : sum.failure_rate > 0 ? "warn" : "ok";
-  const fnOptions = data.functions;
   // Every filter narrows the strip as well as the table, so say so when
   // one is on — a filtered total must not read as the window's.
-  const narrowed = Boolean(fnFilter || status || search || entityFilter);
+  const narrowed = Boolean(fnFilter || modelFilter || status || search || entityFilter);
+  const badges: { key: string; label: string; title: string }[] = [
+    internalOnly && { key: "school", label: "Internal only", title: "Calls that belong to no school" },
+    assignmentFilter && { key: "assignment", label: `Homework: ${shortId(assignmentFilter)}`, title: "Every call on a submission to this homework" },
+    submissionFilter && { key: "submission", label: `Submission: ${shortId(submissionFilter)}`, title: submissionFilter },
+    sessionFilter && { key: "session", label: `Session: ${shortId(sessionFilter)}`, title: sessionFilter },
+  ].filter((b): b is { key: string; label: string; title: string } => Boolean(b));
 
   return (
-    <div>
-      <div className="page-header">
-        <span className="eyebrow">Diagnostic</span>
-        <h1>LLM calls</h1>
-        <p>Find and inspect one AI call — its prompt in, response out, cost, latency, success.</p>
+    <div className={selectedCall ? "calls-page with-drawer" : "calls-page"}>
+      <div className="page-header calls-header">
+        <div>
+          <span className="eyebrow">Debug</span>
+          <h1>Calls</h1>
+          <p>Every AI call — find the failing one, see exactly what it sent and got back.</p>
+        </div>
+        <div className="calls-window">
+          <select
+            aria-label="Time window" value={custom ? "custom" : hours}
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v === "custom") {
+                const today = new Date().toISOString().slice(0, 10);
+                setParams({ hours: "", from: today, to: today });
+              } else {
+                setParams({ hours: v === "24" ? "" : v, from: "", to: "" });
+              }
+            }}
+          >
+            <option value="1">Last hour</option>
+            <option value="6">Last 6 hours</option>
+            <option value="24">Last 24 hours</option>
+            <option value="168">Last 7 days</option>
+            <option value="720">Last 30 days</option>
+            <option value="2160">Last 90 days</option>
+            <option value="custom">Custom…</option>
+          </select>
+          {custom && (
+            <>
+              <input type="date" aria-label="From" value={dateFrom} max={dateTo || undefined} onChange={(e) => setParam("from", e.target.value)} />
+              <span className="calls-muted">→</span>
+              <input type="date" aria-label="To" value={dateTo} min={dateFrom || undefined} onChange={(e) => setParam("to", e.target.value)} />
+            </>
+          )}
+        </div>
       </div>
 
-      {/* ── Filter bar — the operator's find-that-one-call controls ──── */}
+      {/* What needs a human now — each line a link into its calls. */}
+      <AttentionBand
+        // The place only — never the narrower filters, which a band click
+        // clears — so the list it lands on is the set it counted.
+        schoolId={placeFilter}
+        placeLabel={internalOnly ? "Internal" : schoolName ?? (scope ? "this school" : "All schools")}
+        onFunction={(fn, failedOnly) => followBand({ function: fn, status: failedOnly ? "failed" : "" })}
+        onSchool={(id) => followBand({ school: id, status: "failed" })}
+      />
+
+      {/* ── Filters — every one narrows the numbers and the rows ─────── */}
       <div className="filters">
-        <select aria-label="Time window" value={hours} onChange={(e) => handleHoursChange(e.target.value)}>
-          <option value="1">Last hour</option>
-          <option value="6">Last 6 hours</option>
-          <option value="24">Last 24 hours</option>
-          <option value="168">Last 7 days</option>
-          <option value="720">Last 30 days</option>
-          <option value="2160">Last 90 days</option>
+        <select aria-label="Filter by teacher" value={teacherFilter} onChange={(e) => setParam("teacher", e.target.value)}>
+          <option value="">All teachers</option>
+          {withCurrent(data.teachers, teacherFilter).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
-        <select aria-label="Filter by user" value={userFilter} onChange={(e) => setParam("user", e.target.value)}>
-          <option value="">All users</option>
-          {data.users.map((u) => <option key={u.id} value={u.id}>{u.email}</option>)}
+        <select aria-label="Filter by student" value={studentFilter} onChange={(e) => setParam("student", e.target.value)}>
+          <option value="">All students</option>
+          {withCurrent(data.students, studentFilter).map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
-        <select aria-label="Filter by function" value={fnFilter} onChange={(e) => setFnFilter(e.target.value)}>
+        <select aria-label="Filter by function" value={fnFilter} onChange={(e) => pickFunction(e.target.value)}>
           <option value="">All functions</option>
-          {fnOptions.map((f) => <option key={f} value={f}>{f}</option>)}
+          {withCurrent(data.functions.map((f) => ({ id: f, name: f })), fnFilter).map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+        </select>
+        <select aria-label="Filter by model" value={modelFilter} onChange={(e) => setParam("model", e.target.value)}>
+          <option value="">All models</option>
+          {withCurrent(data.models.map((m) => ({ id: m, name: shortModel(m) })), modelFilter).map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
         </select>
         <select aria-label="Filter by status" value={status} onChange={(e) => setParam("status", e.target.value)}>
           <option value="">Any status</option>
           <option value="ok">Succeeded</option>
           <option value="failed">Failed</option>
         </select>
-        <SearchInput value={search} onChange={setSearch} placeholder="Search prompt + response…" />
-        {teacherFilter && (
-          <button className="filter-badge" onClick={() => setParam("teacher", "")} style={{ cursor: "pointer", border: "none" }} title="Their own calls plus calls on submissions to their homework">
-            Teacher: {shortId(teacherFilter)} ✕
+        <select aria-label="Filter by who made the call" value={userFilter} onChange={(e) => setParam("user", e.target.value)}>
+          <option value="">Made by anyone</option>
+          {withCurrent(data.users.map((u) => ({ id: u.id, name: u.email })), userFilter).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+        </select>
+        <SearchInput value={search} onChange={setSearch} placeholder="Search input / output…" />
+        {badges.map((b) => (
+          <button key={b.key} className="filter-badge" onClick={() => setParam(b.key, "")} title={b.title}>
+            {b.label} ✕
           </button>
-        )}
-        {studentFilter && (
-          <button className="filter-badge" onClick={() => setParam("student", "")} style={{ cursor: "pointer", border: "none" }} title="Calls they made plus calls on their submissions">
-            Student: {shortId(studentFilter)} ✕
-          </button>
-        )}
-        {submissionFilter && (
-          <button className="filter-badge" onClick={() => setParam("submission", "")} style={{ cursor: "pointer", border: "none" }} title={submissionFilter}>
-            Submission: {shortId(submissionFilter)} ✕
-          </button>
-        )}
-        {sessionFilter && (
-          <button className="filter-badge" onClick={() => setParam("session", "")} style={{ cursor: "pointer", border: "none" }} title={sessionFilter}>
-            Session: {shortId(sessionFilter)} ✕
-          </button>
-        )}
+        ))}
       </div>
 
-      {/* ── ① Strip — the window's headline health + failing functions ── */}
+      {/* ── The strip — follows every filter ─────────────────────────── */}
       <div className="tile-grid">
         <StatTile
           label="Calls" value={sum.calls.toLocaleString()}
-          sub={narrowed ? `filtered · last ${win}` : `in the last ${win}`}
+          sub={narrowed ? `filtered · ${win} · totals follow filters` : `in ${custom ? win : `the last ${win}`}`}
         />
         <StatTile label="Spend" value={fmtCost(sum.spend)} sub={narrowed ? "of the filtered calls" : "across all functions"} />
         <StatTile
           label="Failed" tone={errTone} value={sum.failed.toLocaleString()}
           sub={`${sum.failure_rate}% of ${sum.calls.toLocaleString()} calls`}
         />
-        <StatTile label="p50 latency" value={fmtLatency(sum.latency_p50_ms)} sub="successful calls" />
+        <StatTile label="p50" value={fmtLatency(sum.latency_p50_ms)} sub="successful calls" />
         <StatTile
-          label="p95 latency" value={fmtLatency(sum.latency_p95_ms)}
+          label="p95" value={fmtLatency(sum.latency_p95_ms)}
           sub={`successful calls · n=${sum.latency_n.toLocaleString()}`}
         />
       </div>
 
-      {data.failures_by_function.length > 0 && (
-        <div className="table-card">
-          <h3>Failing functions · {win}</h3>
-          <DataTable
-            columns={failCols}
-            rows={data.failures_by_function}
-            rowKey={(r) => r.function}
-            defaultSort={{ key: "count", dir: "desc" }}
-            onRowClick={(r) => { setFnFilter(r.function); setParam("status", "failed"); }}
-            rowStatus={() => "var(--danger)"}
-            unpaged
-            minWidth={360}
-          />
-        </div>
-      )}
-
-      {/* ── ② The primary surface — one searchable, sortable call table ── */}
+      {/* ── The table ────────────────────────────────────────────────── */}
       <div className="table-card">
         <h3>Calls {data.total_count > 0 && <span className="llm-count">({data.total_count.toLocaleString()})</span>}</h3>
         <DataTable
           columns={columns}
           rows={data.calls}
-          // Server-paged: one page of a larger set. <Pagination> below owns
-          // paging, and client-side sort would rank only this page.
           serverPaged
           rowKey={(c) => c.id}
           loading={loadedOffset !== offset}
-          // Unconditionally: withheld, a failed Next left the previous
-          // page's rows under the new page's label, reading as data rather
-          // than as a failure.
           error={error}
           onRetry={() => { setError(null); setLoadedOffset(null); setReloadKey((k) => k + 1); }}
           onRowClick={(c) => setSelectedCall(c)}
           rowStatus={(c) => (c.id === selectedCall?.id ? "var(--accent)" : !c.success ? "var(--danger)" : undefined)}
           empty={<span className="dt-state-title">No calls match these filters.</span>}
-          minWidth={720}
+          minWidth={1000}
         />
         <Pagination offset={offset} limit={BOARD_PAGE_SIZE} total={data.total_count} onChange={setOffset} />
       </div>
 
-      {/* ── ③ One call, up front — prompt in, response out ───────────── */}
       {selectedCall && (
-        <CallDetailModal
+        <CallDrawer
           call={selectedCall}
           repo={data.repo}
           debugState={debugState[selectedCall.id]}
-          tracePath={selectedCall.submission_id ? tracePathFor(selectedCall.submission_id) : null}
           onClose={() => setSelectedCall(null)}
           onDebug={() => handleDebug(selectedCall.id)}
-          // Both chips refilter the table underneath, so both dismiss — leaving
-          // the modal up would silently rescope the list behind it.
           onSubmissionClick={(id) => { setParam("submission", id); setSelectedCall(null); }}
           onSessionClick={(id) => { setParam("session", id); setSelectedCall(null); }}
         />
@@ -388,6 +439,22 @@ export default function LLMCalls() {
           </div>
         </div>
 
+        {data.failures_by_function.length > 0 && (
+          <div className="table-card">
+            <h3>Failing functions</h3>
+            <DataTable
+              columns={failCols}
+              rows={data.failures_by_function}
+              rowKey={(r) => r.function}
+              defaultSort={{ key: "count", dir: "desc" }}
+              onRowClick={(r) => setParams({ function: r.function, status: "failed" })}
+              rowStatus={() => "var(--danger)"}
+              unpaged
+              minWidth={360}
+            />
+          </div>
+        )}
+
         <div className="table-card">
           <h3>By function</h3>
           <DataTable
@@ -395,7 +462,7 @@ export default function LLMCalls() {
             rows={data.by_function}
             rowKey={(r) => r.function}
             defaultSort={{ key: "total_cost", dir: "desc" }}
-            onRowClick={(r) => setFnFilter(r.function)}
+            onRowClick={(r) => pickFunction(r.function)}
             unpaged
             minWidth={520}
           />
@@ -403,6 +470,14 @@ export default function LLMCalls() {
       </details>
     </div>
   );
+}
+
+/** A picker's options, plus the current value when the list doesn't hold
+ *  it (a link named someone outside this window or school), so the select
+ *  shows the filter that is on rather than silently reading "All". */
+function withCurrent(options: { id: string; name: string }[], current: string): { id: string; name: string }[] {
+  if (!current || options.some((o) => o.id === current)) return options;
+  return [{ id: current, name: shortId(current) }, ...options];
 }
 
 const failCols: Column<LLMCallsData["failures_by_function"][number]>[] = [
@@ -418,122 +493,3 @@ const byFnCols: Column<LLMCallsData["by_function"][number]>[] = [
   { key: "avg_latency_ms", header: "Avg latency", numeric: true, width: "20%", sortValue: (r) => r.avg_latency_ms, render: (r) => fmtLatency(r.avg_latency_ms) },
 ];
 
-/**
- * The one-call detail. Lives in a modal rather than inline under the table
- * because the panel used to render below all 25 rows — clicking the top row
- * put its prompt ~1600px below the fold with no scroll, so the click looked
- * like it did nothing.
- *
- * Input/output stack full-width and uncapped; the modal body is the single
- * scroll container. The old panel capped each <pre> at 300px with its own
- * scrollbar, which showed ~13% of a real (~1400-token) prompt and trapped
- * the wheel inside a box nested in a scrolling page.
- */
-function CallDetailModal({
-  call, repo, debugState, tracePath, onClose, onDebug, onSubmissionClick, onSessionClick,
-}: {
-  call: CallRow;
-  repo: string;
-  debugState: string | undefined;
-  tracePath: string | null;
-  onClose: () => void;
-  onDebug: () => void;
-  onSubmissionClick: (id: string) => void;
-  onSessionClick: (id: string) => void;
-}) {
-  // On a failure the error is what you came for, so it leads.
-  const io = call.success
-    ? [{ label: "Input", text: call.input_text }, { label: "Output", text: call.output_text }]
-    : [{ label: "Error", text: call.output_text }, { label: "Input", text: call.input_text }];
-
-  return (
-    <EditorialModal eyebrow="LLM call" title={call.function} onClose={onClose} maxWidth={1040}>
-      <div className="llm-modal-body">
-        <div className="llm-detail-title">
-          <StatusPill tone={call.success ? "ok" : "danger"} label={call.success ? "OK" : "FAIL"} />
-          <span className="llm-detail-meta" title={call.model}>{shortModel(call.model)}</span>
-          <span className="llm-detail-meta">{call.user_name || "—"}</span>
-          <span className="llm-detail-meta">{call.input_tokens}/{call.output_tokens} tok</span>
-          {(call.cache_read_tokens > 0 || call.cache_write_tokens > 0) && (
-            <span
-              className="llm-detail-meta"
-              title={`Prompt cache: ${call.cache_read_tokens} read at 0.1x input, ${call.cache_write_tokens} written at 1.25x input`}
-            >
-              cache {call.cache_read_tokens}r/{call.cache_write_tokens}w
-            </span>
-          )}
-          <span className="llm-detail-meta">{fmtLatency(call.latency_ms)}</span>
-          <span className="llm-detail-meta">{fmtCost(call.cost_usd)}</span>
-          <span className="llm-detail-meta" title={new Date(call.created_at).toLocaleString()}>
-            {formatRelativeDate(call.created_at)}
-          </span>
-        </div>
-
-        <div className="llm-io">
-          {io.map(({ label, text }) => (
-            <div key={label} className="llm-io-section">
-              <div className="llm-io-head">
-                <strong>{label}</strong>
-                <CopyButton text={text ?? ""} disabled={!text} />
-              </div>
-              <pre>{text || "(not captured)"}</pre>
-            </div>
-          ))}
-        </div>
-
-        <div className="llm-io-section">
-          <strong>Metadata</strong>
-          <MetadataChips
-            metadata={call.metadata}
-            schoolId={call.school_id}
-            submissionId={call.submission_id}
-            onSubmissionClick={onSubmissionClick}
-          />
-          <div className="llm-detail-actions">
-            {call.session_id && (
-              <button className="llm-link-btn" onClick={() => onSessionClick(call.session_id!)}>
-                ⧉ View session calls →
-              </button>
-            )}
-            {tracePath && (
-              <Link to={tracePath} className="llm-link-btn">▤ Open flight recorder →</Link>
-            )}
-            <button className="llm-link-btn" onClick={onDebug} disabled={debugState === "sending"}>
-              🔍 Debug with agent
-            </button>
-            {(debugState === "sent" || Boolean(call.metadata?.debug_dispatched_at)) && (
-              <a
-                href={`https://github.com/${repo}/issues?q=${encodeURIComponent(`is:issue label:llm-debug ${call.id}`)}`}
-                target="_blank" rel="noopener noreferrer" className="llm-link-btn"
-                title="Open the debug agent's findings for this call on GitHub"
-              >
-                🔗 Debug results
-              </a>
-            )}
-          </div>
-          {debugState === "sending" && <div className="llm-detail-note">Dispatching…</div>}
-          {debugState === "sent" && <div className="llm-detail-note llm-note-ok">Dispatched — results appear under 🔗 once the agent finishes.</div>}
-          {debugState === "error" && <div className="llm-detail-note llm-note-bad">Dispatch failed (token configured?).</div>}
-        </div>
-      </div>
-    </EditorialModal>
-  );
-}
-
-function CopyButton({ text, disabled }: { text: string; disabled?: boolean }) {
-  const [done, setDone] = useState(false);
-  return (
-    <button
-      type="button"
-      className="copy-btn"
-      disabled={disabled}
-      onClick={() => {
-        void navigator.clipboard?.writeText(text);
-        setDone(true);
-        setTimeout(() => setDone(false), 1200);
-      }}
-    >
-      {done ? "Copied ✓" : "Copy"}
-    </button>
-  );
-}

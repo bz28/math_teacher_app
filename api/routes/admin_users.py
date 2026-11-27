@@ -25,7 +25,7 @@ from api.core.entitlements import (
     FREE_DAILY_SESSION_LIMIT,
     today_start,
 )
-from api.core.llm_attribution import call_owners, calls_of
+from api.core.llm_attribution import call_owners
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
 from api.models.activity_log import ActivityLog
@@ -1267,21 +1267,6 @@ async def teacher_students(
     # Every call this teacher's CLASSROOM caused, not just the ones billed
     # to her user id — the one whose-call rule (api/core/llm_attribution.py).
     #
-    # Grading and integrity calls are billed to the student whose request
-    # they serve, so `user_id == teacher.id` sees only content generation —
-    # `decompose`, `generate_questions`, `practice_eval`. On a teacher who
-    # generated nothing but whose class submitted work, that count is 0
-    # while the submissions table on the same screen shows 45. The page
-    # contradicted itself in the one number that says whether the AI is
-    # doing anything for her at all.
-    llm_stats = (await db.execute(
-        select(
-            func.count().label("call_count"),
-            func.coalesce(func.sum(LLMCall.cost_usd), 0).label("total_cost"),
-        )
-        .where(calls_of(teacher.id), window.covers(LLMCall.created_at))
-    )).one()
-
     # The generation half on its own, because the panel below the header
     # only shows those and has to be able to say so honestly.
     generated_calls = (await db.execute(
@@ -1353,9 +1338,7 @@ async def teacher_students(
             "school_id": str(teacher.school_id) if teacher.school_id else None,
             "school": school,
             "last_active_at": last_action_at.isoformat() if last_action_at else None,
-            "call_count_30d": int(llm_stats.call_count),
             "generated_call_count_30d": int(generated_calls),
-            "total_cost_30d": round(float(llm_stats.total_cost), 6),
         },
         "usage": usage,
         "sections": section_summary,

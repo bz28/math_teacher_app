@@ -483,6 +483,9 @@ export const api = {
   llmCalls: (params?: Record<string, string>) => request<LLMCallsData>("/admin/llm-calls", params),
   llmCallsSummary: (params?: Record<string, string>) =>
     request<CallSummary>("/admin/llm-calls/summary", params),
+  llmCallsAttention: (params?: Record<string, string>) =>
+    request<{ items: AttentionItem[] }>("/admin/llm-calls/attention", params),
+  llmPayload: (id: string) => request<LLMPayload>(`/admin/llm-payloads/${id}`),
   extractionQuality: (params?: Record<string, string>) =>
     request<ExtractionQualityData>("/admin/extraction-quality", params),
   extractionDetail: (submissionId: string) =>
@@ -644,6 +647,26 @@ export interface CallSummary {
   }[];
 }
 
+/** One line of the Calls page's "needs you" band — a fact about the
+ *  last 24 hours, each a link into the calls behind it. */
+export type AttentionItem =
+  | { kind: "function_failing"; function: string; failed: number; of: number }
+  | { kind: "school_failures"; school_id: string; school_name: string; failed: number }
+  | { kind: "p95_up"; function: string; p95_ms: number; was_ms: number; n: number };
+
+/** A system prompt or tool schema, content-addressed and shared by every
+ *  call that sent the same bytes (`used_by`). */
+export interface LLMPayload {
+  id: string;
+  sha256: string;
+  text: string;
+  char_len: number;
+  kind: string;
+  first_seen_from: string;
+  first_seen_at: string;
+  used_by: number;
+}
+
 export interface LLMCallsData {
   summary: CallSummary;
   /** Filter options — the window's functions and models, not narrowed by
@@ -681,9 +704,18 @@ export interface LLMCallsData {
     user_id: string | null;
     user_name: string | null;
     school_id: string | null;
+    /** Who the call was for: the school stamped on it and, for a call on
+     *  a submission, the student who handed it in and their teacher. */
+    school_name: string | null;
+    teacher_name: string | null;
+    student_name: string | null;
     submission_id: string | null;
     /** A submission-pipeline call whose submission was deleted. */
     deleted_submission: boolean;
+    /** The system prompt / tool schema it sent (bodies via llmPayload);
+     *  null when not recorded. */
+    system_prompt_id: string | null;
+    tool_schema_id: string | null;
     metadata: Record<string, unknown> | null;
     created_at: string;
   }[];
@@ -693,6 +725,9 @@ export interface LLMCallsData {
    *  the general LLM-calls list. */
   submission: SubmissionSummary | null;
   users: { id: string; email: string }[];
+  /** Picker options: the scope's teachers, and students with calls. */
+  teachers: { id: string; name: string }[];
+  students: { id: string; name: string }[];
   repo: string;
 }
 
@@ -1064,7 +1099,6 @@ export interface SchoolOverviewData {
     last_week: ActivityCounts;
   };
   failed_calls_24h: number;
-  failed_calls_7d: number;
 }
 
 export interface CreateSchoolBody {
@@ -1141,14 +1175,10 @@ export interface TeacherStudentsData {
      *  ActivityLog alone, which read NOT STARTED on teachers whose own
      *  page listed recent work. Null if they've genuinely never acted. */
     last_active_at: string | null;
-    /** Every call this teacher's CLASSROOM caused in 30d, including the
-     *  grading and integrity calls billed to the students who
-     *  submitted. */
-    call_count_30d: number;
-    /** The generation half only — all the Content generation panel can
-     *  show, since it filters on the teacher's own user id. */
+    /** Calls she made herself in 30d — the generation half, all the
+     *  Content generation panel can show. Her full count (with calls
+     *  on her homework) is the calls panel's. */
     generated_call_count_30d: number;
-    total_cost_30d: number;
   };
   usage: TeacherUsage;
   sections: TeacherRosterSection[];
@@ -1473,8 +1503,6 @@ export interface StudentDetailData {
      *  homework. */
     last_active_at: string | null;
     last_submitted_at: string | null;
-    call_count_30d: number;
-    total_cost_30d: number;
   };
   sections: StudentSection[];
   funnel: Record<SubmissionStage, number>;
