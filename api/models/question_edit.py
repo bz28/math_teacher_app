@@ -78,12 +78,6 @@ REJECT = "reject"                    # binned the question outright
 # asks for a fresh take; with instructions it keeps the original and
 # revises it. Only the first is evidence the prompt produced something
 # unusable, so collapsing them would blunt the signal.
-# The two kinds that existed before actions were recorded. The generation
-# report counts ONLY these, so its numbers keep meaning what they meant
-# before regenerate and reject became recordable — a reporting change
-# belongs in the commit that redesigns the report, not in the one that
-# widens what gets written.
-EDIT_KINDS = (EDIT_MANUAL, EDIT_WORKSHOP)
 
 # ── field: WHICH LLM call the row indicts ───────────────────────────
 # A bank item is the output of two separate calls (three with MCQ), so

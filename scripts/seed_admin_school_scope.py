@@ -27,7 +27,7 @@ from tests.test_admin_school_scope import _school
 async def main() -> None:
     async with get_session_factory()() as s:
         await s.execute(text(
-            "TRUNCATE TABLE teacher_reports, question_edits, question_bank_items, "
+            "TRUNCATE TABLE teacher_reports, "
             "llm_calls, sessions, submission_grades, submissions, assignments, "
             "section_enrollments, sections, units, course_teachers, courses, "
             "teacher_invites, schools, users RESTART IDENTITY CASCADE"
@@ -37,9 +37,8 @@ async def main() -> None:
         s.add(admin)
         await s.flush()
         a = await _school(s, "Lincoln High", students=6, reports=2, cost=1.25,
-                          questions=8, with_preview=True)
-        b = await _school(s, "Riverside Prep", students=14, reports=5, cost=3.40,
-                          questions=4)
+                          with_preview=True)
+        b = await _school(s, "Riverside Prep", students=14, reports=5, cost=3.40)
         # extra spread so the cost chart has two days
         now = datetime.now(UTC)
         for i, (sid, c) in enumerate([(a["id"], 0.6), (b["id"], 1.1)]):

@@ -193,9 +193,6 @@ Extract math problems from a photo using Claude Vision.
 
 All admin endpoints require the `admin` role.
 
-### `GET /admin/overview`
-Dashboard overview: sessions today/yesterday, daily cost, active users, completion rates, chart data.
-
 ### `GET /admin/llm-calls`
 LLM call analytics: cost by function/model/day, detailed call logs with pagination.
 
