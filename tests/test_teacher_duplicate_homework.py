@@ -306,3 +306,38 @@ async def test_deleting_a_practice_set_still_deletes_its_versions(
             select(QuestionBankItem.id).where(QuestionBankItem.id.in_(version_ids))
         )).scalars().all()
         assert left == []
+
+
+async def test_deleting_a_practice_set_keeps_its_questions_a_homework_uses(
+    client: AsyncClient, world: dict[str, Any],
+) -> None:
+    """A scratch-built practice set makes its own questions; one picked
+    onto a homework from the bank must stay on that homework."""
+    w = await _setup(world)
+    async with get_session_factory()() as s:
+        practice = Assignment(
+            course_id=w["course_id"], teacher_id=world["teacher_id"], title="P",
+            type="practice", status="draft", unit_ids=[world["unit_id"]],
+        )
+        s.add(practice)
+        await s.flush()
+        own = QuestionBankItem(
+            course_id=w["course_id"], unit_id=world["unit_id"],
+            originating_assignment_id=practice.id, title="Own", question="Solve 2x = 4",
+            status="approved", source="generated",
+        )
+        s.add(own)
+        await s.flush()
+        src = await s.get(Assignment, w["source_id"])
+        assert src is not None
+        src.content = {"problem_ids": [str(w["primary_id"]), str(own.id)]}
+        src.problem_points = None
+        await s.commit()
+        practice_id, own_id = practice.id, own.id
+    r = await client.delete(
+        f"/v1/teacher/assignments/{practice_id}", headers=_auth(world["teacher_token"]),
+    )
+    assert r.status_code == 200, r.text
+    async with get_session_factory()() as s:
+        kept = await s.get(QuestionBankItem, own_id)
+        assert kept is not None and kept.originating_assignment_id == w["source_id"]
