@@ -112,11 +112,11 @@ function menuActionsFor(u: UserRow, selfId: string | null): MenuAction[] {
 }
 
 /** The calls behind a row's cost, over the same window the row's cost
- *  covers. Teachers and students go through the one whose-call rule, so
- *  the list matches the number on their row; an admin's calls are just
- *  the ones they made. */
+ *  covers. The row's cost is the one whose-call rule for every role, so
+ *  the link is too: an admin can set homework like a teacher, and the
+ *  calls on it are in their number. */
 function callsLink(u: { id: string; role: string }, hours: string): string {
-  const key = u.role === "teacher" ? "teacher" : u.role === "student" ? "student" : "user";
+  const key = u.role === "student" ? "student" : "teacher";
   return `/llm-calls?${key}=${u.id}&hours=${hours}`;
 }
 
