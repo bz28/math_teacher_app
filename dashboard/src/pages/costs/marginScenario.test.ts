@@ -6,8 +6,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { CatalogModel, UnitEconomicsData } from "../../lib/costsApi.ts";
 import {
-  DEFAULT_RATE_CARD, cardPriceFor, defaultModels, readRateCard, scenarioDefaults, stageOptions,
+  DEFAULT_RATE_CARD, cardPriceFor, defaultModels, ratesUnmeasured, readRateCard, scenarioDefaults,
+  stageOptions,
 } from "./marginScenario.ts";
+import { windowDays } from "./unitWindows.ts";
 
 const model = (id: string, is_configured = false): CatalogModel => ({
   id, label: id, input_per_mtok: 1, output_per_mtok: 1, is_configured,
@@ -58,7 +60,7 @@ test("homeworks per month start at the measured rate, not a hardcoded 8", () => 
   assert.deepEqual(scenarioDefaults(data({
     submissions_per_student_month: { homework: 1.4, quiz: 0.0326, test: 0, practice: 0 },
   })).quiz, { value: 0.03, measured: true });
-  assert.deepEqual(d.studentsPerTeacher, { value: 30.7, measured: true });
+  assert.deepEqual(d.studentsPerTeacher, { value: 31, measured: true });
 });
 
 test("a short window's rates are not taken as measured", () => {
@@ -112,4 +114,17 @@ test("the card prices by enrollment tier and subject count", () => {
   assert.equal(cardPriceFor(DEFAULT_RATE_CARD, 92, 1), 32);
   assert.equal(cardPriceFor(DEFAULT_RATE_CARD, 300, 2), 22);
   assert.equal(cardPriceFor(DEFAULT_RATE_CARD, 5000, 9), 14);
+});
+
+test("no measured rates says so, and whole students per teacher", () => {
+  assert.equal(ratesUnmeasured(data()), false);
+  assert.equal(ratesUnmeasured(data({ submissions_per_student_month: null })), true);
+  assert.equal(ratesUnmeasured(data({ window_too_short: true })), true);
+  // The slider steps by 1: a 30.67 default it can't hold is lost on touch.
+  assert.equal(scenarioDefaults(data()).studentsPerTeacher.value, 31);
+});
+
+test("a days value the picker doesn't offer reads as the default window", () => {
+  for (const bad of ["abc", "0", "5", "-30", null]) assert.equal(windowDays(bad), "");
+  for (const ok of ["7", "30", "90", ""]) assert.equal(windowDays(ok), ok);
 });

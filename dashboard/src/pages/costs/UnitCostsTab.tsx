@@ -93,7 +93,17 @@ export default function UnitCostsTab({ data, modelLabel }: Props) {
                     <span className="costs-caption">{u.denominator}</span>
                   </td>
                   <td className="num">{u.n.toLocaleString()}</td>
-                  <td className="num">{cost(u.cost_median)}</td>
+                  <td className="num">
+                    {cost(u.cost_median)}
+                    {/* A unit's cost is every run for it, regenerations
+                        included: say how many, so a regen-heavy unit
+                        reads as one rather than as a pricey unit. */}
+                    {u.runs_per_unit != null && (
+                      <span className="costs-caption">
+                        {u.runs_per_unit.toFixed(1)} run{u.runs_per_unit === 1 ? "" : "s"} / unit
+                      </span>
+                    )}
+                  </td>
                   <td className="num">{cost(u.cost_mean)}</td>
                   <td className="num">{u.n < data.min_sample ? "—" : cost(u.cost_p90)}</td>
                   <td><Sufficiency u={u} minSample={data.min_sample} /></td>

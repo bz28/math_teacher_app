@@ -4,7 +4,8 @@ import StatTile from "../../components/StatTile";
 import type { Stage, UnitEconomicsData } from "../../lib/costsApi";
 import { computeMargin, marginAtPrice, type ModelChoice, type Scenario } from "./marginModel";
 import {
-  STAGES, cardPriceFor, defaultModels, readRateCard, scenarioDefaults, stageOptions, type NumKey,
+  STAGES, cardPriceFor, defaultModels, ratesUnmeasured, readRateCard, scenarioDefaults, stageOptions,
+  type NumKey,
 } from "./marginScenario";
 import PricingPanel from "./PricingPanel";
 import { usd } from "./spendFormat";
@@ -18,6 +19,8 @@ import { usd } from "./spendFormat";
  */
 
 interface Slider { key: NumKey; label: string; max: number; step: number }
+
+const RATE_KEYS = ["homework", "quiz", "test", "practice"] as const;
 
 const USAGE: Slider[] = [
   { key: "homework", label: "Homeworks per student per month", max: 12, step: 0.01 },
@@ -79,6 +82,8 @@ export default function MarginTab({ data, modelLabel }: Props) {
   const scenario: Scenario = { ...nums, pricePerStudent: cardPrice, models };
   const r = computeMargin(data, scenario);
   const months = Math.max(scenario.schoolYearMonths, 1);
+  // Until the operator sets a rate themselves.
+  const noRates = ratesUnmeasured(data) && RATE_KEYS.every((k) => params.get(k) === null);
 
   return (
     <div className="costs-margin">
@@ -101,6 +106,15 @@ export default function MarginTab({ data, modelLabel }: Props) {
           sub={`${r.overCap ? "over" : "vs"} the ${usd(scenario.fairUseCap)} cap`}
         />
       </div>
+
+      {noRates && (
+        <div className="costs-note warn" role="note">
+          This window measured no submission rates
+          {data.measured.window_too_short ? " (it's under a week)" : " (no one handed anything in)"}, so usage
+          starts at 0 and the margin leaves out grading, reading and integrity cost. Set the rates below or pick a
+          longer window before reading it.
+        </div>
+      )}
 
       {(r.anyThin || r.anyUnpriced || r.excluded.length > 0) && (
         <div className="costs-note warn" role="note">

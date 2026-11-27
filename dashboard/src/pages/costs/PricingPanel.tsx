@@ -1,4 +1,5 @@
 import { DEFAULT_RATE_CARD, TIER_LABELS, subjectIndex, tierFor, type NumKey } from "./marginScenario";
+import NumberField from "./NumberField";
 import { usd } from "./spendFormat";
 
 /**
@@ -35,7 +36,7 @@ export default function PricingPanel({
 
   const setRate = (ti: number, si: number, v: string) => {
     const next = rateCard.map((row) => [...row]);
-    next[ti][si] = Number(v) || 0;
+    next[ti][si] = Math.max(Number(v), 0);
     onRates(JSON.stringify(next) === JSON.stringify(DEFAULT_RATE_CARD) ? null : next);
   };
 
@@ -61,12 +62,12 @@ export default function PricingPanel({
                 <td>{TIER_LABELS[ti]}</td>
                 {row.map((v, si) => (
                   <td key={si} className="num">
-                    <input
-                      type="number"
+                    <NumberField
                       aria-label={`${TIER_LABELS[ti]} students, ${si + 1} subject${si ? "s" : ""}`}
                       className={ti === tier && si === subj ? "on" : ""}
+                      min={0}
                       value={v}
-                      onChange={(e) => setRate(ti, si, e.target.value)}
+                      onCommit={(x) => setRate(ti, si, x)}
                     />
                   </td>
                 ))}
@@ -78,10 +79,10 @@ export default function PricingPanel({
           {TERMS.map((t) => (
             <label key={t.key}>
               <span className="costs-caption">{t.label}</span>
-              <input
-                type="number" inputMode="decimal" min={t.key === "subjects" ? 1 : 0} step={t.step}
+              <NumberField
+                inputMode="decimal" min={t.key === "subjects" ? 1 : 0} step={t.step}
                 value={nums[t.key]}
-                onChange={(e) => onNum(t.key, e.target.value)}
+                onCommit={(v) => onNum(t.key, v)}
               />
             </label>
           ))}

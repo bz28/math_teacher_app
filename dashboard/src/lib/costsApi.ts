@@ -105,6 +105,8 @@ export interface UnitCost {
   cost_mean: number | null;
   cost_p90: number | null;
   cost_total: number;
+  /** generation:unit only — generation runs per unit, regenerations included. */
+  runs_per_unit?: number | null;
   sufficient: boolean;
   /** Too short a window to read a per-month rate from. */
   window_too_short: boolean;
@@ -134,6 +136,7 @@ export interface Measured {
   active_students: number;
   submissions: Record<SubmissionKind, number>;
   /** null when no student submitted — unknown, not zero. */
+  /** null when no one handed anything in — unknown, not four zeros. */
   submissions_per_student_month: Record<SubmissionKind, number> | null;
   teachers: number;
   students: number;

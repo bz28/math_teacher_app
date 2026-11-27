@@ -2,7 +2,8 @@ import { useSearchParams } from "react-router-dom";
 import ErrorState from "../../components/ErrorState";
 import MarginTab from "./MarginTab";
 import UnitCostsTab from "./UnitCostsTab";
-import { WINDOWS, useUnitEconomics, windowLabel } from "./useUnitEconomics";
+import { useUnitEconomics } from "./useUnitEconomics";
+import { WINDOWS, windowDays, windowLabel } from "./unitWindows";
 
 /**
  * The Unit costs and Margin tabs share one /admin/unit-economics fetch and
@@ -19,8 +20,8 @@ interface Props {
 
 export default function UnitEconomicsTabs({ tab, scopeParams, includeInternal }: Props) {
   const [params, setParams] = useSearchParams();
-  const days = params.get("days") ?? "";
-  const { data, error, retry } = useUnitEconomics(scopeParams, includeInternal, days);
+  const days = windowDays(params.get("days"));
+  const { data, loadedDays, stale, error, retry } = useUnitEconomics(scopeParams, includeInternal, days);
 
   if (error) return <ErrorState message={error} onRetry={retry} />;
   if (!data) return <p className="loading">Loading…</p>;
@@ -36,11 +37,11 @@ export default function UnitEconomicsTabs({ tab, scopeParams, includeInternal }:
   };
 
   return (
-    <div className="costs-section">
+    <div className={`costs-section costs-unit-economics${stale ? " stale" : ""}`} aria-busy={stale}>
       <div className="costs-section-head">
         <h3>
           {tab === "units" ? "What one of each thing costs" : "Margin simulator"} ·{" "}
-          {windowLabel(data, days, modelLabel)}
+          {windowLabel(data, loadedDays, modelLabel)}
         </h3>
         <select aria-label="Window" value={days} onChange={(e) => setDays(e.target.value)}>
           {WINDOWS.map((w) => <option key={w.value} value={w.value}>{w.label}</option>)}

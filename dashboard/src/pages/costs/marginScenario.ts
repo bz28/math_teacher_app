@@ -39,7 +39,6 @@ export interface Default {
   measured: boolean;
 }
 
-const round1 = (n: number) => Math.round(n * 10) / 10;
 // Rates to the hundredth: a 0.03-a-month quiz habit is measured, not 0.
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -56,10 +55,18 @@ export function scenarioDefaults(d: UnitEconomicsData): Record<NumKey, Default> 
   out.quiz = rate("quiz");
   out.test = rate("test");
   out.practice = rate("practice");
+  // Whole students: the slider steps by 1, and a 23.4 it can't hold
+  // would be lost the first time anyone touched it.
   out.studentsPerTeacher = m.students_per_teacher
-    ? { value: round1(m.students_per_teacher), measured: true }
+    ? { value: Math.round(m.students_per_teacher), measured: true }
     : { value: FALLBACK_STUDENTS_PER_TEACHER, measured: false };
   return out;
+}
+
+/** No submission rate was measured, so usage starts at 0 and the margin
+ *  leaves out every per-submission cost — say so above the verdict. */
+export function ratesUnmeasured(d: UnitEconomicsData): boolean {
+  return d.measured.window_too_short || d.measured.submissions_per_student_month === null;
 }
 
 /** The model each stage starts on: what ran, else what's configured now. */

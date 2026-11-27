@@ -12,10 +12,13 @@ export function useUnitEconomics(
   includeInternal: boolean,
   days: string,
 ) {
-  const [data, setData] = useState<UnitEconomicsData | null>(null);
+  // The data and the request it answers, kept together: the heading and
+  // the busy cue read off what's on screen, not what was just asked for.
+  const [loaded, setLoaded] = useState<{ data: UnitEconomicsData; key: string; days: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const scopeKey = JSON.stringify(scopeParams);
+  const key = `${scopeKey}|${includeInternal}|${days}`;
 
   useEffect(() => {
     let cancelled = false;
@@ -26,28 +29,16 @@ export function useUnitEconomics(
     if (days) q.days = days;
     costsApi
       .unitEconomics(q)
-      .then((d) => { if (!cancelled) { setData(d); setError(null); } })
+      .then((d) => { if (!cancelled) { setLoaded({ data: d, key: `${scopeKey}|${includeInternal}|${days}`, days }); setError(null); } })
       .catch((e: Error) => { if (!cancelled) setError(e.message); });
     return () => { cancelled = true; };
   }, [scopeKey, includeInternal, days, attempt]);
 
-  return { data, error, retry: () => setAttempt((n) => n + 1) };
-}
-
-export const WINDOWS = [
-  { value: "", label: "Since the model cutover" },
-  { value: "7", label: "Last 7 days" },
-  { value: "30", label: "Last 30 days" },
-  { value: "90", label: "Last 90 days" },
-] as const;
-
-/** "since Opus 5.5 cutover (Nov 4)" / "last 30 days" — the section heading's tail. */
-export function windowLabel(d: UnitEconomicsData, days: string, modelLabel: (id: string) => string): string {
-  if (days) return `last ${days} days`;
-  const start = new Date(d.window.start).toLocaleDateString("en-US", {
-    month: "short", day: "numeric", timeZone: "UTC",
-  });
-  return d.window.cutover_model
-    ? `since ${modelLabel(d.window.cutover_model)} cutover (${start})`
-    : `since ${start}`;
+  return {
+    data: loaded?.data ?? null,
+    loadedDays: loaded?.days ?? "",
+    stale: loaded !== null && loaded.key !== key,
+    error,
+    retry: () => setAttempt((n) => n + 1),
+  };
 }

@@ -138,6 +138,7 @@ export function computeMargin(
   const lines: CostLine[] = [];
   let anyUnpriced = false;
   let anyThin = false;
+  const idle = new Set<string>();
 
   // 1. Per-submission work — paid for every student, every time.
   for (const kind of SUBMISSION_KINDS) {
@@ -152,6 +153,7 @@ export function computeMargin(
     // No measurement at all → contribute nothing, but say so rather
     // than let a missing bucket read as "free".
     const thin = !unit || !unit.sufficient;
+    if (perMonth <= 0) idle.add(`submission:${kind}`);
     if (perMonth > 0 && (unpriced || thin)) {
       anyUnpriced = anyUnpriced || unpriced;
       anyThin = anyThin || thin;
@@ -176,6 +178,7 @@ export function computeMargin(
   const classSize = Math.max(s.studentsPerClass, 1);
   const unitsPerMonth = Math.max(s.unitsPerYear, 0) / schoolYearMonths;
   const genThin = !genUnit || !genUnit.sufficient;
+  if (s.unitsPerYear <= 0) idle.add("generation:unit");
   lines.push({
     key: "generation:unit",
     label: "unit generation",
@@ -230,9 +233,12 @@ export function computeMargin(
   // that is BOTH thin and short would otherwise report only the window.
   // The two need different actions: collect more data, or widen the
   // window.
+  // Only where the line is in use: a quiz rate of 0 with no quizzes
+  // measured costs nothing, and flagging it put the warning on every
+  // scenario, which teaches people to ignore it.
   for (const line of lines) {
     const unit = unitOf(data, line.key);
-    line.thin = Boolean(unit) && unit!.n < data.min_sample;
+    line.thin = !idle.has(line.key) && Boolean(unit) && unit!.n < data.min_sample;
   }
   anyThin = lines.some((l) => l.thin);
   // Derived from the lines, like anyThin. It used to be assigned only

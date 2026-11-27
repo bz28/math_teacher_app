@@ -360,3 +360,15 @@ test("a well-sampled short-window row is not called thin", () => {
   assert.ok(line);
   assert.equal(line!.thin, false, "50 observations is not a thin sample");
 });
+
+// ── The "too few observations" note is for lines in use ────────────────
+
+test("an unmeasured kind used at a rate of 0 does not raise the thin warning", () => {
+  // Only homework in use (and well measured, as are both residuals);
+  // quiz, test and practice have n=0 but cost nothing at 0 a month.
+  const d = data();
+  d.units = d.units.map((u) => (u.kind.startsWith("residual:") ? unit(u.kind) : u));
+  const r = computeMargin(d, scenario({ quiz: 0 }));
+  assert.equal(r.lines.find((l) => l.key === "submission:quiz")!.thin, false);
+  assert.equal(r.anyThin, false, "a warning on every scenario gets ignored");
+});
