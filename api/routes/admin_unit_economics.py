@@ -116,10 +116,10 @@ async def _resolve_window(
 
 def _submission_join(stmt: Select[Any], scope: Scope) -> Select[Any]:
     """Join a call to its submission's assignment, keeping only submissions
-    whose pipeline began in the window (see Scope.started_in_window)."""
+    handed in inside the window (see Scope.submission_began_in_window)."""
     return stmt.join(Submission, Submission.id == LLMCall.submission_id).join(
         Assignment, Assignment.id == Submission.assignment_id,
-    ).where(scope.started_in_window())
+    ).where(scope.submission_began_in_window())
 
 
 async def _submission_units(
@@ -262,7 +262,8 @@ async def _unit_functions(
                         QuestionBankGenerationJob,
                         QuestionBankGenerationJob.id == LLMCall.generation_job_id,
                     ),
-                ).group_by(LLMCall.function, LLMCall.model),
+                ).where(scope.unit_began_in_window())
+                .group_by(LLMCall.function, LLMCall.model),
             )
         ).all(),
     )
@@ -275,7 +276,7 @@ async def _unit_functions(
                     QuestionBankGenerationJob,
                     QuestionBankGenerationJob.id == LLMCall.generation_job_id,
                 ),
-            ),
+            ).where(scope.unit_began_in_window()),
         )
     ).scalar() or 1
     gen_rows.extend(discarded.legs_for("generation", float(gen_units)))
@@ -349,7 +350,9 @@ async def _generation_unit(
             QuestionBankGenerationJob,
             QuestionBankGenerationJob.id == LLMCall.generation_job_id,
         ),
-    ).group_by(QuestionBankGenerationJob.unit_id).subquery()
+    ).where(scope.unit_began_in_window()).group_by(
+        QuestionBankGenerationJob.unit_id,
+    ).subquery()
 
     r = (
         await db.execute(

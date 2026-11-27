@@ -25,6 +25,7 @@ from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.core.llm_attribution import deleted_submission_calls
+from api.models.assignment import Submission
 from api.models.llm_call import LLMCall
 from api.models.question_bank import QuestionBankGenerationJob
 from api.routes.admin_unit_economics_profiles import as_float
@@ -101,8 +102,10 @@ async def deleted_submissions(db: AsyncSession, scope: Scope) -> OrphanCalls:
     """Spread over the window's surviving submissions — the same set the
     per-submission costs count."""
     units = (await db.execute(
-        scope.apply(select(func.count(func.distinct(LLMCall.submission_id))))
-        .where(LLMCall.submission_id.isnot(None), scope.started_in_window()),
+        scope.apply(
+            select(func.count(func.distinct(LLMCall.submission_id)))
+            .join(Submission, Submission.id == LLMCall.submission_id),
+        ).where(scope.submission_began_in_window()),
     )).scalar() or 0
     return await _orphans(db, scope, deleted_submission_calls(), int(units))
 
@@ -118,6 +121,6 @@ async def deleted_generation_jobs(db: AsyncSession, scope: Scope) -> OrphanCalls
                 QuestionBankGenerationJob,
                 QuestionBankGenerationJob.id == LLMCall.generation_job_id,
             ),
-        ),
+        ).where(scope.unit_began_in_window()),
     )).scalar() or 0
     return await _orphans(db, scope, deleted_generation_calls(), int(units))

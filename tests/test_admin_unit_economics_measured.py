@@ -364,20 +364,73 @@ async def test_measured_rates_from_a_short_window_are_flagged(
 async def test_a_submission_begun_before_the_window_is_not_a_cheap_phantom(
     client: AsyncClient,
 ) -> None:
-    """Read 10 days ago, regraded 2 days ago: in a 7-day window it would be
-    one whole submission carrying only its regrade."""
+    """Handed in and read 10 days ago, regraded 2 days ago: in a 7-day
+    window it would be one whole submission carrying only its regrade."""
     w = await _seed(homework_submissions=6, test_submissions=0)
+    ten_days_ago = datetime.now(UTC) - timedelta(days=10)
+    student = uuid.UUID(w.student_ids[0])
     async with get_session_factory()() as s:
         await s.execute(
             update(LLMCall)
-            .where(
-                LLMCall.function == "integrity_extract",
-                LLMCall.user_id == uuid.UUID(w.student_ids[0]),
-            )
-            .values(created_at=datetime.now(UTC) - timedelta(days=10)),
+            .where(LLMCall.function == "integrity_extract", LLMCall.user_id == student)
+            .values(created_at=ten_days_ago),
+        )
+        await s.execute(
+            update(Submission).where(Submission.student_id == student)
+            .values(submitted_at=ten_days_ago),
         )
         await s.commit()
 
     hw = _unit(await _get(client, w.admin_id, days=7), "submission:homework")
     assert hw["n"] == 5
     assert hw["cost_median"] == pytest.approx(_hw_cost())
+
+
+async def test_an_old_submission_with_no_stamped_calls_is_still_left_out(
+    client: AsyncClient,
+) -> None:
+    """Before September the pipeline didn't stamp submission_id, so an old
+    submission's first read is invisible to a call-based test. Only its
+    regrade carries the id — the submission's own date catches it."""
+    w = await _seed(homework_submissions=6, test_submissions=0)
+    student = uuid.UUID(w.student_ids[0])
+    async with get_session_factory()() as s:
+        await s.execute(
+            update(LLMCall)
+            .where(LLMCall.function == "integrity_extract", LLMCall.user_id == student)
+            .values(submission_id=None, created_at=datetime(2026, 8, 20, tzinfo=UTC)),
+        )
+        await s.execute(
+            update(Submission).where(Submission.student_id == student)
+            .values(submitted_at=datetime(2026, 8, 20, tzinfo=UTC)),
+        )
+        await s.commit()
+
+    hw = _unit(await _get(client, w.admin_id, days=7), "submission:homework")
+    assert hw["n"] == 5
+
+
+async def test_a_unit_begun_before_the_window_is_not_a_cheap_phantom(
+    client: AsyncClient,
+) -> None:
+    """Unit 0 got its first job 10 days ago and another this week; in a
+    7-day window it is not one whole unit costing one job."""
+    w = await _seed(homework_submissions=6, generation_units=2)
+    async with get_session_factory()() as s:
+        first = (await s.execute(
+            select(QuestionBankGenerationJob)
+            .where(QuestionBankGenerationJob.unit_id == uuid.UUID(w.unit_ids[0])),
+        )).scalar_one()
+        s.add(QuestionBankGenerationJob(
+            course_id=first.course_id, unit_id=first.unit_id,
+            originating_assignment_id=first.originating_assignment_id,
+            created_by_id=first.created_by_id, mode="generate", status="done",
+            requested_count=5, created_at=datetime.now(UTC) - timedelta(days=10),
+        ))
+        await s.commit()
+
+    body = await _get(client, w.admin_id, days=7)
+    gen = _unit(body, "generation:unit")
+    assert gen["n"] == 1
+    fns = body["functions_by_unit"]["generation:unit"]
+    assert sum(f["cost_per_unit"] for f in fns) == pytest.approx(gen["cost_mean"])

@@ -8,10 +8,13 @@ handling (admin_unit_economics_orphans.py) read the same definitions.
 
 from typing import Any
 
-from sqlalchemy import ColumnElement, Select, and_, func, or_, select
+from sqlalchemy import ColumnElement, Select, and_, exists, func, or_
+from sqlalchemy.orm import aliased
 
 from api.core.llm_attribution import SUBMISSION_FUNCTIONS, school_calls
+from api.models.assignment import Submission
 from api.models.llm_call import LLMCall
+from api.models.question_bank import QuestionBankGenerationJob
 from api.routes.admin_helpers import INTERNAL_SCHOOL_SENTINEL, Window
 
 # Harness grading calls. They carry a real cost but no customer, and
@@ -55,21 +58,31 @@ class Scope:
         return stmt.where(*self.filters())
 
 
-    def started_in_window(self) -> ColumnElement[bool]:
-        """A submission whose pipeline began inside the window.
+    def submission_began_in_window(self) -> ColumnElement[bool]:
+        """A submission handed in inside the window (needs Submission joined).
 
         Calls are cut at the window's edges, so a submission read before
         the window and regraded inside it would count as one whole
         submission carrying only its regrade — a cheap phantom that drags
         the median down, most of all right after a model switch (the
-        default window's start). Only submissions with no call before
-        the window count.
+        default window's start). Read off the submission's own
+        submitted_at rather than its earliest call: calls before
+        SUBMISSION_STAMPED_SINCE carry no submission_id, so a call-based
+        test can't see them. A resubmission resets submitted_at, which
+        is right — its calls are the new attempt's.
         """
-        earlier = select(LLMCall.submission_id).where(
-            LLMCall.submission_id.isnot(None),
-            LLMCall.created_at < self.window.start,
+        return Submission.submitted_at >= self.window.start
+
+    def unit_began_in_window(self) -> ColumnElement[bool]:
+        """A teaching unit with no generation job before the window (needs
+        QuestionBankGenerationJob joined). The same phantom as above: a
+        unit built last month that gets one more job today is not one
+        whole cheap unit."""
+        earlier = aliased(QuestionBankGenerationJob)
+        return ~exists().where(
+            earlier.unit_id == QuestionBankGenerationJob.unit_id,
+            earlier.created_at < self.window.start,
         )
-        return LLMCall.submission_id.notin_(earlier)
 
 
 def deleted_generation_calls() -> ColumnElement[bool]:
