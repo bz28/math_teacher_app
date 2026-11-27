@@ -489,7 +489,8 @@ async def _grade_publish_flow(
     a submitted submission, then exercises
     `PATCH /teacher/submissions/{id}/grade` (manual full credit on that
     problem's id, no AI) and `POST /teacher/assignments/{id}/publish-grades`. Asserts the
-    score is set and the publish counts the grade."""
+    score is set and the publish counts the grade (a complete hand grade
+    approves itself, and publishing releases only approved grades)."""
     name, title = "grade_publish", "Teacher grades and publishes"
     issues: list[str] = []
     assignment_id, submission_id, problem_id = await seed_submitted_submission(seed)
@@ -515,7 +516,7 @@ async def _grade_publish_flow(
 
         published = await client.post(
             f"{base}/teacher/assignments/{assignment_id}/publish-grades",
-            json={"reviewed_only": False}, headers=_auth(seed.teacher_token),
+            json={}, headers=_auth(seed.teacher_token),
         )
         if published.status_code != 200:
             issues.append(

@@ -524,9 +524,13 @@ async def test_a_rehearsal_grade_can_be_published_so_she_can_see_it(
     assert r.status_code == 200, r.text
     submission_id = uuid.UUID(r.json()["submission_id"])
 
-    # Stand in for the grading pipeline, which needs an LLM.
+    # Stand in for the grading pipeline, which needs an LLM, and for her
+    # Approve: publishing only ever releases approved grades.
     async with get_session_factory()() as s:
-        s.add(SubmissionGrade(submission_id=submission_id, final_score=92.0))
+        s.add(SubmissionGrade(
+            submission_id=submission_id, final_score=92.0,
+            reviewed_at=datetime.now(UTC),
+        ))
         await s.commit()
 
     # Nothing to see yet — the score exists but was never released.

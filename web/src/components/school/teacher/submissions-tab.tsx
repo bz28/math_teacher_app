@@ -246,7 +246,7 @@ function BatchActionBar({
     // we report the honest count of failures and still refresh so the
     // succeeded ones drop out of the list.
     const results = await Promise.allSettled(
-      dirtyBatch.assignmentIds.map((id) => teacher.publishGrades(id, false)),
+      dirtyBatch.assignmentIds.map((id) => teacher.publishGrades(id)),
     );
     const failed = results.filter((r) => r.status === "rejected").length;
     setRepublishing(false);
@@ -305,15 +305,10 @@ function BatchActionBar({
                   Send {dirtyBatch.dirtyCount} updated{" "}
                   {dirtyBatch.dirtyCount === 1 ? "grade" : "grades"} to students
                   across {dirtyBatch.assignmentIds.length} homeworks
-                  {dirtyBatch.pendingCount > 0 && (
-                    <>
-                      {" "}
-                      <span className="text-text-muted">
-                        (+{dirtyBatch.pendingCount} newly graded)
-                      </span>
-                    </>
-                  )}
-                  ?
+                  ?{" "}
+                  <span className="text-text-muted">
+                    Only grades you’ve approved go out.
+                  </span>
                 </span>
                 <button
                   type="button"
@@ -616,10 +611,6 @@ type DirtyBatch = {
   assignmentIds: string[];
   /** Total dirty grades across those homeworks — the "(N)" count. */
   dirtyCount: number;
-  /** Freshly graded-but-never-published grades on the same homeworks.
-   *  The endpoint publishes these alongside the dirty ones, so the
-   *  confirm discloses them honestly. */
-  pendingCount: number;
 };
 
 function collectDirtyBatch(rows: SubmissionsInboxRow[]): DirtyBatch {
@@ -633,12 +624,5 @@ function collectDirtyBatch(rows: SubmissionsInboxRow[]): DirtyBatch {
       dirtyCount += r.dirty;
     }
   }
-  // Second pass: pending (graded-but-unpublished) grades that live on
-  // the same homeworks and would publish in the same fan-out. `to_grade`
-  // is exactly the graded-but-unpublished count per row.
-  let pendingCount = 0;
-  for (const r of rows) {
-    if (ids.has(r.assignment_id)) pendingCount += r.to_grade;
-  }
-  return { assignmentIds: Array.from(ids), dirtyCount, pendingCount };
+  return { assignmentIds: Array.from(ids), dirtyCount };
 }

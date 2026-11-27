@@ -41,14 +41,11 @@ import { DetailSkeleton, ReviewLoadingSkeleton } from "./_components/skeletons";
 import { VerdictLegendTrigger } from "./_components/reference-modals";
 import { RosterFilterBar, TriageRoster, NotSubmittedCard } from "./_components/roster";
 import { SubmissionDetailPanel } from "./_components/submission-detail-panel";
+import { usePublishGrades } from "./_hooks/use-publish-grades";
 import { IntegrityCard } from "./_components/integrity-card";
 import { PinnedWorkRail } from "./_components/pinned-work";
-import {
-  GradeAllButton,
-  PublishButton,
-  PublishConfirmDialog,
-  RegradeConfirmDialog,
-} from "./_components/header-actions";
+import { GradeAllButton, RegradeConfirmDialog } from "./_components/header-actions";
+import { PublishButton, PublishConfirmDialog } from "./_components/publish-controls";
 
 // Suspense boundary required because the inner component reads
 // useSearchParams (the ?student= deep-link focus), which opts the page
@@ -209,7 +206,6 @@ function HomeworkSectionReview({
     setPendingOtherSections,
     dirtyOtherSections,
     setDirtyOtherSections,
-    gradedOtherSections,
     setGradedOtherSections,
     pendingReviewedOtherSections,
     setPendingReviewedOtherSections,
@@ -248,8 +244,6 @@ function HomeworkSectionReview({
   );
   const publishConfirmOpen = useReviewStore((s) => s.publishConfirmOpen);
   const setPublishConfirmOpen = useReviewStore((s) => s.setPublishConfirmOpen);
-  const [publishing, setPublishing] = useState(false);
-  const [publishError, setPublishError] = useState<string | null>(null);
   // Regrade state — a single slot because only one submission is open
   // in the detail pane at a time. When populated, the detail panel
   // shows a spinner on the regrade button and disables grading inputs.
@@ -788,6 +782,7 @@ function HomeworkSectionReview({
     dirtyInSection,
     gradedInSection,
     reviewedToPublishInSection,
+    reviewedDirtyInSection,
     flaggedToPublishInSection,
     graphToPublishInSection,
   } = useMemo(() => {
@@ -795,12 +790,13 @@ function HomeworkSectionReview({
     let dirty = 0;
     let graded = 0;
     let reviewedToPublish = 0;
+    let reviewedDirty = 0;
     let flaggedToPublish = 0;
     let graphToPublish = 0;
     for (const e of roster ?? []) {
       const s = e.submission;
       if (!s || s.final_score === null) continue;
-      // Class-side on purpose: gradedTotal's only consumer is the
+      // Class-side on purpose: `graded`'s only consumer is the
       // pill choosing between "No grades to publish" and a green "All
       // grades published". Those are claims ABOUT THE CLASS, not
       // labels on a click, so her rehearsal must not be what flips a
@@ -814,6 +810,7 @@ function HomeworkSectionReview({
       // A grade is "to publish" if pending or dirty; count the vetted
       // ones so the dialog can split reviewed vs unopened.
       if ((isPending || isDirty) && s.reviewed_at) reviewedToPublish += 1;
+      if (isDirty && s.reviewed_at) reviewedDirty += 1;
       // Soft publish-confirm: a grade about to go out whose integrity
       // check landed on flag_for_review and the teacher hasn't resolved
       // it yet. Only flag_for_review (not the other dispositions) and
@@ -822,8 +819,10 @@ function HomeworkSectionReview({
       // cross-section portion (flaggedOtherSections) is added in below
       // so the count matches what the HW-wide publish actually releases.
       const ov = s.integrity_overview;
+      // Only approved grades publish, so only they can go out flagged.
       if (
         (isPending || isDirty) &&
+        s.reviewed_at &&
         ov?.disposition === "flag_for_review" &&
         ov.resolution === "unresolved"
       ) {
@@ -832,20 +831,22 @@ function HomeworkSectionReview({
       // Soft publish-confirm: a grade about to go out with graph items
       // still waiting on her ✓/✗. Those items keep their points until
       // she marks them, so the score can still drop.
-      if ((isPending || isDirty) && hasGraphToCheck(e)) graphToPublish += 1;
+      if ((isPending || isDirty) && s.reviewed_at && hasGraphToCheck(e)) {
+        graphToPublish += 1;
+      }
     }
     return {
       pendingInSection: pending,
       dirtyInSection: dirty,
       gradedInSection: graded,
       reviewedToPublishInSection: reviewedToPublish,
+      reviewedDirtyInSection: reviewedDirty,
       flaggedToPublishInSection: flaggedToPublish,
       graphToPublishInSection: graphToPublish,
     };
   }, [roster]);
   const pendingTotal = pendingInSection + pendingOtherSections;
   const dirtyTotal = dirtyInSection + dirtyOtherSections;
-  const gradedTotal = gradedInSection + gradedOtherSections;
   // Turned in, but no AI grade yet. AI grading is queued and runs when
   // the due date passes; a HW with no due date never grades on its own
   // (there's no moment that means "the class is in"), so for those this
@@ -898,117 +899,59 @@ function HomeworkSectionReview({
         tooLongInSection: tooLong,
       };
     }, [roster, aiPendingIds]);
-  // Reviewed vs unopened split of the full to-release set (HW-wide).
+  // Publishing releases approved grades only. The header button and its
+  // confirm act on this section, the class she's reviewing; "Publish
+  // all" in the confirm reaches every section of the homework.
   const toReleaseTotal = pendingTotal + dirtyTotal;
+  const unreviewedToPublishInSection =
+    pendingInSection + dirtyInSection - reviewedToPublishInSection;
   const reviewedToPublishTotal =
     reviewedToPublishInSection +
     pendingReviewedOtherSections +
     dirtyReviewedOtherSections;
   const unreviewedToPublishTotal = toReleaseTotal - reviewedToPublishTotal;
-  // Flagged-to-publish across the whole HW — the publish action is
-  // HW-wide, so the soft confirm counts both the loaded section and the
-  // snapshotted other-section flags.
-  const flaggedToPublishTotal = flaggedToPublishInSection + flaggedOtherSections;
-  const graphToPublishTotal = graphToPublishInSection + graphOtherSections;
 
-  // Publish every pending-or-dirty submission on the HW. Backend is
-  // idempotent. On success we mirror the publish timestamp onto every
-  // local roster entry that was in either bucket and flip grade_dirty
-  // to false. Cross-section counters zero out; other sections refresh
-  // on next open — acceptable for a one-shot action.
-  //
-  // `reviewedOnly` narrows the action to grades the teacher has vetted
-  // (reviewed_at set) — the "publish what I've checked" path. The
-  // optimistic update is scoped the same way: only reviewed rows flip,
-  // and the cross-section counters drop by their reviewed portions
-  // rather than zeroing.
-  const handlePublish = useCallback(
-    async (reviewedOnly = false): Promise<boolean> => {
-      setPublishing(true);
-      setPublishError(null);
-      try {
-        await teacher.publishGrades(assignmentId, reviewedOnly);
-        const nowIso = new Date().toISOString();
-        setRoster((prev) =>
-          prev
-            ? prev.map((e) => {
-                const s = e.submission;
-                if (!s || s.final_score === null) return e;
-                const wasPending = s.grade_published_at === null;
-                const wasDirty = !!s.grade_dirty;
-                if (!wasPending && !wasDirty) return e;
-                // Reviewed-only run leaves unvetted grades unpublished.
-                if (reviewedOnly && !s.reviewed_at) return e;
-                return {
-                  ...e,
-                  submission: {
-                    ...s,
-                    grade_published_at: nowIso,
-                    grade_dirty: false,
-                  },
-                };
-              })
-            : prev,
-        );
-        if (reviewedOnly) {
-          setPendingOtherSections((n) => n - pendingReviewedOtherSections);
-          setDirtyOtherSections((n) => n - dirtyReviewedOtherSections);
-          setPendingReviewedOtherSections(0);
-          setDirtyReviewedOtherSections(0);
-        } else {
-          setPendingOtherSections(0);
-          setDirtyOtherSections(0);
-          setPendingReviewedOtherSections(0);
-          setDirtyReviewedOtherSections(0);
-          // Full publish releases every other-section flag too. (A
-          // reviewed-only run can leave unreviewed flags unpublished, and
-          // we don't track the reviewed-flag split — that path keeps the
-          // snapshot, refreshed on next open like the other counters.)
-          setFlaggedOtherSections(0);
-          setGraphOtherSections(0);
-        }
-        // If the open student's grade was part of the publish, clear
-        // the local dirty flag on detail too so the strip updates
-        // without a refetch.
-        setDetail((d) => {
-          if (!d) return d;
-          const wasToPublish = d.grade_published_at === null || d.grade_dirty;
-          if (!wasToPublish) return d;
-          if (reviewedOnly && !d.reviewed_at) return d;
-          return { ...d, grade_published_at: nowIso, grade_dirty: false };
-        });
-        setPublishConfirmOpen(false);
-        return true;
-      } catch (e) {
-        setPublishError(
-          e instanceof Error ? e.message : "Failed to publish grades",
-        );
-        return false;
-      } finally {
-        setPublishing(false);
-      }
+  const { publish, publishing, publishError, setPublishError } = usePublishGrades({
+    assignmentId,
+    sectionId,
+    setRoster,
+    setDetail,
+    pendingReviewedOtherSections,
+    dirtyReviewedOtherSections,
+    setPendingOtherSections,
+    setDirtyOtherSections,
+    setPendingReviewedOtherSections,
+    setDirtyReviewedOtherSections,
+  });
+  const publishFromConfirm = useCallback(
+    (scope: "section" | "all") => {
+      void publish({ kind: scope }).then((ok) => {
+        if (ok) setPublishConfirmOpen(false);
+      });
     },
-    [
-      assignmentId,
-      pendingReviewedOtherSections,
-      dirtyReviewedOtherSections,
-      setDetail,
-      setDirtyOtherSections,
-      setDirtyReviewedOtherSections,
-      setFlaggedOtherSections,
-      setGraphOtherSections,
-      setPendingOtherSections,
-      setPendingReviewedOtherSections,
-      setPublishConfirmOpen,
-    ],
+    [publish, setPublishConfirmOpen],
   );
+  // One student, from their panel: only once approved, and only when
+  // there's something new to release (never published, or edited since).
+  // A failure shows on that student's panel, not in the section confirm.
+  const [studentPublishFailedFor, setStudentPublishFailedFor] = useState<string | null>(null);
+  const selectedSub = selectedEntry?.submission ?? null;
+  const publishStudent = useMemo(() => {
+    const s = selectedSub;
+    if (!s || s.final_score === null || !s.reviewed_at) return null;
+    if (s.grade_published_at !== null && !s.grade_dirty) return null;
+    return {
+      update: s.grade_published_at !== null,
+      failed: studentPublishFailedFor === s.id,
+      run: () => {
+        setStudentPublishFailedFor(null);
+        void publish({ kind: "student", submissionId: s.id }).then((ok) => {
+          if (!ok) setStudentPublishFailedFor(s.id);
+        });
+      },
+    };
+  }, [selectedSub, publish, studentPublishFailedFor]);
 
-  // Publish-button click gate. If every grade about to go out is approved
-  // and none are flagged-unresolved, there's nothing to warn about —
-  // publish straight through (no interruption). Otherwise open the
-  // confirm so the teacher decides on the unapproved / flagged grades
-  // with eyes open. A direct publish that errors falls back to opening
-  // the dialog so its error + retry are visible.
   // "Grade all". AI grading is queued and normally runs when the due
   // date passes; a HW with no due date never grades on its own, so for
   // those this is the only path. Grading happens server-side after the
@@ -1212,19 +1155,35 @@ function HomeworkSectionReview({
     };
   }, [polling, assignmentId, pollKick, setDetail]);
 
+  // Publish-button click gate. Straight through only when there's
+  // nothing to say: every grade to release in this section is approved,
+  // none is flagged or has graph items open, and no other section has
+  // approved grades she might want to publish with them. Otherwise the
+  // confirm says what goes and what stays hidden. A direct publish that
+  // errors falls back to the confirm so its error and retry show.
   const onPublishClick = useCallback(() => {
-    if (
-      unreviewedToPublishTotal === 0 &&
-      flaggedToPublishTotal === 0 &&
-      graphToPublishTotal === 0
-    ) {
-      void handlePublish(false).then((ok) => {
-        if (!ok) setPublishConfirmOpen(true);
-      });
-    } else {
+    const quiet =
+      reviewedToPublishInSection > 0 &&
+      unreviewedToPublishInSection === 0 &&
+      flaggedToPublishInSection === 0 &&
+      graphToPublishInSection === 0 &&
+      reviewedToPublishTotal === reviewedToPublishInSection;
+    if (!quiet) {
       setPublishConfirmOpen(true);
+      return;
     }
-  }, [unreviewedToPublishTotal, flaggedToPublishTotal, graphToPublishTotal, handlePublish, setPublishConfirmOpen]);
+    void publish({ kind: "section" }).then((ok) => {
+      if (!ok) setPublishConfirmOpen(true);
+    });
+  }, [
+    reviewedToPublishInSection,
+    unreviewedToPublishInSection,
+    flaggedToPublishInSection,
+    graphToPublishInSection,
+    reviewedToPublishTotal,
+    publish,
+    setPublishConfirmOpen,
+  ]);
 
   // Explicit approval — the teacher's deliberate "I've vouched for this"
   // click on the Approve button of an AI grade (hand grades self-approve
@@ -1575,9 +1534,11 @@ function HomeworkSectionReview({
                 onClick={onGradeAllClick}
               />
               <PublishButton
-                pendingTotal={pendingTotal}
-                dirtyTotal={dirtyTotal}
-                gradedTotal={gradedTotal}
+                approved={reviewedToPublishInSection}
+                approvedEdits={reviewedDirtyInSection}
+                unapproved={unreviewedToPublishInSection}
+                graded={gradedInSection}
+                approvedOtherSections={reviewedToPublishTotal - reviewedToPublishInSection}
                 onOpen={onPublishClick}
               />
             </div>
@@ -1731,8 +1692,10 @@ function HomeworkSectionReview({
                     : null
                 }
                 onProblemFocused={clearProblemFocus}
-                toReleaseTotal={toReleaseTotal}
+                toReleaseTotal={reviewedToPublishInSection}
                 onPublish={onPublishClick}
+                onPublishStudent={publishStudent}
+                publishingStudent={publishing}
                 onGradeProblem={setProblemGrade}
                 onFeedbackChange={setProblemFeedback}
                 onIntegrityResolved={handleIntegrityResolved}
@@ -1879,17 +1842,19 @@ function HomeworkSectionReview({
             setPublishError(null);
           }
         }}
-        pendingInSection={pendingInSection}
-        pendingOtherSections={pendingOtherSections}
-        dirtyInSection={dirtyInSection}
-        dirtyOtherSections={dirtyOtherSections}
-        reviewedToPublish={reviewedToPublishTotal}
-        unreviewedToPublish={unreviewedToPublishTotal}
-        flaggedToPublish={flaggedToPublishTotal}
-        graphToPublish={graphToPublishTotal}
+        sectionName={sectionName}
+        approved={reviewedToPublishInSection}
+        approvedEdits={reviewedDirtyInSection}
+        unapproved={unreviewedToPublishInSection}
+        flagged={flaggedToPublishInSection}
+        graph={graphToPublishInSection}
+        approvedAll={reviewedToPublishTotal}
+        unapprovedAll={unreviewedToPublishTotal}
+        flaggedOther={flaggedOtherSections}
+        graphOther={graphOtherSections}
         publishing={publishing}
         error={publishError}
-        onConfirm={handlePublish}
+        onPublish={publishFromConfirm}
       />
 
       <RegradeConfirmDialog

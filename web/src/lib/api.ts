@@ -2092,16 +2092,24 @@ export const teacher = {
       { method: "POST" },
     );
   },
-  /** Publish every graded submission on this HW to students at once.
-   *  Idempotent — already-published grades are skipped, and ungraded
-   *  submissions are ignored (teacher can grade + publish more later).
-   *  When `reviewedOnly` is set, only grades the teacher has vetted
-   *  (reviewed_at not null) are released — the safer "publish what I've
-   *  checked" path. Returns the count actually published. */
-  publishGrades(assignmentId: string, reviewedOnly = false) {
-    return apiFetch<{ status: string; published_count: number }>(
+  /** Publish (or republish) approved grades. Never releases a grade the
+   *  teacher hasn't approved. No scope = every section of the homework
+   *  (Publish all); `sectionId` = the class period she's reviewing;
+   *  `submissionId` = one student. `unapproved_remaining` = graded grades
+   *  in that scope still waiting on her Approve. */
+  publishGrades(
+    assignmentId: string,
+    scope: { sectionId?: string; submissionId?: string } = {},
+  ) {
+    return apiFetch<{ status: string; published_count: number; unapproved_remaining: number }>(
       `/teacher/assignments/${assignmentId}/publish-grades`,
-      { method: "POST", body: JSON.stringify({ reviewed_only: reviewedOnly }) },
+      {
+        method: "POST",
+        body: JSON.stringify({
+          section_id: scope.sectionId ?? null,
+          submission_id: scope.submissionId ?? null,
+        }),
+      },
     );
   },
   // Visibility

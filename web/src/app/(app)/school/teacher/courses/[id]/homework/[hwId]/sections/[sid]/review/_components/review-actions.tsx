@@ -36,6 +36,8 @@ export function ReviewActions({
   toReleaseTotal,
   onPublish,
   published,
+  onPublishStudent,
+  publishingStudent,
 }: {
   detail: TeacherSubmissionDetail;
   reportBase: ReportProblemContext;
@@ -60,9 +62,15 @@ export function ReviewActions({
   onUnmarkReviewed: () => void;
   nextStudent: RosterEntry | null;
   onSelectNext: () => void;
+  /** Approved grades still to publish in this section. */
   toReleaseTotal: number;
   onPublish: () => void;
   published: boolean;
+  /** Set when this student's approved grade is new or edited since it
+   *  was last published: releases just them (late work, an early
+   *  return). Null otherwise — an unapproved grade never publishes. */
+  onPublishStudent: { run: () => void; update: boolean; failed: boolean } | null;
+  publishingStudent: boolean;
 }): ReactNode {
   return (
     <>
@@ -208,6 +216,30 @@ export function ReviewActions({
                 {marking ? "Undoing…" : "Undo"}
               </button>
             )}
+            {onPublishStudent && (
+              <button
+                type="button"
+                onClick={onPublishStudent.run}
+                disabled={publishingStudent || marking || savingGrade || regrading}
+                title={
+                  onPublishStudent.update
+                    ? "Send this student their updated grade now"
+                    : "Show this student their grade now, without publishing the rest of the class"
+                }
+                className="rounded-[--radius-md] border border-primary/30 bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-primary transition-colors hover:border-primary/60 hover:bg-primary-bg disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {publishingStudent
+                  ? "Publishing…"
+                  : onPublishStudent.update
+                    ? "Publish update"
+                    : "Publish to student"}
+              </button>
+            )}
+            {onPublishStudent?.failed && !publishingStudent && (
+              <span role="alert" className="text-[11px] font-semibold text-[color:var(--color-error)]">
+                Couldn’t publish — try again.
+              </span>
+            )}
           </>
         )}
         {/* Advance-or-publish. While there's a next unreleased submitter,
@@ -234,12 +266,11 @@ export function ReviewActions({
           <button
             type="button"
             onClick={onPublish}
-            title={`You're on the last student — publish ${toReleaseTotal} ${toReleaseTotal === 1 ? "grade" : "grades"}`}
+            title={`You're on the last student — publish ${toReleaseTotal} approved ${toReleaseTotal === 1 ? "grade" : "grades"}`}
             className="inline-flex items-center gap-1.5 rounded-[--radius-md] bg-primary px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-primary-dark"
           >
             <span aria-hidden>✓</span>
-            Last one — publish {toReleaseTotal}{" "}
-            {toReleaseTotal === 1 ? "grade" : "grades"} →
+            Last one — publish {toReleaseTotal} approved →
           </button>
         ) : published ? (
           <span

@@ -16,7 +16,8 @@ AI-suggested one they never opened.
     approved one is the teacher's own change to a grade she already vouched
     for, so the approval stays. A force-regrade still clears it — the AI
     replaced the grade she approved.
-  • POST /teacher/assignments/{id}/publish-grades with reviewed_only=True
+  • POST /teacher/assignments/{id}/publish-grades releases only approved
+    grades — for the homework, one section, or one submission
     releases only the vetted grades, leaving unopened AI suggestions
     unpublished.
 """
@@ -41,7 +42,12 @@ from api.core.grading_ai import (
     run_ai_grading_for_submission as _real_run_ai_grading,
 )
 from api.database import get_session_factory
-from api.models.assignment import Assignment, Submission, SubmissionGrade
+from api.models.assignment import (
+    Assignment,
+    AssignmentSection,
+    Submission,
+    SubmissionGrade,
+)
 from api.models.course import Course
 from api.models.question_bank import QuestionBankItem
 from api.models.section import Section
@@ -314,7 +320,6 @@ async def test_edit_after_approval_keeps_it(client: AsyncClient) -> None:
     r = await client.post(
         f"/v1/teacher/assignments/{world['assignment_id']}/publish-grades",
         headers=hdr,
-        json={"reviewed_only": True},
     )
     assert r.status_code == 200, r.text
     assert r.json()["published_count"] == 1
@@ -413,7 +418,6 @@ async def test_regrade_after_approval_revokes_it(client: AsyncClient) -> None:
     r = await client.post(
         f"/v1/teacher/assignments/{world['assignment_id']}/publish-grades",
         headers=hdr,
-        json={"reviewed_only": True},
     )
     assert r.status_code == 200, r.text
     assert r.json()["published_count"] == 0
@@ -478,7 +482,6 @@ async def test_partial_hand_grade_stays_unreviewed(
     r = await client.post(
         f"/v1/teacher/assignments/{world['assignment_id']}/publish-grades",
         headers=headers,
-        json={"reviewed_only": True},
     )
     assert r.status_code == 200, r.text
     assert r.json()["published_count"] == 0
@@ -513,36 +516,27 @@ async def test_partial_hand_grade_stays_unreviewed(
     assert grade.reviewed_by is None
 
 
-async def test_publish_reviewed_only_releases_vetted_grades(
+async def test_publish_releases_only_approved_grades(
     client: AsyncClient,
 ) -> None:
-    """reviewed_only=True publishes only the grade the teacher vetted; a
-    follow-up publish-all releases the remaining AI-suggested one."""
+    """Publishing releases the grade the teacher approved and never the
+    AI suggestion she hasn't, and says how many it held back."""
     world = await _seed_hw(n_submissions=2)
     reviewed_sub, unreviewed_sub = world["submission_ids"]
     await _add_grade(reviewed_sub, final_score=90.0, reviewed=True)
     await _add_grade(unreviewed_sub, final_score=70.0, reviewed=False)
 
-    r = await client.post(
-        f"/v1/teacher/assignments/{world['assignment_id']}/publish-grades",
-        headers=_auth(world["teacher_token"]),
-        json={"reviewed_only": True},
-    )
-    assert r.status_code == 200, r.text
-    assert r.json()["published_count"] == 1
+    for expected in (1, 0):  # a second Publish never sweeps up the rest
+        r = await client.post(
+            f"/v1/teacher/assignments/{world['assignment_id']}/publish-grades",
+            headers=_auth(world["teacher_token"]),
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["published_count"] == expected
+        assert r.json()["unapproved_remaining"] == 1
 
     assert (await _get_grade(reviewed_sub)).grade_published_at is not None
     assert (await _get_grade(unreviewed_sub)).grade_published_at is None
-
-    # Publish all picks up the still-unpublished AI suggestion.
-    r = await client.post(
-        f"/v1/teacher/assignments/{world['assignment_id']}/publish-grades",
-        headers=_auth(world["teacher_token"]),
-        json={"reviewed_only": False},
-    )
-    assert r.status_code == 200, r.text
-    assert r.json()["published_count"] == 1
-    assert (await _get_grade(unreviewed_sub)).grade_published_at is not None
 
 
 async def test_unmark_reviewed_clears_stamp(client: AsyncClient) -> None:
@@ -605,26 +599,101 @@ async def test_unmark_then_publish_reviewed_only_holds_it_back(
     r = await client.post(
         f"/v1/teacher/assignments/{world['assignment_id']}/publish-grades",
         headers=_auth(world["teacher_token"]),
-        json={"reviewed_only": True},
     )
     assert r.status_code == 200, r.text
     assert r.json()["published_count"] == 0
     assert (await _get_grade(sub_id)).grade_published_at is None
 
 
-async def test_publish_defaults_to_all_without_body(
-    client: AsyncClient,
-) -> None:
-    """No body == publish everything (back-compat with the original
-    no-arg call shape)."""
-    world = await _seed_hw(n_submissions=2)
-    reviewed_sub, unreviewed_sub = world["submission_ids"]
-    await _add_grade(reviewed_sub, final_score=90.0, reviewed=True)
-    await _add_grade(unreviewed_sub, final_score=70.0, reviewed=False)
+async def _add_section_with_submission(world: dict[str, Any]) -> uuid.UUID:
+    """Assign the homework to its seeded section and to a second one
+    ("Period 3") holding one submission; return that submission."""
+    async with get_session_factory()() as s:
+        a = await s.get(Assignment, world["assignment_id"])
+        other = Section(course_id=a.course_id, name="Period 3")
+        s.add(other)
+        await s.flush()
+        for sid in (world["section_id"], other.id):
+            s.add(AssignmentSection(assignment_id=a.id, section_id=sid))
+        student = User(
+            email=f"student_{uuid.uuid4().hex[:6]}@t.com",
+            password_hash=hash_password("x"),
+            grade_level=8, role="student", name="S",
+        )
+        s.add(student)
+        await s.flush()
+        sub = Submission(
+            assignment_id=a.id, student_id=student.id,
+            section_id=other.id, status="submitted",
+        )
+        s.add(sub)
+        await s.commit()
+        return sub.id
+
+
+async def test_publish_scoped_to_a_section(client: AsyncClient) -> None:
+    """Publish from a section's review page releases that class period's
+    approved grades and leaves another period's approved grades alone."""
+    world = await _seed_hw(n_submissions=1)
+    here = world["submission_ids"][0]
+    await _add_grade(here, final_score=90.0, reviewed=True)
+    there = await _add_section_with_submission(world)
+    await _add_grade(there, final_score=80.0, reviewed=True)
 
     r = await client.post(
         f"/v1/teacher/assignments/{world['assignment_id']}/publish-grades",
         headers=_auth(world["teacher_token"]),
+        json={"section_id": str(world["section_id"])},
     )
     assert r.status_code == 200, r.text
-    assert r.json()["published_count"] == 2
+    assert r.json()["published_count"] == 1
+    assert (await _get_grade(here)).grade_published_at is not None
+    assert (await _get_grade(there)).grade_published_at is None
+
+    # Publish all reaches the other period.
+    r = await client.post(
+        f"/v1/teacher/assignments/{world['assignment_id']}/publish-grades",
+        headers=_auth(world["teacher_token"]),
+    )
+    assert r.json()["published_count"] == 1
+    assert (await _get_grade(there)).grade_published_at is not None
+
+
+async def test_publish_one_student(client: AsyncClient) -> None:
+    """Publishing from a student's panel releases only that student, and
+    only once approved."""
+    world = await _seed_hw(n_submissions=2)
+    one, other = world["submission_ids"]
+    await _add_grade(one, final_score=90.0, reviewed=False)
+    await _add_grade(other, final_score=80.0, reviewed=True)
+
+    url = f"/v1/teacher/assignments/{world['assignment_id']}/publish-grades"
+    r = await client.post(
+        url, headers=_auth(world["teacher_token"]),
+        json={"submission_id": str(one)},
+    )
+    assert r.json() == {"status": "ok", "published_count": 0, "unapproved_remaining": 1}
+
+    async with get_session_factory()() as s:
+        g = await s.get(SubmissionGrade, (await _get_grade(one)).id)
+        g.reviewed_at = datetime.now(UTC)
+        await s.commit()
+    r = await client.post(
+        url, headers=_auth(world["teacher_token"]),
+        json={"submission_id": str(one)},
+    )
+    assert r.json()["published_count"] == 1
+    assert (await _get_grade(one)).grade_published_at is not None
+    assert (await _get_grade(other)).grade_published_at is None
+
+
+async def test_publish_rejects_a_section_not_on_the_homework(
+    client: AsyncClient,
+) -> None:
+    world = await _seed_hw()
+    r = await client.post(
+        f"/v1/teacher/assignments/{world['assignment_id']}/publish-grades",
+        headers=_auth(world["teacher_token"]),
+        json={"section_id": str(uuid.uuid4())},
+    )
+    assert r.status_code == 404

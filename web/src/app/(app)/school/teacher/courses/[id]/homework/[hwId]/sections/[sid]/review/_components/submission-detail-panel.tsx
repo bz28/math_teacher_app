@@ -111,6 +111,8 @@ export function SubmissionDetailPanel({
   onSelectNext,
   toReleaseTotal,
   onPublish,
+  onPublishStudent,
+  publishingStudent,
   onGradeProblem,
   onFeedbackChange,
   onIntegrityResolved,
@@ -163,6 +165,10 @@ export function SubmissionDetailPanel({
   // Drives the end-of-stack publish CTA below.
   toReleaseTotal: number;
   onPublish: () => void;
+  /** Publish just this student's approved grade; null when there's
+   *  nothing of theirs to release. */
+  onPublishStudent: { run: () => void; update: boolean; failed: boolean } | null;
+  publishingStudent: boolean;
   onGradeProblem: (problemId: string, status: GradeStatus, partialPercent?: number) => void;
   onFeedbackChange: (problemId: string, text: string) => void;
   onIntegrityResolved: (
@@ -956,6 +962,8 @@ export function SubmissionDetailPanel({
           toReleaseTotal={toReleaseTotal}
           onPublish={onPublish}
           published={published}
+          onPublishStudent={onPublishStudent}
+          publishingStudent={publishingStudent}
         />
       </div>
 
