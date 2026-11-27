@@ -870,6 +870,17 @@
       },
       "CaseProblem": {
         "properties": {
+          "ai_call": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Call"
+          },
           "answer_key": {
             "anyOf": [
               {
@@ -940,6 +951,7 @@
           "question",
           "answer_key",
           "reading",
+          "ai_call",
           "grade",
           "final",
           "integrity"

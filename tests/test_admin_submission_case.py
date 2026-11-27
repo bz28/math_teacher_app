@@ -470,6 +470,7 @@ async def test_case_reads_the_problem_as_the_grader_got_it(
         "student_edited": True,
     }
     assert p["grade"] is None
+    assert p["ai_call"] == 0.0  # the stamped zero, though no `grades` entry
     assert p["final"]["differs_from_ai"] is False
 
     async with get_session_factory()() as s:

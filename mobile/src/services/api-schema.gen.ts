@@ -4582,6 +4582,8 @@ export interface components {
         };
         /** CaseProblem */
         CaseProblem: {
+            /** Ai Call */
+            ai_call: number | null;
             /** Answer Key */
             answer_key: string | null;
             /** Bank Item Id */
