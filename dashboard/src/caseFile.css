@@ -72,7 +72,9 @@
 .cp-row-differs td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .cp-final-differs { color: var(--accent); font-weight: 600; }
 .cp-row-target { background: var(--warn-soft); }
+.cp-read-cell { display: flex; align-items: baseline; gap: 6px; max-width: 280px; }
 .cp-read {
+  min-width: 0;
   max-width: 260px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -89,6 +91,7 @@
   color: var(--ink-soft);
 }
 .cp-edited {
+  flex: none;
   margin-left: 6px;
   font-family: var(--font-sans);
   font-size: 10px;

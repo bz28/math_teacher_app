@@ -149,15 +149,19 @@ export default function CaseProblems({
                     aria-expanded={isOpen}
                   >
                     <td className="cp-num">P{p.position}</td>
-                    <td className="cp-read" title={summary}>
-                      {p.reading === null ? (
-                        <span className="cp-muted">reader never ran</span>
-                      ) : summary ? (
-                        summary
-                      ) : (
-                        <span className="cp-muted">nothing read</span>
-                      )}
-                      {p.reading?.student_edited && <span className="cp-edited">edited</span>}
+                    <td title={summary}>
+                      <span className="cp-read-cell">
+                        <span className="cp-read">
+                          {p.reading === null ? (
+                            <span className="cp-muted">reader never ran</span>
+                          ) : summary ? (
+                            summary
+                          ) : (
+                            <span className="cp-muted">nothing read</span>
+                          )}
+                        </span>
+                        {p.reading?.student_edited && <span className="cp-edited">edited</span>}
+                      </span>
                     </td>
                     <td className="cp-r cp-mono">{pct(p.ai_call)}</td>
                     <td className="cp-r cp-mono">

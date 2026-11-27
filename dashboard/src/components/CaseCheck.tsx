@@ -1,4 +1,5 @@
 import StatusPill, { type PillTone } from "./StatusPill";
+import MathText from "./MathText";
 import { formatRelativeDate } from "../lib/format";
 import type { CaseIntegrity, CaseTurn, SubmissionCase } from "../lib/caseFile";
 
@@ -40,7 +41,7 @@ function toolLine(t: CaseTurn, positionOf: Map<string, number>): string {
       return ["Closed the check", words(input.disposition), input.headline ? `"${String(input.headline)}"` : null]
         .filter(Boolean).join(" · ");
     case "label_student_reply":
-      return `Labelled the reply: ${words(input.engagement ?? input.label)}`;
+      return `Labelled the reply: ${words(input.engagement)}`;
     default:
       return words(t.tool_name ?? "tool call");
   }
@@ -131,7 +132,7 @@ function Turn({ t, positionOf }: { t: CaseTurn; positionOf: Map<string, number> 
     return (
       <li className="cc-msg cc-msg-note">
         <span className="cc-who">Agent note · not shown to the student</span>
-        <p>{t.content}</p>
+        <p><MathText>{t.content}</MathText></p>
       </li>
     );
   }
@@ -139,7 +140,7 @@ function Turn({ t, positionOf }: { t: CaseTurn; positionOf: Map<string, number> 
   return (
     <li className={`cc-msg ${student ? "cc-msg-student" : "cc-msg-agent"}`}>
       <span className="cc-who">{student ? "Student" : "Agent"}</span>
-      <p>{t.content}</p>
+      <p><MathText>{t.content}</MathText></p>
       {student && <Telemetry t={t} />}
     </li>
   );
