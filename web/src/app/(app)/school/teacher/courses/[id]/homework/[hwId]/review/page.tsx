@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useCallback, useEffect, useState } from "react";
+import { courseTabHref } from "../_lib/course-tab-href";
 import { Breadcrumbs } from "@/components/school/teacher/breadcrumbs";
 import { useCourseName } from "@/components/school/teacher/teacher-courses";
 import Link from "next/link";
@@ -183,7 +184,11 @@ export default function HomeworkReviewPage({
       <div className="mx-auto max-w-6xl px-4 pt-3">
         <Breadcrumbs
           items={[
-            { label: courseName ?? "", href: `/school/teacher/courses/${courseId}?tab=homework` },
+            {
+              label: courseName ?? "",
+              // Practice sets are reviewed here too; they live on the Practice tab.
+              href: courseTabHref(courseId, assignmentType),
+            },
             { label: hwTitle, href: backHref },
             { label: "Review problems" },
           ]}

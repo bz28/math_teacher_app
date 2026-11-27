@@ -5,37 +5,48 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { teacher, type TeacherCourse } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { courseIdFromPath, shouldReadCourses, type CoursesRead } from "./teacher-courses-read";
+
+export { courseIdFromPath };
 
 /**
  * The teacher's courses, for the shell: the sidebar lists them with
  * what's waiting in each, the phone header folds the same list into a
  * menu, and deep pages name the course in their breadcrumb.
  *
- * Read once per navigation (a new page is when a count can have moved:
- * grades approved, a course just made), keeping the last list on screen
- * while the next one loads. Null until the first read lands; a failed
- * read keeps whatever was there — this is a convenience, not the page.
+ * Read again on navigation (a new page is when a count can have moved:
+ * grades approved, a course just made) — at once when the teacher moves
+ * between courses or home, otherwise at most every READ_EVERY_MS — keeping
+ * the last list on screen while the next loads. Null until the first read
+ * lands; a failed read keeps whatever was there — this is a convenience,
+ * not the page.
  */
 const TeacherCoursesContext = createContext<TeacherCourse[] | null>(null);
 
 export function TeacherCoursesProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const scope = courseIdFromPath(pathname);
   const [courses, setCourses] = useState<TeacherCourse[] | null>(null);
-  const mounted = useRef(true);
+  const last = useRef<CoursesRead | null>(null);
   useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
-  useEffect(() => {
+    const now = Date.now();
+    if (!shouldReadCourses(last.current, scope, now)) return;
+    // Only the latest read lands: a slow older one can't overwrite it.
+    // It counts as read only once it lands, so a read cut short by the
+    // next page doesn't make that page skip its own.
+    let cancelled = false;
     teacher
       .courses()
       .then((res) => {
-        if (mounted.current) setCourses(res.courses.filter((c) => c.status !== "archived"));
+        if (cancelled) return;
+        last.current = { at: now, scope };
+        setCourses(res.courses.filter((c) => c.status !== "archived"));
       })
       .catch(() => undefined);
-  }, [pathname]);
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname, scope]);
   return (
     <TeacherCoursesContext.Provider value={courses}>{children}</TeacherCoursesContext.Provider>
   );
@@ -48,11 +59,6 @@ export function useTeacherCourses(): TeacherCourse[] | null {
 /** The course's name for a breadcrumb, or null while the list loads. */
 export function useCourseName(courseId: string): string | null {
   return useTeacherCourses()?.find((c) => c.id === courseId)?.name ?? null;
-}
-
-/** The course the URL is inside, if any: /school/teacher/courses/<id>/… */
-export function courseIdFromPath(pathname: string | null): string | null {
-  return pathname?.match(/^\/school\/teacher\/courses\/([^/?#]+)/)?.[1] ?? null;
 }
 
 function ToReview({ n, active }: { n: number; active: boolean }) {
@@ -174,6 +180,7 @@ export function MobileCourseMenu({ fallback }: { fallback: React.ReactNode }) {
         >
           <Link
             href="/school/teacher"
+            onClick={() => setOpen(false)}
             className="block px-3 py-2 text-xs font-semibold text-text-secondary hover:text-text-primary"
           >
             All courses
@@ -185,6 +192,7 @@ export function MobileCourseMenu({ fallback }: { fallback: React.ReactNode }) {
                 <li key={c.id}>
                   <Link
                     href={`/school/teacher/courses/${c.id}`}
+                    onClick={() => setOpen(false)}
                     aria-current={active ? "page" : undefined}
                     className={cn(
                       "flex items-center gap-2 px-3 py-2 text-sm",
