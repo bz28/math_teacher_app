@@ -30,7 +30,7 @@ from api.models.llm_call import LLMCall
 from api.models.school import School
 from api.models.section import Section
 from api.models.user import User
-from api.routes.admin_spend import spend_headline
+from api.routes.admin_spend import spend_headline, spend_series
 from tests.conftest import auth_headers
 
 _RECENT = datetime.now(UTC) - timedelta(hours=1)
@@ -365,3 +365,70 @@ async def test_a_braced_school_id_is_read_as_the_school(client: AsyncClient) -> 
     w = await _seed()
     body = await _get(client, w, school_id="{" + w.radnor_id + "}")
     assert body["total_cost"] == pytest.approx(5.0)
+
+
+
+# --------------------------------------------------------------------------
+# Round 3 follow-ups — the range, the school page, the widest window
+# --------------------------------------------------------------------------
+
+async def test_quiet_weeks_count_once_spend_ever_began() -> None:
+    """A customer since September with a quiet start to the range: those
+    weeks are slow weeks (the low end), not "before we existed"."""
+    now = datetime(2026, 11, 26, 12, 0, tzinfo=UTC)
+    async with get_session_factory()() as s:
+        await s.execute(text("TRUNCATE TABLE llm_calls RESTART IDENTITY CASCADE"))
+        s.add_all([
+            _call(9.0, created_at=datetime(2026, 9, 1, tzinfo=UTC)),
+            _call(7.0, created_at=datetime(2026, 11, 10, tzinfo=UTC)),
+            _call(14.0, created_at=datetime(2026, 11, 17, tzinfo=UTC)),
+        ])
+        await s.commit()
+        h = await spend_headline(s, [], now)
+    assert h["range_weeks"] == 8
+    assert h["projected_low"] == pytest.approx(21.0, abs=1e-3)  # rest of month at $0/wk
+
+
+async def test_school_page_counts_only_calls_stamped_with_the_school(
+    client: AsyncClient,
+) -> None:
+    w = await _seed()
+    async with get_session_factory()() as s:
+        s.add(_call(50.0, function="bank_chat", school_id=None, user_id=uuid.UUID(w.teacher_id)))
+        await s.commit()
+    detail = (await client.get(
+        f"/v1/admin/schools/{w.radnor_id}",
+        headers=auth_headers(create_access_token(w.admin_id, "admin")),
+    )).json()
+    ms_t = next(t for t in detail["teachers"] if t["id"] == w.teacher_id)
+    assert ms_t["cost_30d"] == pytest.approx(5.0)
+
+
+async def test_a_custom_range_is_capped(client: AsyncClient) -> None:
+    w = await _seed()
+    headers = auth_headers(create_access_token(w.admin_id, "admin"))
+    r = await client.get("/v1/admin/spend", params={"to": "2026-11-01"}, headers=headers)
+    assert r.status_code == 400
+    assert "366" in r.json()["detail"]
+    ok = await client.get(
+        "/v1/admin/spend", params={"from": "2025-11-01", "to": "2026-10-31"}, headers=headers,
+    )
+    assert ok.status_code == 200
+
+
+async def test_day_buckets_are_utc_whatever_the_database_clock() -> None:
+    """21:00 in New York on 9 Nov is 02:00 UTC on 10 Nov: the 10th's bucket."""
+    now = datetime(2026, 11, 12, 12, 0, tzinfo=UTC)
+    async with get_session_factory()() as s:
+        await s.execute(text("TRUNCATE TABLE llm_calls RESTART IDENTITY CASCADE"))
+        s.add(_call(3.0, created_at=datetime(2026, 11, 10, 2, 0, tzinfo=UTC)))
+        await s.commit()
+        await s.execute(text("SET TIME ZONE 'America/New_York'"))
+        try:
+            series = await spend_series(s, [], "day", now)
+        finally:
+            # Don't hand a New York clock back to the pool.
+            await s.execute(text("RESET TIME ZONE"))
+    by_day = {p["start"]: p["cost"] for p in series}
+    assert by_day["2026-11-10"] == pytest.approx(3.0)
+    assert by_day["2026-11-09"] == 0.0

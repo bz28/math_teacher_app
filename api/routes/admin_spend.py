@@ -50,6 +50,9 @@ GroupBy = Literal["school", "teacher", "student", "function", "model"]
 # "where did this window's spend go".
 SERIES_PERIODS: dict[str, int] = {"day": 30, "week": 12, "month": 6}
 
+# The widest window /spend groups over: a school year and change.
+MAX_RANGE_DAYS = 366
+
 # Full weeks the projection's range reads its spread from.
 _RANGE_WEEKS = 8
 
@@ -169,9 +172,14 @@ async def spend_headline(
     cost_prev_30d = await _total(db, conds, last_30.previous())
 
     # The range: the rest of the month at the slowest and the fastest of
-    # the last few FULL weeks. Weeks before the first spend aren't "slow
-    # weeks", they're before we existed, so they don't count.
+    # the last few FULL weeks. A quiet week is a slow week and counts —
+    # unless it's before this spend ever began, when it's before we
+    # existed. "Ever", not "in the range": a winter break at the start of
+    # the range is still a real slow week for a year-old customer.
     this_week = _week_start(now)
+    first_ever = (await db.execute(
+        select(func.min(LLMCall.created_at)).where(*conds, LLMCall.created_at < this_week)
+    )).scalar()
     weeks = (await db.execute(
         select(
             _utc_trunc("week").label("week"),
@@ -186,8 +194,8 @@ async def spend_headline(
     )).all()
     weekly = {r.week.replace(tzinfo=UTC): float(r.cost) for r in weeks}
     full_weeks: list[float] = []
-    if weekly:
-        start = min(weekly)
+    if first_ever is not None:
+        start = max(this_week - timedelta(weeks=_RANGE_WEEKS), _week_start(first_ever))
         while start < this_week:
             full_weeks.append(weekly.get(start, 0.0))
             start += timedelta(weeks=1)
@@ -327,6 +335,12 @@ async def spend(
 
     now = datetime.now(UTC)
     window = resolve_window(hours, date_from, date_to)
+    # An open-ended or year-spanning range would group all of history.
+    if window.end - window.start > timedelta(days=MAX_RANGE_DAYS):
+        raise HTTPException(
+            status_code=400,
+            detail=f"a range can span at most {MAX_RANGE_DAYS} days; give both 'from' and 'to'",
+        )
 
     scope: list[Any] = []
     if school_id:

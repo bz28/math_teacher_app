@@ -34,3 +34,26 @@ def test_week_buckets_start_on_monday_like_postgres() -> None:
     assert _bucket_start(datetime(2026, 11, 23, 0, 0, tzinfo=UTC), "week") == datetime(
         2026, 11, 23, tzinfo=UTC,
     )
+
+
+def test_day_and_week_steps() -> None:
+    d = datetime(2026, 12, 31, tzinfo=UTC)
+    assert _step(d, "day") == datetime(2027, 1, 1, tzinfo=UTC)
+    assert _step(d, "day", -31) == datetime(2026, 11, 30, tzinfo=UTC)
+    monday = datetime(2026, 11, 23, tzinfo=UTC)
+    assert _step(monday, "week") == datetime(2026, 11, 30, tzinfo=UTC)
+    assert _step(monday, "week", -12) == datetime(2026, 8, 31, tzinfo=UTC)
+
+
+async def test_only_the_bucket_still_running_is_partial() -> None:
+    """A bucket ending exactly now is complete; the one now sits in isn't."""
+    from api.database import get_session_factory
+    from api.routes.admin_spend import spend_series
+
+    now = datetime(2026, 11, 23, 0, 0, tzinfo=UTC)  # a Monday, midnight
+    async with get_session_factory()() as s:
+        weeks = await spend_series(s, [], "week", now)
+    assert len(weeks) == 12
+    assert [w["partial"] for w in weeks].count(True) == 1
+    assert weeks[-1]["start"] == "2026-11-23" and weeks[-1]["partial"]
+    assert weeks[-2]["partial"] is False

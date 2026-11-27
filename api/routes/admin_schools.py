@@ -319,9 +319,13 @@ async def get_school(
     window = last_days(30)
 
     # ── Teachers + their spend (the one whose-call rule) ────────────
+    # Only calls stamped with this school: a teacher's calls with no
+    # school (an admin context, pre-backfill rows) aren't this school's
+    # spend, the same rule Costs scoped to it applies.
     owners = call_owners(
         window.covers(LLMCall.created_at),
         not_preview(),
+        LLMCall.school_id == school.id,
         owners_in=select(User.id).where(User.school_id == school.id, User.role == "teacher"),
     )
     teacher_stats_sq = (
@@ -411,7 +415,10 @@ async def get_school(
         .join(Submission, Submission.id == LLMCall.submission_id)
         .join(Section, Section.id == Submission.section_id)
         .join(Course, Course.id == Section.course_id)
-        .where(Course.school_id == school.id, window.covers(LLMCall.created_at), not_preview())
+        .where(
+            Course.school_id == school.id, LLMCall.school_id == school.id,
+            window.covers(LLMCall.created_at), not_preview(),
+        )
         .group_by(Submission.section_id)
     )).all()
     section_cost = {r.section_id: float(r.cost) for r in cost_rows}
