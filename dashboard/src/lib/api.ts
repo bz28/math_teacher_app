@@ -481,6 +481,8 @@ export interface AssignmentDetailData {
 
 export const api = {
   llmCalls: (params?: Record<string, string>) => request<LLMCallsData>("/admin/llm-calls", params),
+  llmCallsSummary: (params?: Record<string, string>) =>
+    request<CallSummary>("/admin/llm-calls/summary", params),
   extractionQuality: (params?: Record<string, string>) =>
     request<ExtractionQualityData>("/admin/extraction-quality", params),
   extractionDetail: (submissionId: string) =>
@@ -616,12 +618,38 @@ export const api = {
 };
 
 // Types
-export interface LLMCallsData {
-  total_count_window: number;
-  total_cost_window: number;
-  p95_latency_ms: number;
-  failure_count: number;
+/** The compact picture of a set of calls — the Calls strip and the calls
+ *  panel at every level. Follows every filter. Latency is over successful
+ *  calls only; `latency_n` is that sample (null percentiles = none). */
+export interface CallSummary {
+  calls: number;
+  spend: number;
+  failed: number;
   failure_rate: number;
+  latency_p50_ms: number | null;
+  latency_p95_ms: number | null;
+  latency_n: number;
+  spend_by_function: { function: string; calls: number; spend: number }[];
+  latest_failures: {
+    id: string;
+    function: string;
+    model: string;
+    created_at: string;
+    latency_ms: number;
+    retry_count: number;
+    submission_id: string | null;
+    /** A submission-pipeline call whose submission was deleted. */
+    deleted_submission: boolean;
+    error: string | null;
+  }[];
+}
+
+export interface LLMCallsData {
+  summary: CallSummary;
+  /** Filter options — the window's functions and models, not narrowed by
+   *  the function/model/status/search filters. */
+  functions: string[];
+  models: string[];
   failures_by_function: { function: string; count: number; avg_retries: number }[];
   by_function: {
     function: string;
@@ -654,6 +682,8 @@ export interface LLMCallsData {
     user_name: string | null;
     school_id: string | null;
     submission_id: string | null;
+    /** A submission-pipeline call whose submission was deleted. */
+    deleted_submission: boolean;
     metadata: Record<string, unknown> | null;
     created_at: string;
   }[];
@@ -970,9 +1000,9 @@ export interface SchoolSection {
   students: SchoolSectionStudent[];
 }
 
-// A teacher and the classes they own. `gen_cost_30d` is the teacher's
-// authoring/generation spend (calls not tied to a submission); per-
-// submission cost lives on each section instead.
+// A teacher and the classes they own. `cost_30d` follows the one
+// whose-call rule: their own calls plus every call on a submission to
+// their homework — the same number their own page shows.
 export interface SchoolTeacher {
   id: string;
   name: string;
@@ -980,8 +1010,8 @@ export interface SchoolTeacher {
   joined_at: string;
   /** False when an admin has revoked access without deleting. */
   is_active: boolean;
-  gen_cost_30d: number;
-  gen_call_count_30d: number;
+  cost_30d: number;
+  call_count_30d: number;
   sections: SchoolSection[];
 }
 
