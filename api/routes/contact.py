@@ -6,15 +6,15 @@ is the record. Validation and the rate limit stay, since the endpoint is
 public and every call sends mail.
 """
 
-import asyncio
 import html
+import json
 import logging
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, EmailStr, Field
 
 from api.config import settings
-from api.core.email import send_email
+from api.core.email import deliver_email
 from api.middleware.rate_limit import limiter
 
 logger = logging.getLogger(__name__)
@@ -33,6 +33,29 @@ class ContactFormRequest(BaseModel):
     message: str | None = Field(default=None, max_length=5000)
 
 
+def _alert_html(body: ContactFormRequest) -> str:
+    """The admin alert. Every user-controlled field is run through
+    html.escape — it lands in the admin inbox as HTML, so raw
+    interpolation would let a lead inject markup/script (XSS/phishing)."""
+    students_line = (
+        f"<li><strong>Est. students:</strong> {body.approx_students}</li>" if body.approx_students else ""
+    )
+    message_line = (
+        f"<li><strong>Message:</strong> {html.escape(body.message)}</li>" if body.message else ""
+    )
+    return (
+        f"<h2>New Lead from {html.escape(body.school_name)}</h2>"
+        f"<ul>"
+        f"<li><strong>Contact:</strong> {html.escape(body.contact_name)}</li>"
+        f"<li><strong>Email:</strong> {html.escape(body.contact_email)}</li>"
+        f"<li><strong>Role:</strong> {html.escape(body.role)}</li>"
+        f"{students_line}"
+        f"{message_line}"
+        f"</ul>"
+        f"<p>This email is the only copy — add it to the Leads table.</p>"
+    )
+
+
 @router.post("/lead")
 @limiter.limit("3/minute")
 async def submit_contact_form(
@@ -41,37 +64,21 @@ async def submit_contact_form(
 ) -> dict[str, str]:
     logger.info("New contact lead from %s (%s) at %s", body.contact_name, body.contact_email, body.school_name)
 
-    # Fire-and-forget admin notification. Every user-controlled field is run
-    # through html.escape — these land in the admin inbox as HTML, so raw
-    # interpolation would let a lead inject markup/script (XSS/phishing).
-    if not settings.admin_alert_emails:
-        # Nothing else keeps the inquiry, so say loudly that it went nowhere.
-        logger.warning("Contact form from %s has no admin to email (ADMIN_ALERT_EMAILS empty)", body.school_name)
-    else:
-        safe_school = html.escape(body.school_name)
-        safe_contact = html.escape(body.contact_name)
-        safe_email = html.escape(body.contact_email)
-        safe_role = html.escape(body.role)
-        students_line = (
-            f"<li><strong>Est. students:</strong> {body.approx_students}</li>" if body.approx_students else ""
+    # Awaited, not fire-and-forget: the email is the only copy, so the
+    # handler has to know it went. When it didn't (no admin configured, no
+    # mail key, Resend failed), the whole inquiry goes to the error log —
+    # which alerts — rather than nowhere. The visitor's answer is the same
+    # either way: their part is done, and the inquiry is not lost.
+    delivered = bool(settings.admin_alert_emails) and await deliver_email(
+        to=settings.admin_alert_emails,
+        subject=f"New school lead: {body.school_name}",
+        html=_alert_html(body),
+    )
+    if not delivered:
+        logger.error(
+            "Contact form inquiry NOT emailed (no admin address, no mail key, or the send failed) "
+            "— this log line is its only copy: %s",
+            json.dumps(body.model_dump(), ensure_ascii=False),
         )
-        message_line = (
-            f"<li><strong>Message:</strong> {html.escape(body.message)}</li>" if body.message else ""
-        )
-        asyncio.create_task(send_email(
-            to=settings.admin_alert_emails,
-            subject=f"New school lead: {body.school_name}",
-            html=(
-                f"<h2>New Lead from {safe_school}</h2>"
-                f"<ul>"
-                f"<li><strong>Contact:</strong> {safe_contact}</li>"
-                f"<li><strong>Email:</strong> {safe_email}</li>"
-                f"<li><strong>Role:</strong> {safe_role}</li>"
-                f"{students_line}"
-                f"{message_line}"
-                f"</ul>"
-                f"<p>This email is the only copy — add it to the Leads table.</p>"
-            ),
-        ))
 
     return {"status": "ok", "message": "Thank you! We'll be in touch soon."}

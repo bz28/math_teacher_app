@@ -8,7 +8,7 @@ lands in an inbox as HTML), and still validates its input.
 
 from __future__ import annotations
 
-import asyncio
+import logging
 from typing import Any
 
 import pytest
@@ -32,10 +32,11 @@ FORM = {
 def sent(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
 
-    async def fake_send(*, to: list[str], subject: str, html: str) -> None:
+    async def fake_deliver(*, to: list[str], subject: str, html: str) -> bool:
         out.append({"to": to, "subject": subject, "html": html})
+        return True
 
-    monkeypatch.setattr(mod, "send_email", fake_send)
+    monkeypatch.setattr(mod, "deliver_email", fake_deliver)
     monkeypatch.setattr(mod.settings, "admin_alert_emails", ["founder@t.com"])
     return out
 
@@ -47,7 +48,6 @@ async def test_form_emails_the_admins_and_answers_as_before(
     assert r.status_code == 200, r.text
     # The web form reads this shape; it must not change.
     assert r.json() == {"status": "ok", "message": "Thank you! We'll be in touch soon."}
-    await asyncio.sleep(0)  # let the fire-and-forget send run
     assert len(sent) == 1
     m = sent[0]
     assert m["to"] == ["founder@t.com"]
@@ -61,14 +61,61 @@ async def test_form_emails_the_admins_and_answers_as_before(
     assert "/leads" not in m["html"]
 
 
-async def test_form_with_no_admins_still_answers_and_sends_nothing(
+def _kept_in_error_log(caplog: pytest.LogCaptureFixture) -> None:
+    """The whole inquiry — the parts only the visitor knows — is in an
+    ERROR line, the one place it survives an undelivered email."""
+    errors = [r.getMessage() for r in caplog.records if r.levelno >= logging.ERROR]
+    assert len(errors) == 1
+    for value in ("Pat Doe", "pat@example.com", "we'd like a demo", "120"):
+        assert value in errors[0].lower() or value in errors[0]
+
+
+async def test_form_with_no_admins_keeps_the_inquiry_in_the_error_log(
     client: AsyncClient, sent: list[dict[str, Any]], monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     monkeypatch.setattr(mod.settings, "admin_alert_emails", [])
     r = await client.post(URL, json=FORM)
     assert r.status_code == 200, r.text
-    await asyncio.sleep(0)
     assert sent == []
+    _kept_in_error_log(caplog)
+
+
+async def test_failed_send_keeps_the_inquiry_in_the_error_log(
+    client: AsyncClient, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture,
+) -> None:
+    async def failing(*, to: list[str], subject: str, html: str) -> bool:
+        return False
+
+    monkeypatch.setattr(mod, "deliver_email", failing)
+    monkeypatch.setattr(mod.settings, "admin_alert_emails", ["founder@t.com"])
+    r = await client.post(URL, json=FORM)
+    assert r.status_code == 200, r.text
+    _kept_in_error_log(caplog)
+
+
+async def test_delivered_inquiry_logs_no_error(
+    client: AsyncClient, sent: list[dict[str, Any]], caplog: pytest.LogCaptureFixture,
+) -> None:
+    r = await client.post(URL, json=FORM)
+    assert r.status_code == 200, r.text
+    assert len(sent) == 1
+    assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
+
+
+async def test_deliver_email_reports_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The contact form trusts this bool; a swallowed Resend error must
+    come back False, not look like a send."""
+    import api.core.email as email
+
+    def boom(_: Any) -> None:
+        raise RuntimeError("resend down")
+
+    monkeypatch.setattr(email.settings, "resend_api_key", "re_test")
+    monkeypatch.setattr(email.resend.Emails, "send", boom)
+    assert await email.deliver_email(to=["a@t.com"], subject="s", html="h") is False
+    monkeypatch.setattr(email.resend.Emails, "send", lambda _: {"id": "x"})
+    assert await email.deliver_email(to=["a@t.com"], subject="s", html="h") is True
 
 
 @pytest.mark.parametrize(
@@ -84,5 +131,4 @@ async def test_form_still_validates(
 ) -> None:
     r = await client.post(URL, json={**FORM, **patch})
     assert r.status_code == 422
-    await asyncio.sleep(0)
     assert sent == []
