@@ -221,7 +221,7 @@ async def test_llm_calls_and_users_are_scoped(
     calls_a = await _get(client, world, "/v1/admin/llm-calls?hours=24", "a")
     calls_all = await _get(client, world, "/v1/admin/llm-calls?hours=24", None)
     assert calls_a["total_count"] == 1
-    assert calls_a["total_cost_window"] == 1.0
+    assert calls_a["summary"]["spend"] == 1.0
     assert calls_all["total_count"] == 3
 
     users_a = await _get(client, world, "/v1/admin/users", "a")

@@ -9,8 +9,8 @@ behaviours:
   * Per-section student_count / submitted_count are exact.
   * Section cost_30d rolls up the per-submission AI spend attributed
     via LLMCall.submission_id → submission → section.
-  * A teacher's gen_cost_30d is their non-submission (authoring) spend —
-    submission-tied calls are NOT double-counted there.
+  * A teacher's cost_30d follows the one whose-call rule: their own
+    calls plus every call on a submission to their homework.
   * School students carry NO subscription / plan fields.
   * A student enrolled in several sections appears under each.
 """
@@ -255,9 +255,12 @@ async def test_section_cost_rolls_up_via_submission_id(
     assert sec_b["cost_30d"] == pytest.approx(0.20)
 
 
-async def test_generation_cost_stays_at_teacher_level(
+async def test_teacher_cost_follows_the_whose_call_rule(
     client: AsyncClient, seeded: dict[str, Any],
 ) -> None:
+    """A teacher's number = their own calls + every call on a submission
+    to their homework (api/core/llm_attribution.py) — the same figure
+    their own page shows, not the generation half alone."""
     r = await client.get(
         f"/v1/admin/schools/{seeded['school_id']}",
         headers=auth_headers(seeded["admin_token"]),
@@ -265,13 +268,19 @@ async def test_generation_cost_stays_at_teacher_level(
     data = r.json()
     anna, bob = data["teachers"]
 
-    # Anna's one non-submission call = $2.00; it must NOT leak into a
-    # section cost, and it's the only thing in her generation bucket.
-    assert anna["gen_cost_30d"] == pytest.approx(2.00)
-    assert anna["gen_call_count_30d"] == 1
-    # Bob authored nothing.
-    assert bob["gen_cost_30d"] == pytest.approx(0.0)
-    assert bob["gen_call_count_30d"] == 0
+    # Anna: her own $2.00 generation call + $1.30 on her homework (A1).
+    assert anna["cost_30d"] == pytest.approx(3.30)
+    assert anna["call_count_30d"] == 4
+    # Bob made nothing; his homework drew the $0.20 call on sub3.
+    assert bob["cost_30d"] == pytest.approx(0.20)
+    assert bob["call_count_30d"] == 1
+
+    # And it is the number the teacher's own page shows.
+    page = (await client.get(
+        f"/v1/admin/users/{seeded['anna_id']}/students",
+        headers=auth_headers(seeded["admin_token"]),
+    )).json()
+    assert page["teacher"]["total_cost_30d"] == pytest.approx(anna["cost_30d"])
 
 
 async def test_students_have_no_plan_and_carry_grades(

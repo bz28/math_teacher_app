@@ -36,6 +36,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.core.llm_attribution import school_calls
 from api.database import get_db
 from api.middleware.auth import CurrentUser, require_admin
 from api.models.activity_log import ActivityLog
@@ -44,7 +45,7 @@ from api.models.course import Course
 from api.models.llm_call import LLMCall
 from api.models.school import School
 from api.models.section import Section
-from api.routes.admin_helpers import INTERNAL_SCHOOL_SENTINEL
+from api.routes.admin_helpers import INTERNAL_SCHOOL_SENTINEL, last_days
 
 router = APIRouter()
 
@@ -65,13 +66,6 @@ def _month_window(now: datetime) -> tuple[datetime, datetime, datetime]:
     days_in_month = calendar.monthrange(now.year, now.month)[1]
     this_month_end = this_month_start + timedelta(days=days_in_month)
     return this_month_start, last_month_start, this_month_end
-
-
-def _llm_school_filter(school_id: str) -> Any:
-    """Build the LLMCall filter for a scope-id (real UUID or 'internal')."""
-    if school_id == INTERNAL_SCHOOL_SENTINEL:
-        return LLMCall.school_id.is_(None)
-    return LLMCall.school_id == school_id
 
 
 @router.get("/schools/{school_id}/overview")
@@ -107,7 +101,7 @@ async def school_overview(
 
     now = datetime.now(UTC)
     this_month_start, last_month_start, this_month_end = _month_window(now)
-    llm_school = _llm_school_filter(school_id)
+    llm_school = school_calls(None if is_internal else school_id)
 
     # ---------- Cost ----------
     this_month_cost = (await db.execute(
@@ -128,19 +122,17 @@ async def school_overview(
     # Rolling 30d cost (+ prior 30d) — the SAME window the Schools list
     # shows, so a school's KPI strip matches the number the operator
     # clicked in from. Distinct from the calendar-month breakdown below.
-    cost_30d_start = now - timedelta(days=30)
-    cost_60d_start = now - timedelta(days=60)
+    cost_window = last_days(30, now)
     cost_30d = (await db.execute(
         select(func.coalesce(func.sum(LLMCall.cost_usd), 0.0)).where(
             llm_school,
-            LLMCall.created_at >= cost_30d_start,
+            cost_window.covers(LLMCall.created_at),
         )
     )).scalar() or 0.0
     cost_prev_30d = (await db.execute(
         select(func.coalesce(func.sum(LLMCall.cost_usd), 0.0)).where(
             llm_school,
-            LLMCall.created_at >= cost_60d_start,
-            LLMCall.created_at < cost_30d_start,
+            cost_window.previous().covers(LLMCall.created_at),
         )
     )).scalar() or 0.0
 
