@@ -633,7 +633,10 @@ async def unit_economics(
         "deleted_submissions": deleted.summary(),
         "deleted_generation_jobs": discarded.summary(),
         "reconciliation": await _reconciliation(db, scope),
-        "measured": await measured_rates(db, window, school_id, exclude_internal),
+        "measured": await measured_rates(
+            db, window, school_id, exclude_internal,
+            active_teachers=next(u["n"] for u in units if u["kind"] == "residual:teacher"),
+        ),
         "models_in_use": await _models_in_use(db, scope),
         "model_catalog": catalog(),
         "min_sample": min_sample,

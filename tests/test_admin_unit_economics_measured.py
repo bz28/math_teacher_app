@@ -210,7 +210,6 @@ async def test_rates_leave_out_internal_users_and_old_submissions(
     assert m["submissions"]["homework"] == 6
     assert m["teachers"] == 1
     assert m["students"] == 6
-    assert m["students_per_teacher"] == pytest.approx(6.0)
 
 
 async def test_no_submissions_is_null_not_zero(client: AsyncClient) -> None:
@@ -539,3 +538,96 @@ async def test_discarded_job_calls_spread_only_over_units_begun_in_the_window(
     body = await _get(client, w.admin_id, days=7)
     assert body["deleted_generation_jobs"]["spread_over"] == 1
     assert _unit(body, "generation:unit")["cost_median"] == pytest.approx(_gen_job_cost() + 0.5)
+
+
+
+# --------------------------------------------------------------------------
+# Round 2 decisions — the platform rate, and per ACTIVE teacher
+# --------------------------------------------------------------------------
+
+async def _teacher_chat(teacher_id: str, school_id: str) -> None:
+    """A residual (teacher-side) call: what makes a teacher active."""
+    async with get_session_factory()() as s:
+        s.add(LLMCall(
+            function="bank_chat", model=_OPUS, input_tokens=10, output_tokens=5,
+            latency_ms=1.0, cost_usd=0.5, success=True,
+            school_id=uuid.UUID(school_id), user_id=uuid.UUID(teacher_id), created_at=_WHEN,
+        ))
+        await s.commit()
+
+
+async def test_students_per_teacher_divides_by_the_teachers_the_cost_is_per(
+    client: AsyncClient,
+) -> None:
+    """Teacher-side cost is per ACTIVE teacher, so the divisor is active
+    students per active teacher. Two idle rostered teachers would have
+    tripled it — and cut the per-student teacher cost to a third."""
+    w = await _seed(homework_submissions=6, test_submissions=0)
+    await _teacher_chat(w.teacher_id, w.school_id)
+    await _add_user("teacher", w.school_id)
+    await _add_user("teacher", w.school_id)
+    m = (await _get(client, w.admin_id, days=30))["measured"]
+    assert m["teachers"] == 3
+    assert m["active_teachers"] == 1
+    assert m["students_per_teacher"] == pytest.approx(6.0)
+
+
+async def test_no_active_teacher_is_unknown_not_a_ratio(client: AsyncClient) -> None:
+    w = await _seed(homework_submissions=6, test_submissions=0)
+    m = (await _get(client, w.admin_id, days=30))["measured"]
+    assert m["active_teachers"] == 0
+    assert m["students_per_teacher"] is None
+
+
+async def test_a_school_with_no_rate_gets_the_platform_rate_beside_it(
+    client: AsyncClient,
+) -> None:
+    """Scoped to a school no one submitted at: its own rate is unknown and
+    the platform's — every school, same window — rides alongside."""
+    from api.models.school import School
+
+    w = await _seed(homework_submissions=6, test_submissions=0)
+    async with get_session_factory()() as s:
+        quiet = School(name="Quiet High", contact_name="Q", contact_email="q@q.com")
+        s.add(quiet)
+        await s.commit()
+        quiet_id = str(quiet.id)
+    whole = (await _get(client, w.admin_id, days=30))["measured"]
+    scoped = (await _get(client, w.admin_id, days=30, school_id=quiet_id))["measured"]
+    assert scoped["submissions_per_student_month"] is None
+    assert scoped["platform_submissions_per_student_month"] == whole["submissions_per_student_month"]
+    assert whole["platform_submissions_per_student_month"] == whole["submissions_per_student_month"]
+
+
+async def test_the_exclude_box_leaves_out_preview_like_spend_does(
+    client: AsyncClient,
+) -> None:
+    """A teacher rehearsing as a preview student: their submission, its
+    grading call and the preview user itself are no school's usage."""
+    w = await _seed(homework_submissions=6, test_submissions=0)
+    preview = await _add_user("student", w.school_id)
+    async with get_session_factory()() as s:
+        await s.execute(update(User).where(User.id == preview).values(is_preview=True))
+        await s.commit()
+    await _add_homework_submission(w, str(preview), _WHEN)
+    async with get_session_factory()() as s:
+        sub = (await s.execute(
+            select(Submission).where(Submission.student_id == preview),
+        )).scalar_one()
+        s.add(LLMCall(
+            function="ai_grading", model=_OPUS, input_tokens=10, output_tokens=5,
+            latency_ms=1.0, cost_usd=99.0, success=True, school_id=uuid.UUID(w.school_id),
+            user_id=preview, submission_id=sub.id, created_at=_WHEN,
+        ))
+        await s.commit()
+
+    body = await _get(client, w.admin_id, days=30)
+    assert body["measured"]["active_students"] == 6
+    assert body["measured"]["students"] == 6
+    hw = _unit(body, "submission:homework")
+    assert hw["n"] == 6
+    assert hw["cost_total"] < 99.0
+
+    # Unticked, it's counted — the box is what removes it.
+    shown = await _get(client, w.admin_id, days=30, exclude_internal="false")
+    assert shown["measured"]["active_students"] == 7

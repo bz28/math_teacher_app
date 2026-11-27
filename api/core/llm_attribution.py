@@ -38,6 +38,7 @@ from sqlalchemy.sql.selectable import Subquery
 from api.core.llm_client import LLMMode
 from api.models.assignment import Assignment, Submission
 from api.models.llm_call import LLMCall
+from api.models.user import User
 
 # Functions that run on a student's submission and carry its id. A row of
 # one of these with no submission_id lost its submission to a delete.
@@ -123,6 +124,25 @@ def call_owners(*where: Any, owners_in: Select[Any] | None = None) -> Subquery:
         .where(*where, *only(Assignment.teacher_id))
     )
     return union(made, handed_in, set_by).subquery("call_owners")
+
+
+def not_preview() -> ColumnElement[bool]:
+    """Not a teacher rehearsing their own homework as a preview student —
+    by who made the call or whose submission it ran on. Real rows, not a
+    customer's usage."""
+    preview_users = select(User.id).where(User.is_preview.is_(True))
+    preview_submissions = (
+        select(Submission.id)
+        .join(User, User.id == Submission.student_id)
+        .where(User.is_preview.is_(True))
+    )
+    return and_(
+        or_(LLMCall.user_id.is_(None), LLMCall.user_id.notin_(preview_users)),
+        or_(
+            LLMCall.submission_id.is_(None),
+            LLMCall.submission_id.notin_(preview_submissions),
+        ),
+    )
 
 
 def school_calls(school_id: uuid.UUID | str | None) -> ColumnElement[bool]:

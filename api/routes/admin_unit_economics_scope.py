@@ -11,7 +11,7 @@ from typing import Any
 from sqlalchemy import ColumnElement, Select, and_, exists, func, or_
 from sqlalchemy.orm import aliased
 
-from api.core.llm_attribution import SUBMISSION_FUNCTIONS, school_calls
+from api.core.llm_attribution import SUBMISSION_FUNCTIONS, not_preview, school_calls
 from api.models.assignment import Submission
 from api.models.llm_call import LLMCall
 from api.models.question_bank import QuestionBankGenerationJob
@@ -52,6 +52,11 @@ class Scope:
             # like a school's usage and would inflate every per-student
             # figure on the page.
             out.append(LLMCall.school_id.isnot(None))
+        if self.exclude_internal:
+            # The same box removes preview on the Spend tab: a teacher
+            # rehearsing their homework as a preview student is a real
+            # row in their school, but not the school's usage.
+            out.append(not_preview())
         return out
 
     def apply(self, stmt: Select[Any]) -> Select[Any]:

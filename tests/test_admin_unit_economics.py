@@ -434,7 +434,6 @@ async def test_teacher_student_ratio_is_measured(client: AsyncClient) -> None:
     ratio = (await _get(client, w.admin_id, days=30))["measured"]
     assert ratio["teachers"] == 1
     assert ratio["students"] == len(w.student_ids)
-    assert ratio["students_per_teacher"] == pytest.approx(float(len(w.student_ids)))
 
 
 async def test_token_profile_carries_calls_per_unit_for_repricing(
